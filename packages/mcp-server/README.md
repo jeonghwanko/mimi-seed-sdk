@@ -1,0 +1,192 @@
+# @yoonion/mimi-seed-mcp
+
+**Mimi Seed** — Firebase · AdMob · Google Play · App Store Connect를 AI 콘솔에서 관리. Claude Code / Cursor / 기타 MCP 클라이언트에서 한 줄 등록으로 사용.
+
+> 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg>.
+
+## 설치
+
+Claude Code:
+
+```bash
+claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mimi-seed": {
+      "command": "npx",
+      "args": ["-y", "@yoonion/mimi-seed-mcp"]
+    }
+  }
+}
+```
+
+## 첫 사용 전 인증
+
+```bash
+npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
+```
+
+브라우저가 열리면 Google 계정으로 로그인. 토큰은 `~/.mimi-seed/tokens.json`에 저장되고 자동 갱신됨.
+
+App Store Connect까지 쓰려면 별도로:
+
+```bash
+npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
+```
+
+(App Store Connect → Users and Access → Keys에서 API Key 생성 후 Issuer ID / Key ID / .p8 경로 입력)
+
+AI 기능(릴리즈 노트 생성, 리뷰 답변)을 쓰려면:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## 제공 도구 (65+개)
+
+| 영역 | 주요 도구 |
+|------|---------|
+| Firebase | `firebase_list_projects` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_enable_service` |
+| AdMob | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
+| Google Play | `playstore_list_tracks` / `playstore_update_listing` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
+| 인앱 결제 | `playstore_create_onetime_product` / `playstore_create_subscription` / `appstore_create_inapp_purchase` / `appstore_create_subscription` |
+| Google Cloud IAM | `iam_list_service_accounts` / `iam_create_service_account` / `iam_list_keys` / `iam_create_key` / `iam_add_iam_policy_binding` |
+| App Store Connect | `appstore_list_apps` / `appstore_list_builds` / `appstore_upload_screenshot` / `appstore_update_whats_new` |
+| 제출 위험 점검 | `playstore_check_submission_risks` / `appstore_check_submission_risks` |
+| 스크린샷 검증 | `screenshot_validate` |
+| AI (Claude) | `generate_release_notes_from_commits` / `generate_review_reply` |
+| 인증 | `mimi_seed_auth_status` / `mimi_seed_auth_start` |
+
+---
+
+## 주요 기능
+
+### 제출 위험 점검
+
+출시 전 블로커와 경고를 자동으로 점검합니다.
+
+```
+"내 앱 출시 전 위험 요소 확인해줘"
+→ playstore_check_submission_risks("com.example.myapp")
+→ appstore_check_submission_risks("1234567890")
+```
+
+**점검 항목:**
+- Google Play: 리스팅 완성도(제목/설명/짧은설명), 스크린샷 수, 아이콘, 내부 빌드 존재, 연락처
+- App Store: What's New, 설명/키워드, 스크린샷 커버리지, TestFlight 빌드, 개인정보처리방침 URL
+
+---
+
+### 스크린샷 해상도 검증
+
+업로드 전 로컬 파일을 스토어 규격과 비교합니다.
+
+```
+"이 스크린샷들이 App Store 규격에 맞는지 확인해줘"
+→ screenshot_validate(["/path/to/screen1.png", "/path/to/screen2.png"], platform="ios", displayType="APP_IPHONE_69")
+```
+
+iOS displayType 예시: `APP_IPHONE_69`, `APP_IPHONE_67`, `APP_IPHONE_65`, `APP_IPAD_PRO_3GEN_129`  
+Android imageType 예시: `phoneScreenshots`, `sevenInchScreenshots`, `featureGraphic`
+
+---
+
+### AI 릴리즈 노트 생성 (ANTHROPIC_API_KEY 필요)
+
+git 커밋 내역을 Claude가 사용자 친화적인 릴리즈 노트로 변환합니다.
+
+```
+"최근 커밋으로 릴리즈 노트 만들어줘"
+→ generate_release_notes_from_commits(
+     commits=[{message: "feat: 다크모드 추가"}, ...],
+     appName="MyApp",
+     locales=["ko", "en-US", "ja"]
+   )
+```
+
+3가지 톤(간결/상세/마케팅) + 다국어를 한 번에 생성. 이후 `playstore_update_release_notes` 또는 `appstore_update_whats_new`로 바로 적용.
+
+---
+
+### AI 리뷰 답변 생성 (ANTHROPIC_API_KEY 필요)
+
+스토어 리뷰에 대한 AI 답변 초안을 생성합니다.
+
+```
+"이 리뷰에 답변 작성해줘"
+→ generate_review_reply(
+     reviewText="앱이 자꾸 튕겨요",
+     rating=2,
+     appName="MyApp",
+     tone="empathetic",
+     language="ko"
+   )
+```
+
+tone 옵션: `friendly`(친근) / `professional`(정중) / `empathetic`(공감) / `brief`(간결)
+
+> ⚠ AI 생성 답변은 초안입니다. 게시 전 반드시 검토하세요.  
+> 답변 게시는 `playstore_reply_to_review` 도구를 사용하세요.
+
+---
+
+## End-to-end: 서비스 계정 → JSON 키 → Play Console 권한
+
+서버(예: [onesub](https://github.com/jeonghwanko/onesub))가 Google Play 영수증을 백그라운드로 검증하려면 서비스 계정 JSON이 필요합니다. Claude에게 한 번에 시킬 수 있어요:
+
+> 1. `my-project`에 `onesub-play-verifier` 서비스 계정 만들고
+> 2. JSON 키 발급받아서
+> 3. `com.yourapp.id`에 대해 검증
+
+Claude가 연쇄 호출:
+
+- `iam_create_service_account("my-project", "onesub-play-verifier", "onesub Play verifier")`
+- `iam_create_key("onesub-play-verifier@my-project.iam.gserviceaccount.com")` → JSON 반환
+- `playstore_verify_service_account(<json>, "com.yourapp.id")` → 아직 Play Console 권한이 없어서 403 반환 기대
+
+그 다음 **Play Console에서 수동으로** (또는 별도 androidpublisher.users API 호출):
+
+- Users and permissions → 서비스 계정 이메일 초대
+- **View financial data, orders, and cancellation survey responses** 체크
+- **~5분 대기** 후 `playstore_verify_service_account` 재실행 → ✓
+
+마지막으로 JSON을 `GOOGLE_SERVICE_ACCOUNT_KEY` 서버 env에 넣으면 Play 영수증 검증 가능.
+
+> Cloud IAM 역할과 Play Console 권한은 다릅니다. `iam_add_iam_policy_binding`은 Cloud IAM 역할(예: `roles/iam.serviceAccountTokenCreator`)만 부여 — Play Console의 "View financial data"는 별도.
+
+---
+
+## 환경변수
+
+| 변수 | 설명 |
+|------|------|
+| `ANTHROPIC_API_KEY` | AI 릴리즈 노트 생성 / 리뷰 답변 활성화 (선택) |
+
+---
+
+## 레거시 호환성
+
+Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받음:
+
+- `~/.preseed/tokens.json` 있으면 읽음 (재인증 불필요)
+- `~/.preseed/appstore.json`도 동일
+- 환경변수 `PRESEED_GOOGLE_CLIENT_ID` / `PRESEED_GOOGLE_CLIENT_SECRET` 계속 인식
+
+새로 쓰는 건 `~/.mimi-seed/`.
+
+---
+
+## Links
+
+- CLI 패키지: [`mimi-seed`](https://www.npmjs.com/package/mimi-seed)
+- 웹 콘솔: https://mimi-seed.pryzm.gg
+- 저장소: https://github.com/jeonghwanko/mimi-seed
+
+MIT © jeonghwanko

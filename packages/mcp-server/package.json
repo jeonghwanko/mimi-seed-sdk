@@ -1,0 +1,60 @@
+{
+  "name": "@yoonion/mimi-seed-mcp",
+  "version": "0.3.17",
+  "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Cursor / any MCP client.",
+  "type": "module",
+  "bin": {
+    "mimi-seed-mcp": "dist/index.js",
+    "mimi-seed-auth": "dist/auth/cli.js",
+    "mimi-seed-appstore-auth": "dist/appstore/setup-cli.js",
+    "mimi-seed-playstore-auth": "dist/auth/playstore-setup-cli.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "auth": "tsx src/auth/cli.ts",
+    "prepublishOnly": "tsc"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "claude",
+    "firebase",
+    "admob",
+    "google-play",
+    "app-store",
+    "mimi-seed"
+  ],
+  "homepage": "https://mimi-seed.pryzm.gg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeonghwanko/mimi-seed.git",
+    "directory": "packages/mcp-server"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@onesub/providers": "^0.2.0",
+    "googleapis": "^171.4.0",
+    "jose": "^5.10.0",
+    "open": "^10.1.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
