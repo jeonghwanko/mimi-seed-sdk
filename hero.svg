@@ -1,0 +1,90 @@
+<svg viewBox="0 0 1280 400" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Mimi Seed — 앱 출시 운영 콘솔">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAFAF7"/>
+      <stop offset="60%" stop-color="#F5EFE0"/>
+      <stop offset="100%" stop-color="#E8DFCC"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="400" fill="url(#bg)"/>
+
+  <!-- Decorative seed sparkles -->
+  <g opacity="0.35">
+    <circle cx="120" cy="80" r="3" fill="#D97706"/>
+    <circle cx="200" cy="160" r="2.5" fill="#F59E0B"/>
+    <circle cx="80" cy="240" r="2" fill="#D97706"/>
+    <circle cx="1180" cy="100" r="3" fill="#F59E0B"/>
+    <circle cx="1230" cy="180" r="2.5" fill="#D97706"/>
+    <circle cx="1140" cy="270" r="2" fill="#F59E0B"/>
+  </g>
+
+  <!-- Mimi character on the left, scaled down -->
+  <g transform="translate(80, 90) scale(0.245)">
+    <ellipse cx="450" cy="855" rx="280" ry="20" fill="rgba(0,0,0,0.18)"/>
+    <circle cx="450" cy="450" r="391" fill="#F3CD29"/>
+    <path d="M 305 385 Q 360 425 415 385" stroke="#333333" stroke-width="14"
+          fill="none" stroke-linecap="round"/>
+    <path d="M 485 385 Q 540 425 595 385" stroke="#333333" stroke-width="14"
+          fill="none" stroke-linecap="round"/>
+    <path d="M 280 540 Q 450 700 620 540" stroke="#333333" stroke-width="16"
+          fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Text block, right of character -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif">
+    <!-- Brand -->
+    <text x="340" y="115" font-size="22" font-weight="600" fill="#0F172A"
+          letter-spacing="-0.5">Mimi Seed</text>
+
+    <!-- Headline -->
+    <text x="340" y="180" font-size="44" font-weight="900" fill="#0F172A"
+          letter-spacing="-1.2">앱 출시·운영,</text>
+    <text x="340" y="232" font-size="44" font-weight="900" fill="url(#accent)"
+          letter-spacing="-1.2">미미가 맡을게요.</text>
+
+    <!-- Subtitle -->
+    <text x="340" y="278" font-size="18" font-weight="500" fill="#475569"
+          letter-spacing="-0.3">
+      Claude Code MCP로 연결하는 인디 개발자 출시 자동화 콘솔
+    </text>
+
+    <!-- 4 Module pills -->
+    <g transform="translate(340, 310)">
+      <g>
+        <rect x="0" y="0" width="118" height="34" rx="8"
+              fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.4)"/>
+        <text x="59" y="22" font-size="13" font-weight="600" fill="#B45309"
+              text-anchor="middle">Integration</text>
+      </g>
+      <g transform="translate(128, 0)">
+        <rect x="0" y="0" width="118" height="34" rx="8"
+              fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.4)"/>
+        <text x="59" y="22" font-size="13" font-weight="600" fill="#B45309"
+              text-anchor="middle">Copy Studio</text>
+      </g>
+      <g transform="translate(256, 0)">
+        <rect x="0" y="0" width="118" height="34" rx="8"
+              fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.4)"/>
+        <text x="59" y="22" font-size="13" font-weight="600" fill="#B45309"
+              text-anchor="middle">Screenshots</text>
+      </g>
+      <g transform="translate(384, 0)">
+        <rect x="0" y="0" width="118" height="34" rx="8"
+              fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.4)"/>
+        <text x="59" y="22" font-size="13" font-weight="600" fill="#B45309"
+              text-anchor="middle">Launch</text>
+      </g>
+    </g>
+
+    <!-- Domain badge bottom right -->
+    <text x="1245" y="370" font-size="12" font-weight="500" fill="#94A3B8"
+          text-anchor="end">mimi-seed.pryzm.gg</text>
+  </g>
+</svg>
