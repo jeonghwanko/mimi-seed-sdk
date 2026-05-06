@@ -1,6 +1,8 @@
 // Mimi Seed CLI
 
 import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
 import kleur from "kleur";
 import open from "open";
 import { detectHints, hasAnyProjectSignal } from "./detect.js";
@@ -108,6 +110,45 @@ async function cmdInit(): Promise<void> {
       for (const line of result.text.split("\n")) log("  " + line);
     }
     log("");
+  }
+
+  // .claude/mimi-seed.md 주입 — Claude Code 세션마다 에이전트 컨텍스트 자동 활성화
+  const claudeDir = path.join(cwd, ".claude");
+  const agentMdPath = path.join(claudeDir, "mimi-seed.md");
+  if (!fs.existsSync(agentMdPath)) {
+    fs.mkdirSync(claudeDir, { recursive: true });
+    const appLines = hints.flatMap((h) => {
+      const parts = [
+        h.name && `  name: ${h.name}`,
+        h.packageName && `  packageName: ${h.packageName}`,
+        h.bundleId && `  bundleId: ${h.bundleId}`,
+      ].filter(Boolean) as string[];
+      return parts;
+    });
+    const agentMd = [
+      "# Mimi Seed Agent",
+      "",
+      "Mimi Seed MCP가 이 프로젝트에 연결되어 있습니다.",
+      "Google Play · App Store · Firebase · AdMob을 도구로 직접 제어합니다.",
+      "",
+      "## 출시 요청 처리 순서",
+      "",
+      "1. 항상 `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인",
+      "2. 릴리즈 노트: `generate_release_notes_from_commits` → 사용자 확인 후 적용",
+      "3. 스토어 **쓰기** 작업(submit, apply, reply)은 반드시 사용자 명시 동의 후 실행",
+      "4. 완료 후 결과 요약 제공",
+      "",
+      "## 앱 정보",
+      ...(appLines.length > 0 ? appLines : ["  (mimi-seed status 로 확인)"]),
+      "",
+      "## 슬래시 커맨드",
+      "",
+      "- `/mimi-seed:deploy` — 전체 출시 파이프라인",
+      "- `/mimi-seed:health` — 연결 상태 빠른 확인",
+      "- `/mimi-seed:review-inbox` — 미답변 리뷰 답변",
+    ].join("\n");
+    fs.writeFileSync(agentMdPath, agentMd, { mode: 0o644 });
+    log(kleur.dim(`  에이전트 설정: .claude/mimi-seed.md`));
   }
 
   log(kleur.bold("✓ 준비 완료."));
