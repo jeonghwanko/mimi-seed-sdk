@@ -1,6 +1,16 @@
 import kleur from "kleur";
 import * as readline from "node:readline";
 import { getEffectiveConfig, writeConfig, type JenkinsConfig } from "./config.js";
+import {
+  loadCiProviderConfig,
+  saveCiProviderConfig,
+  ghTriggerWorkflow,
+  ghPollRun,
+  glTriggerPipeline,
+  glPollPipeline,
+  type CiProviderConfig,
+  type BuildResult,
+} from "./ci-providers.js";
 
 const PHASE_ICON: Record<string, string> = {
   init: "🚀",
@@ -149,6 +159,8 @@ async function streamDeploy(webBase: string, token: string, body: object): Promi
 
 // ── deploy 커맨드 파싱 ──
 
+type CiKind = "jenkins" | "github" | "gitlab" | "auto";
+
 interface DeployArgs {
   platform: "android" | "ios";
   appId?: string;
@@ -159,10 +171,25 @@ interface DeployArgs {
   dryRun: boolean;
   skipBuild: boolean;
   setupJenkins: boolean;
+  setupGithub: boolean;
+  setupGitlab: boolean;
+  ci: CiKind;
+  workflow?: string; // GitHub workflow file (e.g. deploy.yml)
+  ref: string;        // GitHub/GitLab ref (default: main)
 }
 
 function parseArgs(argv: string[]): DeployArgs {
-  const args: DeployArgs = { platform: "android", language: "ko-KR", dryRun: false, skipBuild: false, setupJenkins: false };
+  const args: DeployArgs = {
+    platform: "android",
+    language: "ko-KR",
+    dryRun: false,
+    skipBuild: false,
+    setupJenkins: false,
+    setupGithub: false,
+    setupGitlab: false,
+    ci: "auto",
+    ref: "main",
+  };
   for (let i = 0; i < argv.length; i++) {
     if ((argv[i] === "--platform" || argv[i] === "-p") && argv[i + 1]) args.platform = argv[++i] as "android" | "ios";
     if (argv[i] === "--app" && argv[i + 1]) args.appId = argv[++i];
@@ -172,7 +199,12 @@ function parseArgs(argv: string[]): DeployArgs {
     if (argv[i] === "--language" && argv[i + 1]) args.language = argv[++i];
     if (argv[i] === "--dry-run") args.dryRun = true;
     if (argv[i] === "--skip-build") args.skipBuild = true;
+    if (argv[i] === "--ci" && argv[i + 1]) args.ci = argv[++i] as CiKind;
+    if (argv[i] === "--workflow" && argv[i + 1]) args.workflow = argv[++i];
+    if (argv[i] === "--ref" && argv[i + 1]) args.ref = argv[++i];
     if (argv[i] === "setup-jenkins") args.setupJenkins = true;
+    if (argv[i] === "setup-github") args.setupGithub = true;
+    if (argv[i] === "setup-gitlab") args.setupGitlab = true;
   }
   return args;
 }
@@ -195,6 +227,108 @@ async function promptJenkinsSetup(): Promise<JenkinsConfig> {
   return { url, user, token, jobAndroid: jobAndroid || undefined, jobIos: jobIos || undefined };
 }
 
+async function promptGitProviderSetup(provider: "github" | "gitlab"): Promise<CiProviderConfig> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q: string): Promise<string> =>
+    new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())));
+
+  const isGh = provider === "github";
+  log(kleur.bold(isGh ? "GitHub Actions 설정" : "GitLab CI 설정"));
+  const tokenLabel = isGh
+    ? "  GitHub Personal Access Token (repo+workflow 스코프): "
+    : "  GitLab Personal Access Token: ";
+  const token = await ask(tokenLabel);
+  const owner = await ask(isGh ? "  Owner (org/user): " : "  Namespace/group: ");
+  const repo = await ask("  Repo 이름 (경로 없이): ");
+  const hostPrompt = isGh
+    ? "  GitHub Enterprise host (선택, 엔터=github.com): "
+    : "  GitLab self-hosted URL (선택, 엔터=gitlab.com): ";
+  const host = await ask(hostPrompt);
+
+  rl.close();
+  return {
+    provider,
+    token,
+    owner,
+    repo,
+    host: host || undefined,
+  };
+}
+
+// CI provider 자동 감지: --ci 옵션 우선 → Jenkins → GitHub/GitLab
+function resolveCi(
+  ciOption: CiKind,
+  jenkins: JenkinsConfig | undefined,
+  ciProvider: CiProviderConfig | null,
+): CiKind {
+  if (ciOption !== "auto") return ciOption;
+  if (jenkins?.url && jenkins.token) return "jenkins";
+  if (ciProvider) return ciProvider.provider;
+  throw new Error(
+    "CI 설정 없음. 다음 중 하나 실행:\n" +
+    "  • mimi-seed deploy setup-jenkins\n" +
+    "  • mimi-seed deploy setup-github\n" +
+    "  • mimi-seed deploy setup-gitlab",
+  );
+}
+
+// GitHub/GitLab 빌드 트리거 + 폴링 → buildNumber 반환
+async function runGitProviderBuild(
+  cfg: CiProviderConfig,
+  args: DeployArgs,
+): Promise<number> {
+  let runUrl = "";
+  let runId: number;
+
+  if (cfg.provider === "github") {
+    if (!args.workflow) {
+      throw new Error("--workflow 필요 (예: --workflow deploy.yml)");
+    }
+    log(`🔨 GitHub Actions 트리거: ${kleur.cyan(args.workflow)} @ ${args.ref}`);
+    const inputs: Record<string, string> = {};
+    if (args.appId) inputs.MIMI_APP_ID = args.appId;
+    inputs.PLATFORM = args.platform;
+    const result = await ghTriggerWorkflow(cfg, args.workflow, args.ref, inputs);
+    if (!result) {
+      throw new Error("GitHub Actions run_id 조회 실패. 잠시 후 ci_list_recent_builds 로 확인하세요.");
+    }
+    runId = result.runId;
+    runUrl = result.url;
+    log(kleur.dim(`  Run ID: ${runId} → ${runUrl}`));
+  } else {
+    log(`🔨 GitLab Pipeline 트리거: ${args.ref}`);
+    const variables: Record<string, string> = { PLATFORM: args.platform };
+    if (args.appId) variables.MIMI_APP_ID = args.appId;
+    const result = await glTriggerPipeline(cfg, args.ref, variables);
+    runId = result.pipelineId;
+    runUrl = result.url;
+    log(kleur.dim(`  Pipeline ID: ${runId} → ${runUrl}`));
+  }
+
+  log("  완료 대기 중...");
+  let dots = 0;
+  const onTick = (status: string) => {
+    dots = (dots + 1) % 4;
+    process.stdout.write(`\r  ⏳ ${status}${".".repeat(dots + 1)}     `);
+  };
+
+  const result: BuildResult =
+    cfg.provider === "github"
+      ? await ghPollRun(cfg, runId, onTick)
+      : await glPollPipeline(cfg, runId, onTick);
+
+  process.stdout.write("\n");
+
+  if (result === "success") {
+    log(kleur.green(`✅ 빌드 #${runId} 성공`));
+    return runId;
+  }
+  log(kleur.red(`빌드 종료: ${result}`));
+  log(kleur.dim(`  ${runUrl}`));
+  log(kleur.dim(`  빌드가 이미 완료됐다면: mimi-seed deploy --skip-build --version-code <N> --platform ${args.platform}`));
+  process.exit(1);
+}
+
 // ── 메인 deploy 커맨드 ──
 
 export async function cmdDeploy(argv: string[]): Promise<void> {
@@ -206,11 +340,23 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Jenkins 설정 서브커맨드
+  // CI provider 설정 서브커맨드
   if (args.setupJenkins) {
     const jenkins = await promptJenkinsSetup();
     await writeConfig({ ...cfg, jenkins });
     log(kleur.green("✅ Jenkins 설정 저장됨"));
+    return;
+  }
+  if (args.setupGithub) {
+    const ciCfg = await promptGitProviderSetup("github");
+    saveCiProviderConfig(ciCfg);
+    log(kleur.green(`✅ GitHub Actions 설정 저장됨 → ~/.mimi-seed/ci.json`));
+    return;
+  }
+  if (args.setupGitlab) {
+    const ciCfg = await promptGitProviderSetup("gitlab");
+    saveCiProviderConfig(ciCfg);
+    log(kleur.green(`✅ GitLab CI 설정 저장됨 → ~/.mimi-seed/ci.json`));
     return;
   }
 
@@ -220,64 +366,79 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
 
   let versionCode = args.versionCode;
 
-  // Jenkins 빌드 단계 (--skip-build 없을 때)
+  // 빌드 단계 (--skip-build 없을 때)
   if (!args.skipBuild) {
-    if (!cfg.jenkins?.url || !cfg.jenkins?.token) {
-      log(kleur.yellow("Jenkins 설정 없음. `mimi-seed deploy setup-jenkins` 로 설정하거나 --skip-build 사용."));
-      log(kleur.dim("  또는 서버 /workspace/integrations에서 jenkins 프로바이더 등록 후 서버사이드 트리거 가능."));
-      process.exit(1);
-    }
+    const ciProvider = loadCiProviderConfig();
+    const kind = resolveCi(args.ci, cfg.jenkins, ciProvider);
+    log(kleur.dim(`  CI: ${kind}`));
 
-    const jenkins = cfg.jenkins;
-    const jobName = args.platform === "android" ? jenkins.jobAndroid : jenkins.jobIos;
-    if (!jobName) {
-      log(kleur.red(`${args.platform} Jenkins job이 설정되지 않았습니다. setup-jenkins 실행.`));
-      process.exit(1);
-    }
-
-    log(`🔨 Jenkins 빌드 트리거: ${kleur.cyan(jobName)}`);
-    const buildParams: Record<string, string> = {};
-    if (args.appId) buildParams.MIMI_APP_ID = args.appId;
-
-    const queueItemId = await triggerBuild(jenkins, jobName, buildParams);
-    if (!queueItemId) {
-      log(kleur.yellow("  ⚠ Queue item ID를 가져오지 못했습니다. 빌드는 시작됐을 수 있습니다."));
-    } else {
-      log(kleur.dim(`  Queue item: ${queueItemId}`));
-    }
-
-    // Queue → Build Number 대기 (최대 30초)
-    let buildNumber: number | null = null;
-    if (queueItemId) {
-      log("  빌드 번호 대기 중...");
-      for (let i = 0; i < 6; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
-        buildNumber = await getQueueBuildNumber(jenkins, queueItemId).catch(() => null);
-        if (buildNumber) break;
+    if (kind === "jenkins") {
+      if (!cfg.jenkins?.url || !cfg.jenkins?.token) {
+        log(kleur.yellow("Jenkins 설정 없음. `mimi-seed deploy setup-jenkins` 로 설정하거나 --skip-build 사용."));
+        process.exit(1);
       }
-    }
+      const jenkins = cfg.jenkins;
+      const jobName = args.platform === "android" ? jenkins.jobAndroid : jenkins.jobIos;
+      if (!jobName) {
+        log(kleur.red(`${args.platform} Jenkins job이 설정되지 않았습니다. setup-jenkins 실행.`));
+        process.exit(1);
+      }
 
-    if (!buildNumber) {
-      log(kleur.yellow("  빌드 번호를 가져오지 못했습니다. --skip-build + --version-code 로 재시도 가능."));
-      process.exit(1);
-    }
+      log(`🔨 Jenkins 빌드 트리거: ${kleur.cyan(jobName)}`);
+      const buildParams: Record<string, string> = {};
+      if (args.appId) buildParams.MIMI_APP_ID = args.appId;
 
-    log(`  빌드 #${buildNumber} 시작됨. 완료 대기 중...`);
-    const result = await pollBuildComplete(jenkins, jobName, buildNumber);
+      const queueItemId = await triggerBuild(jenkins, jobName, buildParams);
+      if (!queueItemId) {
+        log(kleur.yellow("  ⚠ Queue item ID를 가져오지 못했습니다. 빌드는 시작됐을 수 있습니다."));
+      } else {
+        log(kleur.dim(`  Queue item: ${queueItemId}`));
+      }
 
-    if (result !== "SUCCESS") {
-      log(kleur.red(`빌드 실패: ${result}`));
-      log(kleur.dim(`  Jenkins: ${jenkins.url}/job/${encodeURIComponent(jobName)}/${buildNumber}/`));
-      log(kleur.dim(`  빌드가 이미 완료됐다면: mimi-seed deploy --skip-build --version-code ${buildNumber} --platform ${args.platform}`));
-      process.exit(1);
-    }
+      let buildNumber: number | null = null;
+      if (queueItemId) {
+        log("  빌드 번호 대기 중...");
+        for (let i = 0; i < 6; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          buildNumber = await getQueueBuildNumber(jenkins, queueItemId).catch(() => null);
+          if (buildNumber) break;
+        }
+      }
 
-    log(kleur.green(`✅ 빌드 #${buildNumber} 성공`));
+      if (!buildNumber) {
+        log(kleur.yellow("  빌드 번호를 가져오지 못했습니다. --skip-build + --version-code 로 재시도 가능."));
+        process.exit(1);
+      }
 
-    // versionCode를 미입력 시 buildNumber를 versionCode로 사용 (일반적인 패턴)
-    if (!versionCode) {
-      versionCode = buildNumber;
-      log(kleur.dim(`  versionCode = buildNumber (${versionCode})`));
+      log(`  빌드 #${buildNumber} 시작됨. 완료 대기 중...`);
+      const result = await pollBuildComplete(jenkins, jobName, buildNumber);
+
+      if (result !== "SUCCESS") {
+        log(kleur.red(`빌드 실패: ${result}`));
+        log(kleur.dim(`  Jenkins: ${jenkins.url}/job/${encodeURIComponent(jobName)}/${buildNumber}/`));
+        log(kleur.dim(`  빌드가 이미 완료됐다면: mimi-seed deploy --skip-build --version-code ${buildNumber} --platform ${args.platform}`));
+        process.exit(1);
+      }
+
+      log(kleur.green(`✅ 빌드 #${buildNumber} 성공`));
+
+      if (!versionCode) {
+        versionCode = buildNumber;
+        log(kleur.dim(`  versionCode = buildNumber (${versionCode})`));
+      }
+    } else {
+      // GitHub Actions or GitLab CI
+      if (!ciProvider) {
+        log(kleur.red(`${kind} 설정이 없습니다. setup-${kind} 실행.`));
+        process.exit(1);
+      }
+      const buildId = await runGitProviderBuild(ciProvider, args);
+      if (!versionCode) {
+        versionCode = buildId;
+        log(kleur.dim(`  versionCode = build id (${versionCode})`));
+        log(kleur.dim(`  주의: GitHub run ID / GitLab pipeline ID는 versionCode로 적합하지 않을 수 있습니다.`));
+        log(kleur.dim(`  --version-code <N> 로 명시 권장.`));
+      }
     }
   }
 

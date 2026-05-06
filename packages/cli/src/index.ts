@@ -233,15 +233,20 @@ ${kleur.bold("mimi-seed review 옵션:")}
   --no-interactive    CI 모드
 
 ${kleur.bold("mimi-seed deploy 옵션:")}
-  --platform android|ios  배포 플랫폼 (기본: android)
-  --app <id>              앱 ID 지정
-  --version-code <n>      빌드 번호 직접 지정 (--skip-build 와 함께)
-  --from <ref>            커밋 범위 시작 (릴리즈 노트용)
-  --to <ref>              커밋 범위 끝 (기본: HEAD)
-  --language <코드>       릴리즈 노트 언어 (기본: ko-KR)
-  --dry-run               실제 배포 없이 파이프라인 테스트
-  --skip-build            Jenkins 빌드 건너뜀 (--version-code 필수)
-  setup-jenkins           Jenkins 설정 대화형 등록
+  --platform android|ios       배포 플랫폼 (기본: android)
+  --app <id>                   앱 ID 지정
+  --version-code <n>           빌드 번호 직접 지정 (--skip-build 와 함께)
+  --from <ref>                 커밋 범위 시작 (릴리즈 노트용)
+  --to <ref>                   커밋 범위 끝 (기본: HEAD)
+  --language <코드>            릴리즈 노트 언어 (기본: ko-KR)
+  --dry-run                    실제 배포 없이 파이프라인 테스트
+  --skip-build                 CI 빌드 건너뜀 (--version-code 필수)
+  --ci jenkins|github|gitlab   CI 강제 선택 (기본: auto)
+  --workflow <file>            GitHub workflow 파일 (예: deploy.yml)
+  --ref <branch|tag>           GitHub/GitLab 브랜치/태그 (기본: main)
+  setup-jenkins                Jenkins 설정 대화형 등록
+  setup-github                 GitHub Actions 설정 대화형 등록
+  setup-gitlab                 GitLab CI 설정 대화형 등록
 
 ${kleur.bold("환경변수:")}
   MIMI_SEED_TOKEN     PAT 토큰 (CI/CD 무인증 모드)
