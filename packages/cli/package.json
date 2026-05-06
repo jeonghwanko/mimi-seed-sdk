@@ -1,6 +1,6 @@
 {
   "name": "mimi-seed",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Mimi Seed CLI — Claude Code에서 앱 출시 운영을 관리합니다.",
   "bin": {
     "mimi-seed": "dist/index.js"
@@ -13,7 +13,9 @@
   ],
   "scripts": {
     "build": "tsup",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=18"
@@ -27,7 +29,8 @@
     "@types/node": "^20.11.0",
     "tsup": "^8.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.5"
   },
   "publishConfig": {
     "access": "public"

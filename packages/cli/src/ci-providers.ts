@@ -89,32 +89,35 @@ export async function ghPollRun(
   runId: number,
   onTick?: (status: string) => void,
   timeoutMs = 30 * 60 * 1000,
+  intervalMs = 15_000,
 ): Promise<BuildResult> {
   const start = Date.now();
   let consecutiveErrors = 0;
   while (Date.now() - start < timeoutMs) {
-    await new Promise((r) => setTimeout(r, 15_000));
+    await new Promise((r) => setTimeout(r, intervalMs));
+    let res: Response;
     try {
-      const res = await fetch(
+      res = await fetch(
         `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/runs/${runId}`,
         { headers: ghHeaders(cfg.token) },
       );
-      if (!res.ok) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= 3) throw new Error("GitHub API 연속 오류");
-        continue;
-      }
-      consecutiveErrors = 0;
-      const data = (await res.json()) as { status: string; conclusion: string | null };
-      onTick?.(data.status);
-      if (data.status === "completed") {
-        if (data.conclusion === "success") return "success";
-        if (data.conclusion === "cancelled") return "cancelled";
-        return "failure";
-      }
     } catch {
       consecutiveErrors++;
       if (consecutiveErrors >= 3) throw new Error("GitHub API 연속 오류 3회");
+      continue;
+    }
+    if (!res.ok) {
+      consecutiveErrors++;
+      if (consecutiveErrors >= 3) throw new Error(`GitHub API 연속 오류 (HTTP ${res.status})`);
+      continue;
+    }
+    consecutiveErrors = 0;
+    const data = (await res.json()) as { status: string; conclusion: string | null };
+    onTick?.(data.status);
+    if (data.status === "completed") {
+      if (data.conclusion === "success") return "success";
+      if (data.conclusion === "cancelled") return "cancelled";
+      return "failure";
     }
   }
   return "timeout";
@@ -153,31 +156,34 @@ export async function glPollPipeline(
   pipelineId: number,
   onTick?: (status: string) => void,
   timeoutMs = 30 * 60 * 1000,
+  intervalMs = 15_000,
 ): Promise<BuildResult> {
   const start = Date.now();
   let consecutiveErrors = 0;
   while (Date.now() - start < timeoutMs) {
-    await new Promise((r) => setTimeout(r, 15_000));
+    await new Promise((r) => setTimeout(r, intervalMs));
+    let res: Response;
     try {
-      const res = await fetch(
+      res = await fetch(
         `${glBase(cfg)}/projects/${glProjectId(cfg)}/pipelines/${pipelineId}`,
         { headers: { "PRIVATE-TOKEN": cfg.token } },
       );
-      if (!res.ok) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= 3) throw new Error("GitLab API 연속 오류");
-        continue;
-      }
-      consecutiveErrors = 0;
-      const data = (await res.json()) as { status: string };
-      onTick?.(data.status);
-      if (data.status === "success") return "success";
-      if (data.status === "failed") return "failure";
-      if (data.status === "canceled" || data.status === "skipped") return "cancelled";
     } catch {
       consecutiveErrors++;
       if (consecutiveErrors >= 3) throw new Error("GitLab API 연속 오류 3회");
+      continue;
     }
+    if (!res.ok) {
+      consecutiveErrors++;
+      if (consecutiveErrors >= 3) throw new Error(`GitLab API 연속 오류 (HTTP ${res.status})`);
+      continue;
+    }
+    consecutiveErrors = 0;
+    const data = (await res.json()) as { status: string };
+    onTick?.(data.status);
+    if (data.status === "success") return "success";
+    if (data.status === "failed") return "failure";
+    if (data.status === "canceled" || data.status === "skipped") return "cancelled";
   }
   return "timeout";
 }

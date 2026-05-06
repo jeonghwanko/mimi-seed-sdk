@@ -1,6 +1,6 @@
 {
   "name": "@yoonion/mimi-seed-mcp",
-  "version": "0.3.21",
+  "version": "0.3.22",
   "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Cursor / any MCP client.",
   "type": "module",
   "bin": {
@@ -17,6 +17,8 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "auth": "tsx src/auth/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "tsc"
   },
   "keywords": [
@@ -55,6 +57,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
   }
 }

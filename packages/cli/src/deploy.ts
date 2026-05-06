@@ -159,9 +159,11 @@ async function streamDeploy(webBase: string, token: string, body: object): Promi
 
 // ── deploy 커맨드 파싱 ──
 
-type CiKind = "jenkins" | "github" | "gitlab" | "auto";
+export type CiKind = "jenkins" | "github" | "gitlab" | "auto";
 
-interface DeployArgs {
+export const ANDROID_VERSION_CODE_MAX = 2_100_000_000; // 2^31 - 1 (실제 max는 2147483647이지만 여유)
+
+export interface DeployArgs {
   platform: "android" | "ios";
   appId?: string;
   versionCode?: number;
@@ -178,7 +180,7 @@ interface DeployArgs {
   ref: string;        // GitHub/GitLab ref (default: main)
 }
 
-function parseArgs(argv: string[]): DeployArgs {
+export function parseArgs(argv: string[]): DeployArgs {
   const args: DeployArgs = {
     platform: "android",
     language: "ko-KR",
@@ -256,11 +258,11 @@ async function promptGitProviderSetup(provider: "github" | "gitlab"): Promise<Ci
 }
 
 // CI provider 자동 감지: --ci 옵션 우선 → Jenkins → GitHub/GitLab
-function resolveCi(
+export function resolveCi(
   ciOption: CiKind,
   jenkins: JenkinsConfig | undefined,
   ciProvider: CiProviderConfig | null,
-): CiKind {
+): Exclude<CiKind, "auto"> {
   if (ciOption !== "auto") return ciOption;
   if (jenkins?.url && jenkins.token) return "jenkins";
   if (ciProvider) return ciProvider.provider;
@@ -434,10 +436,13 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
       }
       const buildId = await runGitProviderBuild(ciProvider, args);
       if (!versionCode) {
-        versionCode = buildId;
-        log(kleur.dim(`  versionCode = build id (${versionCode})`));
-        log(kleur.dim(`  주의: GitHub run ID / GitLab pipeline ID는 versionCode로 적합하지 않을 수 있습니다.`));
-        log(kleur.dim(`  --version-code <N> 로 명시 권장.`));
+        // GitHub run_id / GitLab pipeline_id는 일반적으로 versionCode 범위(2^31-1)를 초과하거나
+        // 빌드 시퀀스와 무관함. 자동 사용은 안전하지 않으므로 차단.
+        log(kleur.red(`✗ versionCode 미지정 (${kind} run_id ${buildId}는 versionCode로 부적합)`));
+        log(kleur.dim("  권장 사항:"));
+        log(kleur.dim("    • CI 워크플로 안에서 versionCode를 결정하고 결과를 출력"));
+        log(kleur.dim("    • 다음 실행: mimi-seed deploy --skip-build --version-code <N>"));
+        process.exit(1);
       }
     }
   }
