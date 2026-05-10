@@ -11,6 +11,7 @@ import { registerAiTools } from './registers/ai.js';
 import { registerBigqueryTools } from './registers/bigquery.js';
 import { registerAuthTools } from './registers/auth.js';
 import { registerCiTools } from './registers/ci.js';
+import { registerInstagramTools } from './registers/instagram.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 
@@ -29,6 +30,7 @@ registerAiTools(server);
 registerBigqueryTools(server);
 registerAuthTools(server);
 registerCiTools(server);
+registerInstagramTools(server);
 registerPrompts(server);
 registerResources(server);
 
