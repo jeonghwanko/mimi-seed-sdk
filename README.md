@@ -84,6 +84,7 @@ Optional auth for more platforms:
 ```bash
 npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth    # App Store Connect
 npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth   # Play Store service account
+npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth    # BigQuery (Crashlytics export, etc.)
 ```
 
 Enable AI features (release notes, review replies):
@@ -100,12 +101,19 @@ export ANTHROPIC_API_KEY=sk-ant-...
 npx mimi-seed init   # auto-detect app → connect account → register MCP
 ```
 
-Detects Expo · Gradle · Info.plist · pbxproj automatically.
+Detects Expo · Gradle · Info.plist · pbxproj automatically, and drops a `.claude/mimi-seed.md` so Claude Code picks up the release workflow every session.
 
-```bash
-npx mimi-seed status   # connection status + app list
-npx mimi-seed logout   # remove local config
-```
+| Command | What it does |
+|---------|--------------|
+| `mimi-seed init` | Connect project (issue PAT + auto-register apps) |
+| `mimi-seed status` | Connection status + app list |
+| `mimi-seed auth` | Google OAuth (Firebase / AdMob / Play) — `login` / `status` / `refresh` / `logout` |
+| `mimi-seed doctor` | Diagnose environment (token · Git · apps · CI) |
+| `mimi-seed check` | Pre-release readiness check (score + blockers) |
+| `mimi-seed notes` | AI release notes (git log → 3 tones → multi-locale → apply) |
+| `mimi-seed review` | AI review-reply draft + post to Play Store |
+| `mimi-seed deploy` | Full deploy pipeline (CI build → release notes → store) |
+| `mimi-seed logout` | Remove local config |
 
 ---
 
@@ -188,6 +196,34 @@ Creates IAM account → issues key → walks you through Play Console permission
 
 ---
 
+### One-Command Deploy
+
+Drive the whole release from one command: CI build → blocker check → release notes → store apply.
+
+```bash
+npx mimi-seed deploy                          # Android, auto-detect CI
+npx mimi-seed deploy --platform ios           # iOS
+npx mimi-seed deploy --skip-build --version-code 142   # notes-only apply
+```
+
+Works with **Jenkins · GitHub Actions · GitLab CI** (auto-detected, or force with `--ci`).
+
+---
+
+## Slash Commands (MCP Prompts)
+
+Available in any MCP client (Claude Code, etc.) as native slash commands:
+
+| Command | What it does |
+|---------|--------------|
+| `/mimi-seed:deploy` | Check blockers → generate release notes → apply to stores |
+| `/mimi-seed:health` | Auth status + launch readiness summary |
+| `/mimi-seed:review-inbox` | Fetch unanswered reviews → draft AI replies |
+
+Plus MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agent/guide` (agent role definition).
+
+---
+
 ## Tool List (110+)
 
 | Domain | Count | Key Tools |
@@ -245,6 +281,17 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg)
 | `MIMI_SEED_TOKEN` | PAT for CLI / CI headless mode |
 | `MIMI_SEED_WEB_BASE` | Server base URL (default: `https://mimi-seed.pryzm.gg`) |
 | `ANTHROPIC_API_KEY` | Enable AI release notes and review replies (optional) |
+
+---
+
+## Legacy Compatibility
+
+Data from the Preseed era (`~/.preseed/`) is picked up automatically — no re-auth needed.
+
+- Reads `~/.preseed/tokens.json` and `~/.preseed/appstore.json` if present
+- Still honors `PRESEED_GOOGLE_CLIENT_ID` / `PRESEED_GOOGLE_CLIENT_SECRET`
+
+New data is written to `~/.mimi-seed/`.
 
 ---
 

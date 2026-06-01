@@ -84,6 +84,7 @@ Claude Desktop (`claude_desktop_config.json`):
 ```bash
 npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth    # App Store Connect
 npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth   # Play Store 서비스 계정
+npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth    # BigQuery (Crashlytics export 등)
 ```
 
 AI 기능 활성화 (릴리즈 노트 생성, 리뷰 답변):
@@ -100,12 +101,19 @@ export ANTHROPIC_API_KEY=sk-ant-...
 npx mimi-seed init   # 앱 자동 감지 → 계정 연결 → MCP 등록 안내
 ```
 
-Expo · Gradle · Info.plist · pbxproj 자동 감지.
+Expo · Gradle · Info.plist · pbxproj 자동 감지. `.claude/mimi-seed.md`도 함께 생성해 Claude Code가 세션마다 출시 워크플로우를 자동 인식합니다.
 
-```bash
-npx mimi-seed status   # 연결 상태 + 앱 목록
-npx mimi-seed logout   # 로컬 설정 삭제
-```
+| 명령어 | 설명 |
+|--------|------|
+| `mimi-seed init` | 프로젝트 연결 (PAT 발급 + 앱 자동 등록) |
+| `mimi-seed status` | 연결 상태 + 앱 목록 |
+| `mimi-seed auth` | Google OAuth (Firebase / AdMob / Play) — `login` / `status` / `refresh` / `logout` |
+| `mimi-seed doctor` | 환경 진단 (토큰 · Git · 앱 · CI) |
+| `mimi-seed check` | 출시 전 Readiness 점검 (점수 + 블로커) |
+| `mimi-seed notes` | AI 릴리즈 노트 (git log → 3 톤 → 다국어 → 적용) |
+| `mimi-seed review` | AI 리뷰 답변 초안 + Play Store 게시 |
+| `mimi-seed deploy` | 출시 파이프라인 전체 (CI 빌드 → 릴리즈 노트 → 스토어) |
+| `mimi-seed logout` | 로컬 설정 삭제 |
 
 ---
 
@@ -185,6 +193,34 @@ Android: `phoneScreenshots` · `sevenInchScreenshots` · `featureGraphic`
 ```
 
 IAM 계정 생성 → 키 발급 → Play Console 권한 안내까지 단계별로 진행합니다.
+
+---
+
+### 원커맨드 배포
+
+CI 빌드 → 블로커 점검 → 릴리즈 노트 → 스토어 적용까지 명령 하나로.
+
+```bash
+npx mimi-seed deploy                          # Android, CI 자동 감지
+npx mimi-seed deploy --platform ios           # iOS
+npx mimi-seed deploy --skip-build --version-code 142   # 노트만 적용
+```
+
+**Jenkins · GitHub Actions · GitLab CI** 지원 (자동 감지, `--ci`로 강제 선택 가능).
+
+---
+
+## 슬래시 커맨드 (MCP Prompts)
+
+MCP 클라이언트(Claude Code 등)에서 슬래시 커맨드로 바로 노출됩니다.
+
+| 커맨드 | 설명 |
+|--------|------|
+| `/mimi-seed:deploy` | 블로커 점검 → 릴리즈 노트 생성 → 스토어 적용 |
+| `/mimi-seed:health` | 인증 상태 + 출시 준비도 요약 |
+| `/mimi-seed:review-inbox` | 미답변 리뷰 조회 → AI 답변 초안 |
+
+MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/guide` (에이전트 역할 정의).
 
 ---
 

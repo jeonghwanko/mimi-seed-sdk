@@ -33,13 +33,17 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 
 브라우저가 열리면 Google 계정으로 로그인. 토큰은 `~/.mimi-seed/tokens.json`에 저장되고 자동 갱신됨.
 
-App Store Connect까지 쓰려면 별도로:
+플랫폼별 추가 인증 (필요한 것만):
 
 ```bash
-npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
+npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth    # App Store Connect (API Key)
+npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth   # Google Play 서비스 계정 JSON
+npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth    # BigQuery (Crashlytics export 등)
 ```
 
-(App Store Connect → Users and Access → Keys에서 API Key 생성 후 Issuer ID / Key ID / .p8 경로 입력)
+- **App Store Connect**: Users and Access → Keys에서 API Key 생성 후 Issuer ID / Key ID / .p8 경로 입력 → `~/.mimi-seed/appstore.json`
+- **Google Play**: Play Console 서비스 계정 JSON 경로 입력 (패키지별 등록)
+- **BigQuery**: Google OAuth 또는 서비스 계정으로 데이터셋 조회 권한 부여
 
 AI 기능(릴리즈 노트 생성, 리뷰 답변)을 쓰려면:
 
@@ -49,20 +53,43 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (65+개)
+## 제공 도구 (110+개)
 
-| 영역 | 주요 도구 |
-|------|---------|
-| Firebase | `firebase_list_projects` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_enable_service` |
-| AdMob | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
-| Google Play | `playstore_list_tracks` / `playstore_update_listing` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
-| 인앱 결제 | `playstore_create_onetime_product` / `playstore_create_subscription` / `appstore_create_inapp_purchase` / `appstore_create_subscription` |
-| Google Cloud IAM | `iam_list_service_accounts` / `iam_create_service_account` / `iam_list_keys` / `iam_create_key` / `iam_add_iam_policy_binding` |
-| App Store Connect | `appstore_list_apps` / `appstore_list_builds` / `appstore_upload_screenshot` / `appstore_update_whats_new` |
-| 제출 위험 점검 | `playstore_check_submission_risks` / `appstore_check_submission_risks` |
-| 스크린샷 검증 | `screenshot_validate` |
-| AI (Claude) | `generate_release_notes_from_commits` / `generate_review_reply` |
-| 인증 | `mimi_seed_auth_status` / `mimi_seed_auth_start` |
+| 영역 | 도구 수 | 주요 도구 |
+|------|---------|-----------|
+| App Store Connect | 30 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_whats_new` / `appstore_create_version` |
+| Google Play | 26 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
+| Firebase | 17 | `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` / `firebase_enable_service` |
+| AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
+| CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
+| Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
+| Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |
+| BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
+| 점검 / 위험 | 4 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `screenshot_validate` / `release_status` |
+| Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
+| AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
+| 인증 | 2 | `mimi_seed_auth_start` / `mimi_seed_auth_status` |
+
+> 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `playstore_create_subscription` · `appstore_create_inapp_purchase` 등 (`@onesub/providers` 위임).
+
+---
+
+## 슬래시 커맨드 (MCP Prompts)
+
+MCP 클라이언트(Claude Code 등)에서 슬래시 커맨드로 바로 노출됩니다.
+
+| 커맨드 | 설명 |
+|--------|------|
+| `/mimi-seed:deploy` | 블로커 점검 → 릴리즈 노트 생성 → 스토어 적용을 한 번에 |
+| `/mimi-seed:health` | 인증 상태 + 앱 출시 준비도 빠른 요약 |
+| `/mimi-seed:review-inbox` | 미답변 리뷰 조회 → AI 답변 초안 생성 |
+
+## MCP Resources
+
+| URI | 설명 |
+|-----|------|
+| `mimi-seed://auth/status` | Google OAuth 토큰 상태 (JSON) |
+| `mimi-seed://agent/guide` | 에이전트 역할 정의 — 출시 워크플로우·주의사항 (Markdown) |
 
 ---
 
@@ -186,7 +213,14 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받음:
 ## Links
 
 - CLI 패키지: [`mimi-seed`](https://www.npmjs.com/package/mimi-seed)
-- 웹 콘솔: https://mimi-seed.pryzm.gg
-- 저장소: https://github.com/jeonghwanko/mimi-seed
+- 웹 콘솔: <https://mimi-seed.pryzm.gg>
+- 저장소: <https://github.com/jeonghwanko/mimi-seed>
 
-MIT © jeonghwanko
+---
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](../../LICENSE) — 비상업적 사용만 허용.
+상업적 이용 문의: <https://mimi-seed.pryzm.gg>
+
+**Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)
