@@ -8,6 +8,7 @@ import {
 } from '@onesub/providers';
 import { requireAppStoreCreds } from '../helpers.js';
 import { buildAppStoreReleasePlan } from '../checks/plan.js';
+import { validateAppStoreWhatsNew, formatIssuesForUser } from '../lib/text-validators.js';
 
 export function registerAppstoreTools(server: McpServer) {
   server.tool(
@@ -116,6 +117,31 @@ export function registerAppstoreTools(server: McpServer) {
   );
 
   server.tool(
+    'appstore_attach_latest_build',
+    [
+      'App Store 버전에 최신 VALID 빌드를 자동으로 attach — list_builds → 필터 → attach 의 3-step 을 1회로 단축.',
+      '내부: versionId 로 appId 역추적 → listBuilds 에서 processingState=VALID 만 필터 → buildNumber 숫자 최대값 선택 → attach.',
+      'PROCESSING 중인 빌드를 실수로 attach 해서 심사 제출 시 깨지는 케이스를 차단.',
+      'minBuildNumber 옵션으로 floor 지정 가능 (예: 1.4.x 빌드만 attach).',
+    ].join(' '),
+    {
+      versionId: z.string().describe('App Store 버전 ID (appstore_create_version 또는 list_versions 결과)'),
+      minBuildNumber: z.number().int().optional().describe('attach 후보 최소 buildNumber (예: 186 — 이전 빌드 무시)'),
+    },
+    async ({ versionId, minBuildNumber }) => {
+      const result = await appstore.attachLatestValidBuild(versionId, { minBuildNumber });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ 최신 VALID 빌드 #${result.buildNumber} (id=${result.attachedBuildId}) 가 버전 ${versionId} 에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`,
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
     'appstore_get_metadata',
     'App Store 버전 메타데이터 (설명문, 키워드, What\'s New)',
     { versionId: z.string().describe('버전 ID') },
@@ -143,6 +169,19 @@ export function registerAppstoreTools(server: McpServer) {
       );
       if (Object.keys(cleaned).length === 0) {
         throw new Error('수정할 필드를 하나 이상 지정해줘 (whatsNew, description, keywords, promotionalText, supportUrl, marketingUrl).');
+      }
+      // whatsNew 가 포함될 때만 사전 lint — 다른 필드(description/keywords)는 별도 정책.
+      if (typeof cleaned.whatsNew === 'string') {
+        const validation = validateAppStoreWhatsNew(cleaned.whatsNew);
+        if (!validation.ok) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ whatsNew 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`,
+            }],
+            isError: true,
+          };
+        }
       }
       const result = await appstore.updateVersionLocalization(localizationId, cleaned);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
@@ -216,6 +255,17 @@ export function registerAppstoreTools(server: McpServer) {
       whatsNew: z.string().describe("'이 버전의 새로운 기능' 텍스트 (4000자 이내)"),
     },
     async ({ versionId, locale, whatsNew }) => {
+      // ── 사전 lint — Apple 409 INVALID_CHARACTERS 등 round-trip 낭비 차단.
+      const validation = validateAppStoreWhatsNew(whatsNew);
+      if (!validation.ok) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ What's New 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`,
+          }],
+          isError: true,
+        };
+      }
       const result = await appstore.updateVersionWhatsNew(versionId, locale, { whatsNew });
       return { content: [{ type: 'text', text: `✅ ${locale} 로캘의 What's New가 업데이트됐어.\n\n${JSON.stringify(result, null, 2)}` }] };
     },
@@ -606,13 +656,44 @@ export function registerAppstoreTools(server: McpServer) {
       '내부 흐름: POST /reviewSubmissions(또는 CREATED 상태 재사용) → POST /reviewSubmissionItems(version attach) → PATCH submitted=true.',
       'appId와 platform은 versionId에서 자동 조회 — 별도 입력 불필요.',
       '⚠️ 비가역 작업: 제출 후엔 Apple 심사가 시작되며, 메타데이터/스크린샷/빌드를 더 못 바꿈 (REJECTED/METADATA_REJECTED 시 다시 편집 가능).',
+      '안전 가드: confirm 생략/false 시 dry-run preview 만 반환 (versionString·빌드·whatsNew 발췌). 실제 제출은 confirm: true 로 재호출.',
       '사전 조건: 버전이 PREPARE_FOR_SUBMISSION 또는 DEVELOPER_REJECTED 상태, 빌드 attached, 모든 필수 메타데이터 채워짐.',
       'appstore_check_submission_risks로 사전 점검 권장.',
     ].join(' '),
     {
       versionId: z.string().describe('App Store 버전 ID (appstore_list_versions 결과)'),
+      confirm: z.boolean().optional().describe('true 명시 시에만 실제 심사 제출. 생략/false 면 dry-run preview 만 반환 (비가역 사고 차단).'),
     },
-    async ({ versionId }) => {
+    async ({ versionId, confirm }) => {
+      if (!confirm) {
+        // ── dry-run preview — versionString·빌드·whatsNew 발췌를 사용자에게 보여주고 재호출 유도.
+        const preview = await appstore.buildSubmitForReviewPreview(versionId);
+        const lines: string[] = [];
+        lines.push('🛑 심사 제출 dry-run — 아직 실제 제출 안 함.');
+        lines.push('');
+        lines.push(`  versionId    : ${preview.versionId}`);
+        lines.push(`  versionString: ${preview.versionString ?? '(조회 실패)'}`);
+        lines.push(`  state        : ${preview.state ?? '(조회 실패)'}`);
+        lines.push(`  appId        : ${preview.appId}`);
+        lines.push(`  platform     : ${preview.platform}`);
+        if (preview.attachedBuild) {
+          lines.push(`  attachedBuild: #${preview.attachedBuild.buildNumber ?? '?'} (id=${preview.attachedBuild.id}, state=${preview.attachedBuild.processingState ?? '?'})`);
+        } else {
+          lines.push(`  attachedBuild: ⚠️ 미연결 — appstore_attach_latest_build 필요`);
+        }
+        if (preview.whatsNewByLocale.length === 0) {
+          lines.push(`  whatsNew     : ⚠️ 등록된 로컬라이제이션 없음`);
+        } else {
+          lines.push(`  whatsNew     :`);
+          for (const wn of preview.whatsNewByLocale) {
+            lines.push(`    [${wn.locale}] (${wn.length}자) "${wn.excerpt}"`);
+          }
+        }
+        lines.push('');
+        lines.push('실제 제출하려면 같은 versionId 로 `confirm: true` 옵션을 추가해 재호출하세요.');
+        lines.push('⚠️ 제출 후엔 cancel_review 가 큐 진입(WAITING_FOR_REVIEW) 시점에 막힐 수 있어요 (실측: 1.4.2→3, 1.4.5→6).');
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
+      }
       const result = await appstore.submitVersionForReview(versionId);
       return { content: [{ type: 'text', text: `✅ 버전 ${versionId} 심사 제출 완료 (state: ${result.state}). App Store Connect에서 진행 상태 확인 가능.\n\n${JSON.stringify(result, null, 2)}` }] };
     },

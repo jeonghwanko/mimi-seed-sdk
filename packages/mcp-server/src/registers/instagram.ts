@@ -7,52 +7,80 @@ export function registerInstagramTools(server: McpServer) {
   server.tool(
     'instagram_save_config',
     [
-      'Instagram Graph API 토큰을 ~/.mimi-seed/instagram.json (mode 0600)에 저장합니다.',
-      'accessToken: long-lived (60일) — developers.facebook.com → Graph API Explorer에서 발급.',
-      'userId: Instagram Business Account ID — GET /me/accounts → instagram_business_account.id 로 조회.',
-      '권한: instagram_basic + instagram_content_publish 필수.',
-      '저장 후 instagram_get_account 로 토큰 검증 권장.',
+      'Instagram 토큰을 ~/.mimi-seed/instagram.json (mode 0600)에 저장합니다.',
+      'accessToken은 두 형식 모두 자동 감지:',
+      '  IGAA... = Instagram API with Instagram Login (Meta 신규, FB Page 불필요)',
+      '  EAA...  = Instagram Graph API via Facebook Login (FB Page+IG Business 연결 필요)',
+      'userId 미입력 시 토큰으로 자동 조회 (/me 또는 /me/accounts).',
+      '저장 직후 토큰 유효성도 자동 검증.',
     ].join(' '),
     {
-      accessToken: z.string().describe('Long-lived access token (60일 유효)'),
-      userId: z.string().describe('Instagram Business Account ID'),
-      assumeIssuedNow: z.boolean().default(true).describe('issuedAt을 지금으로 가정하고 expiresAt = +60일 자동 계산'),
+      accessToken: z.string().describe('Long-lived access token (60일)'),
+      userId: z.string().optional().describe('Instagram Business Account ID (생략 시 자동 조회)'),
+      assumeIssuedNow: z.boolean().default(true).describe('expiresAt = 지금 + 60일 자동 계산'),
     },
     async ({ accessToken, userId, assumeIssuedNow }) => {
+      const apiType = accessToken.startsWith('IGAA') ? 'Instagram Login' : 'Facebook Login';
+
+      // userId 자동 조회
+      let resolvedUserId = userId;
+      if (!resolvedUserId) {
+        try {
+          resolvedUserId = await api.fetchUserId(accessToken);
+        } catch (err) {
+          return {
+            content: [{
+              type: 'text',
+              text: [
+                `❌ userId 자동 조회 실패 (${apiType})`,
+                `   ${(err as Error).message}`,
+                ``,
+                `userId를 명시적으로 전달하거나 토큰을 다시 확인하세요.`,
+              ].join('\n'),
+            }],
+          };
+        }
+      }
+
       const expiresAt = assumeIssuedNow
         ? new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
         : undefined;
 
-      saveInstagramConfig({ accessToken, userId, expiresAt });
-
       // 검증 — 잘못된 토큰이면 즉시 알림
       try {
-        const account = await api.getAccount({ accessToken, userId });
-        // 검증 성공 시 username 추가 저장
-        saveInstagramConfig({ accessToken, userId, expiresAt, username: account.username });
+        const account = await api.getAccount({ accessToken, userId: resolvedUserId });
+        // 검증 성공 → 최종 저장
+        saveInstagramConfig({
+          accessToken,
+          userId: resolvedUserId,
+          expiresAt,
+          username: account.username,
+        });
         return {
           content: [{
             type: 'text',
             text: [
-              `✅ Instagram 연결 확인 완료`,
+              `✅ Instagram 연결 확인 완료 (${apiType})`,
               `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
               `   ID: ${account.id}`,
               account.account_type ? `   타입: ${account.account_type}` : '',
               account.followers_count !== undefined ? `   팔로워: ${account.followers_count.toLocaleString()}` : '',
+              account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
               expiresAt ? `   토큰 만료(추정): ${expiresAt.slice(0, 10)}` : '',
             ].filter(Boolean).join('\n'),
           }],
         };
       } catch (err) {
+        // 검증 실패 — 저장은 하지 않고 사용자에게 알림
         return {
           content: [{
             type: 'text',
             text: [
-              `⚠️ 설정은 저장됐지만 토큰 검증 실패`,
+              `❌ 토큰 검증 실패 (${apiType})`,
+              `   userId: ${resolvedUserId}`,
               `   ${(err as Error).message}`,
               ``,
-              `토큰/userId를 다시 확인하세요.`,
-              `instagram_save_config 로 재저장 가능.`,
+              `토큰을 다시 발급받거나 userId를 직접 지정해보세요.`,
             ].join('\n'),
           }],
         };

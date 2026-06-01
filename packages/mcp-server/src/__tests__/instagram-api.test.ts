@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as api from '../instagram/api.js';
+import { apiBaseFor } from '../instagram/api.js';
 import type { InstagramConfig } from '../instagram/config.js';
 
 const cfg: InstagramConfig = {
@@ -31,8 +32,22 @@ function textResp(text: string, status = 400): Response {
 
 // ── getAccount ──
 
+describe('apiBaseFor — token prefix routing', () => {
+  it('IGAA → graph.instagram.com', () => {
+    expect(apiBaseFor('IGAAxxxxx')).toBe('https://graph.instagram.com/v21.0');
+  });
+
+  it('EAA → graph.facebook.com', () => {
+    expect(apiBaseFor('EAAxxxxx')).toBe('https://graph.facebook.com/v21.0');
+  });
+
+  it('unknown prefix defaults to graph.facebook.com (back-compat)', () => {
+    expect(apiBaseFor('xyzxyz')).toBe('https://graph.facebook.com/v21.0');
+  });
+});
+
 describe('getAccount', () => {
-  it('GETs /<userId> with fields + access_token', async () => {
+  it('Facebook Login token uses graph.facebook.com', async () => {
     fetchMock.mockResolvedValueOnce(jsonResp({ id: cfg.userId, username: 'mimi' }));
     await api.getAccount(cfg);
 
@@ -42,6 +57,27 @@ describe('getAccount', () => {
     expect(url.searchParams.get('fields')).toContain('username');
     expect(url.searchParams.get('fields')).toContain('followers_count');
     expect(fetchMock.mock.calls[0][1]?.method).toBe('GET');
+  });
+
+  it('Instagram Login token (IGAA) uses graph.instagram.com', async () => {
+    const igCfg = { accessToken: 'IGAA_test', userId: '17841999' };
+    fetchMock.mockResolvedValueOnce(jsonResp({ id: igCfg.userId, username: 'mimi' }));
+    await api.getAccount(igCfg);
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.origin).toBe('https://graph.instagram.com');
+  });
+
+  it('IGAA token requests minimal fields (no name/profile_picture_url)', async () => {
+    const igCfg = { accessToken: 'IGAA_test', userId: '17841999' };
+    fetchMock.mockResolvedValueOnce(jsonResp({ id: igCfg.userId, username: 'mimi' }));
+    await api.getAccount(igCfg);
+
+    // username은 OK, name은 별개 필드. comma split으로 정확 일치 비교
+    const fields = (new URL(fetchMock.mock.calls[0][0]).searchParams.get('fields') ?? '').split(',');
+    expect(fields).not.toContain('name');
+    expect(fields).not.toContain('profile_picture_url');
+    expect(fields).toContain('username');
   });
 
   it('parses Graph error format with code', async () => {
@@ -56,6 +92,48 @@ describe('getAccount', () => {
   it('falls back to raw text when error body is not JSON', async () => {
     fetchMock.mockResolvedValueOnce(textResp('Service Unavailable', 503));
     await expect(api.getAccount(cfg)).rejects.toThrow(/503.*Service Unavailable/);
+  });
+});
+
+// ── fetchUserId ──
+
+describe('fetchUserId', () => {
+  it('IGAA token: GET /me returns user_id', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp({ user_id: '17841555', username: 'cafe' }));
+    const id = await api.fetchUserId('IGAA_xxx');
+    expect(id).toBe('17841555');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('https://graph.instagram.com');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/me');
+  });
+
+  it('IGAA token: falls back to id when user_id absent', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp({ id: '17841666', username: 'cafe' }));
+    const id = await api.fetchUserId('IGAA_xxx');
+    expect(id).toBe('17841666');
+  });
+
+  it('EAA token: GET /me/accounts → instagram_business_account.id', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResp({
+        data: [
+          { instagram_business_account: { id: '17841777' } },
+        ],
+      }),
+    );
+    const id = await api.fetchUserId('EAA_xxx');
+    expect(id).toBe('17841777');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('graph.facebook.com');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/me/accounts');
+  });
+
+  it('EAA token: throws helpful error when no IG Business Account linked', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp({ data: [{}] })); // no instagram_business_account
+    await expect(api.fetchUserId('EAA_xxx')).rejects.toThrow(/Instagram Business Account/);
+  });
+
+  it('EAA token: throws when no pages at all', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp({ data: [] }));
+    await expect(api.fetchUserId('EAA_xxx')).rejects.toThrow(/Instagram Business Account/);
   });
 });
 

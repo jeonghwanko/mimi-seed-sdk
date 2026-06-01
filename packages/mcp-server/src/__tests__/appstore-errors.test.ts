@@ -1,0 +1,120 @@
+import { describe, it, expect } from 'vitest';
+import { friendlyAppStoreError, __testing } from '../appstore/errors.js';
+
+describe('friendlyAppStoreError', () => {
+  it('Apple 표준 JSON 에러 파싱 + INVALID_CHARACTERS hint', () => {
+    const body = JSON.stringify({
+      errors: [
+        {
+          code: 'INVALID_CHARACTERS',
+          title: 'An attribute value contains invalid characters.',
+          detail: "Attribute 'whatsNew' contains invalid characters.",
+          source: { pointer: '/data/attributes/whatsNew' },
+        },
+      ],
+    });
+    const err = friendlyAppStoreError(409, body);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('App Store API 409');
+    expect(err.message).toContain('[INVALID_CHARACTERS]');
+    expect(err.message).toContain('/data/attributes/whatsNew');
+    expect(err.message).toContain('text-validators');
+  });
+
+  it('ENTITY_STATE_INVALID hint', () => {
+    const body = JSON.stringify({
+      errors: [{ code: 'ENTITY_STATE_INVALID', detail: 'Cannot edit in current state.' }],
+    });
+    const err = friendlyAppStoreError(409, body);
+    expect(err.message).toContain('[ENTITY_STATE_INVALID]');
+    expect(err.message).toContain('편집 가능 단계가 아니');
+  });
+
+  it('알려지지 않은 code 는 hint 없이 detail 만', () => {
+    const body = JSON.stringify({
+      errors: [{ code: 'TOTALLY_NEW_CODE', detail: 'Some new error.' }],
+    });
+    const err = friendlyAppStoreError(500, body);
+    expect(err.message).toContain('[TOTALLY_NEW_CODE]');
+    expect(err.message).toContain('Some new error.');
+    expect(err.message).not.toContain('💡');
+  });
+
+  it('여러 errors 줄바꿈으로 결합', () => {
+    const body = JSON.stringify({
+      errors: [
+        { code: 'INVALID_CHARACTERS', detail: 'first' },
+        { code: 'ENTITY_STATE_INVALID', detail: 'second' },
+      ],
+    });
+    const err = friendlyAppStoreError(409, body);
+    expect(err.message.split('\n').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('비표준 body (HTML) 폴백 — 원본 message 보존', () => {
+    const body = '<html><body>500 Internal Server Error</body></html>';
+    const err = friendlyAppStoreError(500, body);
+    expect(err.message).toBe('App Store API 500: <html><body>500 Internal Server Error</body></html>');
+  });
+
+  it('빈 body 폴백', () => {
+    const err = friendlyAppStoreError(502, '');
+    expect(err.message).toBe('App Store API 502: ');
+  });
+
+  it('errors 배열이 비어있으면 폴백', () => {
+    const body = JSON.stringify({ errors: [] });
+    const err = friendlyAppStoreError(409, body);
+    // Apple JSON 이지만 errors 가 비어 있으면 의미 있는 friendlyfmt 불가 → 폴백
+    expect(err.message).toBe(`App Store API 409: ${body}`);
+  });
+
+  it('Error.cause 에 원본 + parsedErrors 보존', () => {
+    const body = JSON.stringify({
+      errors: [{ code: 'INVALID_CHARACTERS', detail: 'x' }],
+    });
+    const err = friendlyAppStoreError(409, body) as Error & { cause?: { status: number; body: string; parsedErrors?: unknown[] } };
+    expect(err.cause).toBeDefined();
+    expect(err.cause?.status).toBe(409);
+    expect(err.cause?.body).toBe(body);
+    expect(err.cause?.parsedErrors).toHaveLength(1);
+  });
+
+  it('비표준 body 의 cause.parsedErrors 는 undefined', () => {
+    const err = friendlyAppStoreError(500, 'plain text') as Error & { cause?: { parsedErrors?: unknown[] } };
+    expect(err.cause?.parsedErrors).toBeUndefined();
+  });
+
+  it('isNotFoundError 호환 — App Store API 404: prefix 유지', () => {
+    // tools.ts:255 의 isNotFoundError 가 /^App Store API 404:/.test() 로 분기.
+    // friendly 변환 후에도 prefix 매칭되어야 호환.
+    const body = JSON.stringify({ errors: [{ code: 'NOT_FOUND', detail: 'not found' }] });
+    const err = friendlyAppStoreError(404, body);
+    expect(/^App Store API 404:/.test(err.message)).toBe(true);
+
+    // 폴백 케이스도 마찬가지
+    const err2 = friendlyAppStoreError(404, 'plain');
+    expect(/^App Store API 404:/.test(err2.message)).toBe(true);
+  });
+});
+
+describe('__testing.parseAppleErrorBody', () => {
+  it('정상 JSON 파싱', () => {
+    const parsed = __testing.parseAppleErrorBody(
+      JSON.stringify({ errors: [{ code: 'X' }] }),
+    );
+    expect(parsed).toHaveLength(1);
+  });
+
+  it('JSON 아닌 입력은 null', () => {
+    expect(__testing.parseAppleErrorBody('not json')).toBe(null);
+  });
+
+  it('빈 입력은 null', () => {
+    expect(__testing.parseAppleErrorBody('')).toBe(null);
+  });
+
+  it('errors 키 없는 JSON 은 null', () => {
+    expect(__testing.parseAppleErrorBody('{"foo":"bar"}')).toBe(null);
+  });
+});

@@ -1,12 +1,15 @@
 import { google } from 'googleapis';
-import type { OAuth2Client } from 'google-auth-library';
+import type { OAuth2Client, JWT } from 'google-auth-library';
+
+/** BigQuery 호출에 쓰이는 인증 클라이언트 — 사용자 OAuth 또는 서비스 계정 JWT. */
+export type BigQueryAuthClient = OAuth2Client | JWT;
 
 const bq = () => google.bigquery('v2');
 
 // ─── 쿼리 실행 ───
 
 export async function runQuery(
-  auth: OAuth2Client,
+  auth: BigQueryAuthClient,
   projectId: string,
   query: string,
   maxResults = 1000,
@@ -40,7 +43,7 @@ export async function runQuery(
 
 // ─── 데이터셋 목록 ───
 
-export async function listDatasets(auth: OAuth2Client, projectId: string) {
+export async function listDatasets(auth: BigQueryAuthClient, projectId: string) {
   const res = await bq().datasets.list({ auth, projectId });
   return (res.data.datasets ?? []).map((d) => ({
     datasetId: d.datasetReference?.datasetId,
@@ -51,7 +54,7 @@ export async function listDatasets(auth: OAuth2Client, projectId: string) {
 // ─── 테이블 목록 ───
 
 export async function listTables(
-  auth: OAuth2Client,
+  auth: BigQueryAuthClient,
   projectId: string,
   datasetId: string,
 ) {
@@ -65,7 +68,7 @@ export async function listTables(
 // ─── 테이블 스키마 ───
 
 export async function getTableSchema(
-  auth: OAuth2Client,
+  auth: BigQueryAuthClient,
   projectId: string,
   datasetId: string,
   tableId: string,

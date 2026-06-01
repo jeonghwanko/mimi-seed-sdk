@@ -6,6 +6,7 @@ export type AuthErrorCode =
   | 'UNAUTHENTICATED' // tokens.json 없음
   | 'NO_REFRESH_TOKEN' // tokens.json은 있는데 refresh_token 누락 (offline_access 미발급)
   | 'INVALID_GRANT' // refresh_token revoke/expired — 사용자 재로그인 필요
+  | 'RAPT_REQUIRED' // Google Workspace 재인증(reauth) 정책 — invalid_rapt
   | 'INVALID_CLIENT' // client_id/secret 불일치 — CLI 자체 문제
   | 'UNAUTHORIZED_CLIENT' // 동의 범위/리다이렉트 URI 불일치
   | 'REFRESH_NETWORK_ERROR' // 구글 토큰 엔드포인트 도달 실패
@@ -54,6 +55,19 @@ export function classifyError(e: unknown, ctx: ClassifyContext): AuthErrorPayloa
       code: 'INVALID_GRANT',
       message: 'refresh_token이 더 이상 유효하지 않습니다 (revoke 또는 만료).',
       hint: 'mimi-seed-auth 로 재로그인하세요.',
+      retriable: false,
+      needsReauth: true,
+      cause: raw,
+    };
+  }
+  if (oauthCode === 'invalid_rapt' || oauthCode === 'rapt_required') {
+    return {
+      code: 'RAPT_REQUIRED',
+      message:
+        'Google Workspace 재인증(reauth) 정책으로 토큰 갱신이 거부되었습니다 (invalid_rapt).',
+      hint:
+        'mimi-seed-auth 로 재로그인하거나, 재인증 정책의 영향을 받지 않는 서비스 계정 인증을 사용하세요 ' +
+        '(BigQuery: mimi-seed-bigquery-auth).',
       retriable: false,
       needsReauth: true,
       cause: raw,
@@ -161,7 +175,7 @@ function extractOAuthErrorCode(e: unknown, raw: string): string | undefined {
     if (typeof dataErr === 'string') return dataErr;
   }
   // message에 'invalid_grant' 같은 표준 코드가 박혀 있는 경우
-  const m = raw.match(/\b(invalid_grant|invalid_client|invalid_request|unauthorized_client|access_denied|unsupported_grant_type)\b/);
+  const m = raw.match(/\b(invalid_grant|invalid_client|invalid_request|unauthorized_client|access_denied|unsupported_grant_type|invalid_rapt|rapt_required)\b/);
   return m?.[1];
 }
 

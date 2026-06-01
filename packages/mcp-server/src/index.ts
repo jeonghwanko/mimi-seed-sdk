@@ -12,6 +12,7 @@ import { registerBigqueryTools } from './registers/bigquery.js';
 import { registerAuthTools } from './registers/auth.js';
 import { registerCiTools } from './registers/ci.js';
 import { registerInstagramTools } from './registers/instagram.js';
+import { registerFacebookTools } from './registers/facebook.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 
@@ -31,6 +32,7 @@ registerBigqueryTools(server);
 registerAuthTools(server);
 registerCiTools(server);
 registerInstagramTools(server);
+registerFacebookTools(server);
 registerPrompts(server);
 registerResources(server);
 
@@ -42,6 +44,7 @@ const SUBCOMMANDS: Record<string, () => Promise<unknown>> = {
   'mimi-seed-auth': () => import('./auth/cli.js'),
   'mimi-seed-playstore-auth': () => import('./auth/playstore-setup-cli.js'),
   'mimi-seed-appstore-auth': () => import('./appstore/setup-cli.js'),
+  'mimi-seed-bigquery-auth': () => import('./auth/bigquery-setup-cli.js'),
 };
 
 async function main() {

@@ -1,4 +1,5 @@
 import { getAuthHeaders } from './auth.js';
+import { friendlyAppStoreError } from './errors.js';
 
 /**
  * App Store Connect API v1 래퍼
@@ -29,7 +30,7 @@ export async function apiGet(path: string, params?: Record<string, string>) {
   const res = await fetch(url.toString(), { headers });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`App Store API ${res.status}: ${body}`);
+    throw friendlyAppStoreError(res.status, body);
   }
   return res.json();
 }
@@ -52,7 +53,7 @@ async function apiPatch(path: string, body: unknown) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`App Store API ${res.status}: ${text}`);
+    throw friendlyAppStoreError(res.status, text);
   }
   // 204 No Content 가능
   const text = await res.text();
@@ -77,7 +78,7 @@ async function apiPost(path: string, body: unknown) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`App Store API ${res.status}: ${text}`);
+    throw friendlyAppStoreError(res.status, text);
   }
   // 201 Created — 본문에 created entity. 일부 엔드포인트는 204
   const text = await res.text();
@@ -180,6 +181,60 @@ export async function attachBuildToVersion(versionId: string, buildId: string) {
     data: { type: 'builds', id: buildId },
   });
   return { versionId, buildId, ok: true };
+}
+
+/**
+ * 가장 최신 VALID 빌드를 자동으로 찾아 versionId 에 attach.
+ *
+ * 흐름:
+ *   1. versionId → appId 역추적 (`getVersionAppAndPlatform`).
+ *   2. `listBuilds(appId)` 로 최근 10개 빌드 조회 (sort: uploadedDate desc).
+ *   3. `processingState === 'VALID'` 필터.
+ *   4. `minBuildNumber` 옵션 있으면 buildNumber 숫자 기준 필터.
+ *   5. buildNumber 숫자 최대값으로 정렬 → 1개 선택.
+ *   6. attach.
+ *
+ * 사용처: 1.4.x 같은 매 배포마다 `appstore_list_builds` → 수동 탐색 → `appstore_attach_build` 의
+ * 3-step 을 한 번에 줄임. 실수로 PROCESSING 중인 빌드를 attach 해서 심사 제출 시점에 깨지는
+ * 케이스도 차단.
+ */
+export async function attachLatestValidBuild(
+  versionId: string,
+  opts?: { minBuildNumber?: number },
+): Promise<{ versionId: string; attachedBuildId: string; buildNumber: string; uploadedDate?: string }> {
+  type BuildRow = { id: string; version: string; uploadedDate?: string; processingState?: string };
+  const { appId } = await getVersionAppAndPlatform(versionId);
+  const builds = (await listBuilds(appId)) as BuildRow[];
+  const valid = builds.filter((b: BuildRow) => b.processingState === 'VALID');
+  if (valid.length === 0) {
+    throw new Error(
+      `appId=${appId} 에 VALID 빌드가 없어요 (최근 ${builds.length}개 확인). 빌드 PROCESSING 완료 대기 필요.`,
+    );
+  }
+  let candidates: BuildRow[] = valid;
+  if (opts?.minBuildNumber !== undefined) {
+    const min = opts.minBuildNumber;
+    candidates = valid.filter((b: BuildRow) => Number(b.version) >= min);
+    if (candidates.length === 0) {
+      throw new Error(
+        `minBuildNumber=${min} 이상 VALID 빌드가 없어요. VALID 빌드: ${valid.map((b: BuildRow) => b.version).join(', ')}`,
+      );
+    }
+  }
+  // buildNumber 가 숫자 문자열이라는 가정 (TestFlight 표준). NaN 은 -Infinity 처리해 뒤로.
+  candidates.sort((a: BuildRow, b: BuildRow) => {
+    const an = Number(a.version);
+    const bn = Number(b.version);
+    return (isNaN(bn) ? -Infinity : bn) - (isNaN(an) ? -Infinity : an);
+  });
+  const target = candidates[0];
+  await attachBuildToVersion(versionId, target.id);
+  return {
+    versionId,
+    attachedBuildId: target.id,
+    buildNumber: target.version,
+    uploadedDate: target.uploadedDate,
+  };
 }
 
 // ─── 로컬라이제이션 (메타데이터) ───
@@ -536,6 +591,67 @@ async function isVersionAttached(submissionId: string, versionId: string): Promi
   });
   const items = (data?.data ?? []) as Array<{ relationships?: { appStoreVersion?: { data?: { id?: string } } } }>;
   return items.some((it) => it?.relationships?.appStoreVersion?.data?.id === versionId);
+}
+
+/**
+ * submit_for_review dry-run 프리뷰 — 비가역 제출 직전 사용자 확인용.
+ *
+ * 1.4.x 배포 사고 누적: submit 직후 cancel_review 가 큐 진입으로 막혀 새 versionString
+ * bump 으로 우회해야 하는 케이스가 반복됨 (reference_appstore_cancel_review_window).
+ * 호출자가 의도한 그 버전·빌드인지 미리 보여줘서 잘못된 versionId 제출 차단.
+ */
+export async function buildSubmitForReviewPreview(versionId: string): Promise<{
+  versionId: string;
+  versionString?: string;
+  state?: string;
+  appId: string;
+  platform: string;
+  attachedBuild?: { id: string; buildNumber?: string; uploadedDate?: string; processingState?: string };
+  whatsNewByLocale: Array<{ locale: string; excerpt: string; length: number }>;
+}> {
+  const { appId, platform } = await getVersionAppAndPlatform(versionId);
+
+  // 버전 메타: versionString + state
+  const versionData = await apiGet(`/appStoreVersions/${versionId}`, {
+    'fields[appStoreVersions]': 'versionString,appStoreState',
+  }).catch(() => null);
+  const versionString: string | undefined = versionData?.data?.attributes?.versionString;
+  const state: string | undefined = versionData?.data?.attributes?.appStoreState;
+
+  // attached build
+  let attachedBuild: { id: string; buildNumber?: string; uploadedDate?: string; processingState?: string } | undefined;
+  const build = await apiGet(`/appStoreVersions/${versionId}/build`, {
+    'fields[builds]': 'version,uploadedDate,processingState',
+  }).catch(() => null);
+  if (build?.data?.id) {
+    attachedBuild = {
+      id: build.data.id,
+      buildNumber: build.data.attributes?.version,
+      uploadedDate: build.data.attributes?.uploadedDate,
+      processingState: build.data.attributes?.processingState,
+    };
+  }
+
+  // whatsNew 로컬라이제이션 발췌 (앞 200자)
+  type LocalizationRow = { id: string; locale: string; whatsNew: string };
+  const localizations = (await getVersionLocalizations(versionId).catch(() => [])) as LocalizationRow[];
+  const whatsNewByLocale = localizations
+    .filter((l: LocalizationRow) => typeof l.whatsNew === 'string' && l.whatsNew.length > 0)
+    .map((l: LocalizationRow) => ({
+      locale: l.locale,
+      length: l.whatsNew.length,
+      excerpt: l.whatsNew.length > 200 ? `${l.whatsNew.slice(0, 200)}…` : l.whatsNew,
+    }));
+
+  return {
+    versionId,
+    versionString,
+    state,
+    appId,
+    platform,
+    attachedBuild,
+    whatsNewByLocale,
+  };
 }
 
 export async function submitVersionForReview(versionId: string) {

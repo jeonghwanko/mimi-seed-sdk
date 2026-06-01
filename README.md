@@ -188,18 +188,22 @@ Creates IAM account → issues key → walks you through Play Console permission
 
 ---
 
-## Tool List (65+)
+## Tool List (110+)
 
 | Domain | Count | Key Tools |
 |--------|-------|-----------|
-| **Firebase** | 14 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
-| **AdMob** | 6 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
-| **Google Play** | 20 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
-| **App Store Connect** | 18 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
+| **App Store Connect** | 30 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
+| **Google Play** | 26 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
+| **Firebase** | 17 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
+| **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
+| **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
+| **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
+| **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **Checks / Risk** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
+| **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
-| **Risk Check** | 2 | `playstore_check_submission_risks` · `appstore_check_submission_risks` |
-| **Screenshots** | 1 | `screenshot_validate` |
+| **Auth** | 2 | `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 
 Full list → [packages/mcp-server](packages/mcp-server)
 
@@ -228,7 +232,7 @@ Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg
 | Package | Description |
 |---------|-------------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init` to connect your project |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 65+ tools via Google OAuth |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 110+ tools via Google OAuth |
 
 Web console (Remote MCP): [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg)
 

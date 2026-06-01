@@ -71,6 +71,26 @@ export function getStoredTokens(): StoredTokens | null {
   }
 }
 
+/**
+ * tokens.json mtime — 마지막 refresh 시각의 근사값.
+ * (saveTokens 가 매번 writeFileSync 으로 갱신하므로 mtime ≈ 마지막 갱신/저장.)
+ * Google refresh_token 은 7일(미인증 앱) ~ 6개월(인증 앱) 미사용 시 revoke 됨.
+ * auth_status 응답 enrichment 에 사용.
+ */
+export function getTokensLastRefreshMs(): number | null {
+  const pathToRead = fs.existsSync(TOKEN_PATH)
+    ? TOKEN_PATH
+    : fs.existsSync(LEGACY_TOKEN_PATH)
+      ? LEGACY_TOKEN_PATH
+      : null;
+  if (!pathToRead) return null;
+  try {
+    return fs.statSync(pathToRead).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 function saveTokens(tokens: StoredTokens) {
   ensureDir();
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
@@ -269,7 +289,12 @@ export type RefreshStatus =
  *
  * MCP 도구와 CLI 양쪽에서 공유.
  */
-export async function ensureFreshAccessToken(marginMs = 60_000): Promise<RefreshStatus> {
+/**
+ * 사전 갱신 마진. 기존 60_000(1분)에서 300_000(5분)으로 상향 — Google OAuth access_token 의
+ * 통상 lifetime 이 1h 이므로, 5분 마진으로 매 도구 호출 시 만료 임박 시 사전 갱신해
+ * "토큰 만료 → 도구 fail → 재호출" 의 단절 마찰 제거. 5분 마진은 평균 도구 작업 시간을 흡수.
+ */
+export async function ensureFreshAccessToken(marginMs = 300_000): Promise<RefreshStatus> {
   const tokens = getStoredTokens();
   if (!tokens) {
     return {
