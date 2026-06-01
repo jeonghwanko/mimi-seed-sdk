@@ -26,8 +26,12 @@ jobs:
           cache: npm
           cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
 
+      # `npm install` (not `npm ci`): @emnapi/* are optional deps of
+      # platform-specific native packages (rolldown/oxc), and npm omits the
+      # Linux variants from a Windows-generated lockfile — `npm ci` then fails
+      # the strict sync check. `npm install` reconciles per-platform.
       - name: Install
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build
         run: npm run build
