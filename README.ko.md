@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mimi-seed.pryzm.gg"><strong>🌐 웹 콘솔 바로가기</strong></a> &nbsp;·&nbsp;
+  <a href="https://mimi-seed.pryzm.gg/tool"><strong>🌐 웹 콘솔 바로가기</strong></a> &nbsp;·&nbsp;
   <a href="https://mimi-seed.pryzm.gg/workspace/api-tokens">🔑 PAT 발급</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.md">🇺🇸 English</a>
@@ -45,7 +45,7 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 **방법 A — Remote MCP** (추천 · 웹 콘솔 계정 필요)
 
 ```bash
-# 1. 계정 만들기: https://mimi-seed.pryzm.gg
+# 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
 # 2. PAT 발급:    https://mimi-seed.pryzm.gg/workspace/api-tokens
 # 3. Claude Code에 등록:
 claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
@@ -270,7 +270,7 @@ MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/g
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init`으로 프로젝트 연결 |
 | [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 110+ 도구 직접 실행 |
 
-웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg)
+웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
 ---
 
@@ -297,6 +297,6 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받습니다.
 
 [PolyForm Noncommercial License 1.0.0](LICENSE) — 비상업적 사용만 허용.
 
-상업적 이용 문의: [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg)
+상업적 이용 문의: [turbo08@gmail.com](mailto:turbo08@gmail.com)
 
 **Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)

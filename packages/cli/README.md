@@ -304,4 +304,4 @@ claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
 ## 관련 패키지
 
 - [`@yoonion/mimi-seed-mcp`](https://www.npmjs.com/package/@yoonion/mimi-seed-mcp) — Claude Desktop / Cursor용 로컬 MCP 서버 (Firebase · Play Store · App Store · AdMob)
-- [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg) — 웹 콘솔 (스크린샷 검수, Copy Studio, 팀 워크스페이스)
+- [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool) — 웹 콘솔 (스크린샷 검수, Copy Studio, 팀 워크스페이스)

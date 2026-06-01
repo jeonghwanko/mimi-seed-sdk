@@ -2,7 +2,7 @@
 
 **Mimi Seed** — Firebase · AdMob · Google Play · App Store Connect를 AI 콘솔에서 관리. Claude Code / Cursor / 기타 MCP 클라이언트에서 한 줄 등록으로 사용.
 
-> 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg>.
+> 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg/tool>.
 
 ## 설치
 
@@ -213,7 +213,7 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받음:
 ## Links
 
 - CLI 패키지: [`mimi-seed`](https://www.npmjs.com/package/mimi-seed)
-- 웹 콘솔: <https://mimi-seed.pryzm.gg>
+- 웹 콘솔: <https://mimi-seed.pryzm.gg/tool>
 - 저장소: <https://github.com/jeonghwanko/mimi-seed>
 
 ---
@@ -221,6 +221,6 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받음:
 ## License
 
 [PolyForm Noncommercial License 1.0.0](../../LICENSE) — 비상업적 사용만 허용.
-상업적 이용 문의: <https://mimi-seed.pryzm.gg>
+상업적 이용 문의: turbo08@gmail.com
 
 **Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)

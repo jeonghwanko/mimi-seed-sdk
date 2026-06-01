@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mimi-seed.pryzm.gg"><strong>🌐 Web Console</strong></a> &nbsp;·&nbsp;
+  <a href="https://mimi-seed.pryzm.gg/tool"><strong>🌐 Web Console</strong></a> &nbsp;·&nbsp;
   <a href="https://mimi-seed.pryzm.gg/workspace/api-tokens">🔑 Get API Token</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.ko.md">🇰🇷 한국어</a>
@@ -45,7 +45,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 **Option A — Remote MCP** (Recommended · requires web console account)
 
 ```bash
-# 1. Create account: https://mimi-seed.pryzm.gg
+# 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
 # 2. Issue a PAT:   https://mimi-seed.pryzm.gg/workspace/api-tokens
 # 3. Register in Claude Code:
 claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
@@ -270,7 +270,7 @@ Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init` to connect your project |
 | [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 110+ tools via Google OAuth |
 
-Web console (Remote MCP): [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg)
+Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
 ---
 
@@ -299,6 +299,6 @@ New data is written to `~/.mimi-seed/`.
 
 [PolyForm Noncommercial License 1.0.0](LICENSE) — noncommercial use only.
 
-Commercial licensing: [mimi-seed.pryzm.gg](https://mimi-seed.pryzm.gg)
+Commercial licensing: [turbo08@gmail.com](mailto:turbo08@gmail.com)
 
 **Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)
