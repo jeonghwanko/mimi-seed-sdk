@@ -1,0 +1,75 @@
+# Contributing to mimi-seed-sdk
+
+Thanks for your interest! mimi-seed-sdk is the developer-tooling SSOT for Mimi Seed —
+the `mimi-seed` CLI and the `@yoonion/mimi-seed-mcp` MCP server.
+
+## Repository layout
+
+```
+packages/
+  cli/          # `mimi-seed` — CLI (tsup build)
+  mcp-server/   # `@yoonion/mimi-seed-mcp` — local stdio + remote MCP tools (tsc build)
+skills/         # Claude Code / Codex skills
+.claude-plugin/ # Claude Code plugin + marketplace manifests
+.codex-plugin/  # Codex plugin manifest
+```
+
+The private web console (`mimi-seed.pryzm.gg`) lives in a separate repo. Keep CLI/MCP
+source here — don't move it back into the web repo.
+
+## Development setup
+
+Requires Node 20+ (CI runs on 22). Work inside the package you're changing:
+
+```bash
+cd packages/mcp-server   # or packages/cli
+npm install
+npm run build
+npm test
+```
+
+To try the MCP server locally against a client:
+
+```bash
+cd packages/mcp-server && npm run build
+claude mcp add mimi-seed-dev -- node "$(pwd)/dist/index.js"
+# first run needs Google OAuth:
+node dist/index.js  # then in another shell: npx . mimi-seed-auth  (or use the published bin)
+```
+
+## Pull requests
+
+1. Branch off `main`.
+2. Keep changes scoped to one package where possible.
+3. **Build + test must pass** (`npm run build && npm test` in the affected package). The
+   mcp-server also type-checks via `tsc`; the CLI builds with `tsup` — run `npx tsc --noEmit`
+   there too, since `tsup` does not type-check.
+4. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`,
+   `chore:`, `docs:`…). Release notes are auto-generated from commit messages.
+5. Adding/changing an MCP tool? Update its `server.tool(...)` registration, the tool count
+   in the README tables, and add a test where it makes sense (see `src/__tests__/`).
+
+## Releasing (maintainers)
+
+Releases are automated. Bump the version in the package you changed and push to `main`:
+
+```bash
+cd packages/mcp-server
+npm version patch --no-git-tag-version   # patch only — see versioning note below
+git commit -am "feat(mcp): ..." && git push origin main
+```
+
+CI then, for each package whose `package.json` version is not yet on npm:
+- publishes to npm with **provenance** (signed via GitHub OIDC), and
+- creates a **GitHub Release** with auto-generated notes (`<package>-v<version>` tag).
+
+If the version already exists it's skipped (idempotent), so version-less pushes (docs, CI)
+are safe. Requires the `NPM_TOKEN` repo secret.
+
+**Versioning:** bump the **patch** number only unless a maintainer decides otherwise.
+
+## License
+
+By contributing, you agree your contributions are licensed under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Commercial use requires a separate
+license — contact turbo08@gmail.com.

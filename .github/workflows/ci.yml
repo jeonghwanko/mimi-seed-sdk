@@ -9,6 +9,9 @@ jobs:
   build-test:
     name: ${{ matrix.package }} (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # GitHub Release + 태그 생성
+      id-token: write   # npm provenance (OIDC 서명)
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +50,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "NPM_TOKEN secret 미설정 — publish 건너뜀 (repo Settings → Secrets → NPM_TOKEN 추가 필요)"
@@ -63,9 +67,14 @@ jobs:
           # 레이스 안전망: 방금 다른 푸시가 같은 버전을 올려 pre-check 가 stale 이어도
           # 레지스트리의 "이미 존재" 거부(403)는 실패가 아니라 no-op 으로 처리.
           # 그 외 에러(권한/네트워크 등)는 그대로 실패시킨다.
-          if npm publish --access public 2>/tmp/pub.err; then
+          if npm publish --access public --provenance 2>/tmp/pub.err; then
             cat /tmp/pub.err >&2 || true
-            echo "✓ published $NAME@$VERSION"
+            echo "✓ published $NAME@$VERSION (provenance 서명됨)"
+            # 새 버전 publish 성공 시 GitHub Release 자동 생성 (자동 release notes).
+            # 실패해도 publish 는 이미 끝났으므로 비치명적 처리.
+            TAG="${{ matrix.package }}-v$VERSION"
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes \
+              || echo "⚠ GitHub Release 생성 실패 (publish 는 성공) — 무시"
           elif grep -qiE "cannot publish over|previously published" /tmp/pub.err; then
             cat /tmp/pub.err >&2
             echo "• $NAME@$VERSION 이미 존재(레이스) — no-op"
