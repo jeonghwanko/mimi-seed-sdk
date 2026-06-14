@@ -49,6 +49,9 @@ const CODE_HINTS: Record<string, string> = {
   // submit 직후 cancel 시도 (큐 진입 후)
   STATE_ERROR:
     '현재 상태에서 허용되지 않는 작업. cancel_review 라면 큐 진입 후라서 불가 — 새 versionString 으로 우회.',
+  // JWT 거부 — 잘못된 자격증명
+  NOT_AUTHORIZED:
+    'API 키가 거부됐어요 — issuerId/keyId/.p8 조합 불일치 가능. appstore_verify_credentials 로 진단하고 mimi-seed auth appstore 로 재등록.',
 };
 
 /** Apple 표준 에러 응답 파싱 시도. 실패하면 null 반환. */

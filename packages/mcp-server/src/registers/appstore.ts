@@ -22,6 +22,37 @@ export function registerAppstoreTools(server: McpServer) {
   );
 
   server.tool(
+    'appstore_verify_credentials',
+    'App Store Connect API 키(appstore.json) 유효성 검증 — JWT 서명 + GET /apps 호출로 creds/sign/auth/api 단계별 진단. 첫 도구 호출에서 401로 늦게 터지기 전에 setup 직후 확인용. 인자 없음.',
+    {},
+    async () => {
+      const r = await appstore.verifyAppStoreCredentials();
+      if (r.ok) {
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              '✓ App Store Connect 인증 유효',
+              r.appCount != null ? `   접근 가능 앱: ${r.appCount}개` : '',
+              r.firstApp ? `   예: ${r.firstApp.name ?? r.firstApp.id}` : '',
+            ].filter(Boolean).join('\n'),
+          }],
+        };
+      }
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            `✗ 검증 실패 (stage: ${r.stage}${r.httpStatus ? `, HTTP ${r.httpStatus}` : ''})`,
+            '',
+            r.message,
+          ].join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
     'appstore_get_app',
     'App Store Connect 앱 상세 정보',
     { appId: z.string().describe('앱 ID (숫자)') },

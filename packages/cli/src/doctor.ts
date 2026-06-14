@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { mcpCall } from "./mcp-client.js";
@@ -39,6 +42,37 @@ export async function cmdDoctor(): Promise<void> {
       ok("Mimi Seed 서버 연결됨", `앱 ${lines.length}개`);
     }
   }
+
+  section("로컬 MCP 자격증명 (~/.mimi-seed)");
+  const credDir = path.join(os.homedir(), ".mimi-seed");
+  const hasFile = (name: string) => fs.existsSync(path.join(credDir, name));
+  const hasPrefix = (prefix: string) => {
+    try {
+      return fs.readdirSync(credDir).some((f) => f.startsWith(prefix));
+    } catch {
+      return false;
+    }
+  };
+  const hasPlaySa =
+    hasFile("play-service-account.json") ||
+    (() => {
+      try {
+        return fs.readdirSync(path.join(credDir, "play-service-accounts")).some((f) => f.endsWith(".json"));
+      } catch {
+        return false;
+      }
+    })();
+  const creds: Array<[string, boolean, string]> = [
+    ["Google OAuth (Firebase/AdMob/Play/Ads)", hasFile("tokens.json"), "mimi-seed auth login"],
+    ["App Store Connect", hasFile("appstore.json"), "mimi-seed auth appstore"],
+    ["Play 서비스 계정 (선택 — OAuth로도 가능)", hasPlaySa, "mimi-seed auth playstore"],
+    ["BigQuery 서비스 계정", hasPrefix("bigquery"), "mimi-seed auth bigquery"],
+  ];
+  for (const [label, present, cmd] of creds) {
+    if (present) ok(label);
+    else warn(label, `→ ${cmd}`);
+  }
+  process.stdout.write(kleur.dim("  OAuth 토큰 신선도 확인: mimi-seed auth status\n"));
 
   section("로컬 환경");
   const nodeVer = process.version;

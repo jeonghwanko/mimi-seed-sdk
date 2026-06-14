@@ -32,7 +32,8 @@ function log(msg: string): void {
   process.stdout.write(msg + "\n");
 }
 
-async function cmdInit(): Promise<void> {
+async function cmdInit(args: string[]): Promise<void> {
+  const local = args.includes("--local");
   const cwd = process.cwd();
   log(kleur.bold("Mimi Seed CLI — init"));
   log(kleur.dim(cwd));
@@ -169,6 +170,19 @@ async function cmdInit(): Promise<void> {
   log(`대시보드: ${kleur.underline(DEFAULT_WEB_BASE + "/apps")}`);
   log("");
   printMcpSetup(cfg);
+
+  if (local) {
+    log("");
+    log(kleur.bold("── 로컬 MCP 추가 설정 (--local) ──"));
+    log(kleur.dim("원격 MCP(16 tool, PAT)는 위에서 끝. 로컬 MCP는 Google OAuth로 110+ tool을 직접 실행합니다."));
+    log("");
+    log("1) Google 로그인 (Firebase / AdMob / Play / Ads):");
+    await cmdAuth(["login"]);
+    log("");
+    log("2) 로컬 MCP 서버 등록 (원격 'mimi-seed' 와 별개):");
+    log(kleur.cyan("   claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp"));
+    log(kleur.dim('   Codex: ~/.codex/config.toml 에 [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp"]'));
+  }
 }
 
 async function cmdStatus(): Promise<void> {
@@ -241,8 +255,11 @@ http_headers = { Authorization = "Bearer ${cfg.prefix}..." }`);
 const CMD_USAGE: Record<string, string> = {
   init: `${kleur.bold("mimi-seed init")} — 현재 프로젝트를 Mimi Seed에 연결
 
-앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) → 브라우저 PAT 발급 → 앱 등록
-+ .claude/mimi-seed.md, AGENTS.md 생성. 옵션 없음.`,
+앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) → 브라우저 PAT 발급(원격 MCP) → 앱 등록
++ .claude/mimi-seed.md, AGENTS.md 생성.
+
+옵션:
+  --local   추가로 Google OAuth 로그인 + 로컬 110+ tool MCP 등록 안내`,
   status: `${kleur.bold("mimi-seed status")} — 연결 상태 + 등록 앱 목록. 옵션 없음.`,
   doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI). 옵션 없음.`,
   logout: `${kleur.bold("mimi-seed logout")} — 로컬 설정(config.json) 삭제. 옵션 없음.`,
@@ -345,7 +362,7 @@ async function main(): Promise<void> {
   try {
     switch (cmd) {
       case "init":
-        await cmdInit();
+        await cmdInit(restArgs);
         break;
       case "status":
         await cmdStatus();
