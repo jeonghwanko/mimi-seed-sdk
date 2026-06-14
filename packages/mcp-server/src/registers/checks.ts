@@ -19,7 +19,7 @@ export function registerChecksTools(server: McpServer) {
       language: z.string().optional().describe('언어 코드 (기본: ko-KR)'),
     },
     async ({ packageName, language }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const risks = await checkPlayStoreRisks(auth, packageName, language ?? 'ko-KR');
       const text = formatRisks(risks, 'Google Play');
       return { content: [{ type: 'text', text }] };

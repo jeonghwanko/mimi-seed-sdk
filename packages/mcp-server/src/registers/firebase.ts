@@ -1,7 +1,31 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import * as firebase from '../firebase/tools.js';
+import * as firebaseRaw from '../firebase/tools.js';
 import { requireAuth } from '../helpers.js';
+import { friendlyGoogleError } from '../lib/google-errors.js';
+
+// 모든 firebase tools 호출을 친절 에러로 감싸는 프록시 — 17개 핸들러에 개별
+// try/catch 없이 raw GaxiosError(API 미활성화/프로젝트 없음/billing/권한)를
+// "다음에 뭘 할지" 메시지로 변환. 비-Promise 반환은 그대로 통과.
+const firebase: typeof firebaseRaw = new Proxy(firebaseRaw, {
+  get(target, prop, receiver) {
+    const orig = Reflect.get(target, prop, receiver);
+    if (typeof orig !== 'function') return orig;
+    return (...args: unknown[]) => {
+      try {
+        const out = (orig as (...a: unknown[]) => unknown)(...args);
+        if (out && typeof (out as { then?: unknown }).then === 'function') {
+          return (out as Promise<unknown>).catch((err) => {
+            throw friendlyGoogleError(err);
+          });
+        }
+        return out;
+      } catch (err) {
+        throw friendlyGoogleError(err);
+      }
+    };
+  },
+});
 
 export function registerFirebaseTools(server: McpServer) {
   server.tool(
@@ -9,7 +33,7 @@ export function registerFirebaseTools(server: McpServer) {
     '내 Firebase 프로젝트 목록 조회',
     {},
     async () => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const projects = await firebase.listProjects(auth);
       return { content: [{ type: 'text', text: JSON.stringify(projects, null, 2) }] };
     },
@@ -20,7 +44,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase 프로젝트 상세 정보 조회',
     { projectId: z.string().describe('Firebase 프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const project = await firebase.getProject(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
     },
@@ -31,7 +55,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase 프로젝트의 Android 앱 목록',
     { projectId: z.string().describe('Firebase 프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const apps = await firebase.listAndroidApps(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }] };
     },
@@ -46,7 +70,7 @@ export function registerFirebaseTools(server: McpServer) {
       displayName: z.string().describe('앱 표시 이름'),
     },
     async ({ projectId, packageName, displayName }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.createAndroidApp(auth, projectId, packageName, displayName);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
@@ -60,7 +84,7 @@ export function registerFirebaseTools(server: McpServer) {
       appId: z.string().describe('Firebase 앱 ID'),
     },
     async ({ projectId, appId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const config = await firebase.getAndroidConfig(auth, projectId, appId);
       return { content: [{ type: 'text', text: JSON.stringify(config, null, 2) }] };
     },
@@ -74,7 +98,7 @@ export function registerFirebaseTools(server: McpServer) {
       appId: z.string().describe('삭제할 Firebase 앱 ID'),
     },
     async ({ projectId, appId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.deleteAndroidApp(auth, projectId, appId);
       return { content: [{ type: 'text', text: `삭제 완료: ${JSON.stringify(result)}` }] };
     },
@@ -85,7 +109,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase 프로젝트의 iOS 앱 목록',
     { projectId: z.string().describe('Firebase 프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const apps = await firebase.listIosApps(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }] };
     },
@@ -100,7 +124,7 @@ export function registerFirebaseTools(server: McpServer) {
       displayName: z.string().describe('앱 표시 이름'),
     },
     async ({ projectId, bundleId, displayName }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.createIosApp(auth, projectId, bundleId, displayName);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
@@ -114,7 +138,7 @@ export function registerFirebaseTools(server: McpServer) {
       appId: z.string().describe('Firebase 앱 ID'),
     },
     async ({ projectId, appId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const config = await firebase.getIosConfig(auth, projectId, appId);
       return { content: [{ type: 'text', text: JSON.stringify(config, null, 2) }] };
     },
@@ -128,7 +152,7 @@ export function registerFirebaseTools(server: McpServer) {
       appId: z.string().describe('삭제할 Firebase 앱 ID'),
     },
     async ({ projectId, appId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.deleteIosApp(auth, projectId, appId);
       return { content: [{ type: 'text', text: `삭제 완료: ${JSON.stringify(result)}` }] };
     },
@@ -139,7 +163,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase 프로젝트의 Web 앱 목록',
     { projectId: z.string().describe('Firebase 프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const apps = await firebase.listWebApps(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }] };
     },
@@ -153,7 +177,7 @@ export function registerFirebaseTools(server: McpServer) {
       displayName: z.string().describe('앱 표시 이름'),
     },
     async ({ projectId, displayName }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.createWebApp(auth, projectId, displayName);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
@@ -167,7 +191,7 @@ export function registerFirebaseTools(server: McpServer) {
       appId: z.string().describe('Firebase 앱 ID'),
     },
     async ({ projectId, appId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const config = await firebase.getWebConfig(auth, projectId, appId);
       return { content: [{ type: 'text', text: JSON.stringify(config, null, 2) }] };
     },
@@ -181,7 +205,7 @@ export function registerFirebaseTools(server: McpServer) {
       appId: z.string().describe('삭제할 Firebase 앱 ID'),
     },
     async ({ projectId, appId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.deleteWebApp(auth, projectId, appId);
       return { content: [{ type: 'text', text: `삭제 완료: ${JSON.stringify(result)}` }] };
     },
@@ -195,7 +219,7 @@ export function registerFirebaseTools(server: McpServer) {
       serviceId: z.string().describe('서비스 ID (예: firestore.googleapis.com)'),
     },
     async ({ projectId, serviceId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await firebase.enableService(auth, projectId, serviceId);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
@@ -206,7 +230,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase 기본 서비스 일괄 활성화 (Firestore, Auth, Storage, FCM 등)',
     { projectId: z.string().describe('프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const results = await firebase.enableCommonServices(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
     },
@@ -217,7 +241,7 @@ export function registerFirebaseTools(server: McpServer) {
     '프로젝트에서 활성화된 GCP 서비스 목록',
     { projectId: z.string().describe('프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const services = await firebase.listEnabledServices(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(services, null, 2) }] };
     },

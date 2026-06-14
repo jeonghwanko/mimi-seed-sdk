@@ -9,7 +9,7 @@ export function registerAdmobTools(server: McpServer) {
     'AdMob 계정 목록 조회',
     {},
     async () => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const accounts = await admob.listAccounts(auth);
       return { content: [{ type: 'text', text: JSON.stringify(accounts, null, 2) }] };
     },
@@ -20,7 +20,7 @@ export function registerAdmobTools(server: McpServer) {
     'AdMob에 등록된 앱 목록',
     { accountId: z.string().describe('AdMob 계정 ID (예: accounts/pub-XXXX)') },
     async ({ accountId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const apps = await admob.listApps(auth, accountId);
       return { content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }] };
     },
@@ -31,7 +31,7 @@ export function registerAdmobTools(server: McpServer) {
     'AdMob 광고 단위 목록',
     { accountId: z.string().describe('AdMob 계정 ID') },
     async ({ accountId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const units = await admob.listAdUnits(auth, accountId);
       return { content: [{ type: 'text', text: JSON.stringify(units, null, 2) }] };
     },
@@ -42,7 +42,7 @@ export function registerAdmobTools(server: McpServer) {
     '오늘 AdMob 수익 요약',
     { accountId: z.string().describe('AdMob 계정 ID') },
     async ({ accountId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const report = await admob.getTodayEarnings(auth, accountId);
       return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
     },
@@ -61,7 +61,7 @@ export function registerAdmobTools(server: McpServer) {
       endDay: z.number().describe('종료 일'),
     },
     async ({ accountId, startYear, startMonth, startDay, endYear, endMonth, endDay }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const report = await admob.getNetworkReport(
         auth, accountId,
         { year: startYear, month: startMonth, day: startDay },
@@ -80,7 +80,7 @@ export function registerAdmobTools(server: McpServer) {
       displayName: z.string().describe('앱 이름'),
     },
     async ({ accountId, platform, displayName }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       try {
         const result = await admob.createApp(auth, accountId, platform, displayName);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
@@ -116,7 +116,7 @@ export function registerAdmobTools(server: McpServer) {
       adFormat: z.enum(['BANNER', 'INTERSTITIAL', 'REWARDED', 'REWARDED_INTERSTITIAL', 'APP_OPEN', 'NATIVE']).describe('광고 형식'),
     },
     async ({ accountId, appId, displayName, adFormat }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       try {
         const result = await admob.createAdUnit(auth, accountId, appId, displayName, adFormat);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

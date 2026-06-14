@@ -38,7 +38,7 @@ export function registerGoogleAdsTools(server: McpServer) {
     'Google Ads 캠페인 목록 조회 (상태, 채널 타입, 일일 예산 포함)',
     {},
     async () => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const cfg = requireConfig();
       const campaigns = await googleads.listCampaigns(auth, cfg);
       return {
@@ -58,7 +58,7 @@ export function registerGoogleAdsTools(server: McpServer) {
       endDate: z.string().describe('종료일 (YYYY-MM-DD)'),
     },
     async ({ startDate, endDate }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const cfg = requireConfig();
       const report = await googleads.getCampaignReport(auth, cfg, { startDate, endDate });
 
@@ -94,7 +94,7 @@ export function registerGoogleAdsTools(server: McpServer) {
       endDate: z.string().describe('종료일 (YYYY-MM-DD)'),
     },
     async ({ startDate, endDate }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const cfg = requireConfig();
       const report = await googleads.getUacReport(auth, cfg, { startDate, endDate });
 
@@ -124,7 +124,7 @@ export function registerGoogleAdsTools(server: McpServer) {
     'OAuth 토큰으로 접근 가능한 Google Ads 계정 목록 (API 연결 확인용)',
     {},
     async () => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const cfg = requireConfig();
       const result = await googleads.listAccessibleCustomers(auth, cfg);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

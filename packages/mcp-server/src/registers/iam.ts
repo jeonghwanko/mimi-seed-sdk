@@ -11,7 +11,7 @@ export function registerIamTools(server: McpServer) {
       projectId: z.string().describe('Google Cloud 프로젝트 ID'),
     },
     async ({ projectId }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const accounts = await iam.listServiceAccounts(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(accounts, null, 2) }] };
     },
@@ -29,7 +29,7 @@ export function registerIamTools(server: McpServer) {
       displayName: z.string().describe('사람이 읽을 표시 이름 (예: "onesub Play verifier")'),
     },
     async ({ projectId, accountId, displayName }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const account = await iam.createServiceAccount(auth, projectId, accountId, displayName);
       return {
         content: [
@@ -59,7 +59,7 @@ export function registerIamTools(server: McpServer) {
       serviceAccount: z.string().describe('서비스 계정 이메일'),
     },
     async ({ serviceAccount }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const keys = await iam.listServiceAccountKeys(auth, serviceAccount);
       return { content: [{ type: 'text', text: JSON.stringify(keys, null, 2) }] };
     },
@@ -75,7 +75,7 @@ export function registerIamTools(server: McpServer) {
       serviceAccount: z.string().describe('서비스 계정 이메일'),
     },
     async ({ serviceAccount }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const key = await iam.createServiceAccountKey(auth, serviceAccount);
       return {
         content: [
@@ -119,7 +119,7 @@ export function registerIamTools(server: McpServer) {
       role: z.string().describe('IAM 역할 (예: roles/iam.serviceAccountTokenCreator)'),
     },
     async ({ projectId, member, role }) => {
-      const auth = requireAuth();
+      const auth = await requireAuth();
       const result = await iam.addProjectIamPolicyBinding(auth, projectId, member, role);
       return {
         content: [

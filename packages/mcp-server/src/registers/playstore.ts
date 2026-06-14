@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import * as playstore from '../playstore/tools.js';
+import * as playstoreRaw from '../playstore/tools.js';
+import { friendlyPlayError } from '../playstore/errors.js';
 import {
   saveServiceAccountJsonForPackage,
   listRegisteredServiceAccounts,
@@ -13,6 +14,30 @@ import {
 import { requirePlayStoreAuth, requireServiceAccountJson } from '../helpers.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
+
+// 모든 playstore tools 호출을 친절 에러로 감싸는 프록시 — 403(권한)/404/edit 충돌/
+// invalid_grant 를 raw dump 대신 구체적 복구 안내로 변환. args[1] 이 packageName 규약.
+// 비-Promise 반환(publisher 등 sync factory)은 그대로 통과, 도메인 에러는 원본 보존.
+const playstore: typeof playstoreRaw = new Proxy(playstoreRaw, {
+  get(target, prop, receiver) {
+    const orig = Reflect.get(target, prop, receiver);
+    if (typeof orig !== 'function') return orig;
+    return (...args: unknown[]) => {
+      const pkg = typeof args[1] === 'string' ? (args[1] as string) : undefined;
+      try {
+        const out = (orig as (...a: unknown[]) => unknown)(...args);
+        if (out && typeof (out as { then?: unknown }).then === 'function') {
+          return (out as Promise<unknown>).catch((err) => {
+            throw friendlyPlayError(err, pkg);
+          });
+        }
+        return out;
+      } catch (err) {
+        throw friendlyPlayError(err, pkg);
+      }
+    };
+  },
+});
 
 export function registerPlaystoreTools(server: McpServer) {
   server.tool(
