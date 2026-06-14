@@ -209,6 +209,7 @@ async function cmdMcp(args: string[]): Promise<void> {
       const configPath = await writeCodexMcpConfig(cfg);
       log(kleur.green("✓ Codex MCP 설정 완료"));
       log(kleur.dim(`  ${configPath}`));
+      log(kleur.dim("  ⚠ config.toml에 실제 토큰이 평문으로 저장됩니다 (파일 권한 확인 권장)."));
       log("");
       log("Codex를 새로 열고 `/mcp` 또는 `codex mcp list`로 확인하세요.");
       return;
@@ -236,35 +237,35 @@ http_headers = { Authorization = "Bearer ${cfg.prefix}..." }`);
   printMcpSetup(cfg);
 }
 
-function printHelp(): void {
-  log(`${kleur.bold("mimi-seed")} — Claude Code/Codex에서 앱 출시 운영
+// 명령별 상세 사용법 (SSOT). `mimi-seed <command> --help` 와 overview 가 공유.
+const CMD_USAGE: Record<string, string> = {
+  init: `${kleur.bold("mimi-seed init")} — 현재 프로젝트를 Mimi Seed에 연결
 
-${kleur.bold("명령어:")}
-  ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
-  ${kleur.cyan("mimi-seed status")}      연결 상태 + 등록 앱 목록
-  ${kleur.cyan("mimi-seed auth")}        Google OAuth 인증 (Firebase/AdMob/Play). 'mimi-seed auth --help'
-  ${kleur.cyan("mimi-seed doctor")}      환경 진단 (토큰·Git·프로젝트·CI 체크)
-  ${kleur.cyan("mimi-seed check")}       출시 전 Readiness 점검
-  ${kleur.cyan("mimi-seed notes")}       릴리즈 노트 생성 (git log → AI → 마켓 적용)
-  ${kleur.cyan("mimi-seed review")}      리뷰 답변 AI 초안 생성 및 Play Store 게시
-  ${kleur.cyan("mimi-seed deploy")}      앱 자동 배포 (Jenkins → Play Store/App Store)
-  ${kleur.cyan("mimi-seed mcp")}         Claude/Codex MCP 연결 안내 및 Codex 설정 쓰기
-  ${kleur.cyan("mimi-seed restart")}     MCP 서버 프로세스 재시작 (기본: mimi-seed)
-  ${kleur.cyan("mimi-seed logout")}      로컬 설정 삭제
+앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) → 브라우저 PAT 발급 → 앱 등록
++ .claude/mimi-seed.md, AGENTS.md 생성. 옵션 없음.`,
+  status: `${kleur.bold("mimi-seed status")} — 연결 상태 + 등록 앱 목록. 옵션 없음.`,
+  doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI). 옵션 없음.`,
+  logout: `${kleur.bold("mimi-seed logout")} — 로컬 설정(config.json) 삭제. 옵션 없음.`,
+  restart: `${kleur.bold("mimi-seed restart")} — MCP 서버 프로세스 재시작 (기본: mimi-seed)
 
-${kleur.bold("mimi-seed notes 옵션:")}
+  mimi-seed restart [server-name]`,
+  notes: `${kleur.bold("mimi-seed notes")} — 릴리즈 노트 생성 (git log → AI → 마켓 적용)
+
+옵션:
   --from <ref>        시작 커밋/태그 (기본: 최신 태그)
   --to <ref>          끝 커밋 (기본: HEAD)
   --locale ko,en-US   대상 로케일 (쉼표 구분)
   --apply             생성 후 스토어에 바로 적용
   --no-interactive    CI 모드 (프롬프트 없음)
-  --limit <n>         최대 커밋 수 (기본: 30)
+  --limit <n>         최대 커밋 수 (기본: 30)`,
+  check: `${kleur.bold("mimi-seed check")} — 출시 전 Readiness 점검
 
-${kleur.bold("mimi-seed check 옵션:")}
+옵션:
   --app <id>          앱 ID 지정
-  --fail-on-blocker   블로커 있으면 exit 1 (CI용)
+  --fail-on-blocker   블로커 있으면 exit 1 (CI용)`,
+  review: `${kleur.bold("mimi-seed review")} — 리뷰 답변 AI 초안 생성 및 Play Store 게시
 
-${kleur.bold("mimi-seed review 옵션:")}
+옵션:
   --text <내용>       리뷰 원문 (미입력 시 대화형 프롬프트)
   --rating <1-5>      별점
   --tone <tone>       friendly / professional / empathetic / brief (기본: friendly)
@@ -273,9 +274,10 @@ ${kleur.bold("mimi-seed review 옵션:")}
   --apply             답변을 Play Store에 게시
   --review-id <id>    리뷰 ID (--apply 시 필요)
   --package-name <p>  패키지명 (--apply 시 필요)
-  --no-interactive    CI 모드
+  --no-interactive    CI 모드`,
+  deploy: `${kleur.bold("mimi-seed deploy")} — 앱 자동 배포 (CI 빌드 → Play Store/App Store)
 
-${kleur.bold("mimi-seed deploy 옵션:")}
+옵션:
   --platform android|ios       배포 플랫폼 (기본: android)
   --app <id>                   앱 ID 지정
   --version-code <n>           빌드 번호 직접 지정 (--skip-build 와 함께)
@@ -283,13 +285,46 @@ ${kleur.bold("mimi-seed deploy 옵션:")}
   --to <ref>                   커밋 범위 끝 (기본: HEAD)
   --language <코드>            릴리즈 노트 언어 (기본: ko-KR)
   --dry-run                    실제 배포 없이 파이프라인 테스트
+  --yes, -y                    배포 확인 프롬프트 생략 (스크립트/자동화용)
   --skip-build                 CI 빌드 건너뜀 (--version-code 필수)
   --ci jenkins|github|gitlab   CI 강제 선택 (기본: auto)
   --workflow <file>            GitHub workflow 파일 (예: deploy.yml)
   --ref <branch|tag>           GitHub/GitLab 브랜치/태그 (기본: main)
-  setup-jenkins                Jenkins 설정 대화형 등록
-  setup-github                 GitHub Actions 설정 대화형 등록
-  setup-gitlab                 GitLab CI 설정 대화형 등록
+  setup-jenkins / setup-github / setup-gitlab   CI 설정 대화형 등록`,
+  mcp: `${kleur.bold("mimi-seed mcp")} — Claude/Codex MCP 연결
+
+서브명령:
+  mimi-seed mcp                현재 설정 + 등록 안내
+  mimi-seed mcp claude         Claude Code 등록 명령 출력
+  mimi-seed mcp codex          Codex 등록 안내
+  mimi-seed mcp codex --write  ~/.codex/config.toml에 직접 기록 (⚠ 실제 토큰 평문 저장)`,
+};
+
+// auth 는 자체 상세 help(printAuthHelp)를 가지므로 여기서 제외 — main()에서 위임.
+function printCommandHelp(cmd: string): boolean {
+  const usage = CMD_USAGE[cmd];
+  if (!usage) return false;
+  log(usage);
+  return true;
+}
+
+function printHelp(): void {
+  log(`${kleur.bold("mimi-seed")} — Claude Code/Codex에서 앱 출시 운영
+
+${kleur.bold("명령어:")}
+  ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
+  ${kleur.cyan("mimi-seed status")}      연결 상태 + 등록 앱 목록
+  ${kleur.cyan("mimi-seed auth")}        로컬 인증 (Google OAuth / App Store / Play / BigQuery)
+  ${kleur.cyan("mimi-seed doctor")}      환경 진단 (토큰·Git·프로젝트·CI 체크)
+  ${kleur.cyan("mimi-seed check")}       출시 전 Readiness 점검
+  ${kleur.cyan("mimi-seed notes")}       릴리즈 노트 생성 (git log → AI → 마켓 적용)
+  ${kleur.cyan("mimi-seed review")}      리뷰 답변 AI 초안 생성 및 Play Store 게시
+  ${kleur.cyan("mimi-seed deploy")}      앱 자동 배포 (CI → Play Store/App Store)
+  ${kleur.cyan("mimi-seed mcp")}         Claude/Codex MCP 연결 안내 및 Codex 설정 쓰기
+  ${kleur.cyan("mimi-seed restart")}     MCP 서버 프로세스 재시작 (기본: mimi-seed)
+  ${kleur.cyan("mimi-seed logout")}      로컬 설정 삭제
+
+${kleur.dim("각 명령 상세 옵션:")} ${kleur.cyan("mimi-seed <command> --help")}
 
 ${kleur.bold("환경변수:")}
   MIMI_SEED_TOKEN     PAT 토큰 (CI/CD 무인증 모드)
@@ -301,6 +336,12 @@ ${kleur.bold("환경변수:")}
 async function main(): Promise<void> {
   const cmd = process.argv[2];
   const restArgs = process.argv.slice(3);
+
+  // 명령별 --help / -h. auth 는 cmdAuth 가 자체 상세 help 를 출력하므로 위임.
+  if (cmd && cmd !== "auth" && (restArgs.includes("--help") || restArgs.includes("-h"))) {
+    if (printCommandHelp(cmd)) return;
+  }
+
   try {
     switch (cmd) {
       case "init":

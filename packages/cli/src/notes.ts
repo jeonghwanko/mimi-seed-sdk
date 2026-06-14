@@ -144,11 +144,13 @@ export async function cmdNotes(argv: string[]): Promise<void> {
   }
 
   let selectedText = result.concise;
+  let userSelectedTone = false;
   if (shouldPrompt) {
     const choice = await promptUser("적용할 버전 [1=간결/2=상세/3=마케팅/Enter=건너뜀]: ");
     if (!choice) { process.stdout.write(kleur.dim("건너뜀.\n")); return; }
     if (choice === "2") selectedText = result.detailed;
     else if (choice === "3") selectedText = result.marketing;
+    userSelectedTone = true;
   }
 
   const appsResult = await mcpCall(cfg.endpoint, cfg.token, "list_apps", {});
@@ -163,13 +165,20 @@ export async function cmdNotes(argv: string[]): Promise<void> {
     return;
   }
 
+  // 사용자가 톤을 명시 선택하면 그 텍스트를 모든 로케일에 그대로 적용 (선택이 결과를 결정).
+  // 비대화형 --apply 일 때만 로케일별 자동 번역(localized)을 사용.
+  if (userSelectedTone && args.locales.length > 1) {
+    process.stdout.write(kleur.dim("선택한 톤을 모든 로케일에 적용합니다 (자동 번역 미적용).\n"));
+  }
+
   process.stdout.write("Play Store에 적용 중...\n");
   for (const locale of args.locales) {
+    const text = userSelectedTone ? selectedText : (result.localized[locale] ?? selectedText);
     const r = await mcpCall(cfg.endpoint, cfg.token, "apply_release_notes", {
       app_id: app.id,
       platform: "android",
       locale,
-      text: result.localized[locale] ?? selectedText,
+      text,
     });
     process.stdout.write(r.isError ? kleur.red(`${locale} 적용 실패: ${r.text}\n`) : kleur.green(`✓ ${locale} 적용됨\n`));
   }

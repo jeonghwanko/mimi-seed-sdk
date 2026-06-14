@@ -105,8 +105,23 @@ export async function cmdCheck(argv: string[]): Promise<void> {
       process.stdout.write("\n");
     }
 
+    // 모듈 약점 → 구체적 다음 액션 (doctor 처럼 막다른 길이 아니라 명령/링크 제시)
+    const base = `${cfg.webBase}/apps/${appId}`;
+    const nextSteps: string[] = [];
+    if (data.modules) {
+      if ((data.modules.integration ?? 25) < 25) nextSteps.push(`연결 진단    ${base}/integration`);
+      if ((data.modules.copy ?? 25) < 25) nextSteps.push(`문구 보강    mimi-seed notes  또는  ${base}/copy`);
+      if ((data.modules.screenshot ?? 25) < 25) nextSteps.push(`스크린샷     ${base}/screenshots`);
+      if ((data.modules.checklist ?? 25) < 25) nextSteps.push(`체크리스트   ${base}/launch`);
+    }
+    if (nextSteps.length) {
+      process.stdout.write(kleur.bold("→ 다음 단계:\n"));
+      for (const s of nextSteps) process.stdout.write(`  ${kleur.cyan("•")} ${s}\n`);
+      process.stdout.write(kleur.dim(`  미리보기: mimi-seed deploy --dry-run\n\n`));
+    }
+
     if (!hasBlocker) {
-      process.stdout.write(score >= 80 ? kleur.green("✓ 출시 준비 완료!\n") : kleur.yellow("점수를 높이려면 대시보드를 확인하세요.\n"));
+      process.stdout.write(score >= 80 ? kleur.green("✓ 출시 준비 완료!\n") : kleur.yellow(`아직 ${score}/100 — 위 다음 단계를 진행하세요.\n`));
     }
   } catch {
     for (const line of readinessResult.text.split("\n")) process.stdout.write("  " + line + "\n");

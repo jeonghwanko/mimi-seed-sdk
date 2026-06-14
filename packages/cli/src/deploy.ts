@@ -171,6 +171,7 @@ export interface DeployArgs {
   toRef?: string;
   language: string;
   dryRun: boolean;
+  yes: boolean;       // 배포 확인 프롬프트 생략 (--yes/-y)
   skipBuild: boolean;
   setupJenkins: boolean;
   setupGithub: boolean;
@@ -185,6 +186,7 @@ export function parseArgs(argv: string[]): DeployArgs {
     platform: "android",
     language: "ko-KR",
     dryRun: false,
+    yes: false,
     skipBuild: false,
     setupJenkins: false,
     setupGithub: false,
@@ -200,6 +202,7 @@ export function parseArgs(argv: string[]): DeployArgs {
     if (argv[i] === "--to" && argv[i + 1]) args.toRef = argv[++i];
     if (argv[i] === "--language" && argv[i + 1]) args.language = argv[++i];
     if (argv[i] === "--dry-run") args.dryRun = true;
+    if (argv[i] === "--yes" || argv[i] === "-y") args.yes = true;
     if (argv[i] === "--skip-build") args.skipBuild = true;
     if (argv[i] === "--ci" && argv[i + 1]) args.ci = argv[++i] as CiKind;
     if (argv[i] === "--workflow" && argv[i + 1]) args.workflow = argv[++i];
@@ -470,6 +473,25 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
   if (!appId) {
     log(kleur.red("appId를 확인할 수 없습니다. --app <id> 로 지정하거나 `mimi-seed init` 으로 앱 등록."));
     process.exit(1);
+  }
+
+  // 프로덕션 쓰기 작업 — 명시적 확인 (notes/review 와 동일한 안전장치).
+  // --dry-run / --yes / 비TTY / CI(MIMI_SEED_TOKEN) 에서는 생략.
+  const needsConfirm =
+    !args.dryRun && !args.yes && process.stdout.isTTY && !process.env.MIMI_SEED_TOKEN;
+  if (needsConfirm) {
+    const target = args.platform === "ios" ? "App Store 심사 제출" : "Play Store production 트랙";
+    log("");
+    log(kleur.yellow(`⚠ 실제 배포: ${args.platform} · versionCode ${versionCode} → ${target}`));
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((resolve) =>
+      rl.question(kleur.bold("계속 진행할까요? [y/N]: "), (a) => resolve(a.trim().toLowerCase())),
+    );
+    rl.close();
+    if (answer !== "y" && answer !== "yes") {
+      log(kleur.dim("취소됨. (--yes 로 확인 생략 가능)"));
+      return;
+    }
   }
 
   log("");

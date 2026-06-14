@@ -48,6 +48,9 @@ describe('parseArgs', () => {
   it('parses boolean flags', () => {
     expect(parseArgs(['--dry-run']).dryRun).toBe(true);
     expect(parseArgs(['--skip-build']).skipBuild).toBe(true);
+    expect(parseArgs(['--yes']).yes).toBe(true);
+    expect(parseArgs(['-y']).yes).toBe(true);
+    expect(parseArgs([]).yes).toBe(false);
   });
 
   it('mixes flags in any order', () => {
