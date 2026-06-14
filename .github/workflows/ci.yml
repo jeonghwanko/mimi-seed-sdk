@@ -54,9 +54,22 @@ jobs:
           fi
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
-            echo "✓ $NAME@$VERSION 이미 npm 에 존재 — skip"
+          # 빠른 경로: 이미 있으면 publish 시도 자체를 생략 (--prefer-online 으로 캐시 우회)
+          if npm view "$NAME@$VERSION" version --prefer-online >/dev/null 2>&1; then
+            echo "• $NAME@$VERSION 이미 npm 에 존재 — skip"
+            exit 0
+          fi
+          echo "→ publishing $NAME@$VERSION"
+          # 레이스 안전망: 방금 다른 푸시가 같은 버전을 올려 pre-check 가 stale 이어도
+          # 레지스트리의 "이미 존재" 거부(403)는 실패가 아니라 no-op 으로 처리.
+          # 그 외 에러(권한/네트워크 등)는 그대로 실패시킨다.
+          if npm publish --access public 2>/tmp/pub.err; then
+            cat /tmp/pub.err >&2 || true
+            echo "✓ published $NAME@$VERSION"
+          elif grep -qiE "cannot publish over|previously published" /tmp/pub.err; then
+            cat /tmp/pub.err >&2
+            echo "• $NAME@$VERSION 이미 존재(레이스) — no-op"
           else
-            echo "→ publishing $NAME@$VERSION"
-            npm publish --access public
+            cat /tmp/pub.err >&2
+            exit 1
           fi
