@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerFirebaseTools } from './registers/firebase.js';
@@ -17,9 +18,15 @@ import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 
+// dist/index.js 기준 ../package.json — npm 패키지 루트의 버전을 단일 출처로 사용.
+// 하드코딩하면 publish 때마다 serverInfo.version 이 드리프트하므로 런타임에 읽는다.
+const { version } = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+) as { version: string };
+
 const server = new McpServer({
   name: 'mimi-seed',
-  version: '0.1.0',
+  version,
 });
 
 registerFirebaseTools(server);
