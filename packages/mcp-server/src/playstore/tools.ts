@@ -95,6 +95,14 @@ export async function withEdit<T>(
 }
 
 // ─── Play Developer Reporting API / Android vitals ───
+//
+// ⚠️ DRIFT 주의 — getStatistics 의 요청 빌드 규칙(타임존 HOURLY=UTC, errorCount→reportType,
+//    userCohort 게이팅, default 차원/metric)은 웹 콘솔 리포의 복제본과 동일해야 합니다:
+//      web:  src/lib/mcp/tools/play-vitals.ts (buildPlayVitalsRequest)
+//    양쪽 모두 contract 테스트로 잠겨 있음:
+//      sdk:  src/__tests__/playstore-statistics.test.ts
+//      web:  src/__tests__/play-vitals.test.ts
+//    규칙 변경 시 양쪽 코드 + 양쪽 테스트를 함께 수정하세요.
 
 export async function getStatistics(
   auth: OAuth2Client | JWT,
