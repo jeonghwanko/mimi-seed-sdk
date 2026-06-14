@@ -11,7 +11,8 @@ import {
   createGoogleOneTimePurchase, createGoogleSubscription,
   updateGoogleProduct, deleteGoogleProduct, listGoogleProducts,
 } from '@onesub/providers';
-import { requirePlayStoreAuth, requireServiceAccountJson } from '../helpers.js';
+import { requirePlayStoreAuth, requireServiceAccountJson, requireAuth } from '../helpers.js';
+import * as iam from '../iam/tools.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
 
@@ -773,6 +774,71 @@ export function registerPlaystoreTools(server: McpServer) {
         return { content: [{ type: 'text', text: `❌ 삭제 실패: ${result.error}` }] };
       }
       return { content: [{ type: 'text', text: `✓ ${productId} 삭제 완료` }] };
+    },
+  );
+
+  server.tool(
+    'setup_playstore_connection',
+    [
+      'Play Store 서비스 계정을 한 번에 설정합니다 (SA 생성 → JSON 키 발급 → 로컬 등록).',
+      'iam_create_service_account → iam_create_key → playstore_register_service_account 를 순서대로 자동 실행.',
+      '완료 후 Play Console에서 서비스 계정 이메일을 초대하는 안내(수동 1단계)가 포함됩니다.',
+      '이미 같은 accountId의 SA가 존재하면 키만 새로 발급하고 등록합니다.',
+    ].join(' '),
+    {
+      packageName: z.string().describe('Android 패키지명 (예: gg.pryzm.speakmoney)'),
+      projectId: z.string().describe('Google Cloud 프로젝트 ID (예: my-project-123). Firebase 콘솔 → 프로젝트 설정에서 확인.'),
+      accountId: z
+        .string()
+        .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, 'lowercase, digits, hyphens; 6-30 chars')
+        .default('mimi-play-publisher')
+        .describe('서비스 계정 ID (기본: mimi-play-publisher)'),
+    },
+    async ({ packageName, projectId, accountId }) => {
+      const auth = await requireAuth();
+      const displayName = `Mimi Seed Play Publisher (${packageName})`;
+
+      // 1. 서비스 계정 생성 (이미 존재하면 409 → 이메일만 재구성)
+      let saEmail: string;
+      try {
+        const account = await iam.createServiceAccount(auth, projectId, accountId, displayName);
+        saEmail = account.email!;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('409') || msg.toLowerCase().includes('already exists')) {
+          saEmail = `${accountId}@${projectId}.iam.gserviceaccount.com`;
+        } else {
+          throw err;
+        }
+      }
+
+      // 2. JSON 키 발급
+      const key = await iam.createServiceAccountKey(auth, saEmail);
+
+      // 3. 로컬 등록 (검증은 Play Console 초대 전이라 skip)
+      saveServiceAccountJsonForPackage(packageName, key.json);
+
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            `✅ Play Store 서비스 계정 설정 완료`,
+            '',
+            `**패키지**: \`${packageName}\``,
+            `**SA 이메일**: \`${saEmail}\``,
+            `**저장 경로**: \`~/.mimi-seed/play-service-accounts/${packageName}.json\``,
+            '',
+            '## 필수 수동 단계 — Play Console 초대',
+            '1. https://play.google.com/console/developers 접속',
+            '2. **설정 → 사용자 및 권한 → 새 사용자 초대**',
+            `3. 이메일 입력: \`${saEmail}\``,
+            '4. 권한: **앱 출시** 또는 **릴리스 관리자** 선택 → 초대 전송',
+            '5. 권한 적용까지 약 5분 소요',
+            '',
+            '초대 완료 후 `playstore_verify_service_account` 로 연결 확인 가능합니다.',
+          ].join('\n'),
+        }],
+      };
     },
   );
 }
