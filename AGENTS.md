@@ -9,7 +9,7 @@ This repository is the public developer-tooling source of truth for Mimi Seed.
 - `.codex-plugin`, `.mcp.json`, `skills`: Codex plugin and skill surface.
 - Root README files: public installation docs mirrored by the private web console repo.
 
-The private web console lives at `C:\Users\turbo08\mimi-seed`. Do not move SDK package implementation back into that repo.
+The private web console lives in a separate repo (not this SDK). Do not move SDK package implementation back into that repo.
 
 ## Codex Support
 
