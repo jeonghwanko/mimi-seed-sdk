@@ -31,6 +31,47 @@ function mimeTypeFor(filePath: string): string {
 
 export const publisher = () => google.androidpublisher('v3');
 
+export type PlayVitalsMetricSet = 'anrRate' | 'crashRate' | 'errorCount';
+
+export interface PlayStatisticsQuery {
+  metricSet?: PlayVitalsMetricSet;
+  startDate: string;
+  endDate: string;
+  aggregationPeriod?: 'DAILY' | 'HOURLY';
+  dimensions?: string[];
+  metrics?: string[];
+  filter?: string;
+  pageSize?: number;
+  pageToken?: string;
+  userCohort?: 'OS_PUBLIC' | 'APP_TESTERS' | 'OS_BETA';
+  timeZone?: string;
+}
+
+const REPORTING_API_BASE = 'https://playdeveloperreporting.googleapis.com/v1beta1';
+
+const METRIC_SET_RESOURCE: Record<PlayVitalsMetricSet, string> = {
+  anrRate: 'anrRateMetricSet',
+  crashRate: 'crashRateMetricSet',
+  errorCount: 'errorCountMetricSet',
+};
+
+const DEFAULT_METRICS: Record<PlayVitalsMetricSet, string[]> = {
+  anrRate: ['anrRate', 'userPerceivedAnrRate', 'distinctUsers'],
+  crashRate: ['crashRate', 'userPerceivedCrashRate', 'distinctUsers'],
+  errorCount: ['errorReportCount', 'distinctUsers'],
+};
+
+function dateToReportingDateTime(date: string, timeZone: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) throw new Error(`날짜는 YYYY-MM-DD 형식이어야 해: ${date}`);
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    timeZone: { id: timeZone },
+  };
+}
+
 export async function withEdit<T>(
   auth: OAuth2Client | JWT,
   packageName: string,
@@ -51,6 +92,39 @@ export async function withEdit<T>(
       await publisher().edits.delete({ auth, packageName, editId }).catch(() => {});
     }
   }
+}
+
+// ─── Play Developer Reporting API / Android vitals ───
+
+export async function getStatistics(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+  query: PlayStatisticsQuery,
+) {
+  const metricSet = query.metricSet ?? 'anrRate';
+  const resource = METRIC_SET_RESOURCE[metricSet];
+  const timeZone = query.timeZone ?? 'America/Los_Angeles';
+  const url = `${REPORTING_API_BASE}/apps/${encodeURIComponent(packageName)}/${resource}:query`;
+
+  const res = await auth.request({
+    url,
+    method: 'POST',
+    data: {
+      timelineSpec: {
+        aggregationPeriod: query.aggregationPeriod ?? 'DAILY',
+        startTime: dateToReportingDateTime(query.startDate, timeZone),
+        endTime: dateToReportingDateTime(query.endDate, timeZone),
+      },
+      dimensions: query.dimensions ?? ['versionCode'],
+      metrics: query.metrics ?? DEFAULT_METRICS[metricSet],
+      ...(query.filter ? { filter: query.filter } : {}),
+      ...(query.pageSize ? { pageSize: query.pageSize } : {}),
+      ...(query.pageToken ? { pageToken: query.pageToken } : {}),
+      ...(query.userCohort ? { userCohort: query.userCohort } : {}),
+    },
+  });
+
+  return res.data;
 }
 
 // ─── 앱 목록 ───

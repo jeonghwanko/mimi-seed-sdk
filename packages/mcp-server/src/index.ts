@@ -13,6 +13,7 @@ import { registerAuthTools } from './registers/auth.js';
 import { registerCiTools } from './registers/ci.js';
 import { registerInstagramTools } from './registers/instagram.js';
 import { registerFacebookTools } from './registers/facebook.js';
+import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 
@@ -33,6 +34,7 @@ registerAuthTools(server);
 registerCiTools(server);
 registerInstagramTools(server);
 registerFacebookTools(server);
+registerGoogleAdsTools(server);
 registerPrompts(server);
 registerResources(server);
 

@@ -71,6 +71,51 @@ export function registerPlaystoreTools(server: McpServer) {
   );
 
   server.tool(
+    'playstore_get_statistics',
+    'Google Play Developer Reporting API / Android vitals 통계 조회. ANR/Crash/Error count를 기간·버전·기기·국가 등으로 분해해 확인',
+    {
+      packageName: z.string().describe('패키지명 (예: gg.pryzm.coffee)'),
+      metricSet: z.enum(['anrRate', 'crashRate', 'errorCount'])
+        .default('anrRate')
+        .describe('조회할 Vitals metric set. 기본: anrRate'),
+      startDate: z.string().describe('시작일 YYYY-MM-DD (포함)'),
+      endDate: z.string().describe('종료일 YYYY-MM-DD (보통 exclusive처럼 다음날 지정 권장)'),
+      aggregationPeriod: z.enum(['DAILY', 'HOURLY']).default('DAILY').describe('집계 단위'),
+      dimensions: z.array(z.enum([
+        'apiLevel',
+        'versionCode',
+        'deviceModel',
+        'deviceBrand',
+        'deviceType',
+        'countryCode',
+        'deviceRamBucket',
+        'deviceSocMake',
+        'deviceSocModel',
+        'deviceCpuMake',
+        'deviceCpuModel',
+        'deviceGpuMake',
+        'deviceGpuModel',
+        'deviceGpuVersion',
+        'deviceVulkanVersion',
+        'deviceGlEsVersion',
+        'deviceScreenSize',
+        'deviceScreenDpi',
+      ])).optional().describe('분해 차원. 기본: ["versionCode"]'),
+      metrics: z.array(z.string()).optional().describe('조회 metric. 기본은 metricSet별 핵심 metric + distinctUsers'),
+      filter: z.string().optional().describe('AIP-160 필터. 예: versionCode = 42'),
+      pageSize: z.number().int().min(1).max(100000).optional().describe('최대 행 수'),
+      pageToken: z.string().optional().describe('다음 페이지 토큰'),
+      userCohort: z.enum(['OS_PUBLIC', 'APP_TESTERS', 'OS_BETA']).optional().describe('사용자 cohort'),
+      timeZone: z.string().optional().describe('날짜 기준 timezone. 기본: America/Los_Angeles (Play Reporting API 샘플/지원 기준)'),
+    },
+    async (args) => {
+      const auth = requirePlayStoreAuth(args.packageName);
+      const result = await playstore.getStatistics(auth, args.packageName, args);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
     'playstore_list_images',
     'Google Play 리스팅 이미지 목록 조회 (imageType별)',
     {
