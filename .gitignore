@@ -4,3 +4,7 @@ dist/
 .env
 .env.local
 .env.*
+
+# Claude Code local settings (per-machine permission allowlist — not shared)
+.claude/settings.json
+.claude/settings.local.json
