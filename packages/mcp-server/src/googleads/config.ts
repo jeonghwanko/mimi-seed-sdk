@@ -33,7 +33,16 @@ export function saveConfig(cfg: GoogleAdsConfig): void {
 export function loadConfig(): GoogleAdsConfig | null {
   if (!fs.existsSync(CONFIG_PATH)) return null;
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as GoogleAdsConfig;
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as GoogleAdsConfig;
+    // 읽기 시점에도 정규화 — 하이픈 포함 값이 손으로 적히거나 구버전이 쓴 경우에도
+    // URL/login-customer-id 헤더가 항상 숫자만 포함하도록 보장 (write 경로 의존 제거).
+    return {
+      ...cfg,
+      customerId: normalizeCustomerId(cfg.customerId),
+      loginCustomerId: cfg.loginCustomerId
+        ? normalizeCustomerId(cfg.loginCustomerId)
+        : undefined,
+    };
   } catch {
     return null;
   }

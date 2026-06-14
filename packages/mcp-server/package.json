@@ -1,6 +1,6 @@
 {
   "name": "@yoonion/mimi-seed-mcp",
-  "version": "0.3.29",
+  "version": "0.3.30",
   "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Codex / Cursor / any MCP client.",
   "type": "module",
   "bin": {
@@ -37,7 +37,7 @@
   "homepage": "https://mimi-seed.pryzm.gg",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jeonghwanko/mimi-seed.git",
+    "url": "git+https://github.com/jeonghwanko/mimi-seed-sdk.git",
     "directory": "packages/mcp-server"
   },
   "publishConfig": {

@@ -103,7 +103,15 @@ export async function getStatistics(
 ) {
   const metricSet = query.metricSet ?? 'anrRate';
   const resource = METRIC_SET_RESOURCE[metricSet];
-  const timeZone = query.timeZone ?? 'America/Los_Angeles';
+  const period = query.aggregationPeriod ?? 'DAILY';
+  // Reporting API는 집계 단위별 지원 timezone이 고정: HOURLY=UTC, DAILY=America/Los_Angeles.
+  // 단일 default를 모든 period에 쓰면 HOURLY가 INVALID_ARGUMENT로 실패한다.
+  const timeZone =
+    query.timeZone ?? (period === 'HOURLY' ? 'UTC' : 'America/Los_Angeles');
+  // errorCountMetricSet은 reportType dimension이 필수 — default에 포함하지 않으면 실패.
+  const dimensions =
+    query.dimensions ??
+    (metricSet === 'errorCount' ? ['reportType', 'versionCode'] : ['versionCode']);
   const url = `${REPORTING_API_BASE}/apps/${encodeURIComponent(packageName)}/${resource}:query`;
 
   const res = await auth.request({
@@ -111,16 +119,19 @@ export async function getStatistics(
     method: 'POST',
     data: {
       timelineSpec: {
-        aggregationPeriod: query.aggregationPeriod ?? 'DAILY',
+        aggregationPeriod: period,
         startTime: dateToReportingDateTime(query.startDate, timeZone),
         endTime: dateToReportingDateTime(query.endDate, timeZone),
       },
-      dimensions: query.dimensions ?? ['versionCode'],
+      dimensions,
       metrics: query.metrics ?? DEFAULT_METRICS[metricSet],
       ...(query.filter ? { filter: query.filter } : {}),
       ...(query.pageSize ? { pageSize: query.pageSize } : {}),
       ...(query.pageToken ? { pageToken: query.pageToken } : {}),
-      ...(query.userCohort ? { userCohort: query.userCohort } : {}),
+      // userCohort는 anrRate/crashRate만 지원 (errorCount에 보내면 INVALID_ARGUMENT).
+      ...(query.userCohort && metricSet !== 'errorCount'
+        ? { userCohort: query.userCohort }
+        : {}),
     },
   });
 

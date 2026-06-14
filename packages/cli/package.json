@@ -1,12 +1,18 @@
 {
   "name": "mimi-seed",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Mimi Seed CLI — Claude Code와 Codex에서 앱 출시 운영을 관리합니다.",
   "bin": {
     "mimi-seed": "dist/index.js"
   },
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
+  "homepage": "https://mimi-seed.pryzm.gg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeonghwanko/mimi-seed-sdk.git",
+    "directory": "packages/cli"
+  },
   "files": [
     "dist",
     "LICENSE"

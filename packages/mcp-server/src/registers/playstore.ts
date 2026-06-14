@@ -82,6 +82,9 @@ export function registerPlaystoreTools(server: McpServer) {
       endDate: z.string().describe('종료일 YYYY-MM-DD (보통 exclusive처럼 다음날 지정 권장)'),
       aggregationPeriod: z.enum(['DAILY', 'HOURLY']).default('DAILY').describe('집계 단위'),
       dimensions: z.array(z.enum([
+        'reportType', // errorCount metricSet 필수
+        'issueId',    // errorCount 전용
+        'osBuild',    // OS_BETA cohort 전용
         'apiLevel',
         'versionCode',
         'deviceModel',
@@ -100,7 +103,7 @@ export function registerPlaystoreTools(server: McpServer) {
         'deviceGlEsVersion',
         'deviceScreenSize',
         'deviceScreenDpi',
-      ])).optional().describe('분해 차원. 기본: ["versionCode"]'),
+      ])).optional().describe('분해 차원. 기본: ["versionCode"] (errorCount는 ["reportType","versionCode"]). reportType/issueId는 errorCount 전용, countryCode/deviceBrand는 anrRate/crashRate 전용'),
       metrics: z.array(z.string()).optional().describe('조회 metric. 기본은 metricSet별 핵심 metric + distinctUsers'),
       filter: z.string().optional().describe('AIP-160 필터. 예: versionCode = 42'),
       pageSize: z.number().int().min(1).max(100000).optional().describe('최대 행 수'),

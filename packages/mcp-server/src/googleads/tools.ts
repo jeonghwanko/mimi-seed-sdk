@@ -1,7 +1,10 @@
 import type { OAuth2Client } from 'google-auth-library';
 import type { GoogleAdsConfig } from './config.js';
 
-const API_VERSION = 'v17';
+// Google Ads API는 ~13개월 주기로 sunset (항상 최신 3개 major만 유지).
+// v24 = 2026-06 기준 현행 major. 새 major 출시 시 갱신 필요.
+// https://developers.google.com/google-ads/api/docs/sunset-dates
+const API_VERSION = 'v24';
 const BASE = `https://googleads.googleapis.com/${API_VERSION}`;
 
 export interface DateRange {
