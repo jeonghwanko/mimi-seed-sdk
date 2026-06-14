@@ -42,7 +42,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 ## 30-Second Setup
 
-**Option A — Remote MCP** (Recommended · requires web console account)
+**Option A — Remote MCP** (recommended for status & readiness · requires web console account)
 
 ```bash
 # 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
@@ -56,6 +56,8 @@ npx mimi-seed mcp codex --write
 ```
 
 Done. Start talking to Claude Code or Codex.
+
+> **Remote vs Local — pick by what you need.** Remote MCP exposes a ~16-tool **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM / BigQuery (the 110+ tools below) — use **Option B (Local MCP)**.
 
 ---
 
@@ -169,7 +171,7 @@ git commits → user-friendly release notes → push to stores.
 ```
 
 Tones: `friendly` · `professional` · `empathetic` · `brief`  
-Post directly with `playstore_reply_to_review` after review.
+Post directly with `playstore_reply_review` after review.
 
 > AI-generated replies are drafts. Always review before posting.
 
@@ -238,7 +240,9 @@ Plus MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agen
 
 ---
 
-## Tool List (110+)
+## Local MCP Tool List (110+)
+
+> These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller ~16-tool read/diagnostic subset.
 
 | Domain | Count | Key Tools |
 |--------|-------|-----------|

@@ -74,6 +74,6 @@ export function formatReviewReply(result: ReviewReplyResult): string {
     '',
     `⚠ ${result.note}`,
     '',
-    '이 답변이 마음에 들면 playstore_reply_to_review 도구로 게시하세요.',
+    '이 답변이 마음에 들면 playstore_reply_review 도구로 게시하세요.',
   ].join('\n');
 }

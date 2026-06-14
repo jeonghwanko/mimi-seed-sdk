@@ -42,7 +42,7 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 ## 30초 시작
 
-**방법 A — Remote MCP** (추천 · 웹 콘솔 계정 필요)
+**방법 A — Remote MCP** (상태·준비도 확인에 추천 · 웹 콘솔 계정 필요)
 
 ```bash
 # 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
@@ -56,6 +56,8 @@ npx mimi-seed mcp codex --write
 ```
 
 끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
+
+> **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 ~16개 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)만 노출합니다. **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM / BigQuery(아래 110+ 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
 
 ---
 
@@ -169,7 +171,7 @@ git 커밋 내역 → 사용자 친화적 릴리즈 노트 → 스토어 자동 
 ```
 
 `friendly` · `professional` · `empathetic` · `brief` 4가지 톤.  
-생성 후 `playstore_reply_to_review`로 바로 게시.
+생성 후 `playstore_reply_review`로 바로 게시.
 
 > 생성 답변은 초안입니다. 게시 전 반드시 검토하세요.
 
@@ -238,7 +240,9 @@ MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/g
 
 ---
 
-## 도구 목록 (110+)
+## 도구 목록 (Local MCP · 110+)
+
+> 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 ~16개 읽기/진단 subset만 노출합니다.
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|

@@ -25,6 +25,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
+          registry-url: https://registry.npmjs.org
 
       # `npm install` (not `npm ci`): @emnapi/* are optional deps of
       # platform-specific native packages (rolldown/oxc), and npm omits the
@@ -38,3 +39,24 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # main 푸시에서 package.json version 이 npm 에 아직 없으면 자동 publish.
+      # 버전이 그대로면 skip (idempotent) — 수동 `npm version patch` 후 푸시만 하면 배포됨.
+      # NPM_TOKEN secret 미설정 시 안전하게 skip (실패 아님).
+      - name: Publish if version is new
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret 미설정 — publish 건너뜀 (repo Settings → Secrets → NPM_TOKEN 추가 필요)"
+            exit 0
+          fi
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "✓ $NAME@$VERSION 이미 npm 에 존재 — skip"
+          else
+            echo "→ publishing $NAME@$VERSION"
+            npm publish --access public
+          fi

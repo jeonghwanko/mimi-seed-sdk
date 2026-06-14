@@ -56,7 +56,7 @@ export function registerResources(server: McpServer) {
           '',
           '- `playstore_submit_release(status=completed)` — 비가역, 반드시 명시 동의 필요',
           '- `appstore_submit_for_review` — 비가역, 반드시 명시 동의 필요',
-          '- `playstore_reply_to_review` — 공개 게시, 반드시 검토 후 동의 필요',
+          '- `playstore_reply_review` — 공개 게시, 반드시 검토 후 동의 필요',
         ].join('\n'),
       }],
     }),

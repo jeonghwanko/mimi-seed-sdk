@@ -42,7 +42,7 @@ export function registerAiTools(server: McpServer) {
       'tone: friendly(친근) / professional(정중) / empathetic(공감) / brief(간결) — 기본: friendly',
       'language: ko / en / ja / zh 등 — 기본: ko',
       '⚠ 생성된 답변은 초안입니다. 게시 전 반드시 검토하세요.',
-      '답변 게시는 playstore_reply_to_review 도구를 사용하세요.',
+      '답변 게시는 playstore_reply_review 도구를 사용하세요.',
     ].join(' '),
     {
       reviewText: z.string().describe('리뷰 원문'),

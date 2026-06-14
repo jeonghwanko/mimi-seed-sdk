@@ -169,7 +169,7 @@ git 커밋 내역을 Claude가 사용자 친화적인 릴리즈 노트로 변환
 tone 옵션: `friendly`(친근) / `professional`(정중) / `empathetic`(공감) / `brief`(간결)
 
 > ⚠ AI 생성 답변은 초안입니다. 게시 전 반드시 검토하세요.  
-> 답변 게시는 `playstore_reply_to_review` 도구를 사용하세요.
+> 답변 게시는 `playstore_reply_review` 도구를 사용하세요.
 
 ---
 

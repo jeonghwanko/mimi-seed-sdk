@@ -79,7 +79,7 @@ export function registerPrompts(server: McpServer) {
             '3. 각 리뷰에 generate_review_reply 로 답변 초안 생성',
             `   톤: ${tone ?? 'empathetic'}`,
             '4. 초안 보여주고 게시 여부 확인 (비가역 — 반드시 동의 받을 것)',
-            '5. 확인 후 playstore_reply_to_review 로 게시',
+            '5. 확인 후 playstore_reply_review 로 게시',
             '',
             '⚠️ AI 생성 답변은 초안입니다. 게시 전 반드시 검토하세요.',
           ].join('\n'),
