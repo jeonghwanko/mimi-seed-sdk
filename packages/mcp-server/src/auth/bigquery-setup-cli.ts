@@ -99,7 +99,7 @@ async function main() {
   }
 
   console.log('');
-  console.log('  이제 Claude Code 에서:');
+  console.log('  이제 Claude Code 또는 Codex에서:');
   console.log('    "BigQuery 로 GA4 트래픽 분석해줘"');
   console.log('');
 

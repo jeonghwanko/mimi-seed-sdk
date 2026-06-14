@@ -224,7 +224,7 @@ export function startAuth(
           <html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
             <div style="text-align:center">
               <h1>✅ Mimi Seed 인증 완료!</h1>
-              <p>이 창을 닫고 Claude Code로 돌아가세요.</p>
+              <p>이 창을 닫고 Claude Code 또는 Codex로 돌아가세요.</p>
             </div>
           </body></html>
         `);

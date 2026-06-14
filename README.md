@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mimi-seed.pryzm.gg/tool"><strong>🌐 Web Console</strong></a> &nbsp;·&nbsp;
+  <a href="https://mimi-seed.pryzm.gg"><strong>🌐 Homepage</strong></a> &nbsp;·&nbsp;
   <a href="https://mimi-seed.pryzm.gg/workspace/api-tokens">🔑 Get API Token</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.ko.md">🇰🇷 한국어</a>
@@ -22,7 +22,7 @@ How many tabs do you have open right now to ship one app?
 Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...  
 Write release notes, check screenshot specs, reply to reviews, wire up Firebase — all in separate dashboards, all manual.
 
-**Mimi Seed handles all of this through Claude Code conversation.**
+**Mimi Seed handles all of this through Claude Code or Codex conversation.**
 
 ```
 "Is my app ready to ship?"
@@ -47,12 +47,15 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 ```bash
 # 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
 # 2. Issue a PAT:   https://mimi-seed.pryzm.gg/workspace/api-tokens
-# 3. Register in Claude Code:
+# 3-a. Register in Claude Code:
 claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
   --header "Authorization: Bearer <PAT>"
+
+# 3-b. Or register in Codex:
+npx mimi-seed mcp codex --write
 ```
 
-Done. Start talking to Claude Code.
+Done. Start talking to Claude Code or Codex.
 
 ---
 
@@ -61,7 +64,18 @@ Done. Start talking to Claude Code.
 ```bash
 # Claude Code
 claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+```
 
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.mimi-seed]
+command = "npx"
+args = ["-y", "@yoonion/mimi-seed-mcp"]
+enabled = true
+```
+
+```bash
 # First-time auth (opens browser)
 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 ```
@@ -101,7 +115,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 npx mimi-seed init   # auto-detect app → connect account → register MCP
 ```
 
-Detects Expo · Gradle · Info.plist · pbxproj automatically, and drops a `.claude/mimi-seed.md` so Claude Code picks up the release workflow every session.
+Detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session.
 
 | Command | What it does |
 |---------|--------------|
@@ -212,7 +226,7 @@ Works with **Jenkins · GitHub Actions · GitLab CI** (auto-detected, or force w
 
 ## Slash Commands (MCP Prompts)
 
-Available in any MCP client (Claude Code, etc.) as native slash commands:
+Available in any MCP client (Claude Code, Codex, etc.) as native slash commands:
 
 | Command | What it does |
 |---------|--------------|

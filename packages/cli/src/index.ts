@@ -23,6 +23,7 @@ import { cmdReview } from "./review.js";
 import { cmdAuth } from "./auth.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
+import { printMcpSetup, writeCodexMcpConfig } from "./mcp-config.js";
 
 const DEFAULT_WEB_BASE = process.env.MIMI_SEED_WEB_BASE ?? "https://mimi-seed.pryzm.gg";
 const DEFAULT_MCP_ENDPOINT = `${DEFAULT_WEB_BASE}/api/mcp`;
@@ -112,61 +113,62 @@ async function cmdInit(): Promise<void> {
     log("");
   }
 
-  // .claude/mimi-seed.md 주입 — Claude Code 세션마다 에이전트 컨텍스트 자동 활성화
+  const appLines = hints.flatMap((h) => {
+    const parts = [
+      h.name && `  name: ${h.name}`,
+      h.packageName && `  packageName: ${h.packageName}`,
+      h.bundleId && `  bundleId: ${h.bundleId}`,
+    ].filter(Boolean) as string[];
+    return parts;
+  });
+  const agentMd = [
+    "# Mimi Seed Agent",
+    "",
+    "Mimi Seed MCP가 이 프로젝트에 연결되어 있습니다.",
+    "Google Play · App Store · Firebase · AdMob을 도구로 직접 제어합니다.",
+    "",
+    "## 출시 요청 처리 순서",
+    "",
+    "1. 항상 `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인",
+    "2. 릴리즈 노트: `generate_release_notes_from_commits` → 사용자 확인 후 적용",
+    "3. 스토어 **쓰기** 작업(submit, apply, reply)은 반드시 사용자 명시 동의 후 실행",
+    "4. 완료 후 결과 요약 제공",
+    "",
+    "## 앱 정보",
+    ...(appLines.length > 0 ? appLines : ["  (mimi-seed status 로 확인)"]),
+    "",
+    "## 슬래시 커맨드",
+    "",
+    "- `/mimi-seed:deploy` — 전체 출시 파이프라인",
+    "- `/mimi-seed:health` — 연결 상태 빠른 확인",
+    "- `/mimi-seed:review-inbox` — 미답변 리뷰 답변",
+  ].join("\n");
+
+  // Claude Code는 .claude 하위 문서를, Codex는 AGENTS.md를 프로젝트 컨텍스트로 읽는다.
   const claudeDir = path.join(cwd, ".claude");
-  const agentMdPath = path.join(claudeDir, "mimi-seed.md");
-  if (!fs.existsSync(agentMdPath)) {
+  const claudeAgentPath = path.join(claudeDir, "mimi-seed.md");
+  if (!fs.existsSync(claudeAgentPath)) {
     fs.mkdirSync(claudeDir, { recursive: true });
-    const appLines = hints.flatMap((h) => {
-      const parts = [
-        h.name && `  name: ${h.name}`,
-        h.packageName && `  packageName: ${h.packageName}`,
-        h.bundleId && `  bundleId: ${h.bundleId}`,
-      ].filter(Boolean) as string[];
-      return parts;
-    });
-    const agentMd = [
-      "# Mimi Seed Agent",
-      "",
-      "Mimi Seed MCP가 이 프로젝트에 연결되어 있습니다.",
-      "Google Play · App Store · Firebase · AdMob을 도구로 직접 제어합니다.",
-      "",
-      "## 출시 요청 처리 순서",
-      "",
-      "1. 항상 `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인",
-      "2. 릴리즈 노트: `generate_release_notes_from_commits` → 사용자 확인 후 적용",
-      "3. 스토어 **쓰기** 작업(submit, apply, reply)은 반드시 사용자 명시 동의 후 실행",
-      "4. 완료 후 결과 요약 제공",
-      "",
-      "## 앱 정보",
-      ...(appLines.length > 0 ? appLines : ["  (mimi-seed status 로 확인)"]),
-      "",
-      "## 슬래시 커맨드",
-      "",
-      "- `/mimi-seed:deploy` — 전체 출시 파이프라인",
-      "- `/mimi-seed:health` — 연결 상태 빠른 확인",
-      "- `/mimi-seed:review-inbox` — 미답변 리뷰 답변",
-    ].join("\n");
-    fs.writeFileSync(agentMdPath, agentMd, { mode: 0o644 });
-    log(kleur.dim(`  에이전트 설정: .claude/mimi-seed.md`));
+    fs.writeFileSync(claudeAgentPath, agentMd, { mode: 0o644 });
+    log(kleur.dim(`  Claude 에이전트 설정: .claude/mimi-seed.md`));
+  }
+
+  const codexAgentPath = path.join(cwd, "AGENTS.md");
+  if (!fs.existsSync(codexAgentPath)) {
+    fs.writeFileSync(codexAgentPath, agentMd, { mode: 0o644 });
+    log(kleur.dim(`  Codex 에이전트 설정: AGENTS.md`));
   }
 
   log(kleur.bold("✓ 준비 완료."));
   log("");
-  log("Claude Code에서 이렇게 물어보세요:");
+  log("Claude Code 또는 Codex에서 이렇게 물어보세요:");
   log(kleur.cyan('  "내 앱 출시 준비됐어?"'));
   log(kleur.cyan('  "릴리즈 노트 써줘"'));
   log(kleur.cyan('  "등록된 앱 목록 보여줘"'));
   log("");
   log(`대시보드: ${kleur.underline(DEFAULT_WEB_BASE + "/apps")}`);
   log("");
-  log(
-    kleur.dim(
-      "Claude Code MCP 등록:\n" +
-        `  claude mcp add --transport http mimi-seed ${DEFAULT_MCP_ENDPOINT} \\\n` +
-        `    --header "Authorization: Bearer ${cfg.prefix}..."`,
-    ),
-  );
+  printMcpSetup(cfg);
 }
 
 async function cmdStatus(): Promise<void> {
@@ -194,8 +196,48 @@ async function cmdLogout(): Promise<void> {
   log(kleur.dim("웹에서 토큰 해지: /workspace/api-tokens"));
 }
 
+async function cmdMcp(args: string[]): Promise<void> {
+  const target = args[0] ?? "help";
+  const cfg = await getEffectiveConfig();
+  if (!cfg) {
+    log(kleur.yellow("연결된 Mimi Seed 계정이 없습니다. `mimi-seed init` 실행."));
+    process.exit(1);
+  }
+
+  if (target === "codex") {
+    if (args.includes("--write")) {
+      const configPath = await writeCodexMcpConfig(cfg);
+      log(kleur.green("✓ Codex MCP 설정 완료"));
+      log(kleur.dim(`  ${configPath}`));
+      log("");
+      log("Codex를 새로 열고 `/mcp` 또는 `codex mcp list`로 확인하세요.");
+      return;
+    }
+    log(kleur.bold("Codex MCP 등록"));
+    log("");
+    log("자동 등록:");
+    log(kleur.cyan("  mimi-seed mcp codex --write"));
+    log("");
+    log("수동 등록 예시 (~/.codex/config.toml):");
+    log(`[mcp_servers.mimi-seed]
+url = "${cfg.endpoint}"
+enabled = true
+http_headers = { Authorization = "Bearer ${cfg.prefix}..." }`);
+    return;
+  }
+
+  if (target === "claude") {
+    log(kleur.bold("Claude Code MCP 등록"));
+    log(kleur.cyan(`  claude mcp add --transport http mimi-seed ${cfg.endpoint} \\`));
+    log(kleur.cyan(`    --header "Authorization: Bearer ${cfg.prefix}..."`));
+    return;
+  }
+
+  printMcpSetup(cfg);
+}
+
 function printHelp(): void {
-  log(`${kleur.bold("mimi-seed")} — Claude Code에서 앱 출시 운영
+  log(`${kleur.bold("mimi-seed")} — Claude Code/Codex에서 앱 출시 운영
 
 ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
@@ -206,6 +248,7 @@ ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed notes")}       릴리즈 노트 생성 (git log → AI → 마켓 적용)
   ${kleur.cyan("mimi-seed review")}      리뷰 답변 AI 초안 생성 및 Play Store 게시
   ${kleur.cyan("mimi-seed deploy")}      앱 자동 배포 (Jenkins → Play Store/App Store)
+  ${kleur.cyan("mimi-seed mcp")}         Claude/Codex MCP 연결 안내 및 Codex 설정 쓰기
   ${kleur.cyan("mimi-seed restart")}     MCP 서버 프로세스 재시작 (기본: mimi-seed)
   ${kleur.cyan("mimi-seed logout")}      로컬 설정 삭제
 
@@ -283,6 +326,9 @@ async function main(): Promise<void> {
         break;
       case "deploy":
         await cmdDeploy(restArgs);
+        break;
+      case "mcp":
+        await cmdMcp(restArgs);
         break;
       case "restart":
         await cmdRestart(restArgs);

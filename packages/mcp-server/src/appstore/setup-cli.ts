@@ -51,7 +51,7 @@ async function main() {
   console.log('');
   console.log('  ✅ 연결 완료!');
   console.log('');
-  console.log('  이제 Claude Code에서:');
+  console.log('  이제 Claude Code 또는 Codex에서:');
   console.log('    "내 앱스토어 앱 목록 보여줘"');
   console.log('    "TestFlight 빌드 목록 보여줘"');
   console.log('');

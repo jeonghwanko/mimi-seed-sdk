@@ -1,7 +1,7 @@
 {
   "name": "mimi-seed",
   "version": "0.2.8",
-  "description": "Mimi Seed CLI — Claude Code에서 앱 출시 운영을 관리합니다.",
+  "description": "Mimi Seed CLI — Claude Code와 Codex에서 앱 출시 운영을 관리합니다.",
   "bin": {
     "mimi-seed": "dist/index.js"
   },

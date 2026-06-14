@@ -64,7 +64,7 @@ async function main() {
   console.log('');
   console.log(`  ✅ 저장 완료! (${parsed.client_email})`);
   console.log('');
-  console.log('  이제 Claude Code에서:');
+  console.log('  이제 Claude Code 또는 Codex에서:');
   console.log('    "내 Play 스토어 앱 리스팅 보여줘"');
   console.log('    "Play 구독 상품 목록 보여줘"');
   console.log('');

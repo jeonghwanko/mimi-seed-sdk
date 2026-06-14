@@ -223,7 +223,7 @@ async function cmdLogin(): Promise<number> {
   err('');
   err('  ✅ 연결 완료!');
   err('');
-  err('  이제 Claude Code에서 이렇게 쓸 수 있어:');
+  err('  이제 Claude Code 또는 Codex에서 이렇게 쓸 수 있어:');
   err('    "내 Firebase 프로젝트 보여줘"');
   err('    "새 Android 앱 등록해줘"');
   err('    "google-services.json 다운로드해줘"');

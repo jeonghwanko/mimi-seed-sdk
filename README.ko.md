@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mimi-seed.pryzm.gg/tool"><strong>🌐 웹 콘솔 바로가기</strong></a> &nbsp;·&nbsp;
+  <a href="https://mimi-seed.pryzm.gg"><strong>🌐 홈페이지</strong></a> &nbsp;·&nbsp;
   <a href="https://mimi-seed.pryzm.gg/workspace/api-tokens">🔑 PAT 발급</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.md">🇺🇸 English</a>
@@ -22,7 +22,7 @@
 Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...  
 릴리즈 노트는 써야 하고, 스크린샷은 규격이 맞는지 확인해야 하고, 리뷰에 답변도 달아야 합니다.
 
-**Mimi Seed는 이 반복 작업 전체를 Claude Code 대화로 처리합니다.**
+**Mimi Seed는 이 반복 작업 전체를 Claude Code 또는 Codex 대화로 처리합니다.**
 
 ```
 "내 앱 출시 준비됐어?"
@@ -47,12 +47,15 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 ```bash
 # 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
 # 2. PAT 발급:    https://mimi-seed.pryzm.gg/workspace/api-tokens
-# 3. Claude Code에 등록:
+# 3-a. Claude Code에 등록:
 claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
   --header "Authorization: Bearer <PAT>"
+
+# 3-b. 또는 Codex에 등록:
+npx mimi-seed mcp codex --write
 ```
 
-끝. Claude Code에서 바로 사용할 수 있어요.
+끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
 
 ---
 
@@ -61,7 +64,18 @@ claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
 ```bash
 # Claude Code
 claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+```
 
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.mimi-seed]
+command = "npx"
+args = ["-y", "@yoonion/mimi-seed-mcp"]
+enabled = true
+```
+
+```bash
 # 첫 인증 (브라우저 Google 로그인)
 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 ```
@@ -101,7 +115,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 npx mimi-seed init   # 앱 자동 감지 → 계정 연결 → MCP 등록 안내
 ```
 
-Expo · Gradle · Info.plist · pbxproj 자동 감지. `.claude/mimi-seed.md`도 함께 생성해 Claude Code가 세션마다 출시 워크플로우를 자동 인식합니다.
+Expo · Gradle · Info.plist · pbxproj 자동 감지. `.claude/mimi-seed.md`와 `AGENTS.md`를 함께 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식합니다.
 
 | 명령어 | 설명 |
 |--------|------|
@@ -212,7 +226,7 @@ npx mimi-seed deploy --skip-build --version-code 142   # 노트만 적용
 
 ## 슬래시 커맨드 (MCP Prompts)
 
-MCP 클라이언트(Claude Code 등)에서 슬래시 커맨드로 바로 노출됩니다.
+MCP 클라이언트(Claude Code, Codex 등)에서 슬래시 커맨드로 바로 노출됩니다.
 
 | 커맨드 | 설명 |
 |--------|------|

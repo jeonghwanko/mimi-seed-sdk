@@ -1,6 +1,6 @@
 # @yoonion/mimi-seed-mcp
 
-**Mimi Seed** — Firebase · AdMob · Google Play · App Store Connect를 AI 콘솔에서 관리. Claude Code / Cursor / 기타 MCP 클라이언트에서 한 줄 등록으로 사용.
+**Mimi Seed** — Firebase · AdMob · Google Play · App Store Connect를 AI 콘솔에서 관리. Claude Code / Codex / Cursor / 기타 MCP 클라이언트에서 한 줄 등록으로 사용.
 
 > 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg/tool>.
 
@@ -10,6 +10,15 @@ Claude Code:
 
 ```bash
 claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.mimi-seed]
+command = "npx"
+args = ["-y", "@yoonion/mimi-seed-mcp"]
+enabled = true
 ```
 
 Claude Desktop (`claude_desktop_config.json`):
@@ -76,7 +85,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## 슬래시 커맨드 (MCP Prompts)
 
-MCP 클라이언트(Claude Code 등)에서 슬래시 커맨드로 바로 노출됩니다.
+MCP 클라이언트(Claude Code, Codex 등)에서 슬래시 커맨드로 바로 노출됩니다.
 
 | 커맨드 | 설명 |
 |--------|------|

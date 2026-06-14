@@ -1,7 +1,7 @@
 {
   "name": "@yoonion/mimi-seed-mcp",
   "version": "0.3.27",
-  "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Cursor / any MCP client.",
+  "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Codex / Cursor / any MCP client.",
   "type": "module",
   "bin": {
     "mimi-seed-mcp": "dist/index.js",
@@ -27,6 +27,7 @@
     "mcp-server",
     "model-context-protocol",
     "claude",
+    "codex",
     "firebase",
     "admob",
     "google-play",
