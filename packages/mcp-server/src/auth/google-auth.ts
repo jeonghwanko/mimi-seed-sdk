@@ -14,6 +14,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/admob.monetization',
   'https://www.googleapis.com/auth/androidpublisher',
   'https://www.googleapis.com/auth/adwords', // Google Ads API (googleads_* tools)
+  'https://www.googleapis.com/auth/webmasters', // Search Console API (gsc_* tools, 사이트맵 제출 포함)
 ];
 
 // Primary config dir. Legacy `~/.preseed` is read as a fallback during the

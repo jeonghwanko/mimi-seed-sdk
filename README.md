@@ -254,6 +254,7 @@ Plus MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agen
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_list_sitemaps` · `gsc_submit_sitemap` |
 | **Checks / Risk** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
