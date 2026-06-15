@@ -17,6 +17,7 @@ import { registerFacebookTools } from './registers/facebook.js';
 import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerGscTools } from './registers/gsc.js';
 import { registerJenkinsTools } from './registers/jenkins.js';
+import { registerAndroidTools } from './registers/android.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 
@@ -46,6 +47,7 @@ registerFacebookTools(server);
 registerGoogleAdsTools(server);
 registerGscTools(server);
 registerJenkinsTools(server);
+registerAndroidTools(server);
 registerPrompts(server);
 registerResources(server);
 
