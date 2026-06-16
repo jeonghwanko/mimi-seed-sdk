@@ -6,23 +6,52 @@ export interface JenkinsCredentialSummary {
   typeName: string;
 }
 
+const FILE_CLASS = 'org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl';
+const TEXT_CLASS = 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl';
+
 function basicAuth(username: string, token: string): string {
   return 'Basic ' + Buffer.from(`${username}:${token}`).toString('base64');
 }
 
-function credentialsBase(url: string): string {
+// 도메인(_ = 전역) 레벨 — 목록 조회 / createCredentials 의 베이스
+function storeBase(url: string): string {
   return `${url.replace(/\/$/, '')}/credentials/store/system/domain/_`;
 }
 
+// 개별 credential 레벨 — 반드시 /credential/<id> 세그먼트 필요 (조회/업데이트/삭제)
+function credentialBase(url: string, id: string): string {
+  return `${storeBase(url)}/credential/${encodeURIComponent(id)}`;
+}
+
+/**
+ * CSRF crumb (best-effort). crumb issuer 비활성이거나 API 토큰으로 면제되면 빈 객체.
+ * 구버전 Jenkins / 비밀번호 인증 환경에서 POST 403 방지.
+ */
+async function getCrumb(cfg: JenkinsConfig): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${cfg.url.replace(/\/$/, '')}/crumbIssuer/api/json`, {
+      headers: { Authorization: basicAuth(cfg.username, cfg.token) },
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as { crumbRequestField?: string; crumb?: string };
+    if (data.crumbRequestField && data.crumb) {
+      return { [data.crumbRequestField]: data.crumb };
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 async function credentialExists(cfg: JenkinsConfig, id: string): Promise<boolean> {
-  const res = await fetch(`${credentialsBase(cfg.url)}/${encodeURIComponent(id)}/api/json`, {
+  const res = await fetch(`${credentialBase(cfg.url, id)}/api/json`, {
     headers: { Authorization: basicAuth(cfg.username, cfg.token) },
   });
   return res.ok;
 }
 
 export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCredentialSummary[]> {
-  const res = await fetch(`${credentialsBase(cfg.url)}/api/json?depth=1`, {
+  const res = await fetch(`${storeBase(cfg.url)}/api/json?depth=1`, {
     headers: { Authorization: basicAuth(cfg.username, cfg.token) },
   });
   if (!res.ok) throw new Error(`Jenkins credentials 조회 실패 (${res.status})`);
@@ -42,30 +71,30 @@ export async function upsertSecretText(
   secret: string,
   description = '',
 ): Promise<'created' | 'updated'> {
-  const payload = JSON.stringify({
-    '': '0',
+  const exists = await credentialExists(cfg, id);
+  const payload = {
     credentials: {
       scope: 'GLOBAL',
       id,
       description,
       secret,
-      'stapler-class': 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl',
-      '$class': 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl',
+      $class: TEXT_CLASS,
+      'stapler-class': TEXT_CLASS,
     },
-  });
-  const base = credentialsBase(cfg.url);
-  const exists = await credentialExists(cfg, id);
+  };
   const endpoint = exists
-    ? `${base}/${encodeURIComponent(id)}/updateSubmit`
-    : `${base}/createCredentials`;
+    ? `${credentialBase(cfg.url, id)}/updateSubmit`
+    : `${storeBase(cfg.url)}/createCredentials`;
+  const crumb = await getCrumb(cfg);
 
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Authorization: basicAuth(cfg.username, cfg.token),
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...crumb,
     },
-    body: new URLSearchParams({ json: payload }).toString(),
+    body: new URLSearchParams({ json: JSON.stringify(payload) }).toString(),
   });
   if (!res.ok && res.status !== 302) {
     throw new Error(`Jenkins credential ${exists ? 'update' : 'create'} 실패 (${res.status})`);
@@ -73,6 +102,10 @@ export async function upsertSecretText(
   return exists ? 'updated' : 'created';
 }
 
+/**
+ * Secret File credential 생성/교체. Jenkins는 파일을 multipart 로 받고
+ * json 본문이 "file": "<필드명>" 으로 참조한다 (secretBytes JSON 직접 입력은 불가).
+ */
 export async function upsertSecretFile(
   cfg: JenkinsConfig,
   id: string,
@@ -80,31 +113,36 @@ export async function upsertSecretFile(
   fileName: string,
   description = '',
 ): Promise<'created' | 'updated'> {
-  const payload = JSON.stringify({
-    '': '0',
+  const exists = await credentialExists(cfg, id);
+  const payload = {
     credentials: {
       scope: 'GLOBAL',
       id,
       description,
-      fileName,
-      secretBytes: fileBase64,
-      'stapler-class': 'org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl',
-      '$class': 'org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl',
+      file: 'file0',
+      $class: FILE_CLASS,
+      'stapler-class': FILE_CLASS,
     },
-  });
-  const base = credentialsBase(cfg.url);
-  const exists = await credentialExists(cfg, id);
-  const endpoint = exists
-    ? `${base}/${encodeURIComponent(id)}/updateSubmit`
-    : `${base}/createCredentials`;
+  };
 
+  const form = new FormData();
+  form.append('json', JSON.stringify(payload));
+  const bytes = Buffer.from(fileBase64, 'base64');
+  form.append('file0', new Blob([bytes]), fileName);
+
+  const endpoint = exists
+    ? `${credentialBase(cfg.url, id)}/updateSubmit`
+    : `${storeBase(cfg.url)}/createCredentials`;
+  const crumb = await getCrumb(cfg);
+
+  // Content-Type 은 fetch 가 multipart boundary 와 함께 자동 설정 — 수동 지정 금지
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Authorization: basicAuth(cfg.username, cfg.token),
-      'Content-Type': 'application/x-www-form-urlencoded',
+      ...crumb,
     },
-    body: new URLSearchParams({ json: payload }).toString(),
+    body: form,
   });
   if (!res.ok && res.status !== 302) {
     throw new Error(`Jenkins secret file credential ${exists ? 'update' : 'create'} 실패 (${res.status})`);
@@ -113,9 +151,13 @@ export async function upsertSecretFile(
 }
 
 export async function deleteCredential(cfg: JenkinsConfig, id: string): Promise<void> {
-  const res = await fetch(`${credentialsBase(cfg.url)}/${encodeURIComponent(id)}/doDelete`, {
+  const crumb = await getCrumb(cfg);
+  const res = await fetch(`${credentialBase(cfg.url, id)}/doDelete`, {
     method: 'POST',
-    headers: { Authorization: basicAuth(cfg.username, cfg.token) },
+    headers: {
+      Authorization: basicAuth(cfg.username, cfg.token),
+      ...crumb,
+    },
   });
   if (!res.ok && res.status !== 302) {
     throw new Error(`Jenkins credential 삭제 실패 (${res.status})`);

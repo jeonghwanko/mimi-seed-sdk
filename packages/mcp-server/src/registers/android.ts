@@ -169,6 +169,10 @@ export function registerAndroidTools(server: McpServer) {
           text: [
             '✅ Android upload keystore 생성 완료',
             '',
+            '🔒 아래 비밀번호는 채팅 기록에 평문으로 남습니다.',
+            '   Jenkins 등록을 마친 뒤에는 이 대화/세션을 삭제하는 것을 권장합니다.',
+            '   keystore 파일과 비밀번호는 분실 시 앱 서명을 영구히 잃으니 별도 안전한 곳에도 백업하세요.',
+            '',
             '── 생성된 값 (지금 바로 Jenkins에 등록하세요) ────',
             `keyAlias:      ${ks.keyAlias}`,
             `storePassword: ${ks.storePassword}`,
