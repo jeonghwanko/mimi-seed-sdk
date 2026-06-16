@@ -1,6 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getMcpOAuthClient } from '../auth/constants.js';
 import { startAuth, ensureFreshAccessToken, getTokensLastRefreshMs } from '../auth/google-auth.js';
+import { listRegisteredServiceAccounts } from '../auth/playstore-auth.js';
+import { getAppStoreCredentials } from '../appstore/auth.js';
+import { loadJenkinsConfig } from '../jenkins/config.js';
+import { loadCiConfig } from '../ci/config.js';
+import { loadConfig as loadGoogleAdsConfig } from '../googleads/config.js';
+import { loadFacebookConfig } from '../facebook/config.js';
+import { loadInstagramConfig } from '../instagram/config.js';
+import { getBigQueryServiceAccountKey } from '../auth/bigquery-auth.js';
 
 /**
  * tokens.json mtime → "Nd Hh ago" 형식 문자열 + 재인증 권고.
@@ -29,6 +37,119 @@ function formatLastRefreshHint(lastMs: number | null): { label: string; recommen
 }
 
 export function registerAuthTools(server: McpServer) {
+  // ── 전체 연결 상태 진단 ────────────────────────────────────────────────────
+  server.tool(
+    'mimi_seed_status',
+    [
+      '⭐ 새 세션을 시작하거나 "뭐가 연결됐지?" 라는 질문엔 이 도구를 먼저 호출하세요.',
+      '9개 서비스(Google OAuth / Play SA / App Store / Jenkins / CI / Google Ads / Facebook / Instagram / BigQuery)',
+      '설정 상태를 한 번에 스캔해 ✅ / ❌ 트래픽 라이트 리포트와 번호 매긴 다음 단계를 반환합니다.',
+      '미설정 서비스마다 어떤 도구를 호출하면 되는지 구체적으로 알려줍니다.',
+    ].join(' '),
+    {},
+    async () => {
+      const lines: string[] = ['🌱 Mimi Seed 연결 상태', ''];
+
+      // 1. Google OAuth
+      const oauthResult = await ensureFreshAccessToken();
+      if (oauthResult.status === 'fresh' || oauthResult.status === 'refreshed') {
+        const min = Math.round(oauthResult.msUntilExpiry / 60_000);
+        const hint = formatLastRefreshHint(getTokensLastRefreshMs());
+        lines.push(`✅ Google OAuth      — 연결됨 (${min}분 남음, ${hint.label})`);
+        if (hint.recommendation) lines.push(`   ${hint.recommendation}`);
+      } else {
+        lines.push('❌ Google OAuth      — 미연결 → mimi_seed_auth_start');
+      }
+
+      // 2. Play Store SA
+      const saInfo = listRegisteredServiceAccounts();
+      const saCount = saInfo.perPackage.length + (saInfo.default ? 1 : 0);
+      if (saCount > 0) {
+        const pkgs = saInfo.perPackage.map((p) => p.packageName).join(', ');
+        const detail = pkgs || saInfo.default?.clientEmail || '(default)';
+        lines.push(`✅ Play Store SA     — ${saCount}개 등록 (${detail})`);
+      } else {
+        lines.push('❌ Play Store SA     — 미설정 → playstore_register_service_account 또는 setup_playstore_connection');
+      }
+
+      // 3. App Store Connect
+      const asc = getAppStoreCredentials();
+      if (asc) {
+        lines.push(`✅ App Store Connect — 연결됨 (keyId: ${asc.keyId})`);
+      } else {
+        lines.push('❌ App Store Connect — 미설정 → npx @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
+      }
+
+      // 4. Jenkins
+      const jenkins = loadJenkinsConfig();
+      if (jenkins) {
+        lines.push(`✅ Jenkins           — 연결됨 (${jenkins.url})`);
+      } else {
+        lines.push('❌ Jenkins           — 미설정 → jenkins_status → jenkins_save_config  (선택)');
+      }
+
+      // 5. CI (GitHub/GitLab)
+      const ci = loadCiConfig();
+      if (ci) {
+        lines.push(`✅ CI               — ${ci.provider} (${ci.owner}/${ci.repo})`);
+      } else {
+        lines.push('❌ CI               — 미설정 → ci_save_config  (선택)');
+      }
+
+      // 6. Google Ads
+      const gads = loadGoogleAdsConfig();
+      if (gads) {
+        lines.push(`⚠️  Google Ads       — 설정됨 (customerId: ${gads.customerId})`);
+      } else {
+        lines.push('❌ Google Ads        — 미설정 → googleads_save_config  (선택)');
+      }
+
+      // 7. Facebook
+      const fb = loadFacebookConfig();
+      if (fb) {
+        lines.push(`✅ Facebook          — 연결됨 (pageId: ${fb.pageId})`);
+      } else {
+        lines.push('❌ Facebook          — 미설정 → facebook_save_config  (선택)');
+      }
+
+      // 8. Instagram
+      const ig = loadInstagramConfig();
+      if (ig) {
+        lines.push(`✅ Instagram         — 연결됨 (userId: ${ig.userId})`);
+      } else {
+        lines.push('❌ Instagram         — 미설정 → instagram_save_config  (선택)');
+      }
+
+      // 9. BigQuery
+      const bq = getBigQueryServiceAccountKey();
+      if (bq) {
+        lines.push(`✅ BigQuery          — 서비스 계정 연결됨 (${(bq as { client_email?: string }).client_email ?? ''})`);
+      } else {
+        lines.push('❌ BigQuery          — 미설정 → npx @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)');
+      }
+
+      // 다음 단계 안내
+      const missing: string[] = [];
+      if (oauthResult.status !== 'fresh' && oauthResult.status !== 'refreshed') {
+        missing.push('  1. mimi_seed_auth_start  (Google 계정 로그인 — Firebase/AdMob/GSC 등 필수)');
+      }
+      if (saCount === 0) {
+        missing.push('  2. setup_playstore_connection(packageName=..., projectId=...)  (Play Store 배포 필수)');
+      }
+      if (!asc) {
+        missing.push('  3. npx @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)');
+      }
+
+      if (missing.length > 0) {
+        lines.push('', '── 다음 단계 (필수) ─────────────────────────────', ...missing);
+      } else {
+        lines.push('', '✅ 필수 연결 모두 완료. 앱 출시 작업을 시작할 수 있습니다.');
+      }
+
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    },
+  );
+
   server.tool(
     'mimi_seed_auth_start',
     [

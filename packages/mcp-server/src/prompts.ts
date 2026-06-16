@@ -35,7 +35,7 @@ export function registerPrompts(server: McpServer) {
 
   server.prompt(
     'health',
-    '인증 상태 + 앱 출시 준비도 빠른 요약',
+    '전체 연결 상태 스캔 + 앱 출시 준비도 요약',
     {},
     async () => ({
       messages: [{
@@ -46,10 +46,10 @@ export function registerPrompts(server: McpServer) {
             '현재 Mimi Seed 연결 상태와 앱 출시 준비도를 요약해줘.',
             '',
             '확인 순서:',
-            '1. mimi_seed_auth_status 로 Google OAuth 토큰 상태 확인',
-            '2. 인증 없으면 mimi_seed_auth_start 로 로그인 링크 발급',
-            '3. firebase_list_projects 로 연결된 Firebase 프로젝트 확인 (인증 있을 때)',
-            '4. playstore_check_submission_risks / appstore_check_submission_risks 로 등록 앱 블로커 점검',
+            '1. mimi_seed_status 호출 — 9개 서비스 전체 연결 상태 스캔',
+            '2. ❌ 필수 항목(Google OAuth / Play SA / App Store)이 있으면 먼저 설정 안내',
+            '3. firebase_list_projects 로 연결된 Firebase 프로젝트 확인 (OAuth 연결 시)',
+            '4. playstore_check_submission_risks / appstore_check_submission_risks 로 블로커 점검',
             '5. 다음 권장 액션 제안 (블로커 수정 / 릴리즈 노트 생성 / 출시 실행)',
           ].join('\n'),
         },
