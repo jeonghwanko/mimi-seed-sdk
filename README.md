@@ -240,6 +240,23 @@ Plus MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agen
 
 ---
 
+## Skills & Agent Guide
+
+Bundled skills (auto-loaded by the Claude Code / Codex plugin from [`skills/`](skills/)):
+
+| Skill | Use it for |
+|-------|-----------|
+| `mimi-seed` | General entry — status → readiness → release notes → store apply |
+| `playstore-publish` | Play Store listing, images, release notes, track promote |
+| `appstore-publish` | App Store Connect What's New + screenshots |
+| `deploy` | End-to-end: CI build → blocker check → notes → apply |
+
+Building an agent on top of Mimi Seed? Read **[`docs/agent-guide.md`](docs/agent-guide.md)** —
+how tools load (the deferred-tool / `ToolSearch select:` pattern), the right call order,
+auth model, and which actions are irreversible.
+
+---
+
 ## Local MCP Tool List (110+)
 
 > These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller ~16-tool read/diagnostic subset.
