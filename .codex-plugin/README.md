@@ -5,7 +5,12 @@
 ## 포함 내용
 
 - **MCP 서버**: `mimi-seed` (`@yoonion/mimi-seed-mcp`)
-- **스킬**: `appstore-publish` — App Store Connect 릴리스 노트와 스크린샷 업로드
+- **스킬**:
+  - `mimi-seed` — 범용 진입 (상태 점검 → 준비도 → 릴리스 노트 → 스토어 적용)
+  - `playstore-publish` — Google Play 등록정보·이미지·릴리스 노트·트랙 출시/승격
+  - `appstore-publish` — App Store Connect What's New + 스크린샷 업로드
+  - `deploy` — CI 빌드 → 블로커 점검 → 릴리스 노트 → 스토어 적용 풀 파이프라인
+- **에이전트 가이드**: `docs/agent-guide.md` — deferred-tool 로딩(`ToolSearch select:`) 패턴, 호출 순서, 비가역 작업 안전수칙
 
 ## 사전 조건
 
