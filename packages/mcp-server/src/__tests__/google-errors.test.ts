@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { friendlyGoogleError, extractHttpStatus, authReauthMessage } from '../lib/google-errors.js';
+import { friendlyGoogleError, extractHttpStatus, authReauthMessage, googleErrorDetail } from '../lib/google-errors.js';
 import { friendlyPlayError } from '../playstore/errors.js';
 
 describe('extractHttpStatus', () => {
@@ -20,6 +20,21 @@ describe('authReauthMessage', () => {
   });
   it('null for unrelated text', () => {
     expect(authReauthMessage('some random error')).toBeNull();
+  });
+});
+
+describe('googleErrorDetail', () => {
+  it('extracts response.data.error.message', () => {
+    const e = { response: { data: { error: { message: 'The caller does not have permission' } } } };
+    expect(googleErrorDetail(e)).toContain('does not have permission');
+  });
+  it('extracts errors[].reason', () => {
+    const e = { errors: [{ reason: 'insufficientPermissions', message: 'nope' }] };
+    expect(googleErrorDetail(e)).toContain('insufficientPermissions');
+  });
+  it('undefined when no structured detail', () => {
+    expect(googleErrorDetail(new Error('forbidden'))).toBeUndefined();
+    expect(googleErrorDetail('x')).toBeUndefined();
   });
 });
 
@@ -51,6 +66,12 @@ describe('friendlyPlayError', () => {
   it('403 status -> Play Console permission checklist', () => {
     const m = friendlyPlayError({ code: 403, message: 'forbidden' }).message;
     expect(m).toContain('Users and permissions');
+  });
+  it('403 with Google detail surfaces the raw reason (not just "grant permission")', () => {
+    const e = { code: 403, response: { data: { error: { message: 'Operation not allowed for this app state' } } } };
+    const m = friendlyPlayError(e).message;
+    expect(m).toContain('Operation not allowed for this app state');
+    expect(m).toContain('Users and permissions'); // checklist still present as fallback
   });
   it('404 -> packageName hint includes the package', () => {
     const m = friendlyPlayError({ code: 404, message: 'not found' }, 'com.example.app').message;

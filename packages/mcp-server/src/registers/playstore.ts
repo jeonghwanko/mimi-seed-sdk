@@ -68,7 +68,7 @@ export function registerPlaystoreTools(server: McpServer) {
 
   server.tool(
     'playstore_update_listing',
-    'Google Play 스토어 리스팅 수정 (제목, 설명문 변경)',
+    'Google Play 스토어 리스팅 수정 (제목, 설명문 변경). ⚠️ Play API 편집과 Console 동시 편집은 충돌 — Console에서 같은 리스팅을 편집·미게시 중이면 그 변경이 덮어써질 수 있음.',
     {
       packageName: z.string().describe('패키지명'),
       language: z.string().describe('언어 코드 (예: ko-KR, en-US)'),
@@ -161,7 +161,7 @@ export function registerPlaystoreTools(server: McpServer) {
 
   server.tool(
     'playstore_upload_image',
-    'Google Play 리스팅 이미지 단일 업로드 (기존 이미지 유지). featureGraphic 1024x500 / icon 512x512 / phoneScreenshots 320~3840px',
+    'Google Play 리스팅 이미지 단일 업로드 (기존 이미지 유지). featureGraphic 1024x500 / icon 512x512 / phoneScreenshots 320~3840px. ⚠️ 이 작업은 edit을 commit하므로 Play Console의 미게시(저장 전) 리스팅 변경을 덮어쓸 수 있음 — Console에서 같은 앱을 편집 중이면 먼저 저장·게시하거나 텍스트도 update_listing으로 처리하세요.',
     {
       packageName: z.string().describe('패키지명'),
       language: z.string().describe('언어 코드'),
@@ -177,7 +177,7 @@ export function registerPlaystoreTools(server: McpServer) {
 
   server.tool(
     'playstore_delete_all_images',
-    'Google Play 리스팅 특정 imageType의 이미지 전체 삭제 (교체 전 정리)',
+    'Google Play 리스팅 특정 imageType의 이미지 전체 삭제 (교체 전 정리). ⚠️ commit이 Play Console의 미게시 리스팅 변경을 덮어쓸 수 있음.',
     {
       packageName: z.string().describe('패키지명'),
       language: z.string().describe('언어 코드'),
@@ -192,7 +192,7 @@ export function registerPlaystoreTools(server: McpServer) {
 
   server.tool(
     'playstore_replace_images',
-    'Google Play 리스팅 이미지 일괄 교체 (한 edit 세션: deleteall → 순서대로 upload → commit). 스크린샷 5~8장 한 번에 교체 시 효율적. 업로드 순서가 스토어 노출 순서',
+    'Google Play 리스팅 이미지 일괄 교체 (한 edit 세션: deleteall → 순서대로 upload → commit). 스크린샷 5~8장 한 번에 교체 시 효율적. 업로드 순서가 스토어 노출 순서. ⚠️ commit이 Play Console의 미게시 리스팅 변경을 덮어쓸 수 있음.',
     {
       packageName: z.string().describe('패키지명'),
       language: z.string().describe('언어 코드'),
