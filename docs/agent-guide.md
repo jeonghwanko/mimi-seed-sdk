@@ -167,12 +167,17 @@ General rules:
   on draft app."* Closed/open testing also needs the **App Content** declarations
   (content rating, data safety, target audience) which are **Console-only** — the API
   cannot set them.
-- **Store-listing text vs images can route differently.** `playstore_upload_image`
-  (icon/screenshots) and `playstore_update_listing` (description text) both need
-  "Manage store presence", but may resolve credentials differently. If images upload
-  but text returns `403`, it is a credential-routing issue, **not** the user's Play
-  Console permissions — verify with a read (`playstore_get_listing`) and, if needed,
-  fall back to entering text in Console.
+- **A `403` on one write but not another is usually NOT a permissions gap.** Every
+  `playstore_*` write resolves the same credential (`requirePlayStoreAuth`), so if
+  `playstore_upload_image` succeeds but `playstore_update_listing` returns `403`, the
+  account's permissions are fine. Read the **raw Google reason** surfaced in the error
+  (app state, policy, or an operation-specific restriction) instead of blindly
+  "granting permission" — the friendly 403 message now includes that reason.
+- **Play edits overwrite un-published Console changes.** Committing *any* Play
+  Developer API edit (image upload, listing update, release) discards listing/release
+  changes you saved-but-didn't-publish in the Play Console UI. Google's own docs warn
+  against editing the same app with both tools at once. Do all listing writes via the
+  API, or finish & publish your Console edits first — never interleave them.
 - **`ci_*` is GitHub/GitLab only.** It does not trigger Jenkins builds.
 - **Reward/cash-out apps** are a sensitive Play category — flag policy implications to
   the user, but it does not block test-track distribution.

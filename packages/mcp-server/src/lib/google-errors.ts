@@ -24,6 +24,33 @@ export function rawMessage(e: unknown): string {
   }
 }
 
+/**
+ * Google API 에러에서 구조화된 실제 사유를 추출한다. GaxiosError는
+ * `response.data.error.{message,errors[].reason}` 에 진짜 원인을 담는데,
+ * 친절화 레이어가 이를 버리고 일반 메시지("권한 없음")로 덮으면, 권한이 멀쩡한데도
+ * 권한 문제로 오진하게 된다 (예: 같은 SA로 이미지 업로드는 되는데 listings.update만 403).
+ * 추출 실패 시 undefined.
+ */
+export function googleErrorDetail(e: unknown): string | undefined {
+  if (!e || typeof e !== 'object') return undefined;
+  const any = e as {
+    errors?: Array<{ reason?: string; message?: string }>;
+    response?: { data?: { error?: { message?: unknown; errors?: Array<{ reason?: string; message?: string }> } } };
+  };
+  const apiErr = any.response?.data?.error;
+  const parts: string[] = [];
+  if (apiErr?.message) parts.push(String(apiErr.message));
+  const reasons = apiErr?.errors ?? any.errors;
+  if (Array.isArray(reasons)) {
+    for (const r of reasons) {
+      const bit = [r?.reason, r?.message].filter(Boolean).join(': ');
+      if (bit && !parts.some((p) => p.includes(bit))) parts.push(bit);
+    }
+  }
+  const joined = parts.join(' | ').trim();
+  return joined.length ? joined : undefined;
+}
+
 /** invalid_grant / 만료 refresh_token / 부족 scope → 재로그인 안내 메시지. 아니면 null. */
 export function authReauthMessage(text: string): string | null {
   if (/invalid_grant|invalid_rapt|rapt_required|unauthorized_client|ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient.*scope/i.test(text)) {
