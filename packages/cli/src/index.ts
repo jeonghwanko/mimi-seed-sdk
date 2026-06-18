@@ -25,6 +25,7 @@ import { cmdFirebase, cmdAdmob, cmdGa4 } from "./cloud.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
 import { printMcpSetup, writeCodexMcpConfig } from "./mcp-config.js";
+import { ensureReleaseManifest } from "./release-manifest.js";
 
 const DEFAULT_WEB_BASE = process.env.MIMI_SEED_WEB_BASE ?? "https://mimi-seed.pryzm.gg";
 const DEFAULT_MCP_ENDPOINT = `${DEFAULT_WEB_BASE}/api/mcp`;
@@ -70,6 +71,8 @@ async function cmdInit(args: string[]): Promise<void> {
         for (const line of result.text.split("\n")) log("  " + line);
       }
     }
+    const manifest = await ensureReleaseManifest(cwd);
+    log(kleur.dim(`  릴리즈 노트 SSOT: ${manifest.created ? "생성" : "확인"} docs/releases.json`));
     log(kleur.bold("✓ 완료 (CI 모드)"));
     return;
   }
@@ -132,7 +135,7 @@ async function cmdInit(args: string[]): Promise<void> {
     "## 출시 요청 처리 순서",
     "",
     "1. 항상 `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인",
-    "2. 릴리즈 노트: `generate_release_notes_from_commits` → 사용자 확인 후 적용",
+    "2. 릴리즈 노트: `docs/releases.json`을 SSOT로 확인/작성 → 사용자 확인 후 적용",
     "3. 스토어 **쓰기** 작업(submit, apply, reply)은 반드시 사용자 명시 동의 후 실행",
     "4. 완료 후 결과 요약 제공",
     "",
@@ -160,6 +163,9 @@ async function cmdInit(args: string[]): Promise<void> {
     fs.writeFileSync(codexAgentPath, agentMd, { mode: 0o644 });
     log(kleur.dim(`  Codex 에이전트 설정: AGENTS.md`));
   }
+
+  const manifest = await ensureReleaseManifest(cwd);
+  log(kleur.dim(`  릴리즈 노트 SSOT: ${manifest.created ? "생성" : "확인"} docs/releases.json`));
 
   log(kleur.bold("✓ 준비 완료."));
   log("");
@@ -257,7 +263,7 @@ const CMD_USAGE: Record<string, string> = {
   init: `${kleur.bold("mimi-seed init")} — 현재 프로젝트를 Mimi Seed에 연결
 
 앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) → 브라우저 PAT 발급(원격 MCP) → 앱 등록
-+ .claude/mimi-seed.md, AGENTS.md 생성.
++ .claude/mimi-seed.md, AGENTS.md, docs/releases.json 생성/확인.
 
 옵션:
   --local   추가로 Google OAuth 로그인 + 로컬 110+ tool MCP 등록 안내`,
