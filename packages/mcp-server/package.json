@@ -50,6 +50,9 @@
   "engines": {
     "node": ">=20"
   },
+  "overrides": {
+    "gaxios": "7.1.5"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
