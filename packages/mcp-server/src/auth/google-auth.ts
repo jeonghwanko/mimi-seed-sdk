@@ -15,6 +15,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/androidpublisher',
   'https://www.googleapis.com/auth/adwords', // Google Ads API (googleads_* tools)
   'https://www.googleapis.com/auth/webmasters', // Search Console API (gsc_* tools, 사이트맵 제출 포함)
+  'https://www.googleapis.com/auth/analytics.edit', // GA4 Analytics Admin API (ga4_* tools — property/data stream 생성·조회)
 ];
 
 // Primary config dir. Legacy `~/.preseed` is read as a fallback during the
@@ -35,6 +36,8 @@ export interface StoredTokens {
   refresh_token: string;
   token_type: string;
   expiry_date: number;
+  /** 공백 구분 부여 스코프. 신규 도구(GA4 등) pre-flight 스코프 검사에 사용. 구 토큰은 undefined. */
+  scope?: string;
 }
 
 function ensureDir() {
@@ -125,6 +128,7 @@ export function getAuthenticatedClient(): ReturnType<typeof createOAuth2Client> 
         ...(newTokens.access_token && { access_token: newTokens.access_token }),
         ...(newTokens.refresh_token && { refresh_token: newTokens.refresh_token }),
         ...(newTokens.expiry_date && { expiry_date: newTokens.expiry_date }),
+        ...(newTokens.scope && { scope: newTokens.scope }),
       });
     }
   });
@@ -218,6 +222,7 @@ export function startAuth(
           refresh_token: tokens.refresh_token,
           token_type: tokens.token_type ?? 'Bearer',
           expiry_date: tokens.expiry_date ?? Date.now() + 3600_000,
+          ...(tokens.scope && { scope: tokens.scope }),
         };
         saveTokens(stored);
 
@@ -347,6 +352,8 @@ export async function ensureFreshAccessToken(marginMs = 300_000): Promise<Refres
       refresh_token: credentials.refresh_token ?? tokens.refresh_token,
       token_type: credentials.token_type ?? tokens.token_type ?? 'Bearer',
       expiry_date: credentials.expiry_date ?? Date.now() + 3600_000,
+      // refresh 응답은 scope 를 생략할 수 있으므로 기존 값을 보존(blank 방지).
+      scope: credentials.scope ?? tokens.scope,
     };
     saveTokens(refreshed);
     return {

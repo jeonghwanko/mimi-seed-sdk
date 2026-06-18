@@ -21,6 +21,7 @@ import { cmdCheck } from "./check.js";
 import { cmdNotes } from "./notes.js";
 import { cmdReview } from "./review.js";
 import { cmdAuth } from "./auth.js";
+import { cmdFirebase, cmdAdmob, cmdGa4 } from "./cloud.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
 import { printMcpSetup, writeCodexMcpConfig } from "./mcp-config.js";
@@ -332,6 +333,9 @@ ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
   ${kleur.cyan("mimi-seed status")}      연결 상태 + 등록 앱 목록
   ${kleur.cyan("mimi-seed auth")}        로컬 인증 (Google OAuth / App Store / Play / BigQuery)
+  ${kleur.cyan("mimi-seed firebase")}    Firebase 앱 생성·config 다운로드·GA4 링크
+  ${kleur.cyan("mimi-seed admob")}       AdMob 계정·앱·광고단위 조회 및 생성
+  ${kleur.cyan("mimi-seed ga4")}         GA4 property·data stream 생성·조회
   ${kleur.cyan("mimi-seed doctor")}      환경 진단 (토큰·Git·프로젝트·CI 체크)
   ${kleur.cyan("mimi-seed check")}       출시 전 Readiness 점검
   ${kleur.cyan("mimi-seed notes")}       릴리즈 노트 생성 (git log → AI → 마켓 적용)
@@ -381,6 +385,15 @@ async function main(): Promise<void> {
         break;
       case "auth":
         await cmdAuth(restArgs);
+        break;
+      case "firebase":
+        await cmdFirebase(restArgs);
+        break;
+      case "admob":
+        await cmdAdmob(restArgs);
+        break;
+      case "ga4":
+        await cmdGa4(restArgs);
         break;
       case "deploy":
         await cmdDeploy(restArgs);

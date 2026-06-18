@@ -16,6 +16,7 @@ import { registerInstagramTools } from './registers/instagram.js';
 import { registerFacebookTools } from './registers/facebook.js';
 import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerGscTools } from './registers/gsc.js';
+import { registerGa4Tools } from './registers/ga4.js';
 import { registerJenkinsTools } from './registers/jenkins.js';
 import { registerAndroidTools } from './registers/android.js';
 import { registerPrompts } from './prompts.js';
@@ -46,6 +47,7 @@ registerInstagramTools(server);
 registerFacebookTools(server);
 registerGoogleAdsTools(server);
 registerGscTools(server);
+registerGa4Tools(server);
 registerJenkinsTools(server);
 registerAndroidTools(server);
 registerPrompts(server);
@@ -60,6 +62,9 @@ const SUBCOMMANDS: Record<string, () => Promise<unknown>> = {
   'mimi-seed-playstore-auth': () => import('./auth/playstore-setup-cli.js'),
   'mimi-seed-appstore-auth': () => import('./appstore/setup-cli.js'),
   'mimi-seed-bigquery-auth': () => import('./auth/bigquery-setup-cli.js'),
+  'mimi-seed-firebase': () => import('./firebase/cli.js'),
+  'mimi-seed-admob': () => import('./admob/cli.js'),
+  'mimi-seed-ga4': () => import('./ga4/cli.js'),
 };
 
 async function main() {

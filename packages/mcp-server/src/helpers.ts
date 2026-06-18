@@ -1,4 +1,4 @@
-import { getAuthenticatedClient, ensureFreshAccessToken } from './auth/google-auth.js';
+import { getAuthenticatedClient, ensureFreshAccessToken, getStoredTokens } from './auth/google-auth.js';
 import { getServiceAccountClient, getServiceAccountJson } from './auth/playstore-auth.js';
 import { getAppStoreCredentials } from './appstore/auth.js';
 import type { AuthErrorPayload } from './auth/errors.js';
@@ -27,7 +27,7 @@ function formatAuthError(p: AuthErrorPayload): string {
  * 기존엔 만료 시 각 OAuth 도구(firebase/admob/iam/googleads/checks)가
  * googleapis GaxiosError 를 그대로 노출 → 사용자는 "재로그인하라"는 안내를 못 받았다.
  */
-export async function requireAuth() {
+export async function requireAuth(requiredScope?: string) {
   const result = await ensureFreshAccessToken();
   if (result.status === 'unauthenticated' || result.status === 'expired_refresh_failed') {
     throw new Error(formatAuthError(result.error));
@@ -43,6 +43,24 @@ export async function requireAuth() {
         needsReauth: true,
       }),
     );
+  }
+  // 신규 스코프(GA4 analytics.edit 등)는 변경 전 발급된 토큰엔 없다. expiry 만 보는
+  // ensureFreshAccessToken 은 이를 못 걸러내므로(런타임 ACCESS_TOKEN_SCOPE_INSUFFICIENT),
+  // 저장된 scope 로 pre-flight 검사해 결정적인 재로그인 안내를 던진다.
+  // (scope 가 undefined 인 구 토큰은 미보유로 간주 → 재로그인 유도.)
+  if (requiredScope) {
+    const granted = (getStoredTokens()?.scope ?? '').split(' ').filter(Boolean);
+    if (!granted.includes(requiredScope)) {
+      throw new Error(
+        formatAuthError({
+          code: 'INSUFFICIENT_SCOPE',
+          message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 기존 로그인에 없어서 1회 재로그인이 필요해.`,
+          hint: 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
+          retriable: false,
+          needsReauth: true,
+        }),
+      );
+    }
   }
   return client;
 }
