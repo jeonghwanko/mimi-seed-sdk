@@ -8,7 +8,10 @@
     "mimi-seed-auth": "dist/auth/cli.js",
     "mimi-seed-appstore-auth": "dist/appstore/setup-cli.js",
     "mimi-seed-playstore-auth": "dist/auth/playstore-setup-cli.js",
-    "mimi-seed-bigquery-auth": "dist/auth/bigquery-setup-cli.js"
+    "mimi-seed-bigquery-auth": "dist/auth/bigquery-setup-cli.js",
+    "mimi-seed-firebase": "dist/firebase/cli.js",
+    "mimi-seed-admob": "dist/admob/cli.js",
+    "mimi-seed-ga4": "dist/ga4/cli.js"
   },
   "files": [
     "dist",

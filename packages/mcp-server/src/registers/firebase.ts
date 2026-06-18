@@ -246,4 +246,30 @@ export function registerFirebaseTools(server: McpServer) {
       return { content: [{ type: 'text', text: JSON.stringify(services, null, 2) }] };
     },
   );
+
+  server.tool(
+    'firebase_link_analytics',
+    'Firebase 프로젝트에 Google Analytics(GA4) 링크 → 앱별 measurement 자동 활성화. analyticsAccountId(그 계정에 GA4 property 신규 생성) 또는 analyticsPropertyId(기존 property 링크) 중 하나 필수. 먼저 firebase_enable_common_services 로 firebaseanalytics 활성화 권장. property 이름/web stream 까지 직접 제어하려면 ga4_create_property/ga4_create_data_stream 사용.',
+    {
+      projectId: z.string().describe('Firebase 프로젝트 ID'),
+      analyticsAccountId: z.string().optional().describe('GA 계정 ID (신규 property 생성 위치) — 예: 123456'),
+      analyticsPropertyId: z.string().optional().describe('기존 GA4 property ID 에 링크할 경우'),
+    },
+    async ({ projectId, analyticsAccountId, analyticsPropertyId }) => {
+      const auth = await requireAuth();
+      const result = await firebase.linkAnalytics(auth, projectId, { analyticsAccountId, analyticsPropertyId });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'firebase_get_analytics_details',
+    '프로젝트의 GA4 링크 상세 — 연결된 analyticsProperty + 앱↔data stream 매핑 조회.',
+    { projectId: z.string().describe('Firebase 프로젝트 ID') },
+    async ({ projectId }) => {
+      const auth = await requireAuth();
+      const details = await firebase.getAnalyticsDetails(auth, projectId);
+      return { content: [{ type: 'text', text: JSON.stringify(details, null, 2) }] };
+    },
+  );
 }

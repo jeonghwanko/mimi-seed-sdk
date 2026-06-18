@@ -196,6 +196,46 @@ export async function listEnabledServices(auth: OAuth2Client, projectId: string)
   }));
 }
 
+// ─── Google Analytics(GA4) 링크 ───
+
+/**
+ * Firebase 프로젝트에 Google Analytics(GA4)를 링크한다.
+ * - analyticsAccountId: 그 GA 계정 하위에 GA4 property 를 새로 만들어 링크.
+ * - analyticsPropertyId: 기존 GA4 property 에 링크.
+ * 둘 중 정확히 하나는 필수다(addGoogleAnalytics API 계약 — 무인자 모드 없음).
+ * 앱별 data stream(android/ios measurement)은 링크 후 Firebase 가 자동 생성한다.
+ * (반환값은 long-running Operation — 완료까지 수 초 소요될 수 있음.)
+ */
+export async function linkAnalytics(
+  auth: OAuth2Client,
+  projectId: string,
+  opts: { analyticsAccountId?: string; analyticsPropertyId?: string } = {},
+) {
+  const requestBody: { analyticsAccountId?: string; analyticsPropertyId?: string } = {};
+  if (opts.analyticsAccountId) requestBody.analyticsAccountId = opts.analyticsAccountId;
+  if (opts.analyticsPropertyId) requestBody.analyticsPropertyId = opts.analyticsPropertyId;
+  if (!requestBody.analyticsAccountId && !requestBody.analyticsPropertyId) {
+    throw new Error(
+      'GA4 링크엔 analyticsAccountId(신규 property 생성) 또는 analyticsPropertyId(기존 property 연결) 중 하나가 필요합니다.',
+    );
+  }
+  const res = await google.firebase('v1beta1').projects.addGoogleAnalytics({
+    auth,
+    parent: `projects/${projectId}`,
+    requestBody,
+  });
+  return res.data;
+}
+
+/** 프로젝트의 GA4 링크 상세 — 연결된 analyticsProperty + 앱↔stream 매핑 조회. */
+export async function getAnalyticsDetails(auth: OAuth2Client, projectId: string) {
+  const res = await google.firebase('v1beta1').projects.getAnalyticsDetails({
+    auth,
+    name: `projects/${projectId}/analyticsDetails`,
+  });
+  return res.data;
+}
+
 // ─── 편의 함수 ───
 
 const COMMON_SERVICES = [
@@ -206,6 +246,7 @@ const COMMON_SERVICES = [
   'fcm.googleapis.com',
   'identitytoolkit.googleapis.com',
   'cloudresourcemanager.googleapis.com',
+  'firebaseanalytics.googleapis.com', // GA4(Firebase Analytics) — linkAnalytics 전에 활성화
 ];
 
 export async function enableCommonServices(auth: OAuth2Client, projectId: string) {

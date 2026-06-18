@@ -11,6 +11,7 @@ export type AuthErrorCode =
   | 'UNAUTHORIZED_CLIENT' // 동의 범위/리다이렉트 URI 불일치
   | 'REFRESH_NETWORK_ERROR' // 구글 토큰 엔드포인트 도달 실패
   | 'REFRESH_UNKNOWN' // 분류 안 된 갱신 오류
+  | 'INSUFFICIENT_SCOPE' // 토큰은 유효하나 도구가 요구하는 OAuth 스코프 미보유 (신규 스코프 추가 후 재로그인 전)
   // 로그인 플로우
   | 'CALLBACK_PORT_IN_USE' // 9876 점유
   | 'CALLBACK_TIMEOUT' // 사용자가 시간 내 승인 안 함

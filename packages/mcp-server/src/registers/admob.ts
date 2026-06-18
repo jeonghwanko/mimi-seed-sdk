@@ -73,16 +73,17 @@ export function registerAdmobTools(server: McpServer) {
 
   server.tool(
     'admob_create_app',
-    'AdMob에 새 앱 등록 (v1beta — Limited Access)',
+    'AdMob에 새 앱 등록 (v1beta — Limited Access). appStoreId 를 주면 스토어 게시 앱과 링크(Android=패키지명, iOS=App Store 숫자 ID), 없으면 manual(unlinked) 앱.',
     {
       accountId: z.string().describe('AdMob 계정 ID'),
       platform: z.enum(['ANDROID', 'IOS']).describe('플랫폼'),
       displayName: z.string().describe('앱 이름'),
+      appStoreId: z.string().optional().describe('스토어 링크용 ID — Android는 패키지명(com.x.y), iOS는 App Store 숫자 ID'),
     },
-    async ({ accountId, platform, displayName }) => {
+    async ({ accountId, platform, displayName, appStoreId }) => {
       const auth = await requireAuth();
       try {
-        const result = await admob.createApp(auth, accountId, platform, displayName);
+        const result = await admob.createApp(auth, accountId, platform, displayName, appStoreId);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (err: any) {
         if (err.code === 403) {
