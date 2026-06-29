@@ -1,6 +1,6 @@
 ---
 name: appstore-publish
-description: mimi-seed MCP로 App Store Connect에 릴리스 노트와 스크린샷을 업로드한다. Use when publishing iOS App Store metadata updates via mimi-seed MCP in Codex.
+description: mimi-seed MCP로 App Store Connect에 릴리스 노트와 스크린샷을 업로드한다. Use when publishing iOS App Store metadata updates via mimi-seed MCP in Claude Code or Codex.
 ---
 
 # appstore-publish
@@ -9,7 +9,7 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 App Store 도구를 사용해 
 
 ## 사전 조건
 
-1. Codex MCP 설정에 `mimi-seed`가 등록되어 있어야 한다.
+1. MCP 클라이언트(Claude Code / Codex 등)에 `mimi-seed`가 등록되어 있어야 한다.
 2. App Store Connect API 인증 파일 `~/.mimi-seed/appstore.json`이 있어야 한다.
 3. 대상 버전은 `PREPARE_FOR_SUBMISSION`, `DEVELOPER_REJECTED`, `METADATA_REJECTED`, `REJECTED` 중 하나여야 한다.
 
@@ -17,6 +17,14 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 App Store 도구를 사용해 
 
 ```bash
 npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
+```
+
+## 도구 로딩
+
+호출 전 schema 로드:
+
+```
+ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
 ```
 
 ## 실행 흐름

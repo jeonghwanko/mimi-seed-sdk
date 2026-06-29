@@ -240,6 +240,23 @@ MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/g
 
 ---
 
+## 스킬 & 에이전트 가이드
+
+Claude Code / Codex 플러그인은 [`skills/`](skills/)의 스킬을 함께 로드합니다.
+
+| 스킬 | 용도 |
+|------|------|
+| `mimi-seed` | 범용 진입 — 상태 점검 → 준비도 → 릴리즈 노트 → 스토어 적용 |
+| `playstore-publish` | Play Store 등록정보, 이미지, 릴리즈 노트, 트랙 출시/승격 |
+| `appstore-publish` | App Store Connect What's New + 스크린샷 |
+| `deploy` | CI 빌드 → 블로커 점검 → 노트 → 스토어 적용 end-to-end |
+
+에이전트를 직접 붙인다면 **[`docs/agent-guide.md`](docs/agent-guide.md)** 를 먼저 보세요. 도구 로딩 방식(deferred-tool / `ToolSearch select:`), 호출 순서, 인증 모델, 비가역 작업 안전수칙이 정리되어 있습니다.
+
+SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)가 아키텍처, 전체 도구 카탈로그, 인증/credential 모델, 알려진 함정을 설명합니다. 시작점은 [`docs/domain/_index.md`](docs/domain/_index.md)입니다.
+
+---
+
 ## 도구 목록 (Local MCP · 147개 · 17개 영역)
 
 > 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset만 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
