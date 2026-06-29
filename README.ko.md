@@ -57,7 +57,7 @@ npx mimi-seed mcp codex --write
 
 끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
 
-> **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 ~16개 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)만 노출합니다. **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM / BigQuery(아래 110+ 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
+> **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 더 작은 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시) subset만 노출합니다. **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM / BigQuery(아래 147개 로컬 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
 
 ---
 
@@ -240,26 +240,31 @@ MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/g
 
 ---
 
-## 도구 목록 (Local MCP · 110+)
+## 도구 목록 (Local MCP · 147개 · 17개 영역)
 
-> 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 ~16개 읽기/진단 subset만 노출합니다.
+> 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset만 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| **App Store Connect** | 30 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
-| **Google Play** | 26 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
-| **Firebase** | 17 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
+| **App Store Connect** | 31 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
+| **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
+| **Firebase** | 19 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
+| **Jenkins** (크리덴셜) | 6 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_save_config` |
+| **GA4** | 6 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` |
+| **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
+| **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
 | **점검 / 위험** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
+| **Android 서명** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
+| **인증** | 3 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
-| **인증** | 2 | `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 
-전체 목록 → [packages/mcp-server](packages/mcp-server)
+전체 카탈로그 → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · 소스 → [packages/mcp-server](packages/mcp-server)
 
 ---
 
@@ -286,7 +291,7 @@ MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/g
 | 패키지 | 설명 |
 |--------|------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init`으로 프로젝트 연결 |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 110+ 도구 직접 실행 |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 147개 도구 직접 실행 |
 
 웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 

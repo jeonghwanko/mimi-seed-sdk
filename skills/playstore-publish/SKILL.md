@@ -52,3 +52,8 @@ ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_updat
 | `sevenInchScreenshots` / `tenInchScreenshots` | 태블릿 |
 
 업로드 전 실제 PNG 해상도를 확인한다.
+
+## 참고 (온톨로지)
+
+- Play 도구 전체 목록: [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)
+- 함정(draft-app 트랙 제약, Play↔Console 덮어쓰기, 403≠권한): [`docs/domain/pitfalls.md`](../../docs/domain/pitfalls.md)

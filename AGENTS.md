@@ -2,6 +2,14 @@
 
 This repository is the public developer-tooling source of truth for Mimi Seed.
 
+## Domain ontology
+
+Before non-trivial work, read the structural knowledge base in [`docs/domain/`](docs/domain/) — start at
+[`docs/domain/_index.md`](docs/domain/_index.md) (architecture, tool catalog, auth/credentials, external APIs,
+CLI/deploy, skills/plugins, pitfalls). For *how to call* the tools at runtime, see
+[`docs/agent-guide.md`](docs/agent-guide.md). This is a public repo: docs describe structure and behavior only —
+never secrets, real identifiers, or private web-console internals.
+
 ## Ownership
 
 - `packages/cli`: `mimi-seed` npm CLI.

@@ -3,6 +3,11 @@
 Thanks for your interest! mimi-seed-sdk is the developer-tooling SSOT for Mimi Seed —
 the `mimi-seed` CLI and the `@yoonion/mimi-seed-mcp` MCP server.
 
+**New here?** Read the domain ontology in [`docs/domain/`](docs/domain/) first (start at
+[`docs/domain/_index.md`](docs/domain/_index.md)) — it maps the architecture, the full tool catalog, the
+auth/credential model, and known pitfalls. For *how an agent should call* the tools, see
+[`docs/agent-guide.md`](docs/agent-guide.md).
+
 ## Repository layout
 
 ```
@@ -12,6 +17,9 @@ packages/
 skills/         # Claude Code / Codex skills
 .claude-plugin/ # Claude Code plugin + marketplace manifests
 .codex-plugin/  # Codex plugin manifest
+docs/
+  agent-guide.md # how an agent should call the tools
+  domain/        # domain ontology — architecture, tool catalog, pitfalls (start at _index.md)
 ```
 
 The private web console (`mimi-seed.pryzm.gg`) lives in a separate repo. Keep CLI/MCP
@@ -47,7 +55,9 @@ node dist/index.js  # then in another shell: npx . mimi-seed-auth  (or use the p
 4. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`,
    `chore:`, `docs:`…). Release notes are auto-generated from commit messages.
 5. Adding/changing an MCP tool? Update its `server.tool(...)` registration, the tool count
-   in the README tables, and add a test where it makes sense (see `src/__tests__/`).
+   in the README tables **and** [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) (keep them in
+   sync — see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8), and add a test where it makes sense
+   (see `src/__tests__/`).
 
 ## Releasing (maintainers)
 

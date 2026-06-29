@@ -49,3 +49,8 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
 | 2048x2732 | `APP_IPAD_PRO_129` |
 
 업로드 전 실제 PNG 해상도를 확인해 displayType과 맞는지 검수한다.
+
+## 참고 (온톨로지)
+
+- App Store 도구 전체 목록: [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)
+- 인증·ASC JWT 모델: [`docs/domain/auth-credentials.md`](../../docs/domain/auth-credentials.md)

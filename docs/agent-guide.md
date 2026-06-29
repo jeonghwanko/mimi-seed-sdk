@@ -8,11 +8,16 @@ The human-facing install + feature docs live in [`README.md`](../README.md). Thi
 is the **operational contract for agents**: how tools load, what order to call them in,
 and which actions are irreversible.
 
+> **Building or modifying the SDK itself?** The structural companion to this guide — architecture, the full tool
+> catalog, the auth/credential model, and pitfalls — lives in the domain ontology under
+> [`docs/domain/`](domain/_index.md). This guide is *how to call* the tools; the ontology is *how they're built*.
+
 ---
 
 ## 0. The one thing that trips every agent: deferred tools
 
-Mimi Seed exposes **110+ MCP tools**. Harnesses that lazy-load large tool catalogs —
+Mimi Seed exposes **147 MCP tools** across 17 domains (full inventory:
+[`docs/domain/tool-catalog.md`](domain/tool-catalog.md)). Harnesses that lazy-load large tool catalogs —
 **Claude Code most notably** — register these tools as **deferred**: the tool *names*
 are visible (in a system reminder), but the **input schemas are not loaded**. If you
 call a deferred tool directly, it fails with `InputValidationError` ("schema not
@@ -96,7 +101,8 @@ Notes that matter in practice:
 
 ## 3. Tool catalog (by domain)
 
-Full schemas load on demand via `ToolSearch`. Counts are approximate.
+Full schemas load on demand via `ToolSearch`. Counts below are representative; the exact per-domain inventory
+is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 
 | Domain | Representative tools |
 |--------|----------------------|

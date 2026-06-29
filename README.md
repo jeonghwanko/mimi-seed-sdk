@@ -57,7 +57,7 @@ npx mimi-seed mcp codex --write
 
 Done. Start talking to Claude Code or Codex.
 
-> **Remote vs Local — pick by what you need.** Remote MCP exposes a ~16-tool **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM / BigQuery (the 110+ tools below) — use **Option B (Local MCP)**.
+> **Remote vs Local — pick by what you need.** Remote MCP exposes a smaller **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM / BigQuery (the 147 local tools below) — use **Option B (Local MCP)**.
 
 ---
 
@@ -255,29 +255,37 @@ Building an agent on top of Mimi Seed? Read **[`docs/agent-guide.md`](docs/agent
 how tools load (the deferred-tool / `ToolSearch select:` pattern), the right call order,
 auth model, and which actions are irreversible.
 
+Contributing to the SDK? The **domain ontology** in [`docs/domain/`](docs/domain/) maps the architecture, the
+full tool catalog, the auth/credential model, and known pitfalls — start at
+[`docs/domain/_index.md`](docs/domain/_index.md).
+
 ---
 
-## Local MCP Tool List (110+)
+## Local MCP Tool List (147 tools · 17 domains)
 
-> These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller ~16-tool read/diagnostic subset.
+> These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
 | Domain | Count | Key Tools |
 |--------|-------|-----------|
-| **App Store Connect** | 30 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
-| **Google Play** | 26 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
-| **Firebase** | 17 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
+| **App Store Connect** | 31 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
+| **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
+| **Firebase** | 19 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
+| **Jenkins** (credentials) | 6 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_save_config` |
+| **GA4** | 6 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` |
+| **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
+| **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
-| **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_list_sitemaps` · `gsc_submit_sitemap` |
 | **Checks / Risk** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
+| **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
+| **Auth** | 3 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
-| **Auth** | 2 | `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 
-Full list → [packages/mcp-server](packages/mcp-server)
+Full catalog → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · source → [packages/mcp-server](packages/mcp-server)
 
 ---
 
@@ -304,7 +312,7 @@ Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg
 | Package | Description |
 |---------|-------------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init` to connect your project |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 110+ tools via Google OAuth |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 147 tools via Google OAuth |
 
 Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
