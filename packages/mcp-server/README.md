@@ -62,24 +62,30 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (110+개)
+## 제공 도구 (147개 · 17개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| App Store Connect | 30 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_whats_new` / `appstore_create_version` |
-| Google Play | 26 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
-| Firebase | 17 | `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` / `firebase_enable_service` |
+| App Store Connect | 31 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_whats_new` / `appstore_create_version` |
+| Google Play | 28 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
+| Firebase | 19 | `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` / `firebase_enable_service` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
+| Jenkins (크리덴셜) | 6 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_save_config` |
+| GA4 | 6 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_run_report` |
+| Search Console | 6 | `gsc_inspect_url` / `gsc_search_analytics` / `gsc_submit_sitemap` |
+| Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |
 | Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
 | Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |
 | BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
 | 점검 / 위험 | 4 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `screenshot_validate` / `release_status` |
 | Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
+| Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
+| 인증 | 3 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
-| 인증 | 2 | `mimi_seed_auth_start` / `mimi_seed_auth_status` |
 
 > 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `playstore_create_subscription` · `appstore_create_inapp_purchase` 등 (`@onesub/providers` 위임).
+> 전체 카탈로그(항상 최신): [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)
 
 ---
 
