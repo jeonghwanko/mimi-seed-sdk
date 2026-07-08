@@ -57,7 +57,7 @@ npx mimi-seed mcp codex --write
 
 끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
 
-> **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 더 작은 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시) subset만 노출합니다. **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM / BigQuery(아래 147개 로컬 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
+> **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)에 더해 **워크스페이스 공유 BigQuery** 를 노출합니다 — 팀 멤버 전원이 **개인 키 파일 없이** 하나의 공유 서비스 계정으로 BigQuery를 조회합니다 ([팀 공유 BigQuery](#팀-공유-bigquery-remote-mcp) 참고). **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM(아래 147개 로컬 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
 
 ---
 
@@ -223,6 +223,68 @@ npx mimi-seed deploy --skip-build --version-code 142   # 노트만 적용
 ```
 
 **Jenkins · GitHub Actions · GitLab CI** 지원 (자동 감지, `--ci`로 강제 선택 가능).
+
+---
+
+### 팀 공유 BigQuery (Remote MCP)
+
+팀 전체에 읽기 전용 BigQuery 접근(GA4 export 분석 등)을 **하나의 공유 서비스 계정**으로 제공합니다 —
+머신마다 키 파일이 필요 없고, 개인 토큰을 죽이는 Google Workspace 재인증 정책(`invalid_rapt`)의
+영향도 받지 않습니다.
+
+워크스페이스 **owner/admin** 이 서비스 계정을 한 번만 등록합니다(암호화·워크스페이스 범위):
+
+```
+"워크스페이스에 BigQuery 서비스 계정 등록해줘"
+→ register_integration(provider="bigquery", key="serviceAccountJson", value=<SA 키 JSON>)
+→ register_integration(provider="bigquery", key="projectId",          value="my-gcp-project")
+```
+
+그러면 각 멤버(`/workspace/members` 에서 초대 → `/workspace/api-tokens` 에서 PAT 발급)는
+**Remote MCP** 를 연결해 로컬 키 없이 조회합니다:
+
+```bash
+claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
+  --header "Authorization: Bearer <PAT>"
+```
+
+```
+"BigQuery 데이터셋 목록"                          # bigquery_list_datasets
+"SELECT COUNT(*) FROM `proj.ga4.events_*` WHERE ... 실행"   # bigquery_run_query (SELECT/WITH 전용)
+```
+
+멤버는 SA로 **읽기 쿼리만** 가능하고 **키 원본은 다시 꺼내볼 수 없습니다**(어떤 도구도 시크릿 값을
+반환하지 않음), 쓰기 문(statement)은 차단됩니다. 권장 IAM 역할:
+`roles/bigquery.jobUser` + `roles/bigquery.dataViewer`.
+
+> Local MCP(방법 B)에도 `bigquery_*` 도구가 있지만, 그건 **자기** `~/.mimi-seed` 키/OAuth로
+> 인증합니다 — *공유* SA는 **Remote** 엔드포인트에 있습니다.
+
+---
+
+### 프로젝트 매니페스트 — 팀원별 셋업 안내
+
+저장소 루트에 **`.mimi-seed.json`** 을 두고 이 프로젝트가 필요로 하는 서비스를 선언하세요.
+`mimi_seed_status`(MCP)와 `mimi-seed doctor`(CLI)가 이 파일을 읽어, 범용 스캔 대신
+**팀원별로 무엇이 빠졌는지 + 정확한 셋업 명령**을 알려줍니다.
+
+```json
+{
+  "project": "my-app",
+  "services": {
+    "oauth":     { "required": true },
+    "bigquery":  { "required": true, "projectId": "my-gcp-project", "dataset": "analytics_123",
+                   "workspaceProvider": "bigquery" },
+    "playstore": { "required": true, "packageName": "com.example.app" },
+    "appstore":  { "required": true, "keyId": "ABC123", "issuerId": "..." },
+    "jenkins":   { "required": false, "url": "https://jenkins.example.io" }
+  }
+}
+```
+
+저장소를 clone 한 팀원은 `mimi-seed doctor` 를 돌리거나(또는 에이전트에게 "나 뭐 빠졌어?" 라고
+물으면) ❌ 항목만 따라가면 됩니다. `bigquery` 는 서비스 계정 **또는** OAuth fallback 존재 여부를
+정직하게 보고합니다.
 
 ---
 

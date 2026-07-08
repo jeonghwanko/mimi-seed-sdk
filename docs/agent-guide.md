@@ -65,6 +65,13 @@ Before any task, call **`mimi_seed_status`** — the setup doctor. It scans 9 se
 BigQuery) and returns a ✅/❌ report plus the exact next tool to call for anything
 missing. This avoids a late `401`/`403` deep into a workflow.
 
+> If the repo has a **`.mimi-seed.json`** manifest at its root, `mimi_seed_status` (and
+> `mimi-seed doctor`) additionally report **which project-required services this teammate is
+> missing** + the precise fix command — use that section to onboard a new teammate.
+> **BigQuery** can be satisfied per-machine (`mimi-seed-bigquery-auth`) **or** workspace-wide:
+> a workspace admin registers a shared service account once and every member queries via the
+> **Remote MCP** with no personal key (`register_integration(provider="bigquery", …)`).
+
 If auth is missing or expired:
 
 | Service | Fix |

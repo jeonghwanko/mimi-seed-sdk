@@ -57,7 +57,7 @@ npx mimi-seed mcp codex --write
 
 Done. Start talking to Claude Code or Codex.
 
-> **Remote vs Local — pick by what you need.** Remote MCP exposes a smaller **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM / BigQuery (the 147 local tools below) — use **Option B (Local MCP)**.
+> **Remote vs Local — pick by what you need.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** — every workspace member queries BigQuery through one shared service account with **no personal key file** (see [Team-Shared BigQuery](#team-shared-bigquery-remote-mcp)). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM (the 147 local tools below) — use **Option B (Local MCP)**.
 
 ---
 
@@ -223,6 +223,68 @@ npx mimi-seed deploy --skip-build --version-code 142   # notes-only apply
 ```
 
 Works with **Jenkins · GitHub Actions · GitLab CI** (auto-detected, or force with `--ci`).
+
+---
+
+### Team-Shared BigQuery (Remote MCP)
+
+Give a whole team read-only BigQuery access (GA4 export analysis, etc.) with **one shared
+service account** — no per-machine key files, and immune to the Google Workspace OAuth
+reauth policy (`invalid_rapt`) that breaks personal tokens.
+
+A workspace **owner/admin** registers the service account once (encrypted, workspace-scoped):
+
+```
+"Register a BigQuery service account for the workspace"
+→ register_integration(provider="bigquery", key="serviceAccountJson", value=<SA key JSON>)
+→ register_integration(provider="bigquery", key="projectId",          value="my-gcp-project")
+```
+
+Then every workspace member (invite them at `/workspace/members`, they issue a PAT at
+`/workspace/api-tokens`) connects the **Remote MCP** and queries with no local key:
+
+```bash
+claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
+  --header "Authorization: Bearer <PAT>"
+```
+
+```
+"List BigQuery datasets"                       # bigquery_list_datasets
+"Run: SELECT COUNT(*) FROM `proj.ga4.events_*` WHERE ..."   # bigquery_run_query (SELECT/WITH only)
+```
+
+Members can **use** the SA for read-only queries but **cannot read the key back** (no tool
+returns stored secret values), and write statements are blocked. Recommended IAM on the SA:
+`roles/bigquery.jobUser` + `roles/bigquery.dataViewer`.
+
+> Local MCP (Option B) also has `bigquery_*` tools, but those authenticate with **your own**
+> `~/.mimi-seed` key/OAuth — the *shared* SA lives on the **Remote** endpoint.
+
+---
+
+### Project Manifest — per-teammate setup guidance
+
+Drop a **`.mimi-seed.json`** at your repo root declaring the services the project needs.
+`mimi_seed_status` (MCP) and `mimi-seed doctor` (CLI) read it and tell each teammate exactly
+**what they're missing + the precise setup command** — instead of a generic scan.
+
+```json
+{
+  "project": "my-app",
+  "services": {
+    "oauth":     { "required": true },
+    "bigquery":  { "required": true, "projectId": "my-gcp-project", "dataset": "analytics_123",
+                   "workspaceProvider": "bigquery" },
+    "playstore": { "required": true, "packageName": "com.example.app" },
+    "appstore":  { "required": true, "keyId": "ABC123", "issuerId": "..." },
+    "jenkins":   { "required": false, "url": "https://jenkins.example.io" }
+  }
+}
+```
+
+A teammate who clones the repo just runs `mimi-seed doctor` (or asks the agent "what am I
+missing?") and follows the ❌ items. `bigquery` reports honestly whether a service account
+**or** OAuth fallback is present.
 
 ---
 
