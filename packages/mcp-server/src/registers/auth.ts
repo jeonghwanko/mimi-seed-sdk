@@ -8,7 +8,13 @@ import { loadCiConfig } from '../ci/config.js';
 import { loadConfig as loadGoogleAdsConfig } from '../googleads/config.js';
 import { loadFacebookConfig } from '../facebook/config.js';
 import { loadInstagramConfig } from '../instagram/config.js';
-import { getBigQueryServiceAccountKey } from '../auth/bigquery-auth.js';
+import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
+import {
+  findProjectManifest,
+  manifestServiceEntries,
+  type ManifestServiceId,
+  type ManifestService,
+} from '../lib/project-manifest.js';
 
 /**
  * tokens.json mtime → "Nd Hh ago" 형식 문자열 + 재인증 권고.
@@ -34,6 +40,55 @@ function formatLastRefreshHint(lastMs: number | null): { label: string; recommen
     };
   }
   return { label };
+}
+
+// 매니페스트 서비스별 셋업 명령. status/doctor 가 "정확한 다음 명령"으로 안내한다.
+const MANIFEST_FIX: Record<ManifestServiceId, (svc: ManifestService) => string> = {
+  oauth: () => 'mimi_seed_auth_start  (Google 로그인 — Firebase/AdMob/Play/GSC/GA4)',
+  bigquery: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (서비스 계정 권장)',
+  playstore: (svc) =>
+    svc.packageName
+      ? `setup_playstore_connection(packageName="${svc.packageName}")`
+      : 'setup_playstore_connection(packageName=...)',
+  appstore: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+  jenkins: () => 'claude mcp add virgm-jenkins -s user  (개인 자격증명 — .mcp.json 금지)',
+};
+
+/** 서비스별 식별자를 한 줄 detail 로 (예: "ads-coffee / analytics_530080532"). */
+function manifestServiceDetail(id: ManifestServiceId, svc: ManifestService): string {
+  const parts: string[] = [];
+  if (id === 'bigquery') {
+    if (svc.projectId) parts.push(svc.projectId);
+    if (svc.dataset) parts.push(svc.dataset);
+  } else if (id === 'playstore') {
+    if (svc.packageName) parts.push(svc.packageName);
+  } else if (id === 'appstore') {
+    if (svc.keyId) parts.push(`keyId ${svc.keyId}`);
+  } else if (id === 'jenkins') {
+    if (svc.url) parts.push(svc.url);
+  }
+  return parts.join(' / ');
+}
+
+/** 매니페스트 한 서비스를 status 라인(들)으로 렌더. 미설정+필수면 명령 힌트를 붙인다. */
+function renderManifestLine(
+  id: ManifestServiceId,
+  svc: ManifestService,
+  connected: boolean,
+  required: boolean,
+): string {
+  const label = id.padEnd(10);
+  const detail = manifestServiceDetail(id, svc);
+  const detailSuffix = detail ? ` (${detail})` : '';
+
+  if (connected) return `✅ ${label} — 연결됨${detailSuffix}`;
+  if (!required) {
+    const note = svc.note ? ` — ${svc.note}` : '';
+    return `ℹ️  ${label} — (선택)${detailSuffix}${note}`;
+  }
+  const fix = MANIFEST_FIX[id](svc);
+  const noteLine = svc.note ? `\n     ${svc.note}` : '';
+  return `❌ ${label} — 미설정${detailSuffix}\n     → ${fix}${noteLine}`;
 }
 
 export function registerAuthTools(server: McpServer) {
@@ -120,10 +175,13 @@ export function registerAuthTools(server: McpServer) {
         lines.push('❌ Instagram         — 미설정 → instagram_save_config  (선택)');
       }
 
-      // 9. BigQuery
-      const bq = getBigQueryServiceAccountKey();
-      if (bq) {
-        lines.push(`✅ BigQuery          — 서비스 계정 연결됨 (${(bq as { client_email?: string }).client_email ?? ''})`);
+      // 9. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
+      // 이전엔 SA 파일만 검사해 OAuth fallback 이 살아있어도 ❌ 로 오표기했다.
+      const bqAuth = resolveBigQueryAuth();
+      if (bqAuth?.source === 'service-account') {
+        lines.push(`✅ BigQuery          — 서비스 계정 연결됨 (${bqAuth.clientEmail ?? ''})`);
+      } else if (bqAuth?.source === 'user-oauth') {
+        lines.push('⚠️  BigQuery          — OAuth fallback (Workspace 재인증 정책 시 끊길 수 있음 → 서비스 계정 권장: mimi-seed-bigquery-auth)');
       } else {
         lines.push('❌ BigQuery          — 미설정 → npx @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)');
       }
@@ -144,6 +202,46 @@ export function registerAuthTools(server: McpServer) {
         lines.push('', '── 다음 단계 (필수) ─────────────────────────────', ...missing);
       } else {
         lines.push('', '✅ 필수 연결 모두 완료. 앱 출시 작업을 시작할 수 있습니다.');
+      }
+
+      // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ────────────────────
+      // 이 저장소가 "무엇을 필요로 하는가"를 선언해두면, 범용 스캔 대신
+      // "이 프로젝트에서 너한테 빠진 것 + 정확한 셋업 명령"을 팀원별로 보여준다.
+      const loaded = findProjectManifest();
+      if (loaded) {
+        const oauthOk = oauthResult.status === 'fresh' || oauthResult.status === 'refreshed';
+        const playstoreCovers = (pkg?: string) =>
+          saCount > 0 &&
+          (!pkg || !!saInfo.default || saInfo.perPackage.some((p) => p.packageName === pkg));
+
+        const state: Record<ManifestServiceId, boolean> = {
+          oauth: oauthOk,
+          bigquery: !!bqAuth,
+          playstore: playstoreCovers(),
+          appstore: !!asc,
+          jenkins: !!jenkins,
+        };
+
+        const projName = loaded.manifest.displayName ?? loaded.manifest.project ?? '이 프로젝트';
+        const reqLines: string[] = ['', `── ${projName} 요구사항 (.mimi-seed.json) ─────────`];
+        let anyMissing = false;
+
+        for (const [id, svc] of manifestServiceEntries(loaded.manifest)) {
+          const required = svc.required !== false;
+          const connected =
+            id === 'playstore' ? playstoreCovers(svc.packageName) : state[id];
+          reqLines.push(renderManifestLine(id, svc, connected, required));
+          if (required && !connected) anyMissing = true;
+        }
+
+        if (anyMissing) {
+          reqLines.push(
+            '',
+            'ℹ️  팀 공유가 목표라면, 각자 로컬 자격증명을 채우는 대신',
+            '   워크스페이스(https://mimi-seed.pryzm.gg) 초대 → PAT 발급 → 원격 MCP 연결도 가능.',
+          );
+        }
+        lines.push(...reqLines);
       }
 
       return { content: [{ type: 'text', text: lines.join('\n') }] };
