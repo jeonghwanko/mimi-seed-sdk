@@ -24,7 +24,7 @@ mimi-seed-sdk/
 | version | 0.3.x | 0.4.x |
 | build | **tsup** (esbuild bundle) | **tsc** (plain `dist/`) |
 | node | >=18 | >=20 |
-| role | local/CI orchestration + remote-MCP onboarding | the 147-tool stdio MCP that hits Google/Apple APIs |
+| role | local/CI orchestration + remote-MCP onboarding | the 148-tool stdio MCP that hits Google/Apple APIs |
 | key deps | `@anthropic-ai/sdk`, `kleur`, `open` | `@modelcontextprotocol/sdk`, `googleapis`, `jose`, `@onesub/providers`, `zod`, `@anthropic-ai/sdk` |
 
 The two packages are independent: the CLI talks to the **remote HTTP MCP** (web console, PAT auth) for
@@ -82,7 +82,7 @@ count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
 |---|---|---|
 | transport | stdio (client spawns the process) | Streamable HTTP at `/api/mcp` |
 | auth | `~/.mimi-seed/` credentials ([[auth-credentials]]) | PAT bearer token |
-| tools | 147 (full store/cloud surface) | a smaller read/diagnostic subset |
+| tools | 148 (full store/cloud surface) | a smaller read/diagnostic subset |
 | identifier | exposed as `mimi-seed` | also exposed as `mimi-seed` (← the confusion source) |
 
 Both list under the one name `mimi-seed`; tell them apart by **tool-name prefix + auth method**. The 100+

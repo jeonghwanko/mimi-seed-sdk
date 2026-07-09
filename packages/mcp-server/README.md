@@ -62,13 +62,13 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (147개 · 17개 영역)
+## 제공 도구 (148개 · 17개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
 | App Store Connect | 31 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_whats_new` / `appstore_create_version` |
 | Google Play | 28 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
-| Firebase | 19 | `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` / `firebase_enable_service` |
+| Firebase | 20 | `firebase_create_project` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
 | Jenkins (크리덴셜) | 6 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_save_config` |

@@ -25,6 +25,119 @@ export async function getProject(auth: OAuth2Client, projectId: string) {
   return res.data;
 }
 
+const OPERATION_POLL_INTERVAL_MS = 2000;
+const OPERATION_MAX_ATTEMPTS = 30; // ~60s 상한 (operation 하나당) — 프로젝트 생성 + Firebase 추가 두 단계라 최악 ~2분
+const OPERATION_FETCH_RETRY_LIMIT = 3; // getOperation() 자체가 튕기는 경우(네트워크 blip) 허용할 연속 실패 횟수
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** long-running Operation 하나의 완료 여부를 판정한다. 폴링 루프에서 재사용 + 단독 테스트 가능. */
+export function operationOutcome(
+  op: { done?: boolean | null; error?: { message?: string | null } | null },
+): { status: 'pending' } | { status: 'done' } | { status: 'error'; message: string } {
+  if (!op.done) return { status: 'pending' };
+  if (op.error) return { status: 'error', message: op.error.message ?? JSON.stringify(op.error) };
+  return { status: 'done' };
+}
+
+/**
+ * getOperation()을 완료(done)까지 폴링한다. getOperation() 자체가 튕기는 것(네트워크 blip)과
+ * operation이 아직 안 끝난 것(pending)을 구분해서, 전자는 몇 번 더 참아주고 후자만 진행 신호로 본다.
+ * intervalMs/maxAttempts는 테스트에서 실시간 대기 없이 검증하기 위한 override.
+ */
+export async function waitForOperation(
+  getOperation: () => Promise<{ done?: boolean | null; error?: { message?: string | null } | null }>,
+  label: string,
+  opts: { intervalMs?: number; maxAttempts?: number } = {},
+) {
+  const intervalMs = opts.intervalMs ?? OPERATION_POLL_INTERVAL_MS;
+  const maxAttempts = opts.maxAttempts ?? OPERATION_MAX_ATTEMPTS;
+  let consecutiveFetchErrors = 0;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let op: { done?: boolean | null; error?: { message?: string | null } | null };
+    try {
+      op = await getOperation();
+      consecutiveFetchErrors = 0;
+    } catch (err) {
+      consecutiveFetchErrors += 1;
+      if (consecutiveFetchErrors > OPERATION_FETCH_RETRY_LIMIT) throw err;
+      if (attempt < maxAttempts - 1) await sleep(intervalMs);
+      continue;
+    }
+
+    const outcome = operationOutcome(op);
+    if (outcome.status === 'error') throw new Error(`${label} 실패: ${outcome.message}`);
+    if (outcome.status === 'done') return;
+    if (attempt < maxAttempts - 1) await sleep(intervalMs);
+  }
+  throw new Error(`${label}이(가) 시간 내에 끝나지 않았습니다 — 나중에 firebase_get_project 로 상태를 확인하세요.`);
+}
+
+/** 방금 만든 프로젝트를 곧바로 조회할 때의 짧은 전파 지연(propagation lag)을 흡수하는 재시도. */
+async function getProjectWithRetry(auth: OAuth2Client, projectId: string, attempts = 3, delayMs = 1500) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await getProject(auth, projectId);
+    } catch (err) {
+      if (attempt === attempts - 1) throw err;
+      await sleep(delayMs);
+    }
+  }
+  throw new Error('unreachable');
+}
+
+/**
+ * 새 GCP 프로젝트를 만들고 Firebase를 추가한다 (앱 하나당 전용 Firebase 프로젝트 컨벤션).
+ * 둘 다 long-running operation이라 완료까지 폴링한다(최악 케이스 ~2분: 단계당 ~60s × 2단계).
+ * parent 생략 시 계정의 기본 정책대로 생성된다 — 조직 소속이 강제된 계정은 parent
+ * ('organizations/<id>' 또는 'folders/<id>') 없이 호출하면 에러가 난다.
+ */
+export async function createProject(
+  auth: OAuth2Client,
+  projectId: string,
+  displayName: string,
+  opts: { parent?: string } = {},
+) {
+  const crm = google.cloudresourcemanager('v3');
+  const createRes = await crm.projects.create({
+    auth,
+    requestBody: { projectId, displayName, parent: opts.parent },
+  });
+  const createOpName = createRes.data.name;
+  if (!createOpName) throw new Error('GCP 프로젝트 생성 응답에 operation name이 없습니다.');
+  await waitForOperation(
+    async () => (await crm.operations.get({ auth, name: createOpName })).data,
+    'GCP 프로젝트 생성',
+  );
+
+  // 이 지점부터는 GCP 프로젝트가 이미 존재한다 — 아래서 실패하면 "다른 projectId로 재시도"가
+  // 아니라 "같은 projectId로 복구"를 안내해야 한다(안 그러면 고아 프로젝트가 계속 쌓일 수 있음).
+  try {
+    const fb = google.firebase('v1beta1');
+    const addRes = await fb.projects.addFirebase({ auth, project: `projects/${projectId}` });
+    const addOpName = addRes.data.name;
+    if (!addOpName) throw new Error('Firebase 추가 응답에 operation name이 없습니다.');
+    await waitForOperation(
+      async () => (await fb.operations.get({ auth, name: addOpName })).data,
+      'Firebase 추가',
+    );
+  } catch (err) {
+    if (err && typeof err === 'object') {
+      (err as { partialFailureNote?: string }).partialFailureNote = [
+        `⚠️ GCP 프로젝트 \`${projectId}\`는 이미 생성됐습니다.`,
+        '→ 다른 projectId로 재시도하지 말고, 원인을 해결한 뒤 같은 projectId로 다시 시도하거나',
+        `firebase_get_project("${projectId}")로 상태를 확인하세요.`,
+      ].join(' ');
+    }
+    throw err;
+  }
+
+  return getProjectWithRetry(auth, projectId);
+}
+
 // ─── Android 앱 ───
 
 export async function listAndroidApps(auth: OAuth2Client, projectId: string) {

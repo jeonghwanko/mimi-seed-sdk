@@ -1,4 +1,4 @@
-# Tool catalog — 147 tools across 17 domains
+# Tool catalog — 148 tools across 17 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -13,7 +13,7 @@
 |--------|---------------|------:|
 | App Store Connect | `registers/appstore.ts` | 31 |
 | Google Play | `registers/playstore.ts` | 28 |
-| Firebase | `registers/firebase.ts` | 19 |
+| Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
 | Jenkins (credentials) | `registers/jenkins.ts` | 6 |
@@ -28,7 +28,7 @@
 | Auth | `registers/auth.ts` | 3 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
-| **Total** | **17 modules** | **147** |
+| **Total** | **17 modules** | **148** |
 
 ## Google Play — `registers/playstore.ts` (28) · impl `playstore/tools.ts`
 
@@ -56,13 +56,14 @@
 - **D** `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_delete_screenshot` ·
   `appstore_delete_screenshot_set` · `appstore_delete_product`
 
-## Firebase — `registers/firebase.ts` (19)
+## Firebase — `registers/firebase.ts` (20)
 
 - Read: `firebase_list_projects` · `firebase_get_project` · `firebase_list_android_apps` ·
   `firebase_get_android_config` · `firebase_list_ios_apps` · `firebase_get_ios_config` ·
   `firebase_list_web_apps` · `firebase_get_web_config` · `firebase_list_enabled_services` ·
   `firebase_get_analytics_details`
-- **W** `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_create_web_app` ·
+- **W** `firebase_create_project` (new GCP project + addFirebase, polls 2 long-running operations) ·
+  `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_create_web_app` ·
   `firebase_enable_service` · `firebase_enable_common_services` · `firebase_link_analytics`
 - **D** `firebase_delete_android_app` · `firebase_delete_ios_app` · `firebase_delete_web_app`
 

@@ -12,7 +12,7 @@
 
 - Public developer tooling for app launch ops: a **CLI** (`mimi-seed`) + a **local stdio MCP server**
   (`@yoonion/mimi-seed-mcp`) in a two-package monorepo under `packages/`.
-- The MCP server registers **147 tools** across **17 domain modules** — Play Store, App Store Connect, Firebase,
+- The MCP server registers **148 tools** across **17 domain modules** — Play Store, App Store Connect, Firebase,
   AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins credentials,
   Facebook, Instagram, Android signing, AI, Auth, and Checks. (Public READMEs round this to "110+".)
 - It drives Google / Apple APIs **directly** using local credentials under `~/.mimi-seed/`. It manages
@@ -38,7 +38,7 @@ Each file lives under `docs/domain/`. Read the one that matches your task first.
 | File | Covers | Keywords |
 |------|--------|----------|
 | [architecture.md](architecture.md) | ★ **ontology core** — two packages, the `registers/<domain>.ts → tools.ts → API client` pattern, MCP bootstrap + `SUBCOMMANDS` dispatch, stdio vs HTTP, builds (tsup/tsc), resources & prompts | packages, monorepo, register pattern, server.tool, bootstrap, subcommand, stdio, transport, build |
-| [tool-catalog.md](tool-catalog.md) | The 147 tools by domain → register file → tool group, with write/destructive markers and cross-named-tool quirks | tools, catalog, domains, playstore_, appstore_, firebase_, counts, destructive |
+| [tool-catalog.md](tool-catalog.md) | The 148 tools by domain → register file → tool group, with write/destructive markers and cross-named-tool quirks | tools, catalog, domains, playstore_, appstore_, firebase_, counts, destructive |
 | [auth-credentials.md](auth-credentials.md) | `~/.mimi-seed/` credential map (locations & roles only), OAuth vs ASC JWT vs Play SA, per-package SA resolution, setup sub-CLIs, `ANTHROPIC_API_KEY` | auth, credentials, tokens.json, appstore.json, service account, per-package, JWT, OAuth |
 | [external-apis.md](external-apis.md) | What each domain talks to (`googleapis` surfaces, ASC REST+JWT, `@onesub/providers`, Anthropic) and the friendly-error translation layer | googleapis, App Store Connect, jose, friendly error, google-errors, 403, providers |
 | [cli-deploy.md](cli-deploy.md) | CLI command topology, app detection, CI providers, the deploy pipeline data flow, MCP registration, init handshake, release manifest | cli, init, deploy, detect, ci-providers, handshake, mcp-config, releases.json |

@@ -51,6 +51,49 @@ export function registerFirebaseTools(server: McpServer) {
   );
 
   server.tool(
+    'firebase_create_project',
+    [
+      '새 GCP 프로젝트를 만들고 Firebase를 추가한다 (앱 하나당 전용 Firebase 프로젝트 컨벤션 — 기존 프로젝트에',
+      '앱만 추가하려면 firebase_create_android_app/firebase_create_ios_app 사용).',
+      '두 개의 long-running operation(프로젝트 생성 → Firebase 추가)을 순서대로 완료까지 폴링하므로 최악의 경우 2분 정도 걸릴 수 있다.',
+      'projectId는 6-30자, 소문자로 시작, 소문자/숫자/하이픈만 가능(끝에 하이픈 금지).',
+    ].join(' '),
+    {
+      projectId: z
+        .string()
+        .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, '소문자로 시작, 소문자/숫자/하이픈 6-30자 (끝에 하이픈 불가)')
+        .describe('새로 만들 GCP/Firebase 프로젝트 ID (예: pryzm-penguinrun)'),
+      displayName: z.string().describe('프로젝트 표시 이름'),
+      parent: z
+        .string()
+        .optional()
+        .describe("조직/폴더 소속이 필요한 계정일 때만: 'organizations/<id>' 또는 'folders/<id>'. 생략 시 계정 기본 정책대로 생성"),
+    },
+    async ({ projectId, displayName, parent }) => {
+      const auth = await requireAuth();
+      const project = await firebase.createProject(auth, projectId, displayName, { parent });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✓ Firebase 프로젝트 생성 완료: \`${project.projectId}\``,
+              '',
+              `**displayName**: ${project.displayName}`,
+              `**projectNumber**: ${project.projectNumber}`,
+              '',
+              '다음 단계:',
+              `1. firebase_create_android_app("${project.projectId}", packageName, displayName)`,
+              `2. firebase_create_ios_app("${project.projectId}", bundleId, displayName)`,
+              '3. firebase_get_android_config / firebase_get_ios_config 로 설정 파일 다운로드',
+            ].join('\n'),
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
     'firebase_list_android_apps',
     'Firebase 프로젝트의 Android 앱 목록',
     { projectId: z.string().describe('Firebase 프로젝트 ID') },

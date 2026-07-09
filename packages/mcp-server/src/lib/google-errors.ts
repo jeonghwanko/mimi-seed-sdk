@@ -70,6 +70,16 @@ export function withCause(err: Error, cause: unknown): Error {
 }
 
 /**
+ * 일부 호출자(예: firebase_create_project)는 "이미 부분적으로 완료된 작업이 있다"는
+ * 사실을 에러 객체에 `partialFailureNote`로 남겨둔다 — 어떤 분기로 친절화되든
+ * (또는 인식 못 해 원본 그대로 통과하든) 그 경고가 사라지지 않도록 항상 앞에 붙인다.
+ */
+function withPartialNote(e: unknown, message: string): string {
+  const note = (e as { partialFailureNote?: string } | null | undefined)?.partialFailureNote;
+  return note ? `${note}\n\n${message}` : message;
+}
+
+/**
  * Firebase / GCP 에러를 친절 메시지로 변환. 신규 사용자가 가장 자주 만나는
  * 'API 미활성화 / 프로젝트 없음 / billing / 권한' 케이스에 다음 행동을 붙인다.
  */
@@ -78,37 +88,57 @@ export function friendlyGoogleError(e: unknown): Error {
   const status = extractHttpStatus(e);
 
   const reauth = authReauthMessage(text);
-  if (reauth) return withCause(new Error(reauth), e);
+  if (reauth) return withCause(new Error(withPartialNote(e, reauth)), e);
 
   if (/SERVICE_DISABLED|has not been used in project|is disabled|accessNotConfigured/i.test(text)) {
     const url = extractActivationUrl(text);
     return withCause(
       new Error(
-        [
-          '❌ 필요한 Google API가 비활성화돼 있어요.',
-          url ? `→ 활성화: ${url}` : '→ Google Cloud Console에서 해당 API를 활성화한 뒤 다시 시도하세요.',
-        ].join('\n'),
+        withPartialNote(
+          e,
+          [
+            '❌ 필요한 Google API가 비활성화돼 있어요.',
+            url ? `→ 활성화: ${url}` : '→ Google Cloud Console에서 해당 API를 활성화한 뒤 다시 시도하세요.',
+          ].join('\n'),
+        ),
       ),
       e,
     );
   }
   if (/BILLING_DISABLED|billing.*(disabled|not enabled|required)/i.test(text)) {
     return withCause(
-      new Error('❌ 결제(billing)가 비활성화된 프로젝트예요.\n→ Google Cloud Console → 결제 에서 결제 계정을 연결하세요.'),
+      new Error(
+        withPartialNote(e, '❌ 결제(billing)가 비활성화된 프로젝트예요.\n→ Google Cloud Console → 결제 에서 결제 계정을 연결하세요.'),
+      ),
+      e,
+    );
+  }
+  if (/ALREADY_EXISTS|already exists|already in use/i.test(text)) {
+    return withCause(
+      new Error(
+        withPartialNote(
+          e,
+          '❌ 이미 사용 중인 ID예요 (GCP 프로젝트 ID는 전역에서 유일해야 함).\n→ 다른 projectId로 다시 시도하거나, firebase_get_project 로 소유권을 확인하세요.',
+        ),
+      ),
       e,
     );
   }
   if (status === 404 || /NOT_FOUND|not found/i.test(text)) {
     return withCause(
-      new Error('❌ 프로젝트/리소스를 찾을 수 없어요.\n→ firebase_list_projects 로 유효한 projectId를 확인하세요.'),
+      new Error(
+        withPartialNote(e, '❌ 프로젝트/리소스를 찾을 수 없어요.\n→ firebase_list_projects 로 유효한 projectId를 확인하세요.'),
+      ),
       e,
     );
   }
   if (status === 403 || /PERMISSION_DENIED|forbidden|permission/i.test(text)) {
     return withCause(
-      new Error('❌ 권한 부족 — 이 Google 계정이 해당 프로젝트에 접근 권한이 있는지 확인하세요.'),
+      new Error(withPartialNote(e, '❌ 권한 부족 — 이 Google 계정이 해당 프로젝트에 접근 권한이 있는지 확인하세요.')),
       e,
     );
   }
+  const note = (e as { partialFailureNote?: string } | null | undefined)?.partialFailureNote;
+  if (note) return withCause(new Error(`${note}\n\n${text}`), e);
   return e instanceof Error ? e : new Error(text);
 }

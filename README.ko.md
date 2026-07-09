@@ -59,6 +59,8 @@ npx mimi-seed mcp codex --write
 
 > **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)에 더해 **워크스페이스 공유 BigQuery** 를 노출합니다 — 팀 멤버 전원이 **개인 키 파일 없이** 하나의 공유 서비스 계정으로 BigQuery를 조회합니다 ([팀 공유 BigQuery](#팀-공유-bigquery-remote-mcp) 참고). **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM(아래 147개 로컬 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
 
+(로컬 도구는 147개에서 148개로 늘었습니다 — [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) 참고.)
+
 ---
 
 **방법 B — Local MCP** (Google OAuth · 로컬 직접 실행)
@@ -319,7 +321,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ---
 
-## 도구 목록 (Local MCP · 147개 · 17개 영역)
+## 도구 목록 (Local MCP · 148개 · 17개 영역)
 
 > 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset만 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -327,7 +329,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 |------|---------|-----------|
 | **App Store Connect** | 31 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
 | **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
-| **Firebase** | 19 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
+| **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
 | **Jenkins** (크리덴셜) | 6 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_save_config` |
@@ -370,7 +372,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | 패키지 | 설명 |
 |--------|------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init`으로 프로젝트 연결 |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 147개 도구 직접 실행 |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 148개 도구 직접 실행 |
 
 웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 

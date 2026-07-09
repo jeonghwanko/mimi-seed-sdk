@@ -60,6 +60,27 @@ describe('friendlyGoogleError', () => {
     const orig = new Error('totally unrelated domain error');
     expect(friendlyGoogleError(orig)).toBe(orig);
   });
+  it('ALREADY_EXISTS -> pick-another-id guidance', () => {
+    const m = friendlyGoogleError(new Error('ALREADY_EXISTS: project already exists')).message;
+    expect(m).toContain('전역에서 유일');
+  });
+  it('partialFailureNote survives a matched branch (billing)', () => {
+    const e = Object.assign(new Error('BILLING_DISABLED'), {
+      partialFailureNote: '⚠️ GCP 프로젝트는 이미 생성됐습니다.',
+    });
+    const m = friendlyGoogleError(e).message;
+    expect(m).toContain('이미 생성됐습니다');
+    expect(m).toContain('결제');
+  });
+  it('partialFailureNote survives the unrecognized-error passthrough (no longer returns the same object once a note is attached)', () => {
+    const e = Object.assign(new Error('totally unrelated domain error'), {
+      partialFailureNote: '⚠️ GCP 프로젝트는 이미 생성됐습니다.',
+    });
+    const out = friendlyGoogleError(e);
+    expect(out).not.toBe(e);
+    expect(out.message).toContain('이미 생성됐습니다');
+    expect(out.message).toContain('totally unrelated domain error');
+  });
 });
 
 describe('friendlyPlayError', () => {

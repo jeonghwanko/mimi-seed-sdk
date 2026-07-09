@@ -54,7 +54,7 @@ Per-command options are the SSOT in `CMD_USAGE` in `index.ts` (also shown by `mi
 
 - The CLI's `init`/`status` use the **remote HTTP MCP** (`<webBase>/api/mcp`, PAT bearer) for onboarding
   (`sync_apps`, `list_apps`) — a smaller read/diagnostic subset.
-- Real store/cloud work uses the **local stdio MCP** (this repo's 147 tools, file credentials).
+- Real store/cloud work uses the **local stdio MCP** (this repo's 148 tools, file credentials).
 - ⚠️ Some CLI help strings quote an old remote-tool count; treat any hard-coded remote count as potentially
   stale — the authoritative count lives in the web-console repo, not here ([[pitfalls]]).
 

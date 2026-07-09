@@ -7,7 +7,7 @@
 
 ## 1. Deferred tools (the #1 trap)
 
-Claude Code lazy-loads large tool catalogs: the 147 tool **names** are visible, but **schemas are not** until
+Claude Code lazy-loads large tool catalogs: the 148 tool **names** are visible, but **schemas are not** until
 `ToolSearch(query="select:<names>")` loads them. Calling a deferred tool first fails with
 `InputValidationError` → people wrongly conclude "this tool doesn't exist" and pivot to `curl`/`fastlane`.
 
@@ -58,7 +58,7 @@ The CLI + local MCP live **only** here. The private web console is a separate re
 
 ## 8. Keep tool counts in sync
 
-`CONTRIBUTING.md` requires updating counts when tools change. Current truth: **147** `server.tool()`
+`CONTRIBUTING.md` requires updating counts when tools change. Current truth: **148** `server.tool()`
 registrations; READMEs round to "110+". When you add/remove a tool, re-grep `server.tool(` per file and update
 [[tool-catalog]] and the README domain table together. ❌ Don't leave a hard-coded count stale.
 

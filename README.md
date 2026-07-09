@@ -59,6 +59,8 @@ Done. Start talking to Claude Code or Codex.
 
 > **Remote vs Local — pick by what you need.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** — every workspace member queries BigQuery through one shared service account with **no personal key file** (see [Team-Shared BigQuery](#team-shared-bigquery-remote-mcp)). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM (the 147 local tools below) — use **Option B (Local MCP)**.
 
+(That's the 148 local tools, up from 147 — see [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).)
+
 ---
 
 **Option B — Local MCP** (Google OAuth · runs on your machine)
@@ -323,7 +325,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-## Local MCP Tool List (147 tools · 17 domains)
+## Local MCP Tool List (148 tools · 17 domains)
 
 > These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -331,7 +333,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 |--------|-------|-----------|
 | **App Store Connect** | 31 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
 | **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
-| **Firebase** | 19 | `firebase_create_android_app` · `firebase_get_android_config` · `firebase_enable_service` |
+| **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
 | **Jenkins** (credentials) | 6 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_save_config` |
@@ -374,7 +376,7 @@ Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg
 | Package | Description |
 |---------|-------------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init` to connect your project |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 147 tools via Google OAuth |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 148 tools via Google OAuth |
 
 Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
