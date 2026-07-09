@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
+import * as jobs from '../jenkins/jobs.js';
 
 export function registerJenkinsTools(server: McpServer) {
   // ── 0. 상태 확인 (항상 첫 번째로 호출) ─────────────────────────────────────
@@ -48,6 +49,7 @@ export function registerJenkinsTools(server: McpServer) {
             '',
             'jenkins_list_credentials 로 등록된 credential 목록을 확인하거나,',
             'jenkins_create_credential / jenkins_upload_keystore 로 credential을 추가하세요.',
+            '잡은 jenkins_list_jobs / jenkins_get_job_config / jenkins_create_job / jenkins_update_job 로 다룹니다.',
           ].join('\n'),
         }],
       };
@@ -182,6 +184,103 @@ export function registerJenkinsTools(server: McpServer) {
           text: `🗑 Jenkins credential 삭제 완료: \`${id}\``,
         }],
       };
+    },
+  );
+
+  // ── 6. 잡 목록 ─────────────────────────────────────────────────────────────
+  server.tool(
+    'jenkins_list_jobs',
+    [
+      'Jenkins 잡 목록을 조회합니다 (이름 / URL / 상태색).',
+      'folder를 주면 그 폴더 안만 조회합니다. 재귀하지 않고 한 단계만 봅니다.',
+      '설정이 없으면 jenkins_status를 먼저 호출하세요.',
+    ].join(' '),
+    {
+      folder: z.string().optional().describe('폴더 경로 (예: vir-game). 생략하면 루트'),
+    },
+    async ({ folder }) => {
+      const cfg = requireJenkinsConfig();
+      const list = await jobs.listJobs(cfg, folder);
+      if (list.length === 0) {
+        return { content: [{ type: 'text', text: '잡 없음.' }] };
+      }
+      const lines = list.map((j) => `• ${j.name}${j.color ? `  [${j.color}]` : '  [folder]'}`);
+      return {
+        content: [{
+          type: 'text',
+          text: `Jenkins jobs (${list.length}개):\n\n${lines.join('\n')}`,
+        }],
+      };
+    },
+  );
+
+  // ── 7. 잡 config.xml 조회 ──────────────────────────────────────────────────
+  server.tool(
+    'jenkins_get_job_config',
+    [
+      '잡의 config.xml 원문을 가져옵니다.',
+      '잡을 수정하기 전에 현재 설정을 확인하거나 백업할 때 사용하세요.',
+      '폴더 안의 잡은 "folder/job" 형태로 경로를 넘깁니다.',
+    ].join(' '),
+    {
+      job: z.string().describe('잡 경로 (예: penguinrun, vir-game/client)'),
+    },
+    async ({ job }) => {
+      const cfg = requireJenkinsConfig();
+      const xml = await jobs.getJobConfig(cfg, job);
+      return { content: [{ type: 'text', text: xml }] };
+    },
+  );
+
+  // ── 8. 잡 생성 ─────────────────────────────────────────────────────────────
+  server.tool(
+    'jenkins_create_job',
+    [
+      'config.xml 로 새 Jenkins 잡을 생성합니다 (createItem).',
+      '같은 이름의 잡이 이미 있으면 실패합니다. 덮어쓰려면 overwrite=true 를 주거나 jenkins_update_job 을 쓰세요.',
+      '폴더 안에 만들려면 job 에 "folder/name" 을 넘깁니다 (폴더는 미리 존재해야 합니다).',
+      'config_xml 은 Pipeline job 이면 flow-definition 루트 엘리먼트를 갖는 XML 전문입니다.',
+    ].join(' '),
+    {
+      job: z.string().describe('잡 경로 (예: penguinrun, vir-game/client)'),
+      config_xml: z.string().describe('잡 정의 config.xml 전문'),
+      overwrite: z.boolean().default(false).describe('이미 존재하면 덮어쓸지 여부 (기본 false)'),
+    },
+    async ({ job, config_xml, overwrite }) => {
+      const cfg = requireJenkinsConfig();
+      if (overwrite) {
+        const result = await jobs.upsertJob(cfg, job, config_xml);
+        return { content: [{ type: 'text', text: `✅ Jenkins 잡 ${result}: \`${job}\`` }] };
+      }
+      if (await jobs.jobExists(cfg, job)) {
+        return {
+          content: [{
+            type: 'text',
+            text: `⚠️ 잡 \`${job}\` 이(가) 이미 존재합니다. jenkins_update_job 을 쓰거나 overwrite=true 로 다시 호출하세요.`,
+          }],
+        };
+      }
+      await jobs.createJob(cfg, job, config_xml);
+      return { content: [{ type: 'text', text: `✅ Jenkins 잡 created: \`${job}\`` }] };
+    },
+  );
+
+  // ── 9. 잡 수정 ─────────────────────────────────────────────────────────────
+  server.tool(
+    'jenkins_update_job',
+    [
+      '기존 Jenkins 잡의 config.xml 을 통째로 교체합니다.',
+      '잡이 없으면 실패합니다 (생성은 jenkins_create_job).',
+      '기존 설정이 사라지므로 jenkins_get_job_config 로 먼저 백업하는 것을 권장합니다.',
+    ].join(' '),
+    {
+      job: z.string().describe('잡 경로 (예: penguinrun, vir-game/client)'),
+      config_xml: z.string().describe('교체할 config.xml 전문'),
+    },
+    async ({ job, config_xml }) => {
+      const cfg = requireJenkinsConfig();
+      await jobs.updateJob(cfg, job, config_xml);
+      return { content: [{ type: 'text', text: `✅ Jenkins 잡 updated: \`${job}\`` }] };
     },
   );
 }

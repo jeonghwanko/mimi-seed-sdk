@@ -1,4 +1,5 @@
 import type { JenkinsConfig } from './config.js';
+import { authHeaders, getCrumb } from './http.js';
 
 export interface JenkinsCredentialSummary {
   id: string;
@@ -8,10 +9,6 @@ export interface JenkinsCredentialSummary {
 
 const FILE_CLASS = 'org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl';
 const TEXT_CLASS = 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl';
-
-function basicAuth(username: string, token: string): string {
-  return 'Basic ' + Buffer.from(`${username}:${token}`).toString('base64');
-}
 
 // 도메인(_ = 전역) 레벨 — 목록 조회 / createCredentials 의 베이스
 function storeBase(url: string): string {
@@ -23,36 +20,16 @@ function credentialBase(url: string, id: string): string {
   return `${storeBase(url)}/credential/${encodeURIComponent(id)}`;
 }
 
-/**
- * CSRF crumb (best-effort). crumb issuer 비활성이거나 API 토큰으로 면제되면 빈 객체.
- * 구버전 Jenkins / 비밀번호 인증 환경에서 POST 403 방지.
- */
-async function getCrumb(cfg: JenkinsConfig): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(`${cfg.url.replace(/\/$/, '')}/crumbIssuer/api/json`, {
-      headers: { Authorization: basicAuth(cfg.username, cfg.token) },
-    });
-    if (!res.ok) return {};
-    const data = (await res.json()) as { crumbRequestField?: string; crumb?: string };
-    if (data.crumbRequestField && data.crumb) {
-      return { [data.crumbRequestField]: data.crumb };
-    }
-    return {};
-  } catch {
-    return {};
-  }
-}
-
 async function credentialExists(cfg: JenkinsConfig, id: string): Promise<boolean> {
   const res = await fetch(`${credentialBase(cfg.url, id)}/api/json`, {
-    headers: { Authorization: basicAuth(cfg.username, cfg.token) },
+    headers: authHeaders(cfg),
   });
   return res.ok;
 }
 
 export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCredentialSummary[]> {
   const res = await fetch(`${storeBase(cfg.url)}/api/json?depth=1`, {
-    headers: { Authorization: basicAuth(cfg.username, cfg.token) },
+    headers: authHeaders(cfg),
   });
   if (!res.ok) throw new Error(`Jenkins credentials 조회 실패 (${res.status})`);
   const data = (await res.json()) as {
@@ -90,7 +67,7 @@ export async function upsertSecretText(
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: basicAuth(cfg.username, cfg.token),
+      ...authHeaders(cfg),
       'Content-Type': 'application/x-www-form-urlencoded',
       ...crumb,
     },
@@ -139,7 +116,7 @@ export async function upsertSecretFile(
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: basicAuth(cfg.username, cfg.token),
+      ...authHeaders(cfg),
       ...crumb,
     },
     body: form,
@@ -155,7 +132,7 @@ export async function deleteCredential(cfg: JenkinsConfig, id: string): Promise<
   const res = await fetch(`${credentialBase(cfg.url, id)}/doDelete`, {
     method: 'POST',
     headers: {
-      Authorization: basicAuth(cfg.username, cfg.token),
+      ...authHeaders(cfg),
       ...crumb,
     },
   });
