@@ -8,12 +8,12 @@ export { ensureFreshAccessToken };
 const REAUTH_CMD = '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth';
 
 function formatAuthError(p: AuthErrorPayload): string {
+  // 재로그인 안내는 needsReauth 인 경우에만 — CONFIG_FETCH_FAILED 처럼 재로그인이
+  // 해법이 아닌 에러에 무조건 붙이면 같은 실패를 반복하게 만든다.
   return [
     `❌ [${p.code}] ${p.message}`,
     p.hint ? `→ ${p.hint}` : '',
-    '',
-    '터미널에서 재로그인:',
-    REAUTH_CMD,
+    ...(p.needsReauth ? ['', '터미널에서 재로그인:', REAUTH_CMD] : []),
   ]
     .filter((l) => l !== '')
     .join('\n');

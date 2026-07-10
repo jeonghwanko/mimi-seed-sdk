@@ -42,7 +42,19 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 ## 30-Second Setup
 
-**Option A — Remote MCP** (recommended for status & readiness · requires web console account)
+**Pick your option first** (they can also be installed side by side):
+
+| You want to… | Install |
+|---|---|
+| **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Option B — Local MCP** ↓ |
+| Read-only **status & readiness** — blockers, checklists, drafts, team-shared BigQuery | **Option A — Remote MCP** ↓ |
+
+> **Three things that trip every first install:**
+> 1. The local MCP server requires **Node 20+**.
+> 2. Open a **new session** after `claude mcp add` (and after package updates) — tools only appear in fresh sessions.
+> 3. In Claude Code the 150+ tool schemas load lazily; if a first call fails with `InputValidationError`, tell Claude: *"load the mimi-seed tools with ToolSearch first"* ([agent guide](docs/agent-guide.md)).
+
+**Option A — Remote MCP** (status & readiness · requires web console account)
 
 ```bash
 # 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
@@ -57,23 +69,21 @@ npx mimi-seed mcp codex --write
 
 Done. Start talking to Claude Code or Codex.
 
-> **Remote vs Local — pick by what you need.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** — every workspace member queries BigQuery through one shared service account with **no personal key file** (see [Team-Shared BigQuery](#team-shared-bigquery-remote-mcp)). For full **store-write automation** — release-notes apply, screenshot upload, Firebase / AdMob / IAM (the 147 local tools below) — use **Option B (Local MCP)**.
-
-(That's the 148 local tools, up from 147 — see [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).)
+> **What Option A can and can't do.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** — every workspace member queries BigQuery through one shared service account with **no personal key file** (see [Team-Shared BigQuery](#team-shared-bigquery-remote-mcp)). Everything that **writes to stores** — release-notes apply, screenshot upload, Firebase / AdMob / IAM — needs **Option B** ([full tool catalog](docs/domain/tool-catalog.md)).
 
 ---
 
-**Option B — Local MCP** (Google OAuth · runs on your machine)
+**Option B — Local MCP** (store-write automation · Google OAuth · runs on your machine, Node 20+)
 
 ```bash
 # Claude Code
-claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
 ```
 
 Codex (`~/.codex/config.toml`):
 
 ```toml
-[mcp_servers.mimi-seed]
+[mcp_servers.mimi-seed-local]
 command = "npx"
 args = ["-y", "@yoonion/mimi-seed-mcp"]
 enabled = true
@@ -91,7 +101,7 @@ Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "mimi-seed": {
+    "mimi-seed-local": {
       "command": "npx",
       "args": ["-y", "@yoonion/mimi-seed-mcp"]
     }
@@ -327,7 +337,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-## Local MCP Tool List (148 tools · 17 domains)
+## Local MCP Tool List (150+ tools · 17 domains)
 
 > These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -338,7 +348,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
-| **Jenkins** (credentials) | 6 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_save_config` |
+| **Jenkins** (credentials + jobs) | 10 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` |
 | **GA4** | 6 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` |
 | **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
@@ -378,7 +388,7 @@ Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg
 | Package | Description |
 |---------|-------------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init` to connect your project |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 148 tools via Google OAuth |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 150+ tools via Google OAuth |
 
 Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 

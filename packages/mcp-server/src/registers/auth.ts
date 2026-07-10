@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getMcpOAuthClient } from '../auth/constants.js';
+import { classifyError } from '../auth/errors.js';
 import { startAuth, ensureFreshAccessToken, getTokensLastRefreshMs } from '../auth/google-auth.js';
 import { listRegisteredServiceAccounts } from '../auth/playstore-auth.js';
 import { getAppStoreCredentials } from '../appstore/auth.js';
@@ -51,8 +53,14 @@ const MANIFEST_FIX: Record<ManifestServiceId, (svc: ManifestService) => string> 
       ? `setup_playstore_connection(packageName="${svc.packageName}")`
       : 'setup_playstore_connection(packageName=...)',
   appstore: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-  jenkins: () => 'claude mcp add virgm-jenkins -s user  (개인 자격증명 — .mcp.json 금지)',
+  jenkins: () => 'claude mcp add <your-jenkins-mcp> -s user  (개인 자격증명 — .mcp.json 금지)',
 };
+
+// 두 MCP 가 모두 'mimi-seed' 로 등록되는 환경에서 에이전트가 프로그램적으로
+// 어느 서버인지 판별할 수 있도록 status 첫 줄에 자기소개를 넣는다.
+const { version: PKG_VERSION } = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+) as { version: string };
 
 /** 서비스별 식별자를 한 줄 detail 로 (예: "ads-coffee / analytics_530080532"). */
 function manifestServiceDetail(id: ManifestServiceId, svc: ManifestService): string {
@@ -103,7 +111,10 @@ export function registerAuthTools(server: McpServer) {
     ].join(' '),
     {},
     async () => {
-      const lines: string[] = ['🌱 Mimi Seed 연결 상태', ''];
+      const lines: string[] = [
+        `🌱 Mimi Seed 연결 상태 — local-stdio (@yoonion/mimi-seed-mcp v${PKG_VERSION})`,
+        '',
+      ];
 
       // 1. Google OAuth
       const oauthResult = await ensureFreshAccessToken();
@@ -132,7 +143,7 @@ export function registerAuthTools(server: McpServer) {
       if (asc) {
         lines.push(`✅ App Store Connect — 연결됨 (keyId: ${asc.keyId})`);
       } else {
-        lines.push('❌ App Store Connect — 미설정 → npx @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
+        lines.push('❌ App Store Connect — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
       }
 
       // 4. Jenkins
@@ -183,7 +194,7 @@ export function registerAuthTools(server: McpServer) {
       } else if (bqAuth?.source === 'user-oauth') {
         lines.push('⚠️  BigQuery          — OAuth fallback (Workspace 재인증 정책 시 끊길 수 있음 → 서비스 계정 권장: mimi-seed-bigquery-auth)');
       } else {
-        lines.push('❌ BigQuery          — 미설정 → npx @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)');
+        lines.push('❌ BigQuery          — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)');
       }
 
       // 다음 단계 안내
@@ -195,7 +206,7 @@ export function registerAuthTools(server: McpServer) {
         missing.push('  2. setup_playstore_connection(packageName=..., projectId=...)  (Play Store 배포 필수)');
       }
       if (!asc) {
-        missing.push('  3. npx @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)');
+        missing.push('  3. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)');
       }
 
       if (missing.length > 0) {
@@ -258,7 +269,20 @@ export function registerAuthTools(server: McpServer) {
     ].join(' '),
     {},
     async () => {
-      const { clientId, clientSecret } = await getMcpOAuthClient();
+      // 설정 조회 실패를 분류된 안내로 — raw throw 는 MCP 클라이언트에 마커 문자열만 노출된다.
+      let clientId: string;
+      let clientSecret: string;
+      try {
+        ({ clientId, clientSecret } = await getMcpOAuthClient());
+      } catch (e) {
+        const p = classifyError(e, { phase: 'login' });
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ [${p.code}] ${p.message}${p.hint ? `\n→ ${p.hint}` : ''}`,
+          }],
+        };
+      }
       const { url, wait } = startAuth(clientId, clientSecret);
       // fire-and-forget — 토큰은 콜백 서버가 자동 저장
       wait.then(
@@ -330,8 +354,11 @@ export function registerAuthTools(server: McpServer) {
                 `   코드: ${r.error.code}\n` +
                 `   ${r.error.message}\n` +
                 (r.error.hint ? `   → ${r.error.hint}\n` : '') +
-                `${refreshLine}\n` +
-                '\n터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+                `${refreshLine}` +
+                // 재로그인 안내는 그것이 실제 해법일 때만 (네트워크/설정 조회 실패엔 무의미)
+                (r.error.needsReauth
+                  ? '\n\n터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth'
+                  : ''),
             }],
           };
       }

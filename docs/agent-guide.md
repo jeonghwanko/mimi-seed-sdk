@@ -16,7 +16,7 @@ and which actions are irreversible.
 
 ## 0. The one thing that trips every agent: deferred tools
 
-Mimi Seed exposes **148 MCP tools** across 17 domains (full inventory:
+Mimi Seed exposes **150+ MCP tools** across 17 domains (full inventory:
 [`docs/domain/tool-catalog.md`](domain/tool-catalog.md)). Harnesses that lazy-load large tool catalogs —
 **Claude Code most notably** — register these tools as **deferred**: the tool *names*
 are visible (in a system reminder), but the **input schemas are not loaded**. If you
@@ -52,7 +52,7 @@ tools directly — but the *call order* and *safety rules* below still apply.
 | Release notes from commits | `select:generate_release_notes_from_commits,playstore_update_release_notes,appstore_update_whats_new` |
 | Firebase setup | `select:firebase_list_projects,firebase_get_project,firebase_create_project,firebase_create_android_app,firebase_create_ios_app,firebase_get_android_config,firebase_enable_common_services` |
 | AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |
-| Jenkins credentials | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa` |
+| Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds` |
 | Service account end-to-end | `select:iam_create_service_account,iam_create_key,iam_add_iam_policy_binding,playstore_register_service_account,playstore_verify_service_account` |
 
@@ -118,13 +118,13 @@ is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Firebase** (~18) | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_list_*_apps` |
 | **AdMob** (7) | `admob_create_app` · `admob_create_ad_unit` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** (6) | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (**GitHub Actions / GitLab only**) |
-| **Jenkins** (credentials) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` |
+| **Jenkins** (credentials + jobs) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` · `jenkins_create_job` · `jenkins_update_job` |
 | **Google Cloud IAM** (5) | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** (5) | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
 | **Search Console** (6) | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Facebook / Instagram** (10) | `facebook_post_photo` · `instagram_post_carousel` |
 | **Checks** (4) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
-| **AI / Auth** (4) | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_status` |
+| **AI / Auth** (5) | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 
 ---
 
@@ -147,9 +147,10 @@ is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 `playstore_update_release_notes` / `appstore_update_whats_new`.
 
 > **Mimi Seed does not compile app binaries.** It manages metadata, store releases, and
-> CI/Jenkins *credentials* — not Xcode/Gradle builds. To produce an `.ipa`/`.aab`, use
-> EAS, Xcode, or a CI/Jenkins job. There is **no `jenkins_trigger_build` tool**; trigger
-> a Jenkins job via its REST API and use the `jenkins_*` tools only for credentials.
+> CI/Jenkins *credentials and job definitions* — not Xcode/Gradle builds. To produce an
+> `.ipa`/`.aab`, use EAS, Xcode, or a CI/Jenkins job. There is **no `jenkins_trigger_build`
+> tool**; trigger a Jenkins job via its REST API and use the `jenkins_*` tools for
+> credentials and job configs.
 
 ---
 

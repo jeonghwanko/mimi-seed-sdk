@@ -7,7 +7,7 @@
 
 ## 1. Deferred tools (the #1 trap)
 
-Claude Code lazy-loads large tool catalogs: the 148 tool **names** are visible, but **schemas are not** until
+Claude Code lazy-loads large tool catalogs: the 150+ tool **names** are visible, but **schemas are not** until
 `ToolSearch(query="select:<names>")` loads them. Calling a deferred tool first fails with
 `InputValidationError` → people wrongly conclude "this tool doesn't exist" and pivot to `curl`/`fastlane`.
 
@@ -38,8 +38,10 @@ once. Do all listing writes via the API, **or** finish & publish Console edits f
 ## 5. CI ≠ Jenkins; there is no `jenkins_trigger_build`
 
 `ci_*` triggers **GitHub Actions / GitLab only**. The `jenkins_*` tools manage **credentials** (keystore,
-service account, secrets) — they do **not** start builds. To run a Jenkins job, hit its REST API. And remember:
-**Mimi Seed never compiles binaries** — `.aab`/`.ipa` come from EAS/Xcode/Gradle/CI, not from this SDK.
+service account, secrets) and **job definitions** (`jenkins_list_jobs` / `jenkins_get_job_config` /
+`jenkins_create_job` / `jenkins_update_job`) — they do **not** start builds. To run a Jenkins job, hit its
+REST API. And remember: **Mimi Seed never compiles binaries** — `.aab`/`.ipa` come from EAS/Xcode/Gradle/CI,
+not from this SDK.
 
 ## 6. Per-package Play SA needs Android Publisher API enabled
 

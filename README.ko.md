@@ -42,7 +42,19 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 ## 30초 시작
 
-**방법 A — Remote MCP** (상태·준비도 확인에 추천 · 웹 콘솔 계정 필요)
+**먼저 어느 쪽인지 고르세요** (둘 다 나란히 설치할 수도 있습니다):
+
+| 하고 싶은 것 | 설치할 것 |
+|---|---|
+| **스토어에 쓰기** — 릴리스 노트 적용, 스크린샷 업로드, 심사 제출, Firebase / AdMob / IAM (위 데모의 전부) | **방법 B — Local MCP** ↓ |
+| 읽기 전용 **상태·준비도** — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **방법 A — Remote MCP** ↓ |
+
+> **첫 설치에서 누구나 걸리는 세 가지:**
+> 1. Local MCP 서버는 **Node 20+** 가 필요합니다.
+> 2. `claude mcp add` 후(패키지 업데이트 후에도) **새 세션**을 열어야 도구가 보입니다.
+> 3. Claude Code에서 150+ 도구 스키마는 지연 로드됩니다 — 첫 호출이 `InputValidationError`로 실패하면 Claude에게 *"ToolSearch로 mimi-seed 도구 먼저 로드해"* 라고 말하세요 ([에이전트 가이드](docs/agent-guide.md)).
+
+**방법 A — Remote MCP** (상태·준비도 확인 · 웹 콘솔 계정 필요)
 
 ```bash
 # 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
@@ -57,23 +69,21 @@ npx mimi-seed mcp codex --write
 
 끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
 
-> **Remote vs Local — 필요에 맞게 선택.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)에 더해 **워크스페이스 공유 BigQuery** 를 노출합니다 — 팀 멤버 전원이 **개인 키 파일 없이** 하나의 공유 서비스 계정으로 BigQuery를 조회합니다 ([팀 공유 BigQuery](#팀-공유-bigquery-remote-mcp) 참고). **스토어 쓰기 자동화** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM(아래 147개 로컬 도구) — 가 필요하면 **방법 B (Local MCP)** 를 쓰세요.
-
-(로컬 도구는 147개에서 148개로 늘었습니다 — [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) 참고.)
+> **방법 A가 할 수 있는 것 / 없는 것.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)에 더해 **워크스페이스 공유 BigQuery** 를 노출합니다 — 팀 멤버 전원이 **개인 키 파일 없이** 하나의 공유 서비스 계정으로 BigQuery를 조회합니다 ([팀 공유 BigQuery](#팀-공유-bigquery-remote-mcp) 참고). **스토어에 쓰는 모든 것** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM — 은 **방법 B**가 필요합니다 ([전체 도구 카탈로그](docs/domain/tool-catalog.md)).
 
 ---
 
-**방법 B — Local MCP** (Google OAuth · 로컬 직접 실행)
+**방법 B — Local MCP** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 20+)
 
 ```bash
 # Claude Code
-claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
 ```
 
 Codex (`~/.codex/config.toml`):
 
 ```toml
-[mcp_servers.mimi-seed]
+[mcp_servers.mimi-seed-local]
 command = "npx"
 args = ["-y", "@yoonion/mimi-seed-mcp"]
 enabled = true
@@ -91,7 +101,7 @@ Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "mimi-seed": {
+    "mimi-seed-local": {
       "command": "npx",
       "args": ["-y", "@yoonion/mimi-seed-mcp"]
     }
@@ -323,7 +333,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ---
 
-## 도구 목록 (Local MCP · 148개 · 17개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 17개 영역)
 
 > 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset만 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -334,7 +344,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
-| **Jenkins** (크리덴셜) | 6 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_save_config` |
+| **Jenkins** (크리덴셜 + 잡) | 10 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` |
 | **GA4** | 6 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` |
 | **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
@@ -374,7 +384,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | 패키지 | 설명 |
 |--------|------|
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init`으로 프로젝트 연결 |
-| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 148개 도구 직접 실행 |
+| [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 150+ 도구 직접 실행 |
 
 웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 

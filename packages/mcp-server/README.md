@@ -9,13 +9,13 @@
 Claude Code:
 
 ```bash
-claude mcp add mimi-seed -- npx -y @yoonion/mimi-seed-mcp
+claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
 ```
 
 Codex (`~/.codex/config.toml`):
 
 ```toml
-[mcp_servers.mimi-seed]
+[mcp_servers.mimi-seed-local]
 command = "npx"
 args = ["-y", "@yoonion/mimi-seed-mcp"]
 enabled = true
@@ -26,7 +26,7 @@ Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "mimi-seed": {
+    "mimi-seed-local": {
       "command": "npx",
       "args": ["-y", "@yoonion/mimi-seed-mcp"]
     }
@@ -62,7 +62,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (148개 · 17개 영역)
+## 제공 도구 (150+ 개 · 17개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
@@ -71,7 +71,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Firebase | 20 | `firebase_create_project` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
-| Jenkins (크리덴셜) | 6 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_save_config` |
+| Jenkins (크리덴셜 + 잡) | 10 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` |
 | GA4 | 6 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_run_report` |
 | Search Console | 6 | `gsc_inspect_url` / `gsc_search_analytics` / `gsc_submit_sitemap` |
 | Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |

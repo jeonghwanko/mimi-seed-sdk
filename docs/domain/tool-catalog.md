@@ -1,11 +1,11 @@
-# Tool catalog — 148 tools across 17 domains
+# Tool catalog — 152 tools across 17 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
 >
-> SSOT: `packages/mcp-server/src/registers/*.ts` (each `server.tool(name, …)` call). Counts are exact as of this
-> writing — re-grep `server.tool(` per file when they change ([[pitfalls]]: tool-count sync). For *how to call*
-> these in order, see [`../agent-guide.md`](../agent-guide.md); this doc is the inventory only.
+> SSOT: `packages/mcp-server/tool-manifest.json` (test-enforced against the live `server.tool(…)`
+> registrations — see [[pitfalls]] §8). Update the manifest and this catalog together when tools change.
+> For *how to call* these in order, see [`../agent-guide.md`](../agent-guide.md); this doc is the inventory only.
 
 ## Counts by domain
 
@@ -16,7 +16,7 @@
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
-| Jenkins (credentials) | `registers/jenkins.ts` | 6 |
+| Jenkins (credentials + jobs) | `registers/jenkins.ts` | 10 |
 | GA4 | `registers/ga4.ts` | 6 |
 | Search Console | `registers/gsc.ts` | 6 |
 | Google Ads | `registers/googleads.ts` | 6 |
@@ -28,7 +28,7 @@
 | Auth | `registers/auth.ts` | 3 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
-| **Total** | **17 modules** | **148** |
+| **Total** | **17 modules** | **152** |
 
 ## Google Play — `registers/playstore.ts` (28) · impl `playstore/tools.ts`
 
@@ -85,7 +85,7 @@
 | Domain (file) | Tools |
 |---|---|
 | CI (`ci.ts`) — **GitHub Actions / GitLab only** | `ci_list_workflows` · `ci_get_build_status` · `ci_list_recent_builds` · **W** `ci_save_config` · **W** `ci_trigger_build` · **D** `ci_cancel_build` |
-| Jenkins (`jenkins.ts`) — **credentials only, no build trigger** | `jenkins_status` · `jenkins_list_credentials` · **W** `jenkins_save_config` · **W** `jenkins_create_credential` · **W** `jenkins_upload_keystore` · **D** `jenkins_delete_credential` |
+| Jenkins (`jenkins.ts`) — **credentials + job definitions, no build trigger** | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · **W** `jenkins_save_config` · **W** `jenkins_create_credential` · **W** `jenkins_upload_keystore` · **W** `jenkins_create_job` · **W** `jenkins_update_job` · **D** `jenkins_delete_credential` |
 | Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **W** `jenkins_upload_playstore_sa` |
 
 ## Cross-cutting

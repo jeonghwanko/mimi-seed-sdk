@@ -119,7 +119,7 @@ export async function cmdDoctor(): Promise<void> {
       bigquery: "mimi-seed auth bigquery",
       playstore: "mimi-seed auth playstore",
       appstore: "mimi-seed auth appstore",
-      jenkins: "claude mcp add virgm-jenkins -s user",
+      jenkins: "claude mcp add <your-jenkins-mcp> -s user",
     };
     for (const [id, svc] of manifestServiceEntries(loaded.manifest)) {
       const required = svc.required !== false;
@@ -134,10 +134,14 @@ export async function cmdDoctor(): Promise<void> {
   section("로컬 환경");
   const nodeVer = process.version;
   const [, major] = nodeVer.match(/v(\d+)/) ?? [];
-  if (Number(major) >= 18) {
+  // CLI 는 Node 18+ 로 돌지만 Local MCP 서버(@yoonion/mimi-seed-mcp)는 20+ 필요 —
+  // 18/19 에서 doctor 가 ✓ 를 주면 MCP 서버만 조용히 죽는 오진이 된다.
+  if (Number(major) >= 20) {
     ok("Node.js", nodeVer);
+  } else if (Number(major) >= 18) {
+    warn("Node.js", `${nodeVer} — CLI 는 동작하지만 Local MCP 서버(@yoonion/mimi-seed-mcp)는 v20 이상 필요`);
   } else {
-    fail("Node.js", `${nodeVer} — v18 이상 필요`);
+    fail("Node.js", `${nodeVer} — v18 이상(CLI) / v20 이상(Local MCP) 필요`);
   }
 
   if (isGitRepo(cwd)) {

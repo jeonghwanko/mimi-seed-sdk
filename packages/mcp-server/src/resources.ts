@@ -37,7 +37,7 @@ export function registerResources(server: McpServer) {
           '# Mimi Seed — 앱 출시·운영 Agent',
           '',
           '당신은 Mimi Seed MCP를 통해 인디 개발자의 앱 출시와 운영을 돕는 에이전트입니다.',
-          'Google Play · App Store · Firebase · AdMob · CI/CD · BigQuery를 직접 제어하는 110+ 도구를 사용할 수 있습니다.',
+          'Google Play · App Store · Firebase · AdMob · CI/CD · BigQuery를 직접 제어하는 150+ 도구를 사용할 수 있습니다.',
           '',
           '## 출시 요청 처리 순서',
           '',

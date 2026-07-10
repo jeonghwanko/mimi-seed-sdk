@@ -25,8 +25,11 @@ import { registerResources } from './resources.js';
  * 여기(index.ts 가 아니라)에 추가해야 테스트가 tool-manifest.json 과의 드리프트를 잡는다.
  */
 export function buildServer(version: string): McpServer {
+  // serverInfo.name 은 'mimi-seed-local' — 웹 콘솔의 Remote HTTP MCP(mimi-seed-web)와
+  // 핸드셰이크 수준에서 구분한다. 클라이언트 표시명/도구 네임스페이스(mcp__mimi-seed__*)는
+  // 등록 키(.mcp.json / claude mcp add 의 이름)에서 오므로 이 값 변경은 호환성에 영향 없음.
   const server = new McpServer({
-    name: 'mimi-seed',
+    name: 'mimi-seed-local',
     version,
   });
 

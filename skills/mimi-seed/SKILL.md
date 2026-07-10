@@ -5,7 +5,7 @@ description: mimi-seed MCP(@yoonion/mimi-seed-mcp)로 Google Play·App Store Con
 
 # mimi-seed
 
-mimi-seed MCP 서버의 148개 도구(17개 영역)로 앱 출시 운영(상태 점검 · 출시 준비도 · 릴리스 노트 · 스토어 적용 · Firebase/AdMob 설정)을 대화형으로 수행하는 범용 스킬. 도메인별 세부 작업은 `appstore-publish` · `playstore-publish` · `deploy` 스킬로 분기하고, 호출 규약은 [`docs/agent-guide.md`](../../docs/agent-guide.md), 구조·아키텍처·함정은 도메인 온톨로지 [`docs/domain/_index.md`](../../docs/domain/_index.md)를 참조한다.
+mimi-seed MCP 서버의 150+ 도구(17개 영역)로 앱 출시 운영(상태 점검 · 출시 준비도 · 릴리스 노트 · 스토어 적용 · Firebase/AdMob 설정)을 대화형으로 수행하는 범용 스킬. 도메인별 세부 작업은 `appstore-publish` · `playstore-publish` · `deploy` 스킬로 분기하고, 호출 규약은 [`docs/agent-guide.md`](../../docs/agent-guide.md), 구조·아키텍처·함정은 도메인 온톨로지 [`docs/domain/_index.md`](../../docs/domain/_index.md)를 참조한다.
 
 ## 사전 조건
 

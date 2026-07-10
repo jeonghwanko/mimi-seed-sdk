@@ -193,7 +193,7 @@ async function cmdInit(args: string[]): Promise<void> {
   if (local) {
     log("");
     log(kleur.bold("── 로컬 MCP 추가 설정 (--local) ──"));
-    log(kleur.dim("원격 MCP(16 tool, PAT)는 위에서 끝. 로컬 MCP는 Google OAuth로 110+ tool을 직접 실행합니다."));
+    log(kleur.dim("원격 MCP(PAT, 읽기·진단)는 위에서 끝. 로컬 MCP는 Google OAuth로 스토어 쓰기 도구 전체를 직접 실행합니다 (Node 20+)."));
     log("");
     log("1) Google 로그인 (Firebase / AdMob / Play / Ads):");
     await cmdAuth(["login"]);
@@ -278,7 +278,7 @@ const CMD_USAGE: Record<string, string> = {
 + .claude/mimi-seed.md, AGENTS.md, docs/releases.json 생성/확인.
 
 옵션:
-  --local   추가로 Google OAuth 로그인 + 로컬 110+ tool MCP 등록 안내`,
+  --local   추가로 Google OAuth 로그인 + 로컬 MCP(스토어 쓰기 도구 전체) 등록 안내`,
   status: `${kleur.bold("mimi-seed status")} — 연결 상태 + 등록 앱 목록. 옵션 없음.`,
   doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI). 옵션 없음.`,
   logout: `${kleur.bold("mimi-seed logout")} — 로컬 설정(config.json) 삭제. 옵션 없음.`,

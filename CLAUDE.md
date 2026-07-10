@@ -1,7 +1,8 @@
 # Mimi Seed SDK — contributor context
 
 Public developer tooling for app launch ops: a CLI (`mimi-seed`, `packages/cli`) + a local stdio MCP server
-(`@yoonion/mimi-seed-mcp`, `packages/mcp-server`) exposing 148 tools across 17 domains (Play Store, App Store
+(`@yoonion/mimi-seed-mcp`, `packages/mcp-server`) exposing 150+ tools across 17 domains (exact inventory:
+`packages/mcp-server/tool-manifest.json`, test-enforced) (Play Store, App Store
 Connect, Firebase, AdMob, IAM, BigQuery, GA4, Search Console, Google Ads, CI, Jenkins, Facebook, Instagram,
 Android signing, AI, Auth, Checks). It drives Google/Apple APIs directly with local `~/.mimi-seed/` credentials;
 it does **not** compile binaries.

@@ -5,6 +5,12 @@ on:
     branches: [main, master]
   pull_request:
 
+# 같은 ref 의 run 을 직렬화 — 연속 푸시 2건이 같은 패키지를 동시에 publish 하다
+# npm 409 packument 경합으로 죽은 실사고(2026-07-09)의 재발 방지.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-test:
     name: ${{ matrix.package }} (node ${{ matrix.node }})
@@ -63,22 +69,31 @@ jobs:
             echo "• $NAME@$VERSION 이미 npm 에 존재 — skip"
             exit 0
           fi
-          echo "→ publishing $NAME@$VERSION"
-          # 레이스 안전망: 방금 다른 푸시가 같은 버전을 올려 pre-check 가 stale 이어도
-          # 레지스트리의 "이미 존재" 거부(403)는 실패가 아니라 no-op 으로 처리.
-          # 그 외 에러(권한/네트워크 등)는 그대로 실패시킨다.
-          if npm publish --access public --provenance 2>/tmp/pub.err; then
-            cat /tmp/pub.err >&2 || true
-            echo "✓ published $NAME@$VERSION (provenance 서명됨)"
-            # 새 버전 publish 성공 시 GitHub Release 자동 생성 (자동 release notes).
-            # 실패해도 publish 는 이미 끝났으므로 비치명적 처리.
-            TAG="${{ matrix.package }}-v$VERSION"
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes \
-              || echo "⚠ GitHub Release 생성 실패 (publish 는 성공) — 무시"
-          elif grep -qiE "cannot publish over|previously published" /tmp/pub.err; then
-            cat /tmp/pub.err >&2
-            echo "• $NAME@$VERSION 이미 존재(레이스) — no-op"
-          else
-            cat /tmp/pub.err >&2
-            exit 1
-          fi
+          # publish 는 최대 3회 시도. 실패 판정은 에러 메시지 문자열 grep 이 아니라
+          # "레지스트리에 실제로 올라갔는가"(npm view 재확인)로 한다 — 409 packument
+          # 경합("Failed to save packument"), OIDC 일시 오류(IDENTITY_TOKEN_READ_ERROR),
+          # 어느 쪽이든 메시지 포맷과 무관하게 안전. (둘 다 2026-07 실사고.)
+          for attempt in 1 2 3; do
+            echo "→ publishing $NAME@$VERSION (attempt $attempt)"
+            if npm publish --access public --provenance; then
+              echo "✓ published $NAME@$VERSION (provenance 서명됨)"
+              # 새 버전 publish 성공 시 GitHub Release 자동 생성 (자동 release notes).
+              # 실패해도 publish 는 이미 끝났으므로 비치명적 처리.
+              TAG="${{ matrix.package }}-v$VERSION"
+              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes \
+                || echo "⚠ GitHub Release 생성 실패 (publish 는 성공) — 무시"
+              exit 0
+            fi
+            sleep 15
+            if npm view "$NAME@$VERSION" version --prefer-online >/dev/null 2>&1; then
+              echo "• $NAME@$VERSION 레지스트리에 이미 존재 (경합/부분 성공) — publish no-op"
+              # 부분 성공(publish 는 됐는데 응답만 실패) 케이스에도 Release 는 남긴다.
+              # 이미 존재하면 gh 가 실패하고 || 가드가 삼킨다.
+              TAG="${{ matrix.package }}-v$VERSION"
+              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes \
+                || echo "⚠ GitHub Release 생성 실패/이미 존재 — 무시"
+              exit 0
+            fi
+          done
+          echo "❌ $NAME@$VERSION publish 3회 실패"
+          exit 1

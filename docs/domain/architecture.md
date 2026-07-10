@@ -21,10 +21,10 @@ mimi-seed-sdk/
 | | `packages/cli` | `packages/mcp-server` |
 |---|---|---|
 | npm name | `mimi-seed` | `@yoonion/mimi-seed-mcp` |
-| version | 0.3.x | 0.4.x |
+| version | 0.4.x | 0.6.x |
 | build | **tsup** (esbuild bundle) | **tsc** (plain `dist/`) |
 | node | >=18 | >=20 |
-| role | local/CI orchestration + remote-MCP onboarding | the 148-tool stdio MCP that hits Google/Apple APIs |
+| role | local/CI orchestration + remote-MCP onboarding | the 150+-tool stdio MCP that hits Google/Apple APIs |
 | key deps | `@anthropic-ai/sdk`, `kleur`, `open` | `@modelcontextprotocol/sdk`, `googleapis`, `jose`, `@onesub/providers`, `zod`, `@anthropic-ai/sdk` |
 
 The two packages are independent: the CLI talks to the **remote HTTP MCP** (web console, PAT auth) for
@@ -82,10 +82,13 @@ count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
 |---|---|---|
 | transport | stdio (client spawns the process) | Streamable HTTP at `/api/mcp` |
 | auth | `~/.mimi-seed/` credentials ([[auth-credentials]]) | PAT bearer token |
-| tools | 148 (full store/cloud surface) | a smaller read/diagnostic subset |
+| tools | 150+ (full store/cloud surface — exact list: `tool-manifest.json`) | a smaller read/diagnostic subset |
 | identifier | exposed as `mimi-seed` | also exposed as `mimi-seed` (← the confusion source) |
 
-Both list under the one name `mimi-seed`; tell them apart by **tool-name prefix + auth method**. The 100+
+Both are conventionally *registered* under the key `mimi-seed` (existing installs; new local installs are
+documented as `mimi-seed-local`), but since 2026-07 the handshake-level `serverInfo.name` disambiguates:
+local stdio = `mimi-seed-local`, web remote = `mimi-seed-web` — and `mimi_seed_status`'s first line
+self-identifies. Fallback heuristic: **tool-name prefix + auth method**. The 100+
 `playstore_* / appstore_* / firebase_*` deferred tools are the local stdio MCP (this repo). Detail and the
 two-repo boundary live in [[pitfalls]]. (The web console's internals are out of scope here — public boundary
 only.)
