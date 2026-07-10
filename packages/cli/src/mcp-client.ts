@@ -38,6 +38,20 @@ export async function mcpCall(
     }),
   });
 
+  // 401/403/5xx 등 REST 에러 응답은 JSON-RPC 봉투가 아니라 { error: string, code?: string }
+  // 형태다 — 이전엔 이걸 JSON-RPC 로 착각해 payload.error.message(=undefined)를 찍었다.
+  if (!res.ok) {
+    const raw = await res.text();
+    let msg = raw;
+    try {
+      const parsed = JSON.parse(raw) as { error?: unknown };
+      if (typeof parsed.error === "string") msg = parsed.error;
+    } catch {
+      /* 원문 유지 */
+    }
+    return { text: `HTTP ${res.status}: ${msg}`, isError: true };
+  }
+
   const contentType = res.headers.get("content-type") ?? "";
   let payload: JsonRpcResponse;
 
