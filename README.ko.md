@@ -75,6 +75,15 @@ npx mimi-seed mcp codex --write
 
 **방법 B — Local MCP** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 20+)
 
+Claude Code — **플러그인 설치 (권장)**: MCP 서버에 더해 지연 로딩(함정 3번)·인증 복구를 자동 처리하는 **스킬 번들**이 함께 설치됩니다. 설치 후 새 세션 1회는 여전히 필요합니다(함정 2번):
+
+```text
+/plugin marketplace add jeonghwanko/mimi-seed-sdk
+/plugin install mimi-seed@yoonion
+```
+
+또는 MCP 서버만 등록:
+
 ```bash
 # Claude Code
 claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp

@@ -75,6 +75,15 @@ Done. Start talking to Claude Code or Codex.
 
 **Option B — Local MCP** (store-write automation · Google OAuth · runs on your machine, Node 20+)
 
+Claude Code — **plugin install (recommended)**: bundles the MCP server **plus the skills** that auto-handle deferred tool loading (trap #3) and auth recovery. One fresh session after install is still needed (trap #2):
+
+```text
+/plugin marketplace add jeonghwanko/mimi-seed-sdk
+/plugin install mimi-seed@yoonion
+```
+
+Or register the bare MCP server:
+
 ```bash
 # Claude Code
 claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
