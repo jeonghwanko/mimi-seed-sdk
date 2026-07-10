@@ -5,7 +5,8 @@ let _cached: { clientId: string; clientSecret: string } | null = null;
 
 /**
  * OAuth client id/secret 해석: env 오버라이드 → 웹 콘솔 원격 조회.
- * (디스크 캐시 우선 순위는 호출자 — google-auth.ts resolveOAuthClient — 가 처리.)
+ * (디스크 캐시(credentials.json) 우선 순위는 호출자 — google-auth.ts
+ * ensureFreshAccessToken — 가 처리하며, 원격 조회 성공 시 디스크에 저장한다.)
  *
  * 모든 실패는 message 에 'mcp-auth-config' 를 포함해 던진다 —
  * errors.ts classifyError 가 이 마커로 CONFIG_FETCH_FAILED 로 분류해
@@ -36,9 +37,17 @@ export async function getMcpOAuthClient(): Promise<{
   }
   if (!res.ok) throw new Error(`mcp-auth-config fetch failed (${res.status})`);
 
-  const data = (await res.json()) as { clientId?: string; clientSecret?: string };
+  // body 파싱/검증 실패도 반드시 마커를 달아야 한다 — captive portal 이 200 + HTML 을
+  // 돌려주는 첫 설치 환경에서 raw SyntaxError 가 새면 "재로그인하세요" 로 오진된다.
+  let data: { clientId?: string; clientSecret?: string } | null;
+  try {
+    data = (await res.json()) as { clientId?: string; clientSecret?: string } | null;
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(`mcp-auth-config fetch failed (응답이 JSON 이 아님: ${detail})`);
+  }
   // 빈 값 200 응답(서버 env 미설정)을 캐싱하면 프로세스 수명 내내 invalid_client 로 오진된다.
-  if (!data.clientId || !data.clientSecret) {
+  if (!data || typeof data !== 'object' || !data.clientId || !data.clientSecret) {
     throw new Error('mcp-auth-config fetch failed (서버 응답에 clientId/clientSecret 비어 있음)');
   }
   _cached = { clientId: data.clientId, clientSecret: data.clientSecret };

@@ -261,9 +261,9 @@ http_headers = { Authorization = "Bearer ${cfg.token}" }`);
   }
 
   if (target === "claude") {
-    log(kleur.bold("Claude Code MCP 등록 — 아래를 그대로 실행하세요:"));
-    for (const line of claudeMcpAddCommand(cfg)) log(kleur.cyan(`  ${line}`));
-    log(kleur.dim("  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음)."));
+    log(kleur.bold("Claude Code MCP 등록 — 아래 한 줄을 그대로 실행하세요:"));
+    log(kleur.cyan(`  ${claudeMcpAddCommand(cfg)}`));
+    log(kleur.dim("  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ~/.mimi-seed/config.json 에도 저장되어 있습니다."));
     return;
   }
 
