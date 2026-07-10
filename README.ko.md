@@ -47,7 +47,7 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 | 하고 싶은 것 | 설치할 것 |
 |---|---|
 | **스토어에 쓰기** — 릴리스 노트 적용, 스크린샷 업로드, 심사 제출, Firebase / AdMob / IAM (위 데모의 전부) | **방법 B — Local MCP** ↓ |
-| 읽기 전용 **상태·준비도** — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **방법 A — Remote MCP** ↓ |
+| **상태·준비도** + App Store IAP 심사 노트/스크린샷 — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **방법 A — Remote MCP** ↓ |
 
 > **첫 설치에서 누구나 걸리는 세 가지:**
 > 1. Local MCP 서버는 **Node 20+** 가 필요합니다.
@@ -69,7 +69,7 @@ npx mimi-seed mcp codex --write
 
 끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
 
-> **방법 A가 할 수 있는 것 / 없는 것.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시)에 더해 **워크스페이스 공유 BigQuery** 를 노출합니다 — 팀 멤버 전원이 **개인 키 파일 없이** 하나의 공유 서비스 계정으로 BigQuery를 조회합니다 ([팀 공유 BigQuery](#팀-공유-bigquery-remote-mcp) 참고). **스토어에 쓰는 모든 것** — 릴리스 노트 적용, 스크린샷 업로드, Firebase / AdMob / IAM — 은 **방법 B**가 필요합니다 ([전체 도구 카탈로그](docs/domain/tool-catalog.md)).
+> **방법 A가 할 수 있는 것 / 없는 것.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시), **워크스페이스 공유 BigQuery**, App Store IAP 심사 노트/심사 스크린샷 쓰기를 제공합니다. 릴리스 노트 적용, 리스팅 스크린샷, Firebase / AdMob / IAM 등 더 넓은 스토어 쓰기는 **방법 B**가 필요합니다 ([전체 도구 카탈로그](docs/domain/tool-catalog.md)).
 
 ---
 
@@ -344,11 +344,11 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ## 도구 목록 (Local MCP · 150+ 개 · 17개 영역)
 
-> 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset만 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
+> 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| **App Store Connect** | 31 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
+| **App Store Connect** | 33 | `appstore_submit_for_review` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` |
 | **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
 | **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |

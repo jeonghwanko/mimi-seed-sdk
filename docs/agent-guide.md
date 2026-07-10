@@ -49,6 +49,7 @@ tools directly — but the *call order* and *safety rules* below still apply.
 | Play Store listing + images | `select:playstore_get_listing,playstore_update_listing,playstore_upload_image,playstore_list_images,playstore_replace_images,playstore_delete_all_images` |
 | App Store / TestFlight | `select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
 | App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate` |
+| App Store IAP review metadata | `select:appstore_list_apps,appstore_list_products,appstore_update_product_review_note,appstore_upload_product_review_screenshot` |
 | Release notes from commits | `select:generate_release_notes_from_commits,playstore_update_release_notes,appstore_update_whats_new` |
 | Firebase setup | `select:firebase_list_projects,firebase_get_project,firebase_create_project,firebase_create_android_app,firebase_create_ios_app,firebase_get_android_config,firebase_enable_common_services` |
 | AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |

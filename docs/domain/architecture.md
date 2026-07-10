@@ -82,7 +82,7 @@ count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
 |---|---|---|
 | transport | stdio (client spawns the process) | Streamable HTTP at `/api/mcp` |
 | auth | `~/.mimi-seed/` credentials ([[auth-credentials]]) | PAT bearer token |
-| tools | 150+ (full store/cloud surface — exact list: `tool-manifest.json`) | a smaller read/diagnostic subset |
+| tools | 150+ (full store/cloud surface — exact list: `tool-manifest.json`) | a smaller read/diagnostic subset plus App Store IAP review metadata writes |
 | identifier | exposed as `mimi-seed` | also exposed as `mimi-seed` (← the confusion source) |
 
 Both are conventionally *registered* under the key `mimi-seed` (existing installs; new local installs are

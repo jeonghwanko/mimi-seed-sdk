@@ -47,7 +47,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 | You want to… | Install |
 |---|---|
 | **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Option B — Local MCP** ↓ |
-| Read-only **status & readiness** — blockers, checklists, drafts, team-shared BigQuery | **Option A — Remote MCP** ↓ |
+| **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Option A — Remote MCP** ↓ |
 
 > **Three things that trip every first install:**
 > 1. The local MCP server requires **Node 20+**.
@@ -69,7 +69,7 @@ npx mimi-seed mcp codex --write
 
 Done. Start talking to Claude Code or Codex.
 
-> **What Option A can and can't do.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** — every workspace member queries BigQuery through one shared service account with **no personal key file** (see [Team-Shared BigQuery](#team-shared-bigquery-remote-mcp)). Everything that **writes to stores** — release-notes apply, screenshot upload, Firebase / AdMob / IAM — needs **Option B** ([full tool catalog](docs/domain/tool-catalog.md)).
+> **What Option A can and can't do.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** and App Store IAP review-note/review-screenshot writes. Broader store writes — release-note apply, listing screenshots, Firebase / AdMob / IAM — need **Option B** ([full tool catalog](docs/domain/tool-catalog.md)).
 
 ---
 
@@ -348,11 +348,11 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ## Local MCP Tool List (150+ tools · 17 domains)
 
-> These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
+> These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
 | Domain | Count | Key Tools |
 |--------|-------|-----------|
-| **App Store Connect** | 31 | `appstore_submit_for_review` · `appstore_upload_screenshot` · `appstore_update_whats_new` |
+| **App Store Connect** | 33 | `appstore_submit_for_review` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` |
 | **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
 | **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |

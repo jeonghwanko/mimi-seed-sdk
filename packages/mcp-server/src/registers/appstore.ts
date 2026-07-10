@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as appstore from '../appstore/tools.js';
 import * as appstoreScreenshots from '../appstore/screenshots.js';
+import * as appstoreProductReview from '../appstore/product-review.js';
 import {
   createAppleOneTimePurchase, createAppleSubscription,
   updateAppleProduct, deleteAppleProduct, listAppleProducts,
@@ -604,6 +605,85 @@ export function registerAppstoreTools(server: McpServer) {
         appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
       });
       return { content: [{ type: 'text', text: JSON.stringify(products, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'appstore_update_product_review_note',
+    '기존 App Store IAP/구독 상품의 App Review 노트를 수정. appstore_list_products의 productId/type을 사용.',
+    {
+      appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
+      productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
+      productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
+      reviewNote: z.string().max(4000).describe('Apple 심사용 노트 (4000자 이하, 빈 문자열은 초기화)'),
+    },
+    async ({ appId, productId, productType, reviewNote }) => {
+      const creds = requireAppStoreCreds();
+      const products = await listAppleProducts({
+        appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
+      });
+      const product = products.find((item) => item.productId === productId && item.type === productType);
+      if (!product) {
+        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+      }
+
+      const result = await appstoreProductReview.updateProductReviewNote({
+        internalId: product.internalId,
+        productType,
+        reviewNote,
+      });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✓ App Review 노트 수정 완료',
+            `productId: ${productId}`,
+            `internalId: ${result.internalId}`,
+            result.state ? `state: ${result.state}` : '',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_upload_product_review_screenshot',
+    '기존 App Store IAP/구독 상품의 심사용 스크린샷을 reserve → upload → commit. 상품당 1장, 절대 파일 경로 필요.',
+    {
+      appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
+      productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
+      productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
+      filePath: z.string().describe('업로드할 PNG/JPG의 절대 파일 경로'),
+    },
+    async ({ appId, productId, productType, filePath }) => {
+      const creds = requireAppStoreCreds();
+      const products = await listAppleProducts({
+        appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
+      });
+      const product = products.find((item) => item.productId === productId && item.type === productType);
+      if (!product) {
+        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+      }
+
+      const result = await appstoreProductReview.uploadProductReviewScreenshot({
+        internalId: product.internalId,
+        productType,
+        filePath,
+      });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✓ App Review 스크린샷 업로드 완료',
+            `productId: ${productId}`,
+            `internalId: ${result.internalId}`,
+            `screenshotId: ${result.id}`,
+            `file: ${result.fileName} (${result.fileSize} bytes)`,
+            result.state ? `state: ${result.state}` : '',
+            result.verified ? '✓ commit 후 조회 확인' : '⚠ commit은 성공했지만 후속 조회는 확인하지 못함',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
     },
   );
 

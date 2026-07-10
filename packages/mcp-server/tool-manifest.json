@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하여 강제한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것.",
-  "total": 152,
+  "total": 154,
   "domains": {
     "admob": [
       "admob_list_accounts",
@@ -47,6 +47,8 @@
       "appstore_create_inapp_purchase",
       "appstore_create_subscription",
       "appstore_list_products",
+      "appstore_update_product_review_note",
+      "appstore_upload_product_review_screenshot",
       "appstore_update_product",
       "appstore_delete_product",
       "appstore_plan_release",

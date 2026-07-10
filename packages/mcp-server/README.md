@@ -66,7 +66,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| App Store Connect | 31 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_whats_new` / `appstore_create_version` |
+| App Store Connect | 33 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
 | Google Play | 28 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
 | Firebase | 20 | `firebase_create_project` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
@@ -84,7 +84,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | 인증 | 3 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
 
-> 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `playstore_create_subscription` · `appstore_create_inapp_purchase` 등 (`@onesub/providers` 위임).
+> 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `appstore_create_inapp_purchase` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` 등.
 > 전체 카탈로그(항상 최신): [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)
 
 ---
