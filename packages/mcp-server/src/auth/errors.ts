@@ -10,6 +10,7 @@ export type AuthErrorCode =
   | 'INVALID_CLIENT' // client_id/secret 불일치 — CLI 자체 문제
   | 'UNAUTHORIZED_CLIENT' // 동의 범위/리다이렉트 URI 불일치
   | 'REFRESH_NETWORK_ERROR' // 구글 토큰 엔드포인트 도달 실패
+  | 'CONFIG_FETCH_FAILED' // 웹 콘솔에서 OAuth client 설정을 못 받음 (mcp-auth-config)
   | 'REFRESH_UNKNOWN' // 분류 안 된 갱신 오류
   | 'INSUFFICIENT_SCOPE' // 토큰은 유효하나 도구가 요구하는 OAuth 스코프 미보유 (신규 스코프 추가 후 재로그인 전)
   // 로그인 플로우
@@ -99,10 +100,28 @@ export function classifyError(e: unknown, ctx: ClassifyContext): AuthErrorPayloa
   if (oauthCode === 'access_denied') {
     return {
       code: 'USER_DENIED',
-      message: '브라우저에서 Google 동의를 거부했습니다.',
-      hint: '다시 시도하고 모든 권한에 동의해주세요.',
+      message: 'Google 동의가 거부되었습니다 (access_denied).',
+      hint:
+        '직접 거부하지 않았다면: 이 OAuth 앱은 Google 미검증(테스트) 상태라 등록된 테스트 사용자만 로그인할 수 있습니다. ' +
+        '운영자에게 Google Cloud Console → OAuth 동의 화면 → 테스트 사용자에 이 계정 추가를 요청한 뒤 재시도하세요. ' +
+        '직접 거부했다면 다시 시도해 모든 권한에 동의해주세요.',
       retriable: true,
       needsReauth: true,
+      cause: raw,
+    };
+  }
+
+  // OAuth client 설정 조회 실패 — 구글이 아니라 mimi-seed 웹 콘솔 쪽 문제.
+  // 네트워크 분류보다 먼저 검사해야 "oauth2.googleapis.com 연결 실패" 오진을 막는다.
+  if (/mcp-auth-config/i.test(raw)) {
+    return {
+      code: 'CONFIG_FETCH_FAILED',
+      message: 'Mimi Seed 서버에서 OAuth 클라이언트 설정을 받지 못했습니다.',
+      hint:
+        'mimi-seed.pryzm.gg 접속 가능 여부를 확인하거나, ' +
+        '환경변수 MIMI_SEED_GOOGLE_CLIENT_ID / MIMI_SEED_GOOGLE_CLIENT_SECRET 로 자체 OAuth 클라이언트를 지정하세요.',
+      retriable: true,
+      needsReauth: false,
       cause: raw,
     };
   }

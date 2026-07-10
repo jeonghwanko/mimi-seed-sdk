@@ -54,10 +54,14 @@ node dist/index.js  # then in another shell: npx . mimi-seed-auth  (or use the p
    there too, since `tsup` does not type-check.
 4. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`,
    `chore:`, `docs:`…). Release notes are auto-generated from commit messages.
-5. Adding/changing an MCP tool? Update its `server.tool(...)` registration, the tool count
-   in the README tables **and** [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) (keep them in
-   sync — see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8), and add a test where it makes sense
-   (see `src/__tests__/`).
+5. Adding/changing an MCP tool? Register it in `registers/<domain>.ts` (a **new** register
+   module must also be wired into `src/server.ts`), then update
+   `packages/mcp-server/tool-manifest.json` — the boot smoke test
+   (`src/__tests__/tool-manifest.test.ts`) diffs the live registration list against the
+   manifest and fails `npm test` on any mismatch. Refresh the per-domain list in
+   [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md), and add a test where it
+   makes sense (see `src/__tests__/`). Don't hard-code exact tool counts in prose — the
+   manifest is the single source of truth (see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8).
 
 ## Releasing (maintainers)
 

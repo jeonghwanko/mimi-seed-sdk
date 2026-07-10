@@ -84,6 +84,8 @@ enabled = true
 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 ```
 
+> ⚠️ **첫 로그인에서 Google이 "access_denied" / "확인되지 않은 앱"을 띄우면:** OAuth 앱이 테스트 모드라 등록된 테스트 사용자만 로그인할 수 있습니다. 운영자에게 계정 추가(Cloud Console → OAuth 동의 화면 → 테스트 사용자)를 요청한 뒤 `mimi-seed-auth`를 재시도하세요. 등록 없이 재시도만 반복하면 절대 성공하지 않습니다.
+
 Claude Desktop (`claude_desktop_config.json`):
 
 ```json

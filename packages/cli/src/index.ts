@@ -24,7 +24,7 @@ import { cmdAuth } from "./auth.js";
 import { cmdFirebase, cmdAdmob, cmdGa4 } from "./cloud.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
-import { printMcpSetup, writeCodexMcpConfig } from "./mcp-config.js";
+import { printMcpSetup, writeCodexMcpConfig, claudeMcpAddCommand } from "./mcp-config.js";
 import { ensureReleaseManifest } from "./release-manifest.js";
 
 const DEFAULT_WEB_BASE = process.env.MIMI_SEED_WEB_BASE ?? "https://mimi-seed.pryzm.gg";
@@ -252,18 +252,18 @@ async function cmdMcp(args: string[]): Promise<void> {
     log("자동 등록:");
     log(kleur.cyan("  mimi-seed mcp codex --write"));
     log("");
-    log("수동 등록 예시 (~/.codex/config.toml):");
+    log("수동 등록 예시 (~/.codex/config.toml) — 실제 토큰 포함:");
     log(`[mcp_servers.mimi-seed]
 url = "${cfg.endpoint}"
 enabled = true
-http_headers = { Authorization = "Bearer ${cfg.prefix}..." }`);
+http_headers = { Authorization = "Bearer ${cfg.token}" }`);
     return;
   }
 
   if (target === "claude") {
-    log(kleur.bold("Claude Code MCP 등록"));
-    log(kleur.cyan(`  claude mcp add --transport http mimi-seed ${cfg.endpoint} \\`));
-    log(kleur.cyan(`    --header "Authorization: Bearer ${cfg.prefix}..."`));
+    log(kleur.bold("Claude Code MCP 등록 — 아래를 그대로 실행하세요:"));
+    for (const line of claudeMcpAddCommand(cfg)) log(kleur.cyan(`  ${line}`));
+    log(kleur.dim("  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음)."));
     return;
   }
 

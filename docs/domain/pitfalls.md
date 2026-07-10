@@ -56,11 +56,13 @@ The CLI + local MCP live **only** here. The private web console is a separate re
 - ✅ The web repo's landing docs **mirror** this repo's READMEs; the originals are here.
 - The two MCP servers both surface as `mimi-seed` — keep them straight by transport + auth ([[architecture]]).
 
-## 8. Keep tool counts in sync
+## 8. Tool inventory drift — the manifest is the SSOT
 
-`CONTRIBUTING.md` requires updating counts when tools change. Current truth: **148** `server.tool()`
-registrations; READMEs round to "110+". When you add/remove a tool, re-grep `server.tool(` per file and update
-[[tool-catalog]] and the README domain table together. ❌ Don't leave a hard-coded count stale.
+Hand-synced tool counts drifted repeatedly (a 2026-07 review found three stale generations of the number at
+once). The inventory now lives in `packages/mcp-server/tool-manifest.json`, enforced by a boot smoke test
+(`src/__tests__/tool-manifest.test.ts`) that starts the real server and diffs the registered tool list against
+the manifest — add/remove/rename a tool without updating the manifest and `npm test` fails. ❌ Don't hard-code
+exact totals in prose docs or READMEs; write "150+" or point to the manifest/[[tool-catalog]].
 
 ## 9. Tool name ≠ register file
 

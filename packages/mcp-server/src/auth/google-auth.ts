@@ -336,11 +336,27 @@ export async function ensureFreshAccessToken(marginMs = 300_000): Promise<Refres
     };
   }
 
-  // refresh 시도 — credentials.json 우선, 없으면 원격에서 클라이언트 조회
+  // refresh 시도 — credentials.json(디스크) 우선. 디스크에 있으면 원격 조회 자체를 안 한다 —
+  // 매시간 refresh 가 웹 콘솔 생존에 의존하면 콘솔 장애가 모든 로컬 도구 호출을 죽인다.
+  // 없을 때만 env → 원격(getMcpOAuthClient) 순으로 받고, 성공 시 디스크에 저장해
+  // 원격 의존을 최초 1회로 끝낸다. 조회 실패는 raw throw 가 아니라 분류된 에러로 반환.
+  let clientId: string;
+  let clientSecret: string;
   const stored = getStoredCredentials();
-  const { clientId: defaultId, clientSecret: defaultSecret } = await getMcpOAuthClient();
-  const clientId = stored?.clientId ?? defaultId;
-  const clientSecret = stored?.clientSecret ?? defaultSecret;
+  if (stored?.clientId && stored?.clientSecret) {
+    ({ clientId, clientSecret } = stored);
+  } else {
+    try {
+      ({ clientId, clientSecret } = await getMcpOAuthClient());
+      saveCredentials(clientId, clientSecret);
+    } catch (e: unknown) {
+      return {
+        status: 'expired_refresh_failed',
+        tokens,
+        error: classifyError(e, { phase: 'refresh' }),
+      };
+    }
+  }
 
   const client = createOAuth2Client(clientId, clientSecret);
   client.setCredentials({ refresh_token: tokens.refresh_token });

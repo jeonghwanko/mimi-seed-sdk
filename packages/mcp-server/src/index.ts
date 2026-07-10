@@ -1,57 +1,13 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { registerFirebaseTools } from './registers/firebase.js';
-import { registerAdmobTools } from './registers/admob.js';
-import { registerPlaystoreTools } from './registers/playstore.js';
-import { registerIamTools } from './registers/iam.js';
-import { registerAppstoreTools } from './registers/appstore.js';
-import { registerChecksTools } from './registers/checks.js';
-import { registerAiTools } from './registers/ai.js';
-import { registerBigqueryTools } from './registers/bigquery.js';
-import { registerAuthTools } from './registers/auth.js';
-import { registerCiTools } from './registers/ci.js';
-import { registerInstagramTools } from './registers/instagram.js';
-import { registerFacebookTools } from './registers/facebook.js';
-import { registerGoogleAdsTools } from './registers/googleads.js';
-import { registerGscTools } from './registers/gsc.js';
-import { registerGa4Tools } from './registers/ga4.js';
-import { registerJenkinsTools } from './registers/jenkins.js';
-import { registerAndroidTools } from './registers/android.js';
-import { registerPrompts } from './prompts.js';
-import { registerResources } from './resources.js';
+import { buildServer } from './server.js';
 
 // dist/index.js 기준 ../package.json — npm 패키지 루트의 버전을 단일 출처로 사용.
 // 하드코딩하면 publish 때마다 serverInfo.version 이 드리프트하므로 런타임에 읽는다.
 const { version } = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { version: string };
-
-const server = new McpServer({
-  name: 'mimi-seed',
-  version,
-});
-
-registerFirebaseTools(server);
-registerAdmobTools(server);
-registerPlaystoreTools(server);
-registerIamTools(server);
-registerAppstoreTools(server);
-registerChecksTools(server);
-registerAiTools(server);
-registerBigqueryTools(server);
-registerAuthTools(server);
-registerCiTools(server);
-registerInstagramTools(server);
-registerFacebookTools(server);
-registerGoogleAdsTools(server);
-registerGscTools(server);
-registerGa4Tools(server);
-registerJenkinsTools(server);
-registerAndroidTools(server);
-registerPrompts(server);
-registerResources(server);
 
 // `npx -y @yoonion/mimi-seed-mcp <subcommand>` 처리.
 // npx는 스코프 패키지의 basename(`mimi-seed-mcp`)을 매치해 이 bin을 실행하므로,
@@ -90,6 +46,7 @@ async function main() {
     process.exit(2);
   }
 
+  const server = buildServer(version);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

@@ -33,12 +33,21 @@ function replaceTomlBlock(input: string, tableName: string, block: string): stri
   return `${input.slice(0, start)}${block}${input.slice(end).replace(/^\n+/, "\n")}`;
 }
 
+// 등록 명령은 반드시 실제 토큰으로 출력한다. 이전엔 `${prefix}...` 로 잘라 출력했는데,
+// 그대로 복붙하면 100% 401 이 나고 전체 토큰의 위치는 아무도 안내하지 않았다 (온보딩 블로커).
+export function claudeMcpAddCommand(cfg: MimiSeedConfig): string[] {
+  return [
+    `claude mcp add --transport http ${SERVER_NAME} ${cfg.endpoint} \\`,
+    `  --header "Authorization: Bearer ${cfg.token}"`,
+  ];
+}
+
 export function printMcpSetup(cfg: MimiSeedConfig): void {
   process.stdout.write(
     [
-      kleur.dim("Claude Code MCP 등록:"),
-      kleur.dim(`  claude mcp add --transport http ${SERVER_NAME} ${cfg.endpoint} \\`),
-      kleur.dim(`    --header "Authorization: Bearer ${cfg.prefix}..."`),
+      kleur.bold("Claude Code MCP 등록 — 아래를 그대로 실행하세요:"),
+      ...claudeMcpAddCommand(cfg).map((l) => kleur.cyan(`  ${l}`)),
+      kleur.dim(`  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ${CONFIG_LOCATION_HINT} 에도 저장되어 있습니다.`),
       "",
       kleur.dim("Codex MCP 등록:"),
       kleur.dim("  mimi-seed mcp codex --write"),
@@ -46,6 +55,8 @@ export function printMcpSetup(cfg: MimiSeedConfig): void {
     ].join("\n") + "\n",
   );
 }
+
+const CONFIG_LOCATION_HINT = "~/.mimi-seed/config.json";
 
 export async function writeCodexMcpConfig(cfg: MimiSeedConfig): Promise<string> {
   const configDir = path.join(os.homedir(), ".codex");

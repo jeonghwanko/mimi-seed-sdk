@@ -1,0 +1,192 @@
+{
+  "$comment": "등록된 MCP 도구의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하여 강제한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것.",
+  "total": 152,
+  "domains": {
+    "admob": [
+      "admob_list_accounts",
+      "admob_list_apps",
+      "admob_list_ad_units",
+      "admob_get_today_earnings",
+      "admob_get_report",
+      "admob_create_app",
+      "admob_create_ad_unit"
+    ],
+    "ai": [
+      "generate_release_notes_from_commits",
+      "generate_review_reply"
+    ],
+    "android": [
+      "android_signing_setup",
+      "android_generate_keystore",
+      "jenkins_upload_playstore_sa"
+    ],
+    "appstore": [
+      "appstore_list_apps",
+      "appstore_verify_credentials",
+      "appstore_get_app",
+      "appstore_list_versions",
+      "appstore_create_version",
+      "appstore_attach_build",
+      "appstore_attach_latest_build",
+      "appstore_get_metadata",
+      "appstore_update_localization",
+      "appstore_list_screenshots",
+      "appstore_upload_screenshot",
+      "appstore_delete_screenshot",
+      "appstore_delete_screenshot_set",
+      "appstore_update_whats_new",
+      "appstore_update_review_notes",
+      "appstore_get_review_notes",
+      "appstore_list_builds",
+      "appstore_list_beta_groups",
+      "appstore_get_app_info",
+      "appstore_list_app_info_localizations",
+      "appstore_update_app_info_localization",
+      "appstore_list_reviews",
+      "appstore_reply_review",
+      "appstore_create_inapp_purchase",
+      "appstore_create_subscription",
+      "appstore_list_products",
+      "appstore_update_product",
+      "appstore_delete_product",
+      "appstore_plan_release",
+      "appstore_submit_for_review",
+      "appstore_cancel_review"
+    ],
+    "auth": [
+      "mimi_seed_status",
+      "mimi_seed_auth_start",
+      "mimi_seed_auth_status"
+    ],
+    "bigquery": [
+      "bigquery_run_query",
+      "bigquery_list_datasets",
+      "bigquery_list_tables",
+      "bigquery_get_table_schema",
+      "bigquery_auth_status"
+    ],
+    "checks": [
+      "playstore_check_submission_risks",
+      "appstore_check_submission_risks",
+      "screenshot_validate",
+      "release_status"
+    ],
+    "ci": [
+      "ci_save_config",
+      "ci_list_workflows",
+      "ci_trigger_build",
+      "ci_get_build_status",
+      "ci_list_recent_builds",
+      "ci_cancel_build"
+    ],
+    "facebook": [
+      "facebook_save_config",
+      "facebook_list_pages",
+      "facebook_get_page",
+      "facebook_post_photo",
+      "facebook_post_multi_photo",
+      "facebook_current_config"
+    ],
+    "firebase": [
+      "firebase_list_projects",
+      "firebase_get_project",
+      "firebase_create_project",
+      "firebase_list_android_apps",
+      "firebase_create_android_app",
+      "firebase_get_android_config",
+      "firebase_delete_android_app",
+      "firebase_list_ios_apps",
+      "firebase_create_ios_app",
+      "firebase_get_ios_config",
+      "firebase_delete_ios_app",
+      "firebase_list_web_apps",
+      "firebase_create_web_app",
+      "firebase_get_web_config",
+      "firebase_delete_web_app",
+      "firebase_enable_service",
+      "firebase_enable_common_services",
+      "firebase_list_enabled_services",
+      "firebase_link_analytics",
+      "firebase_get_analytics_details"
+    ],
+    "ga4": [
+      "ga4_list_account_summaries",
+      "ga4_list_properties",
+      "ga4_create_property",
+      "ga4_create_data_stream",
+      "ga4_list_data_streams",
+      "ga4_run_report"
+    ],
+    "googleads": [
+      "googleads_save_config",
+      "googleads_list_campaigns",
+      "googleads_get_campaign_report",
+      "googleads_get_uac_report",
+      "googleads_list_accessible_customers",
+      "googleads_config_status"
+    ],
+    "gsc": [
+      "gsc_list_sites",
+      "gsc_list_sitemaps",
+      "gsc_get_sitemap",
+      "gsc_submit_sitemap",
+      "gsc_inspect_url",
+      "gsc_search_analytics"
+    ],
+    "iam": [
+      "iam_list_service_accounts",
+      "iam_create_service_account",
+      "iam_list_keys",
+      "iam_create_key",
+      "iam_add_iam_policy_binding"
+    ],
+    "instagram": [
+      "instagram_save_config",
+      "instagram_get_account",
+      "instagram_post_image",
+      "instagram_post_carousel"
+    ],
+    "jenkins": [
+      "jenkins_status",
+      "jenkins_save_config",
+      "jenkins_list_credentials",
+      "jenkins_create_credential",
+      "jenkins_upload_keystore",
+      "jenkins_delete_credential",
+      "jenkins_list_jobs",
+      "jenkins_get_job_config",
+      "jenkins_create_job",
+      "jenkins_update_job"
+    ],
+    "playstore": [
+      "playstore_get_app",
+      "playstore_get_listing",
+      "playstore_update_listing",
+      "playstore_list_tracks",
+      "playstore_get_statistics",
+      "playstore_list_images",
+      "playstore_upload_image",
+      "playstore_delete_all_images",
+      "playstore_replace_images",
+      "playstore_update_release_notes",
+      "playstore_update_latest_release_notes",
+      "playstore_list_reviews",
+      "playstore_reply_review",
+      "playstore_list_inapp_products",
+      "playstore_list_subscriptions",
+      "playstore_create_onetime_product",
+      "playstore_create_subscription",
+      "playstore_verify_service_account",
+      "playstore_register_service_account",
+      "playstore_list_service_accounts",
+      "playstore_delete_service_account",
+      "playstore_plan_release",
+      "playstore_submit_release",
+      "playstore_promote_release",
+      "playstore_list_products",
+      "playstore_update_product",
+      "playstore_delete_product",
+      "setup_playstore_connection"
+    ]
+  }
+}
