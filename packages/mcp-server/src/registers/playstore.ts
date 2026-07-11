@@ -43,12 +43,31 @@ const playstore: typeof playstoreRaw = new Proxy(playstoreRaw, {
 export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_get_app',
-    'Google Play 앱 상세 정보 조회',
+    'Google Play 앱 세부정보 조회 — 개발자 연락처(이메일·전화·웹사이트)·기본 언어 등 (edits.details). 수정은 playstore_update_details.',
     { packageName: z.string().describe('패키지명 (예: com.findthem.app)') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const details = await playstore.getAppDetails(auth, packageName);
       return { content: [{ type: 'text', text: JSON.stringify(details, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'playstore_update_details',
+    'Google Play 앱 세부정보(개발자 연락처·기본 언어) 수정 — 연락처 이메일/전화/웹사이트, 기본 언어. 스토어 리스팅(제목·설명)과는 별개이며, 넘긴 필드만 부분 갱신(edits.details.patch). ⚠️ Console 에서 같은 앱을 편집·미게시 중이면 충돌할 수 있음.',
+    {
+      packageName: z.string().describe('패키지명 (예: gg.pryzm.penguinrun)'),
+      contactEmail: z.string().optional().describe('개발자 연락처 이메일 (스토어 등록정보에 공개)'),
+      contactPhone: z.string().optional().describe('개발자 연락처 전화번호 (선택)'),
+      contactWebsite: z.string().optional().describe('개발자 웹사이트 URL (예: https://penguin.pryzm.gg)'),
+      defaultLanguage: z.string().optional().describe('기본 언어 코드 (예: ko-KR, en-US)'),
+    },
+    async ({ packageName, contactEmail, contactPhone, contactWebsite, defaultLanguage }) => {
+      const auth = requirePlayStoreAuth(packageName);
+      const result = await playstore.updateAppDetails(auth, packageName, {
+        contactEmail, contactPhone, contactWebsite, defaultLanguage,
+      });
+      return { content: [{ type: 'text', text: `수정 완료:\n${JSON.stringify(result, null, 2)}` }] };
     },
   );
 

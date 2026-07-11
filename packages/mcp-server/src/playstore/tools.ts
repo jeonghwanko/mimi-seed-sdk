@@ -159,6 +159,32 @@ export async function getAppDetails(auth: OAuth2Client | JWT, packageName: strin
   });
 }
 
+// ─── 앱 세부정보(개발자 연락처·기본 언어) 수정 ───
+//
+// edits.details = 스토어 리스팅(제목·설명)과 별개인 개발자 연락처(이메일/전화/웹사이트)
+// 와 기본 언어. patch 로 부분 갱신 — 넘긴 필드만 교체하고 나머지 연락처는 보존한다
+// (update=PUT 은 전체 치환이라 미지정 필드가 지워질 수 있어 patch 사용). edit → commit.
+export async function updateAppDetails(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+  data: { contactEmail?: string; contactPhone?: string; contactWebsite?: string; defaultLanguage?: string },
+) {
+  return withEdit(
+    auth,
+    packageName,
+    async (editId) => {
+      const updated = await publisher().edits.details.patch({
+        auth,
+        packageName,
+        editId,
+        requestBody: data,
+      });
+      return updated.data;
+    },
+    true, // commit
+  );
+}
+
 // ─── 스토어 리스팅 조회 ───
 
 export async function getListing(auth: OAuth2Client | JWT, packageName: string, language: string = 'ko-KR') {
