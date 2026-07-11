@@ -419,6 +419,29 @@ export function registerAppstoreTools(server: McpServer) {
   );
 
   server.tool(
+    'appstore_create_app_info_localization',
+    [
+      'appInfo 로컬라이제이션(스토어 언어) 추가 — POST /appInfoLocalizations.',
+      '편집 가능 appInfo를 자동으로 찾아 새 locale의 앱 이름/부제/개인정보 URL을 생성.',
+      '이미 존재하는 locale이면 409 DUPLICATE — 그땐 appstore_update_app_info_localization 사용.',
+      '생성하면 같은 locale의 버전 로컬라이제이션(설명/키워드/whatsNew)도 함께 생길 수 있음(2026-07 실측) — 내용 채우기는 appstore_update_localization.',
+      '제한: name 30자, subtitle 30자. locale 예: "en-US", "ja", "zh-Hans", "zh-Hant".',
+    ].join(' '),
+    {
+      appId: z.string().describe('앱 ID (appstore_list_apps 결과)'),
+      locale: z.string().describe('추가할 언어 (예: "en-US", "ja", "zh-Hans", "zh-Hant")'),
+      name: z.string().optional().describe('앱 이름 (30자 이내)'),
+      subtitle: z.string().optional().describe('부제 (30자 이내)'),
+      privacyPolicyUrl: z.string().url().optional().describe('개인정보 처리방침 URL'),
+      privacyPolicyText: z.string().optional().describe('개인정보 처리방침 텍스트'),
+    },
+    async ({ appId, locale, ...fields }) => {
+      const result = await appstore.createAppInfoLocalization(appId, locale, fields);
+      return { content: [{ type: 'text', text: `✅ ${locale} 로컬라이제이션이 생성됐어.\n\n${JSON.stringify(result, null, 2)}` }] };
+    },
+  );
+
+  server.tool(
     'appstore_list_reviews',
     [
       'App Store 받은 고객 리뷰 조회 (최신순).',

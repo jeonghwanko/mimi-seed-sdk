@@ -43,7 +43,7 @@
 - **D** `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (33) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (34) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
@@ -51,7 +51,8 @@
   `appstore_list_reviews` · `appstore_list_products` · `appstore_plan_release`
 - **W** `appstore_create_version` · `appstore_attach_build` · `appstore_attach_latest_build` ·
   `appstore_update_localization` · `appstore_upload_screenshot` · `appstore_update_whats_new` ·
-  `appstore_update_review_notes` · `appstore_update_app_info_localization` · `appstore_reply_review` (public) ·
+  `appstore_update_review_notes` · `appstore_update_app_info_localization` · `appstore_create_app_info_localization` ·
+  `appstore_reply_review` (public) ·
   `appstore_create_inapp_purchase` · `appstore_create_subscription` · `appstore_update_product` ·
   `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot`
 - **D** `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_delete_screenshot` ·

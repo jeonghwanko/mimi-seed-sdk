@@ -554,6 +554,39 @@ export async function updateAppInfoLocalization(localizationId: string, fields: 
   });
 }
 
+export async function createAppInfoLocalization(
+  appId: string,
+  locale: string,
+  fields: AppInfoLocalizationFields,
+) {
+  const attributes = Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => v !== undefined),
+  );
+  const { appInfoId, state } = await findEditableAppInfoId(appId);
+  const data = await apiPost('/appInfoLocalizations', {
+    data: {
+      type: 'appInfoLocalizations',
+      attributes: { locale, ...attributes },
+      relationships: {
+        appInfo: { data: { type: 'appInfos', id: appInfoId } },
+      },
+    },
+  });
+  const created = data?.data;
+  return {
+    appInfoId,
+    appInfoState: state,
+    localization: {
+      id: created?.id,
+      locale: created?.attributes?.locale,
+      name: created?.attributes?.name,
+      subtitle: created?.attributes?.subtitle,
+      privacyPolicyUrl: created?.attributes?.privacyPolicyUrl,
+      privacyPolicyText: created?.attributes?.privacyPolicyText,
+    },
+  };
+}
+
 // ─── 고객 리뷰 (App Store 받은 리뷰 + 개발자 답변) ───
 
 export interface ListCustomerReviewsOptions {
