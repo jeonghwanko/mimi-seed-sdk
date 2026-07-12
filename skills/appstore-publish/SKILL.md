@@ -13,11 +13,15 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 App Store 도구를 사용해 
 2. App Store Connect API 인증 파일 `~/.mimi-seed/appstore.json`이 있어야 한다.
 3. 대상 버전은 `PREPARE_FOR_SUBMISSION`, `DEVELOPER_REJECTED`, `METADATA_REJECTED`, `REJECTED` 중 하나여야 한다.
 
-미인증 시:
+미인증이면 사용자에게 **터미널에서** 아래를 실행하라고 안내한다 (대화형이라 네가 대신 실행할 수 없다):
 
 ```bash
-npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
+mimi-seed setup            # 안 된 계정만 순서대로 연결. `?` 를 누르면 토큰 발급 방법을 알려준다
+mimi-seed auth appstore    # App Store Connect 만 따로
 ```
+
+App Store Connect 는 Issuer ID · Key ID · `.p8` 파일 3개가 필요하고, **`.p8` 은 딱 한 번만 다운로드된다**.
+발급 절차: [`docs/credentials.md`](../../docs/credentials.md#app-store-connect)
 
 ## 도구 로딩
 

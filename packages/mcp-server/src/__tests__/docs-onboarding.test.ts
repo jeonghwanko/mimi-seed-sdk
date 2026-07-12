@@ -81,7 +81,13 @@ describe('온보딩 문서 ↔ 코드', () => {
     const nvmrc = read('.nvmrc').trim();
     expect(nvmrc).toMatch(/^\d+$/);
 
-    for (const pkg of ['packages/cli/package.json', 'packages/mcp-server/package.json']) {
+    // 루트도 포함한다 — scripts/install.mjs 가 .nvmrc 로 Node 를 검사하고 루트 engines 로도
+    // 걸러지므로, 여기서 어긋나면 clone 직후 설치가 엉뚱한 이유로 막힌다.
+    for (const pkg of [
+      'package.json',
+      'packages/cli/package.json',
+      'packages/mcp-server/package.json',
+    ]) {
       const engines = (JSON.parse(read(pkg)) as { engines?: { node?: string } }).engines?.node;
       expect(engines, `${pkg} 에 engines.node 없음`).toBeTruthy();
       const floor = engines!.match(/(\d+)/)?.[1];

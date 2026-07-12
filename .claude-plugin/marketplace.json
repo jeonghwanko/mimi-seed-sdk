@@ -9,7 +9,7 @@
     {
       "name": "mimi-seed",
       "source": "./",
-      "description": "Firebase / AdMob / Google Play / App Store Connect를 Claude Code에서 관리하는 MCP 도구와 출시 운영 스킬. 설치 시 @yoonion/mimi-seed-mcp 로컬 MCP 서버가 등록됩니다 (최초 1회 `npx -y @yoonion/mimi-seed-mcp mimi-seed-auth` 로 Google OAuth 필요).",
+      "description": "Firebase / AdMob / Google Play / App Store Connect를 Claude Code에서 관리하는 MCP 도구와 출시 운영 스킬. 설치 시 @yoonion/mimi-seed-mcp 로컬 MCP 서버가 등록됩니다. 계정 연결은 터미널에서 `npx mimi-seed setup` 한 번이면 됩니다 — 언어(한국어/English)를 고르고, 안 된 계정만 순서대로 물어보며, 각 토큰을 어디서 발급받는지도 알려줍니다.",
       "homepage": "https://mimi-seed.pryzm.gg",
       "repository": "https://github.com/jeonghwanko/mimi-seed-sdk"
     }

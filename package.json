@@ -1,7 +1,7 @@
 {
   "name": "mimi-seed-sdk",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Monorepo root — the SDK version (SSOT for both packages and both plugin manifests) plus bootstrap scripts. The publishable packages live in packages/. This is NOT an npm workspace: each package installs independently.",
   "type": "module",
   "engines": {
