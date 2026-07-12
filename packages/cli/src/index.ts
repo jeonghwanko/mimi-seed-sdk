@@ -22,6 +22,7 @@ import { cmdNotes } from "./notes.js";
 import { cmdReview } from "./review.js";
 import { cmdAuth } from "./auth.js";
 import { cmdSetup } from "./setup.js";
+import { cmdLang } from "./lang.js";
 import { cmdFirebase, cmdAdmob, cmdGa4 } from "./cloud.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
@@ -299,6 +300,14 @@ const CMD_USAGE: Record<string, string> = {
   --fail-on-missing   필수 자격증명이 없으면 exit 1 (CI 게이트)
 
 ${kleur.dim("비TTY / CI 환경에서는 프롬프트 없이 상태표만 출력한다.")}`,
+  lang: `${kleur.bold("mimi-seed lang")} — CLI 출력 언어 (한국어 / English)
+
+  mimi-seed lang        현재 언어 표시
+  mimi-seed lang ko     한국어 (기본)
+  mimi-seed lang en     English
+
+${kleur.dim("~/.mimi-seed/settings.json 에 저장됩니다. 환경변수 MIMI_SEED_LANG 가 있으면 그게 우선합니다.")}
+${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 칠 일이 없습니다.")}`,
   status: `${kleur.bold("mimi-seed status")} — 연결 상태 + 등록 앱 목록. 옵션 없음.`,
   doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI). 옵션 없음.`,
   logout: `${kleur.bold("mimi-seed logout")} — 로컬 설정(config.json) 삭제. 옵션 없음.`,
@@ -370,6 +379,7 @@ function printHelp(): void {
 ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
   ${kleur.cyan("mimi-seed setup")}       가진 계정을 한 번에 연결 (안내형 마법사)
+  ${kleur.cyan("mimi-seed lang")}        출력 언어 (ko / en)
   ${kleur.cyan("mimi-seed status")}      연결 상태 + 등록 앱 목록
   ${kleur.cyan("mimi-seed auth")}        자격증명 개별 인증 (Google / App Store / Play / Jenkins / CI …)
   ${kleur.cyan("mimi-seed firebase")}    Firebase 앱 생성·config 다운로드·GA4 링크
@@ -390,6 +400,7 @@ ${kleur.bold("환경변수:")}
   MIMI_SEED_TOKEN     PAT 토큰 (CI/CD 무인증 모드)
   MIMI_SEED_WEB_BASE  서버 주소 (기본: https://mimi-seed.pryzm.gg)
   ANTHROPIC_API_KEY   AI 노트 생성 활성화 (선택)
+  MIMI_SEED_LANG      출력 언어 강제 (ko / en) — settings.json 보다 우선
   MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET
                       직접 만든 Google OAuth 클라이언트 사용 (미지정 시 로그인 때 웹 콘솔에서 받아옴)
 `);
@@ -411,6 +422,9 @@ async function main(): Promise<void> {
         break;
       case "setup":
         await cmdSetup(restArgs);
+        break;
+      case "lang":
+        await cmdLang(restArgs);
         break;
       case "status":
         await cmdStatus();

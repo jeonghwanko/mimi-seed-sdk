@@ -85,6 +85,14 @@ count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
    appears in the CLI ([[cli-deploy]], [[pitfalls]]). The social/Facebook/Instagram *validation* itself is shared
    with the MCP tools via `facebook/setup.ts` and `instagram/setup.ts` — one implementation, two entry points.
 
+## Bootstrapping a clone
+
+The repo is **not** an npm workspace — each package installs and builds independently. The root `package.json`
+is private and holds only bootstrap scripts: `scripts/install.mjs` walks both packages (`npm install` → `npm run
+build` → optional `npm link`) and can register the from-source server with `claude mcp add mimi-seed-dev`. The
+`mimi-seed-install` skill is a thin wrapper so an agent can do it from a prompt. See
+[`../from-source.md`](../from-source.md).
+
 ## Transports — two MCPs, do not conflate
 
 | | Local stdio MCP (**this repo**) | Remote HTTP MCP (web console, other repo) |

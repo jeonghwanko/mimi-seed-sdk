@@ -9,10 +9,11 @@ If you just want to *use* Mimi Seed, don't do any of this. Install from npm or t
 
 ## 0. What this repo is (read this first)
 
-**There is no root `package.json`, no npm workspace, and no root lockfile.** The two packages install and build
-**independently**. This is deliberate — but it means:
+**This is not an npm workspace.** The two packages install and build **independently** — there is no root
+lockfile and no hoisted `node_modules`. The root `package.json` exists only to hold the bootstrap script that
+walks both packages for you.
 
-> `npm install` at the repo root does **nothing**. You install twice, once per package.
+> Don't run `npm install` at the root expecting it to install the packages. Run `npm run setup` (below).
 
 | Package | npm name | What it is |
 |---|---|---|
@@ -29,16 +30,33 @@ If you just want to *use* Mimi Seed, don't do any of this. Install from npm or t
 
 ---
 
-## 2. Clone and build
+## 2. Clone and install
 
-Both packages, in order. This works verbatim in PowerShell 7 and in any POSIX shell:
+One command. It installs + builds both packages, links them globally, and registers the MCP server with
+Claude Code. Works verbatim in PowerShell 7 and any POSIX shell:
 
 ```bash
 git clone https://github.com/jeonghwanko/mimi-seed-sdk.git
 cd mimi-seed-sdk
+npm run setup
+```
 
-cd packages/mcp-server && npm install && npm run build && npm test
-cd ../cli              && npm install && npm run build && npm test
+Or, from a Claude Code prompt in the checkout, just say **"install it"** — the `mimi-seed-install` skill runs
+the same script and walks you through the rest.
+
+Variants:
+
+| Command | Does |
+|---|---|
+| `npm run setup` | install → build → `npm link` → `claude mcp add mimi-seed-dev` |
+| `npm run install:all` | install → build only (no global link, no MCP registration) |
+| `npm test` | runs both packages' test suites |
+
+Prefer to do it by hand? That's all `scripts/install.mjs` runs:
+
+```bash
+cd packages/mcp-server && npm install && npm run build && npm link
+cd ../cli              && npm install && npm run build && npm link
 ```
 
 ---
@@ -135,8 +153,12 @@ mimi-seed setup          # linked (3b)
 npm run dev -- setup     # or, from packages/cli
 ```
 
-The wizard walks every credential and tells you where to get each token
-([`credentials.md`](credentials.md)).
+On its first run the wizard asks for your **language** (Korean by default; `[2]` for English), then walks every
+credential and tells you where to get each token ([`credentials.md`](credentials.md)).
+
+Change it later with `mimi-seed lang en` / `mimi-seed lang ko`, or force it per-command with
+`MIMI_SEED_LANG=en`. The setting lives in `~/.mimi-seed/settings.json` and is passed down to the setup
+binaries, so the wizard and its child prompts never end up in different languages.
 
 > ⚠️ **Even from source, Google login is not self-contained.** The OAuth client id/secret is fetched at login
 > time from the Mimi Seed web console. If you're offline, air-gapped, or self-hosting, supply your own client:

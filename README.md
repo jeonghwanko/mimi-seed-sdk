@@ -48,7 +48,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 |---|---|
 | **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Option B — Local MCP** ↓ |
 | **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Option A — Remote MCP** ↓ |
-| **Hack on it** — run unpublished code from a git checkout | [Run from source](docs/from-source.md) |
+| **Hack on it** — run unpublished code from a git checkout | `git clone … && npm run setup` → [Run from source](docs/from-source.md) |
 
 > **Three things that trip every first install:**
 > 1. The local MCP server requires **Node 20+**.
@@ -127,7 +127,9 @@ Connect the rest of your accounts — App Store Connect, Play, Jenkins, CI, Goog
 npx mimi-seed setup
 ```
 
-It shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md).
+On first run it asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md).
+
+Switch language any time: `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
 
 ---
 
@@ -143,6 +145,7 @@ Detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claud
 |---------|--------------|
 | `mimi-seed init` | Connect project (issue PAT + auto-register apps) |
 | `mimi-seed setup` | **Connect every account, guided** — shows what's missing, tells you where each token comes from |
+| `mimi-seed lang` | CLI output language (`ko` / `en`) |
 | `mimi-seed status` | Connection status + app list |
 | `mimi-seed auth` | Individual credentials — `login` / `appstore` / `playstore` / `jenkins` / `ci` / … |
 | `mimi-seed doctor` | Diagnose environment (token · Git · apps · CI) |
@@ -409,6 +412,7 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/t
 | `MIMI_SEED_TOKEN` | PAT for CLI / CI headless mode |
 | `MIMI_SEED_WEB_BASE` | Server base URL (default: `https://mimi-seed.pryzm.gg`) |
 | `ANTHROPIC_API_KEY` | Enable AI release notes and review replies (optional) |
+| `MIMI_SEED_LANG` | Force CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json` |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Bring your own Google OAuth client. Otherwise it is fetched from the web console at login — set these if you're offline, air-gapped, or self-hosting ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
 
 ---

@@ -7,6 +7,7 @@
 // 갈라졌던 원인이다. 규칙: **자격증명 하나당 writer 는 정확히 하나**.
 
 import { spawn, spawnSync } from "node:child_process";
+import { resolveLang } from "./settings.js";
 
 export const MCP_PKG = "@yoonion/mimi-seed-mcp";
 
@@ -42,7 +43,12 @@ export async function runMcpBin(bin: McpBin, extraArgs: string[] = []): Promise<
 
   return new Promise((resolve) => {
     // Windows / POSIX 양쪽 호환을 위해 shell:true (npm link 는 Windows 에서 .cmd 셰임을 깐다).
-    const child = spawn(cmd, args, { stdio: "inherit", shell: true });
+    // 언어를 환경변수로 물려준다 — 안 그러면 마법사는 영어인데 자식 프롬프트만 한국어로 나온다.
+    const child = spawn(cmd, args, {
+      stdio: "inherit",
+      shell: true,
+      env: { ...process.env, MIMI_SEED_LANG: resolveLang() },
+    });
     child.on("error", (e) => {
       process.stderr.write(`\n  ❌ ${cmd} 실행 실패: ${e.message}\n`);
       resolve(1);

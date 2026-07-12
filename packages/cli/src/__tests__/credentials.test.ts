@@ -170,10 +170,19 @@ describe('레지스트리 불변식', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('모든 항목에 obtain(발급 안내)과 fix(복구 명령)가 있다', () => {
+  it('모든 항목에 obtain(발급 안내)과 fix(복구 명령)가 있다 — obtain 은 ko/en 양쪽', () => {
     for (const spec of CREDENTIALS) {
-      expect(spec.obtain.length, `${spec.id}: obtain 비어 있음`).toBeGreaterThan(0);
+      expect(spec.obtain.ko.length, `${spec.id}: obtain.ko 비어 있음`).toBeGreaterThan(0);
+      expect(spec.obtain.en.length, `${spec.id}: obtain.en 비어 있음`).toBeGreaterThan(0);
       expect(spec.fix, `${spec.id}: fix 비어 있음`).toBeTruthy();
+    }
+  });
+
+  // 지역화 누락은 타입으로는 못 잡는다 (빈 문자열도 string 이다) — 값으로 막는다.
+  it('모든 항목에 label 이 ko/en 양쪽 다 있다', () => {
+    for (const spec of CREDENTIALS) {
+      expect(spec.label.ko, `${spec.id}: label.ko 비어 있음`).toBeTruthy();
+      expect(spec.label.en, `${spec.id}: label.en 비어 있음`).toBeTruthy();
     }
   });
 

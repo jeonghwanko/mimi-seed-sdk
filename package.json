@@ -1,0 +1,21 @@
+{
+  "name": "mimi-seed-sdk",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo root — bootstrap scripts only. The publishable packages live in packages/. This is NOT an npm workspace: each package installs independently.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "node scripts/install.mjs --link --register-mcp",
+    "install:all": "node scripts/install.mjs",
+    "build": "node scripts/install.mjs",
+    "test": "npm test --prefix packages/mcp-server && npm test --prefix packages/cli"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeonghwanko/mimi-seed-sdk.git"
+  }
+}

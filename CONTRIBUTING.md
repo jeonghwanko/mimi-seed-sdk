@@ -29,9 +29,13 @@ source here — don't move it back into the web repo.
 
 Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22).
 
-The full clone → build → `npm link` → MCP-registration walkthrough — including the Windows
-and POSIX forms of each command — lives in **[`docs/from-source.md`](docs/from-source.md)**.
-Read that first; there is no root `package.json`, so the two packages install separately.
+```bash
+npm run setup     # installs + builds both packages, npm links them, registers the MCP server
+```
+
+The full walkthrough — including the Windows and POSIX forms of each command — lives in
+**[`docs/from-source.md`](docs/from-source.md)**. Note this is **not** an npm workspace: the root
+`package.json` only holds bootstrap scripts, and the two packages install separately.
 
 The PR gate, once you're set up — inside the package you changed:
 

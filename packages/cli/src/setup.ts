@@ -10,6 +10,9 @@ import * as readline from "node:readline";
 import os from "node:os";
 import {
   CREDENTIALS,
+  credLabel,
+  credNote,
+  credObtain,
   detectAll,
   isSatisfied,
   missingRequired,
@@ -24,6 +27,8 @@ import { migrateLegacyJenkins } from "./jenkins-config.js";
 import { detectHints } from "./detect.js";
 import { promptGitProviderSetup } from "./deploy.js";
 import { saveCiProviderConfig, verifyCiToken } from "./ci-providers.js";
+import { t } from "./i18n.js";
+import { isLangUnset, writeSettings, type Lang } from "./settings.js";
 
 function log(msg = ""): void {
   process.stdout.write(msg + "\n");
@@ -114,18 +119,20 @@ function statusLine(spec: CredSpec, detected: Map<CredId, Detected>, platforms: 
   const tail = d.present
     ? kleur.dim(d.detail ?? "")
     : isSatisfied(spec, detected)
-      ? kleur.dim(`${spec.note ?? "폴백으로 동작 중"}`)
+      ? kleur.dim(`${credNote(spec) ?? t().setup.fallbackWorking}`)
       : kleur.dim(`→ ${spec.fix}`);
 
-  return `  ${mark} ${spec.label.padEnd(24)} ${tail}`;
+  return `  ${mark} ${credLabel(spec).padEnd(24)} ${tail}`;
 }
 
 function printStatus(detected: Map<CredId, Detected>, platforms: Platform[]): void {
-  log(kleur.bold("연결 상태  ") + kleur.dim("(~/.mimi-seed)"));
+  const m = t().setup;
+  log(kleur.bold(m.statusTitle + "  ") + kleur.dim(m.statusDir));
   log();
   for (const group of ["core", "ci", "marketing"] as const) {
     const specs = CREDENTIALS.filter((c) => c.group === group);
-    const title = group === "core" ? "핵심" : group === "ci" ? "빌드 / CI" : "마케팅 · AI";
+    const title =
+      group === "core" ? m.groupCore : group === "ci" ? m.groupCi : m.groupMarketing;
     log(kleur.dim(`  ── ${title} ──`));
     for (const spec of specs) log(statusLine(spec, detected, platforms));
     log();
@@ -145,22 +152,46 @@ function printStatus(detected: Map<CredId, Detected>, platforms: Platform[]): vo
 function ask(q: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
-    rl.question(q, (a) => {
+    // ⚠️ `rl.close()` 는 'close' 이벤트를 **동기적으로** 발화시킨다. 답변 콜백에서 close 를 먼저
+    // 부르고 resolve 를 나중에 부르면, close 리스너의 resolve('') 가 promise 를 **먼저** 확정해
+    // 버려서 모든 프롬프트가 빈 문자열을 반환한다 — 마법사가 사용자의 답을 무시하고 전부
+    // "건너뛰기" 로 처리한다. 먼저 이긴 쪽 하나만 확정되도록 잠근다.
+    let done = false;
+    const finish = (value: string) => {
+      if (done) return;
+      done = true;
       rl.close();
-      resolve(a.trim());
-    });
+      resolve(value);
+    };
+    rl.question(q, (a) => finish(a.trim()));
     // stdin 이 EOF 면 question 콜백이 영원히 안 온다 — 조용히 멈추는 대신 빈 답으로 진행한다.
-    rl.on('close', () => resolve(''));
+    rl.on('close', () => finish(''));
   });
 }
 
 function printObtain(spec: CredSpec): void {
   log();
-  log(kleur.bold(`  ${spec.label} — 미리 준비할 것`));
-  for (const line of spec.obtain) log(kleur.dim(`    ${line}`));
+  log(kleur.bold(t().setup.obtainTitle(credLabel(spec))));
+  for (const line of credObtain(spec)) log(kleur.dim(`    ${line}`));
   if (spec.docsAnchor) {
-    log(kleur.dim(`    자세히: docs/credentials.md#${spec.docsAnchor}`));
+    log(kleur.dim(t().setup.obtainMore(spec.docsAnchor)));
   }
+  log();
+}
+
+/**
+ * 첫 실행이면 언어부터 묻는다 (기본 한국어).
+ *
+ * 언어를 먼저 정해야 이 뒤의 모든 출력 — 그리고 마법사가 spawn 하는 setup bin 들 — 이
+ * 같은 언어로 나온다. 이미 정해져 있거나 비대화 모드면 묻지 않는다.
+ */
+async function ensureLangChosen(): Promise<void> {
+  if (!isLangUnset()) return;
+  const answer = await ask(t().lang.ask);
+  const lang: Lang = answer.trim() === "2" || answer.trim().toLowerCase() === "en" ? "en" : "ko";
+  writeSettings({ lang });
+  process.env.MIMI_SEED_LANG = lang; // 이번 프로세스 + spawn 될 자식들에 즉시 반영
+  log(kleur.green(t().lang.saved(lang)));
   log();
 }
 
@@ -171,35 +202,35 @@ async function connectOne(spec: CredSpec): Promise<boolean> {
       const code = await runMcpBin(spec.setup.bin, spec.setup.args ?? []);
       if (code !== 0) {
         // 한 개가 실패해도 마법사 전체를 중단하지 않는다 — 나머지는 계속 연결할 수 있어야 한다.
-        log(kleur.yellow(`  ⚠ ${spec.label} 설정이 완료되지 않았어 (exit ${code}). 나중에 다시: ${spec.fix}`));
+        log(kleur.yellow(t().setup.binFailed(credLabel(spec), code, spec.fix)));
       }
       return true;
     }
     case "cli": {
       const provider = spec.setup.handler;
       const cfg = await promptGitProviderSetup(provider);
-      log(kleur.dim("  🔎 토큰 검증 중..."));
+      log(kleur.dim(t().setup.verifying));
       const check = await verifyCiToken(cfg);
       if (!check.ok) {
-        log(kleur.red(`  ❌ 토큰 검증 실패: ${check.reason}`));
-        log(kleur.dim(`     저장하지 않았어. 다시: ${spec.fix}`));
+        log(kleur.red(t().setup.verifyFailed(check.reason ?? "")));
+        log(kleur.dim(t().setup.notSaved(spec.fix)));
         return true;
       }
       saveCiProviderConfig(cfg);
-      log(kleur.green(`  ✅ ${spec.label} 연결됨${check.login ? ` (${check.login})` : ""} → ~/.mimi-seed/ci.json`));
+      log(kleur.green(t().setup.ciSaved(credLabel(spec), check.login ? ` (${check.login})` : "")));
       return true;
     }
     case "command": {
       // init 은 자체 브라우저 핸드셰이크가 필요하다 — 여기서 대신 실행하지 않고 안내만.
-      log(kleur.yellow(`  이건 별도 명령으로 실행해줘:  ${kleur.cyan(spec.setup.run)}`));
-      await ask(kleur.dim("  (엔터를 누르면 계속) "));
+      log(kleur.yellow(t().setup.runSeparately(kleur.cyan(spec.setup.run))));
+      await ask(kleur.dim(t().setup.pressEnter));
       return true;
     }
     case "env": {
-      log(kleur.yellow(`  환경변수로 설정하는 항목이야:`));
+      log(kleur.yellow(t().setup.envVar));
       log(kleur.cyan(`    export ${spec.setup.envVar}=...`));
       log(kleur.dim(`    (Windows PowerShell:  $env:${spec.setup.envVar} = "..." )`));
-      await ask(kleur.dim("  (엔터를 누르면 계속) "));
+      await ask(kleur.dim(t().setup.pressEnter));
       return true;
     }
   }
@@ -214,6 +245,11 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   // 레거시 config.json.jenkins 가 남아 있으면 jenkins.json 으로 이관 (1회성, 조용히).
   migrateLegacyJenkins(home);
 
+  // 첫 실행이면 언어부터. 대화형일 때만 묻는다 (비대화면 기본 ko / 환경변수).
+  if (resolveMode(opts, process.env, process.stdin.isTTY) === "interactive") {
+    await ensureLangChosen();
+  }
+
   const hints = await detectHints(process.cwd());
   const platforms: Platform[] =
     opts.platforms ??
@@ -222,8 +258,8 @@ export async function cmdSetup(argv: string[]): Promise<void> {
       hints.some((h) => h.bundleId) ? "ios" : null,
     ].filter(Boolean) as Platform[]);
 
-  log(kleur.bold("mimi-seed setup"));
-  if (platforms.length > 0) log(kleur.dim(`  감지된 플랫폼: ${platforms.join(", ")}`));
+  log(kleur.bold(t().setup.title));
+  if (platforms.length > 0) log(kleur.dim(t().setup.platformsDetected(platforms.join(", "))));
   log();
 
   let detected = detectAll(home);
@@ -240,8 +276,8 @@ export async function cmdSetup(argv: string[]): Promise<void> {
     // 비대화: 절대 spawn/prompt 하지 않는다.
     const missing = missingRequired(detected, platforms);
     if (missing.length > 0) {
-      log(kleur.yellow("  필수 항목 누락:"));
-      for (const spec of missing) log(kleur.yellow(`    • ${spec.label} → ${spec.fix}`));
+      log(kleur.yellow(t().setup.missingRequired));
+      for (const spec of missing) log(kleur.yellow(`    • ${credLabel(spec)} → ${spec.fix}`));
       log();
     }
 
@@ -249,13 +285,13 @@ export async function cmdSetup(argv: string[]): Promise<void> {
     // 조용히 성공(exit 0)하면 `mimi-seed auth ci && mimi-seed deploy` 같은 스크립트가
     // 설정 없이 그대로 진행해버린다. 명확히 실패시킨다.
     if (opts.only && plan.length > 0) {
-      log(kleur.red("  ✗ 이 자격증명은 대화형 입력이 필요해서 여기서는 설정할 수 없어:"));
-      for (const spec of plan) log(kleur.red(`    • ${spec.label}`));
-      log(kleur.dim("    터미널에서 실행해줘 (Git Bash 등 TTY 미감지 환경이면 --interactive)."));
+      log(kleur.red(t().setup.cannotInteract));
+      for (const spec of plan) log(kleur.red(`    • ${credLabel(spec)}`));
+      log(kleur.dim(t().setup.cannotInteractHint));
       process.exit(1);
     }
 
-    log(kleur.dim("  대화형으로 연결하려면 터미널에서:  mimi-seed setup"));
+    log(kleur.dim(t().setup.runInTerminal));
     if (opts.failOnMissing && missing.length > 0) process.exit(1);
     return;
   }
@@ -263,18 +299,18 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   if (plan.length === 0) {
     // "연결할 게 없다"는 요청 범위 안에서의 이야기다 — --only 로 좁혔다면 그렇게 말해야 한다.
     if (opts.only) {
-      log(kleur.green("  ✅ 요청한 항목은 이미 연결돼 있어."));
-      log(kleur.dim("     다시 설정하려면: mimi-seed setup --reconnect <id>"));
+      log(kleur.green(t().setup.onlyAlreadyDone));
+      log(kleur.dim(t().setup.onlyReconnectHint));
     } else {
-      log(kleur.green("  ✅ 연결할 게 더 없어. 다 됐다."));
+      log(kleur.green(t().setup.allDone));
     }
-    log(kleur.dim("     점검: mimi-seed doctor"));
+    log(kleur.dim("     " + t().common.checkWith));
     // 여기서 그냥 return 하면 --fail-on-missing 이 무시된다 (--only 오타로 plan 이 빌 수도 있다).
     if (opts.failOnMissing && missingRequired(detected, platforms).length > 0) process.exit(1);
     return;
   }
 
-  log(kleur.dim(`  ${plan.length}개 항목을 순서대로 물어볼게. 언제든 s=건너뛰기, q=종료.`));
+  log(kleur.dim(t().setup.planCount(plan.length)));
   log();
 
   let aborted = false;
@@ -282,17 +318,18 @@ export async function cmdSetup(argv: string[]): Promise<void> {
     if (aborted) break;
     const req =
       spec.requirement === "optional"
-        ? kleur.dim("(선택)")
+        ? kleur.dim(`(${t().common.optional})`)
         : spec.requirement === "platform"
-          ? kleur.dim(`(${spec.platform} 배포에 필요)`)
-          : kleur.red("(필수)");
+          ? kleur.dim(t().setup.neededFor(spec.platform!))
+          : kleur.red(`(${t().common.required})`);
 
     // 한 항목당 루프 — '?' 는 단계를 소비하지 않는다.
     for (;;) {
-      log(kleur.bold(`▸ ${spec.label} ${req}`));
-      if (spec.note) log(kleur.dim(`  ${spec.note}`));
+      log(kleur.bold(`▸ ${credLabel(spec)} ${req}`));
+      const note = credNote(spec);
+      if (note) log(kleur.dim(`  ${note}`));
       const answer = (
-        await ask("  [c] 연결  [s] 건너뛰기  [?] 이건 어떻게 구하나요  [q] 종료 : ")
+        await ask(t().setup.prompt)
       ).toLowerCase();
 
       if (answer === "?" || answer === "h") {
@@ -301,12 +338,12 @@ export async function cmdSetup(argv: string[]): Promise<void> {
       }
       if (answer === "q") {
         log();
-        log(kleur.dim("  중단했어. 이어서 하려면 다시:  mimi-seed setup"));
+        log(kleur.dim(t().setup.quit));
         aborted = true;
         break;
       }
       if (answer === "s" || answer === "") {
-        log(kleur.dim(`  건너뜀. 나중에: ${spec.fix}`));
+        log(kleur.dim(t().setup.skipped(spec.fix)));
         log();
         break;
       }
@@ -315,7 +352,7 @@ export async function cmdSetup(argv: string[]): Promise<void> {
         log();
         break;
       }
-      log(kleur.dim("  c / s / ? / q 중에서 골라줘."));
+      log(kleur.dim(t().setup.promptInvalid));
     }
   }
 
@@ -326,12 +363,12 @@ export async function cmdSetup(argv: string[]): Promise<void> {
 
   const stillMissing = missingRequired(detected, platforms);
   if (stillMissing.length === 0) {
-    log(kleur.green("  ✅ 필수 연결 완료."));
+    log(kleur.green(t().setup.requiredDone));
   } else {
-    log(kleur.yellow("  아직 필수 항목이 남아 있어:"));
-    for (const spec of stillMissing) log(kleur.yellow(`    • ${spec.label} → ${spec.fix}`));
+    log(kleur.yellow(t().setup.stillMissing));
+    for (const spec of stillMissing) log(kleur.yellow(`    • ${credLabel(spec)} → ${spec.fix}`));
   }
-  log(kleur.dim("     점검: mimi-seed doctor   ·   배포: mimi-seed deploy"));
+  log(kleur.dim(t().setup.nextSteps));
   log();
 
   if (opts.failOnMissing && stillMissing.length > 0) process.exit(1);

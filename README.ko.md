@@ -48,7 +48,7 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 |---|---|
 | **스토어에 쓰기** — 릴리스 노트 적용, 스크린샷 업로드, 심사 제출, Firebase / AdMob / IAM (위 데모의 전부) | **방법 B — Local MCP** ↓ |
 | **상태·준비도** + App Store IAP 심사 노트/스크린샷 — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **방법 A — Remote MCP** ↓ |
-| **코드를 고치거나** 배포 전 코드를 git 체크아웃에서 돌리기 | [소스에서 실행](docs/from-source.ko.md) |
+| **코드를 고치거나** 배포 전 코드를 git 체크아웃에서 돌리기 | `git clone … && npm run setup` → [소스에서 실행](docs/from-source.ko.md) |
 
 > **첫 설치에서 누구나 걸리는 세 가지:**
 > 1. Local MCP 서버는 **Node 20+** 가 필요합니다.
@@ -127,7 +127,9 @@ Claude Desktop (`claude_desktop_config.json`):
 npx mimi-seed setup
 ```
 
-무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md).
+첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md).
+
+언어 변경: `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
 
 ---
 
@@ -143,6 +145,7 @@ Expo · Gradle · Info.plist · pbxproj 자동 감지. `.claude/mimi-seed.md`와
 |--------|------|
 | `mimi-seed init` | 프로젝트 연결 (PAT 발급 + 앱 자동 등록) |
 | `mimi-seed setup` | **가진 계정을 한 번에 연결 (안내형)** — 뭐가 빠졌는지, 각 토큰을 어디서 받는지 알려줌 |
+| `mimi-seed lang` | CLI 출력 언어 (`ko` / `en`) |
 | `mimi-seed status` | 연결 상태 + 앱 목록 |
 | `mimi-seed auth` | 자격증명 개별 인증 — `login` / `appstore` / `playstore` / `jenkins` / `ci` / … |
 | `mimi-seed doctor` | 환경 진단 (토큰 · Git · 앱 · CI) |
@@ -405,6 +408,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | `MIMI_SEED_TOKEN` | PAT — CLI / CI 무인증 모드 |
 | `MIMI_SEED_WEB_BASE` | 서버 주소 (기본: `https://mimi-seed.pryzm.gg`) |
 | `ANTHROPIC_API_KEY` | AI 릴리즈 노트·리뷰 답변 활성화 (선택) |
+| `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선 |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 자체 Google OAuth 클라이언트 사용. 미지정 시 로그인 때 웹 콘솔에서 받아온다 — 오프라인·폐쇄망·자체호스팅이면 지정할 것 ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
 
 ---

@@ -14,6 +14,7 @@ Routed by `main()` in `cli/src/index.ts`:
 |---|---|---|
 | `init` | `index.ts` (`cmdInit`) | detect app → browser PAT handshake → register apps → scaffold project context files |
 | `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
+| `lang` | `lang.ts` | CLI output language (`ko` / `en`) → `~/.mimi-seed/settings.json`. `setup` asks on first run; `MIMI_SEED_LANG` overrides |
 | `status` | `index.ts` (`cmdStatus`) | show connection + `list_apps` via the remote MCP |
 | `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
@@ -27,6 +28,21 @@ Routed by `main()` in `cli/src/index.ts`:
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 
 Per-command options are the SSOT in `CMD_USAGE` in `index.ts` (also shown by `mimi-seed <cmd> --help`).
+
+### Output language
+
+`settings.ts` owns `~/.mimi-seed/settings.json` (`{ lang }`); `i18n.ts` holds the catalogs (`ko` is the source,
+`en` must satisfy `typeof ko`, so a missing translation is a **compile error**). `t()` resolves the language at
+call time, not module-load time — the wizard asks for a language on its very first prompt and everything after it
+is already in that language.
+
+**`runMcpBin` passes `MIMI_SEED_LANG` down to the spawned setup bins**, which resolve it the same way
+(`mcp-server/src/lib/lang.ts`). Without that, the wizard would be in English while its child prompts came back in
+Korean. The credential registry's human text (`label` / `note` / `obtain`) is `LocalizedText`, read through
+`credLabel()` / `credNote()` / `credObtain()`.
+
+MCP **tool descriptions are deliberately not translated** — they are the LLM's interface, not a human's, and
+translating them would move tool-selection quality around for no user benefit.
 
 ### The credential registry — one list, three consumers
 

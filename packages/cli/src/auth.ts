@@ -6,8 +6,9 @@
 // 자격증명 **목록**은 여기 없다 — credentials.ts 레지스트리가 SSOT 다 (setup/doctor 와 공유).
 
 import kleur from "kleur";
-import { CREDENTIALS, detectAll, isSatisfied } from "./credentials.js";
+import { CREDENTIALS, credLabel, detectAll, isSatisfied } from "./credentials.js";
 import { MCP_PKG, runMcpBin } from "./mcp-bin.js";
+import { t } from "./i18n.js";
 
 function log(msg: string): void {
   process.stdout.write(msg + "\n");
@@ -49,7 +50,7 @@ ${kleur.dim(`내부적으로 ${MCP_PKG} 의 mimi-seed-*-auth CLI를 호출합니
 }
 
 function printAllCredStatus(): void {
-  log(kleur.bold("로컬 자격증명 상태  ") + kleur.dim("(~/.mimi-seed)"));
+  log(kleur.bold(t().auth.statusTitle + "  ") + kleur.dim("(~/.mimi-seed)"));
   const detected = detectAll();
   for (const spec of CREDENTIALS) {
     const d = detected.get(spec.id)!;
@@ -61,7 +62,7 @@ function printAllCredStatus(): void {
           ? kleur.dim("·")
           : kleur.red("✗");
     const tail = d.present ? kleur.dim(d.detail ?? "") : kleur.dim(`→ ${spec.fix}`);
-    log(`  ${mark} ${spec.label.padEnd(24)} ${tail}`);
+    log(`  ${mark} ${credLabel(spec).padEnd(24)} ${tail}`);
   }
   log(kleur.dim("\n  한 번에 연결: mimi-seed setup"));
 }
@@ -114,7 +115,7 @@ export async function cmdAuth(args: string[]): Promise<void> {
       mcpArgs = ["--logout", ...rest];
       break;
     default:
-      log(kleur.red(`알 수 없는 auth 서브명령: ${sub}`));
+      log(kleur.red(t().auth.unknownSub(sub ?? "")));
       printAuthHelp();
       process.exit(1);
   }

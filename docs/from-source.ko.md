@@ -9,10 +9,10 @@
 
 ## 0. 이 리포의 구조 (먼저 읽을 것)
 
-**루트에 `package.json` 도, npm 워크스페이스도, 루트 lockfile 도 없다.** 두 패키지는 **각각 따로** 설치·빌드한다.
-의도한 구조지만, 다음을 뜻한다:
+**npm 워크스페이스가 아니다.** 두 패키지는 **각각 따로** 설치·빌드한다 (루트 lockfile 도, 호이스팅된
+`node_modules` 도 없다). 루트 `package.json` 은 두 패키지를 대신 돌아주는 부트스트랩 스크립트만 들고 있다.
 
-> 루트에서 `npm install` 을 해도 **아무 일도 일어나지 않는다.** 패키지마다 한 번씩, 총 두 번 설치한다.
+> 루트에서 `npm install` 을 한다고 패키지가 설치되지 않는다. 아래의 `npm run setup` 을 쓴다.
 
 | 패키지 | npm 이름 | 정체 |
 |---|---|---|
@@ -29,16 +29,31 @@
 
 ---
 
-## 2. Clone 후 빌드
+## 2. Clone 후 설치
 
-두 패키지를 순서대로. PowerShell 7 과 POSIX 셸 양쪽에서 그대로 동작한다:
+한 명령이면 된다. 두 패키지를 install·build 하고, 전역 링크하고, Claude Code 에 MCP 서버까지 등록한다.
+PowerShell 7 과 POSIX 셸 양쪽에서 그대로 동작한다:
 
 ```bash
 git clone https://github.com/jeonghwanko/mimi-seed-sdk.git
 cd mimi-seed-sdk
+npm run setup
+```
 
-cd packages/mcp-server && npm install && npm run build && npm test
-cd ../cli              && npm install && npm run build && npm test
+체크아웃 안에서 Claude Code 프롬프트에 **"설치해줘"** 라고만 해도 된다 — `mimi-seed-install` 스킬이 같은
+스크립트를 돌리고 나머지도 안내한다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `npm run setup` | install → build → `npm link` → `claude mcp add mimi-seed-dev` |
+| `npm run install:all` | install → build 만 (전역 링크·MCP 등록 없음) |
+| `npm test` | 두 패키지 테스트 전부 실행 |
+
+손으로 하고 싶다면, `scripts/install.mjs` 가 돌리는 건 이게 전부다:
+
+```bash
+cd packages/mcp-server && npm install && npm run build && npm link
+cd ../cli              && npm install && npm run build && npm link
 ```
 
 ---
@@ -133,8 +148,12 @@ mimi-seed setup          # 링크했다면 (3b)
 npm run dev -- setup     # 또는 packages/cli 안에서
 ```
 
-마법사가 모든 자격증명을 순회하며 각 토큰을 어디서 받는지 알려준다
-([`credentials.ko.md`](credentials.ko.md)).
+첫 실행이면 **언어**를 먼저 묻고(기본 한국어, `[2]` 를 누르면 English), 그다음 모든 자격증명을 순회하며 각
+토큰을 어디서 받는지 알려준다 ([`credentials.ko.md`](credentials.ko.md)).
+
+나중에 바꾸려면 `mimi-seed lang en` / `mimi-seed lang ko`, 한 번만 강제하려면 `MIMI_SEED_LANG=en`.
+설정은 `~/.mimi-seed/settings.json` 에 저장되고 setup 바이너리들에도 물려주므로, 마법사와 자식 프롬프트의
+언어가 어긋나지 않는다.
 
 > ⚠️ **소스에서 돌려도 Google 로그인은 자립적이지 않다.** OAuth 클라이언트 id/secret 을 로그인 시점에 Mimi Seed
 > 웹 콘솔에서 받아온다. 오프라인·폐쇄망·자체호스팅이라면 자체 클라이언트를 지정해야 한다:

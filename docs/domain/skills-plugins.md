@@ -9,7 +9,7 @@
 
 ## Skills (`skills/`)
 
-Five skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
+Six skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
 
 | Skill | Role |
 |---|---|
@@ -18,6 +18,7 @@ Five skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) aut
 | `appstore-publish` | App Store Connect metadata, TestFlight builds, screenshots |
 | `deploy` | End-to-end: CI build → readiness check → release notes → store apply |
 | `mimi-seed-update` | Upgrade an install to the latest server / skills / CLI, then verify the *running* version |
+| `mimi-seed-install` | Install **from a clone**: `npm run setup` (both packages → build → `npm link` → `claude mcp add`), then hand off to `mimi-seed setup` for language + credentials |
 
 The `mimi-seed` skill explicitly points deeper work at [`docs/agent-guide.md`](../agent-guide.md). Skill bodies
 are written bilingually (Korean prose + English trigger lines); this ontology stays English per repo decision.
