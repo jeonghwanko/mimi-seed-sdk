@@ -349,8 +349,8 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| **App Store Connect** | 33 | `appstore_submit_for_review` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` |
-| **Google Play** | 28 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
+| **App Store Connect** | 34 | `appstore_submit_for_review` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` |
+| **Google Play** | 29 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
 | **Firebase** | 20 | `firebase_create_project` · `firebase_create_android_app` · `firebase_get_android_config` |
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |

@@ -20,6 +20,8 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `play-service-accounts/<packageName>.json` | **Per-package** Play service account — wins over the default | `mimi-seed-playstore-auth` / `playstore_register_service_account` |
 | `play-service-account.json` | Default / legacy Play service account — fallback when no per-package match | same |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
+| `facebook.json`, `instagram.json` | Page / account access tokens for the social post tools (written `0600`) | `facebook_save_config` / `instagram_save_config` |
+| `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
 
 > Treat every file above as a secret. A repo `.gitignore` should keep them out even if a user runs the CLI

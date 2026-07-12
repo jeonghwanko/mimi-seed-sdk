@@ -63,8 +63,14 @@ The CLI + local MCP live **only** here. The private web console is a separate re
 Hand-synced tool counts drifted repeatedly (a 2026-07 review found three stale generations of the number at
 once). The inventory now lives in `packages/mcp-server/tool-manifest.json`, enforced by a boot smoke test
 (`src/__tests__/tool-manifest.test.ts`) that starts the real server and diffs the registered tool list against
-the manifest — add/remove/rename a tool without updating the manifest and `npm test` fails. ❌ Don't hard-code
-exact totals in prose docs or READMEs; write "150+" or point to the manifest/[[tool-catalog]].
+the manifest — add/remove/rename a tool without updating the manifest and `npm test` fails.
+
+That test only guards manifest ↔ **server**, so the *docs* kept drifting behind it (a 2026-07 pass found a
+tool missing from the catalog and two stale per-domain counts). `src/__tests__/docs-drift.test.ts` now closes
+the loop: it diffs the manifest against [[tool-catalog]] — every registered tool must be listed, and the title
+total + "Counts by domain" table must match. ❌ Don't hard-code exact totals anywhere else; write "150+" or
+point to the manifest/[[tool-catalog]]. The README count columns are still **hand-synced** — check them on
+release ([[_index]] "Fact → SSOT → mirror" table).
 
 ## 9. Tool name ≠ register file
 

@@ -44,7 +44,7 @@ Each file lives under `docs/domain/`. Read the one that matches your task first.
 | [auth-credentials.md](auth-credentials.md) | `~/.mimi-seed/` credential map (locations & roles only), OAuth vs ASC JWT vs Play SA, per-package SA resolution, setup sub-CLIs, `ANTHROPIC_API_KEY` | auth, credentials, tokens.json, appstore.json, service account, per-package, JWT, OAuth |
 | [external-apis.md](external-apis.md) | What each domain talks to (`googleapis` surfaces, ASC REST+JWT, `@onesub/providers`, Anthropic) and the friendly-error translation layer | googleapis, App Store Connect, jose, friendly error, google-errors, 403, providers |
 | [cli-deploy.md](cli-deploy.md) | CLI command topology, app detection, CI providers, the deploy pipeline data flow, MCP registration, init handshake, release manifest | cli, init, deploy, detect, ci-providers, handshake, mcp-config, releases.json |
-| [skills-plugins.md](skills-plugins.md) | The 4 skills, plugin manifests (`.claude-plugin` vs `.codex-plugin`), multi-client surface differences, slash commands & MCP resources | skills, plugin, codex, slash command, resources, prompts, multi-client |
+| [skills-plugins.md](skills-plugins.md) | The 5 skills, plugin manifests (`.claude-plugin` vs `.codex-plugin`), multi-client surface differences, slash commands & MCP resources | skills, plugin, codex, slash command, resources, prompts, multi-client |
 | [pitfalls.md](pitfalls.md) | Validated SDK-side traps — deferred tools, draft-app track, 403≠permission, Play↔Console overwrite, CI≠Jenkins, two-repo drift, tool-count sync | pitfalls, gotchas, deferred, draft app, 403, drift, two repos, tool count |
 
 ## Read X before Y
@@ -74,6 +74,45 @@ Read: docs/domain/pitfalls.md
 
 ---
 
-_This ontology is manually maintained against the code. When a register, credential path, or command changes,
-update the matching `docs/domain/*` file. It is a **public repo**: describe structure and behavior only — never
-secret values, real identifiers, or private web-console internals (see the security note in each doc)._
+## What this folder manages (scope)
+
+**In scope** — facts that live *between* files and cannot be recovered by reading any single one:
+cross-module wiring, why a thing is built the way it is, and traps that cost someone an hour.
+
+**Out of scope** — anything one file already states authoritatively. Don't mirror it here; link to it:
+
+| Don't put here | It already lives in |
+|---|---|
+| A tool's parameters / schema | `registers/<domain>.ts` (the `server.tool(…)` call) |
+| A CLI command's flags | `CMD_USAGE` in `cli/src/index.ts` |
+| How an agent should *call* tools at runtime | [`../agent-guide.md`](../agent-guide.md) |
+| Install / usage instructions for end users | `README.md` |
+| Package or plugin **version numbers** | `package.json`, `plugin.json` — versions rot on every release; never write one into this folder |
+| Secret values, real identifiers, console internals | nowhere — this is a public repo |
+
+## Fact → SSOT → mirror → who enforces it
+
+The ontology is a *mirror* of the code, so every mirrored fact can drift. This is the drift map:
+
+| Fact | SSOT (code) | Mirrored in | Enforced by |
+|---|---|---|---|
+| Tool names & inventory | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) | ✅ `tool-manifest.test.ts` (manifest ↔ live server) + `docs-drift.test.ts` (manifest ↔ catalog) |
+| Exact tool counts | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) **only** | ✅ `docs-drift.test.ts` — prose elsewhere must say "150+", never a number |
+| Domain counts in the READMEs | `tool-manifest.json` | `README.md`, `README.ko.md` | ⚠️ **manual** — check on release |
+| Credential files & roles | `src/*/config.ts`, `src/auth/*` | [auth-credentials.md](auth-credentials.md) | ⚠️ manual |
+| CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |
+| Skills, prompts, resources | `skills/*/SKILL.md`, `prompts.ts`, `resources.ts` | [skills-plugins.md](skills-plugins.md) | ⚠️ manual (incl. the skill count in the table above) |
+
+## Update triggers
+
+| When you… | Also update |
+|---|---|
+| add / rename / delete a tool | `tool-manifest.json` **and** [tool-catalog.md](tool-catalog.md) (tests fail otherwise) + the README count columns |
+| add a credential file or auth flow | [auth-credentials.md](auth-credentials.md) |
+| add a CLI command or change the deploy pipeline | [cli-deploy.md](cli-deploy.md) |
+| add a skill, prompt, or plugin surface | [skills-plugins.md](skills-plugins.md) + the skill count in this index |
+| wire a new Google/Apple API or error path | [external-apis.md](external-apis.md) |
+| lose an hour to a non-obvious trap | [pitfalls.md](pitfalls.md) — that is what it is for |
+
+It is a **public repo**: describe structure and behavior only — never secret values, real identifiers, or
+private web-console internals (see the security note in each doc).

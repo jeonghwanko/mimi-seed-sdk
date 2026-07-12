@@ -1,4 +1,4 @@
-# Tool catalog — 154 tools across 17 domains
+# Tool catalog — 156 tools across 17 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,8 +11,8 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 33 |
-| Google Play | `registers/playstore.ts` | 28 |
+| App Store Connect | `registers/appstore.ts` | 34 |
+| Google Play | `registers/playstore.ts` | 29 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
@@ -28,15 +28,16 @@
 | Auth | `registers/auth.ts` | 3 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
-| **Total** | **17 modules** | **154** |
+| **Total** | **17 modules** | **156** |
 
-## Google Play — `registers/playstore.ts` (28) · impl `playstore/tools.ts`
+## Google Play — `registers/playstore.ts` (29) · impl `playstore/tools.ts`
 
 - Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
   `playstore_list_subscriptions` · `playstore_list_products` · `playstore_list_service_accounts` ·
   `playstore_verify_service_account` · `playstore_plan_release`
-- **W** `playstore_update_listing` · `playstore_upload_image` · `playstore_replace_images` ·
+- **W** `playstore_update_listing` · `playstore_update_details` (developer contact + default language —
+  `edits.details.patch`, distinct from the store listing) · `playstore_upload_image` · `playstore_replace_images` ·
   `playstore_update_release_notes` · `playstore_update_latest_release_notes` · `playstore_reply_review` (public) ·
   `playstore_create_onetime_product` · `playstore_create_subscription` · `playstore_update_product` ·
   `playstore_register_service_account` · `setup_playstore_connection`
