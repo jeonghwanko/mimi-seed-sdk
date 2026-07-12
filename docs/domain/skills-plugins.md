@@ -9,7 +9,7 @@
 
 ## Skills (`skills/`)
 
-Four skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
+Five skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
 
 | Skill | Role |
 |---|---|
@@ -17,6 +17,7 @@ Four skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) aut
 | `playstore-publish` | Play Store listing / track release / image replace / review reply |
 | `appstore-publish` | App Store Connect metadata, TestFlight builds, screenshots |
 | `deploy` | End-to-end: CI build → readiness check → release notes → store apply |
+| `mimi-seed-update` | Upgrade an install to the latest server / skills / CLI, then verify the *running* version |
 
 The `mimi-seed` skill explicitly points deeper work at [`docs/agent-guide.md`](../agent-guide.md). Skill bodies
 are written bilingually (Korean prose + English trigger lines); this ontology stays English per repo decision.
@@ -32,6 +33,11 @@ are written bilingually (Korean prose + English trigger lines); this ontology st
 | `.mcp.json` | MCP registration | spawns the **local** server: `npx -y @yoonion/mimi-seed-mcp` |
 
 Keep the version fields in the two `plugin.json` manifests in step with each other when bumping.
+
+`.mcp.json` deliberately does **not** pin a version (`@yoonion/mimi-seed-mcp`, not `@latest`). Consequence: updating
+the *plugin* refreshes skills and manifests but can leave a **stale server** behind, because npx may reuse a cached
+copy from `_npx`. That split — new skills, old tools — is the main reason the `mimi-seed-update` skill exists; it is
+the update path users should follow rather than reinstalling in a loop.
 
 ## Slash commands & MCP resources
 

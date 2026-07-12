@@ -335,6 +335,7 @@ Claude Code / Codex 플러그인은 [`skills/`](skills/)의 스킬을 함께 로
 | `playstore-publish` | Play Store 등록정보, 이미지, 릴리즈 노트, 트랙 출시/승격 |
 | `appstore-publish` | App Store Connect What's New + 스크린샷 |
 | `deploy` | CI 빌드 → 블로커 점검 → 노트 → 스토어 적용 end-to-end |
+| `mimi-seed-update` | 서버·스킬·CLI를 최신으로 올리고 **실제 돌고 있는 버전**까지 검증 |
 
 에이전트를 직접 붙인다면 **[`docs/agent-guide.md`](docs/agent-guide.md)** 를 먼저 보세요. 도구 로딩 방식(deferred-tool / `ToolSearch select:`), 호출 순서, 인증 모델, 비가역 작업 안전수칙이 정리되어 있습니다.
 

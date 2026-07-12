@@ -335,6 +335,7 @@ Bundled skills (auto-loaded by the Claude Code / Codex plugin from [`skills/`](s
 | `playstore-publish` | Play Store listing, images, release notes, track promote |
 | `appstore-publish` | App Store Connect What's New + screenshots |
 | `deploy` | End-to-end: CI build → blocker check → notes → apply |
+| `mimi-seed-update` | Update to the latest server / skills / CLI — and verify the *running* version |
 
 Building an agent on top of Mimi Seed? Read **[`docs/agent-guide.md`](docs/agent-guide.md)** —
 how tools load (the deferred-tool / `ToolSearch select:` pattern), the right call order,
