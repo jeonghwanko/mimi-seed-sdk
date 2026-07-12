@@ -1,6 +1,6 @@
 {
   "name": "@yoonion/mimi-seed-mcp",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Codex / Cursor / any MCP client.",
   "type": "module",
   "bin": {
@@ -9,6 +9,9 @@
     "mimi-seed-appstore-auth": "dist/appstore/setup-cli.js",
     "mimi-seed-playstore-auth": "dist/auth/playstore-setup-cli.js",
     "mimi-seed-bigquery-auth": "dist/auth/bigquery-setup-cli.js",
+    "mimi-seed-jenkins-auth": "dist/jenkins/setup-cli.js",
+    "mimi-seed-googleads-auth": "dist/googleads/setup-cli.js",
+    "mimi-seed-social-auth": "dist/social/setup-cli.js",
     "mimi-seed-firebase": "dist/firebase/cli.js",
     "mimi-seed-admob": "dist/admob/cli.js",
     "mimi-seed-ga4": "dist/ga4/cli.js"

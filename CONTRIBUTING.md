@@ -27,22 +27,16 @@ source here — don't move it back into the web repo.
 
 ## Development setup
 
-Requires Node 20+ (CI runs on 22). Work inside the package you're changing:
+Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22).
+
+The full clone → build → `npm link` → MCP-registration walkthrough — including the Windows
+and POSIX forms of each command — lives in **[`docs/from-source.md`](docs/from-source.md)**.
+Read that first; there is no root `package.json`, so the two packages install separately.
+
+The PR gate, once you're set up — inside the package you changed:
 
 ```bash
-cd packages/mcp-server   # or packages/cli
-npm install
-npm run build
-npm test
-```
-
-To try the MCP server locally against a client:
-
-```bash
-cd packages/mcp-server && npm run build
-claude mcp add mimi-seed-dev -- node "$(pwd)/dist/index.js"
-# first run needs Google OAuth:
-node dist/index.js  # then in another shell: npx . mimi-seed-auth  (or use the published bin)
+npm run build && npm test
 ```
 
 ## Pull requests

@@ -58,6 +58,10 @@ The CLI + local MCP live **only** here. The private web console is a separate re
 - ✅ The web repo's landing docs **mirror** this repo's READMEs; the originals are here.
 - The two MCP servers both surface as `mimi-seed` — keep them straight by transport + auth ([[architecture]]).
 
+> These are the **contributor-facing** why-it-is-this-way notes. The user-facing version of the recovery steps
+> (deferred tools, the Google testing-mode wall, 403-that-isn't-permissions, draft-app state) is
+> [`../troubleshooting.md`](../troubleshooting.md) — keep the *why* here and the *fix* there.
+
 ## 8. Tool inventory drift — the manifest is the SSOT
 
 Hand-synced tool counts drifted repeatedly (a 2026-07 review found three stale generations of the number at
@@ -93,7 +97,28 @@ Both packages are `"type": "module"` with NodeNext resolution: imports must use 
 breaks the published `dist`. The MCP server builds with `tsc`, the CLI with `tsup` — verify with
 `npm run build && npm test` **inside the changed package** ([[architecture]]).
 
-## 12. Secrets hygiene (public repo)
+## 12. One writer per credential file — two writers always drift
+
+`~/.mimi-seed/jenkins.json` had **two** writers with different shapes: the CLI's `deploy setup-jenkins` wrote a
+`jenkins` key inside `config.json` (field `user`), while `jenkins_save_config` wrote `jenkins.json` (field
+`username`). Neither could see the other, so a user who configured Jenkins via the CLI was told by the MCP tools
+that Jenkins was not configured. The same class of bug bites *within* one file too: a whole-file
+`writeFileSync` from one writer silently erases fields the other owns.
+
+The rules that came out of it:
+
+- **Exactly one writer per credential.** The package that *validates* the credential owns writing it. The CLI
+  shells out to the `mimi-seed-*-auth` bins rather than writing `jenkins.json` / `google-ads.json` /
+  `facebook.json` / `instagram.json` itself ([[cli-deploy]]). `ci.json` is the one CLI-owned file.
+- **Merge, don't overwrite**, when a file legitimately holds fields from two sources (`jenkins.json` carries
+  connection info *and* the CLI's build-job names).
+- **Validate before saving.** A token that can't reach its API must never land on disk — otherwise `doctor`
+  reports ✓ for a credential that 403s, and a typo destroys a working config with no backup.
+- **Normalize on write, not at each read.** A `host` stored as `ghe.corp.com` verified fine and then made
+  `fetch` throw `Invalid URL` at deploy time, because the verifier and the caller built the base URL by
+  different rules.
+
+## 13. Secrets hygiene (public repo)
 
 Never log, return, or embed credential values, tokens, `.p8` contents, or SA JSON — not in tool output, error
 messages, tests, or these docs. Pass image/asset paths as **absolute paths**; never load image bytes into the

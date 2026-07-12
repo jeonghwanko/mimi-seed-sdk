@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { loadInstagramConfig, requireInstagramConfig, saveInstagramConfig } from '../instagram/config.js';
+import { loadInstagramConfig, requireInstagramConfig } from '../instagram/config.js';
+import { connectInstagram } from '../instagram/setup.js';
 import * as api from '../instagram/api.js';
 
 export function registerInstagramTools(server: McpServer) {
@@ -20,71 +21,9 @@ export function registerInstagramTools(server: McpServer) {
       assumeIssuedNow: z.boolean().default(true).describe('expiresAt = 지금 + 60일 자동 계산'),
     },
     async ({ accessToken, userId, assumeIssuedNow }) => {
-      const apiType = accessToken.startsWith('IGAA') ? 'Instagram Login' : 'Facebook Login';
-
-      // userId 자동 조회
-      let resolvedUserId = userId;
-      if (!resolvedUserId) {
-        try {
-          resolvedUserId = await api.fetchUserId(accessToken);
-        } catch (err) {
-          return {
-            content: [{
-              type: 'text',
-              text: [
-                `❌ userId 자동 조회 실패 (${apiType})`,
-                `   ${(err as Error).message}`,
-                ``,
-                `userId를 명시적으로 전달하거나 토큰을 다시 확인하세요.`,
-              ].join('\n'),
-            }],
-          };
-        }
-      }
-
-      const expiresAt = assumeIssuedNow
-        ? new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
-        : undefined;
-
-      // 검증 — 잘못된 토큰이면 즉시 알림
-      try {
-        const account = await api.getAccount({ accessToken, userId: resolvedUserId });
-        // 검증 성공 → 최종 저장
-        saveInstagramConfig({
-          accessToken,
-          userId: resolvedUserId,
-          expiresAt,
-          username: account.username,
-        });
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `✅ Instagram 연결 확인 완료 (${apiType})`,
-              `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
-              `   ID: ${account.id}`,
-              account.account_type ? `   타입: ${account.account_type}` : '',
-              account.followers_count !== undefined ? `   팔로워: ${account.followers_count.toLocaleString()}` : '',
-              account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
-              expiresAt ? `   토큰 만료(추정): ${expiresAt.slice(0, 10)}` : '',
-            ].filter(Boolean).join('\n'),
-          }],
-        };
-      } catch (err) {
-        // 검증 실패 — 저장은 하지 않고 사용자에게 알림
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `❌ 토큰 검증 실패 (${apiType})`,
-              `   userId: ${resolvedUserId}`,
-              `   ${(err as Error).message}`,
-              ``,
-              `토큰을 다시 발급받거나 userId를 직접 지정해보세요.`,
-            ].join('\n'),
-          }],
-        };
-      }
+      // 구현은 instagram/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
+      const result = await connectInstagram(accessToken, userId, assumeIssuedNow);
+      return { content: [{ type: 'text', text: result.text }] };
     },
   );
 

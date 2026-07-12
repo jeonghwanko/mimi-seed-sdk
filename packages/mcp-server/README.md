@@ -42,17 +42,29 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 
 브라우저가 열리면 Google 계정으로 로그인. 토큰은 `~/.mimi-seed/tokens.json`에 저장되고 자동 갱신됨.
 
-플랫폼별 추가 인증 (필요한 것만):
+나머지 계정은 **마법사 하나로** 연결하는 게 가장 빠릅니다 — 뭐가 빠졌는지 보여주고, 각 토큰을 어디서
+발급받는지도 알려줍니다:
 
 ```bash
-npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth    # App Store Connect (API Key)
-npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth   # Google Play 서비스 계정 JSON
-npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth    # BigQuery (Crashlytics export 등)
+npx mimi-seed setup
 ```
 
-- **App Store Connect**: Users and Access → Keys에서 API Key 생성 후 Issuer ID / Key ID / .p8 경로 입력 → `~/.mimi-seed/appstore.json`
-- **Google Play**: Play Console 서비스 계정 JSON 경로 입력 (패키지별 등록)
-- **BigQuery**: Google OAuth 또는 서비스 계정으로 데이터셋 조회 권한 부여
+개별로 실행하고 싶다면 (전부 대화형):
+
+```bash
+npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth     # App Store Connect (API Key)
+npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth    # Google Play 서비스 계정 JSON
+npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth     # BigQuery
+npx -y @yoonion/mimi-seed-mcp mimi-seed-jenkins-auth      # Jenkins (저장 전 서버 프로브)
+npx -y @yoonion/mimi-seed-mcp mimi-seed-googleads-auth    # Google Ads (저장 전 실제 호출로 검증)
+npx -y @yoonion/mimi-seed-mcp mimi-seed-social-auth       # Facebook / Instagram
+```
+
+각 자격증명을 **어디서 어떻게 발급받는지**는 [`docs/credentials.md`](../../docs/credentials.md) 참고.
+
+- **App Store Connect**: Users and Access → Integrations에서 API Key 생성 후 Issuer ID / Key ID / .p8 경로 입력 → `~/.mimi-seed/appstore.json` (.p8은 **1회만** 다운로드됨)
+- **Google Play**: 서비스 계정은 **선택** — OAuth 토큰이 `androidpublisher` 스코프를 갖고 있어 로컬 작업은 그대로 됩니다. CI/헤드리스에서만 필요.
+- **BigQuery**: 선택 — OAuth로도 동작하며, Workspace 재인증 정책에 막힐 때만 서비스 계정이 필요합니다.
 
 AI 기능(릴리즈 노트 생성, 리뷰 답변)을 쓰려면:
 
@@ -66,8 +78,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| App Store Connect | 33 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
-| Google Play | 28 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
+| App Store Connect | 34 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
+| Google Play | 29 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
 | Firebase | 20 | `firebase_create_project` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |

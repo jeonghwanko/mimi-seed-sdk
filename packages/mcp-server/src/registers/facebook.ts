@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { loadFacebookConfig, requireFacebookConfig, saveFacebookConfig } from '../facebook/config.js';
+import { loadFacebookConfig, requireFacebookConfig } from '../facebook/config.js';
+import { connectFacebook } from '../facebook/setup.js';
 import * as api from '../facebook/api.js';
 
 export function registerFacebookTools(server: McpServer) {
@@ -17,78 +18,9 @@ export function registerFacebookTools(server: McpServer) {
       pageId: z.string().optional().describe('Facebook Page ID (생략 시 토큰에서 자동 조회)'),
     },
     async ({ pageAccessToken, pageId }) => {
-      // Resolve pageId
-      let resolvedPageId = pageId;
-      if (!resolvedPageId) {
-        try {
-          const me = await api.listAccessiblePages(pageAccessToken);
-          if (me.length === 0) {
-            // Try /me directly (already a Page Access Token)
-            const res = await fetch(
-              `https://graph.facebook.com/v21.0/me?fields=id,name&access_token=${pageAccessToken}`,
-            );
-            const data = await res.json() as { id?: string; name?: string; error?: { message: string; code: number } };
-            if (data.error) throw new Error(`${data.error.message} (code ${data.error.code})`);
-            resolvedPageId = data.id!;
-          } else if (me.length === 1) {
-            resolvedPageId = me[0].id;
-          } else {
-            const list = me.map(p => `  • ${p.name} (${p.id})`).join('\n');
-            return {
-              content: [{
-                type: 'text',
-                text: [
-                  '여러 페이지에 접근 가능합니다. pageId를 명시해주세요:',
-                  list,
-                ].join('\n'),
-              }],
-            };
-          }
-        } catch (err) {
-          return {
-            content: [{
-              type: 'text',
-              text: `❌ pageId 자동 조회 실패: ${(err as Error).message}`,
-            }],
-          };
-        }
-      }
-
-      try {
-        const cfg = { pageAccessToken, pageId: resolvedPageId };
-        const page = await api.getPage(cfg);
-        saveFacebookConfig({
-          pageAccessToken,
-          pageId: resolvedPageId,
-          pageName: page.name,
-          expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        });
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `✅ Facebook 페이지 연결 완료`,
-              `   페이지: ${page.name}`,
-              `   ID: ${page.id}`,
-              page.category ? `   카테고리: ${page.category}` : '',
-              page.followers_count !== undefined ? `   팔로워: ${page.followers_count.toLocaleString()}` : '',
-              page.fan_count !== undefined ? `   좋아요: ${page.fan_count.toLocaleString()}` : '',
-            ].filter(Boolean).join('\n'),
-          }],
-        };
-      } catch (err) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `❌ 토큰 검증 실패`,
-              `   ${(err as Error).message}`,
-              ``,
-              `Page Access Token을 다시 확인하거나 facebook_list_pages로 페이지 목록을 조회하세요.`,
-            ].join('\n'),
-          }],
-        };
-      }
+      // 구현은 facebook/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
+      const result = await connectFacebook(pageAccessToken, pageId);
+      return { content: [{ type: 'text', text: result.text }] };
     },
   );
 

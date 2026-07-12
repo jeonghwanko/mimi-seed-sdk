@@ -1,6 +1,8 @@
 import kleur from "kleur";
 import * as readline from "node:readline";
-import { getEffectiveConfig, writeConfig, type JenkinsConfig } from "./config.js";
+import { getEffectiveConfig } from "./config.js";
+import { loadJenkinsConfig, migrateLegacyJenkins, type JenkinsConfig } from "./jenkins-config.js";
+import { runMcpBin } from "./mcp-bin.js";
 import {
   loadCiProviderConfig,
   saveCiProviderConfig,
@@ -29,7 +31,7 @@ function log(msg: string): void {
 // ── Jenkins API 헬퍼 ──
 
 function jenkinsHeaders(cfg: JenkinsConfig) {
-  const creds = Buffer.from(`${cfg.user ?? "admin"}:${cfg.token}`).toString("base64");
+  const creds = Buffer.from(`${cfg.username || "admin"}:${cfg.token}`).toString("base64");
   return { Authorization: `Basic ${creds}`, "Content-Type": "application/json" };
 }
 
@@ -214,25 +216,10 @@ export function parseArgs(argv: string[]): DeployArgs {
   return args;
 }
 
-// ── Jenkins 설정 대화형 셋업 ──
+// Jenkins 설정 프롬프트는 여기 없다 — mimi-seed-jenkins-auth bin(mcp-server)이 소유한다.
+// 예전엔 이 파일이 config.json 에 따로 썼고 그게 jenkins.json 과 갈라졌다. [[jenkins-config.ts]] 참고.
 
-async function promptJenkinsSetup(): Promise<JenkinsConfig> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q: string): Promise<string> =>
-    new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())));
-
-  log(kleur.bold("Jenkins 설정"));
-  const url = await ask("  Jenkins URL (예: http://your-jenkins.example.com:8080): ");
-  const user = await ask("  Jenkins 사용자명 (예: admin): ");
-  const token = await ask("  Jenkins API Token: ");
-  const jobAndroid = await ask("  Android Job 이름 (예: my-app-android): ");
-  const jobIos = await ask("  iOS Job 이름 (선택, 엔터 스킵): ");
-
-  rl.close();
-  return { url, user, token, jobAndroid: jobAndroid || undefined, jobIos: jobIos || undefined };
-}
-
-async function promptGitProviderSetup(provider: "github" | "gitlab"): Promise<CiProviderConfig> {
+export async function promptGitProviderSetup(provider: "github" | "gitlab"): Promise<CiProviderConfig> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q: string): Promise<string> =>
     new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())));
@@ -347,9 +334,9 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
 
   // CI provider 설정 서브커맨드
   if (args.setupJenkins) {
-    const jenkins = await promptJenkinsSetup();
-    await writeConfig({ ...cfg, jenkins });
-    log(kleur.green("✅ Jenkins 설정 저장됨"));
+    // 쓰기는 mcp-server 의 bin 이 소유한다 (검증 후 jenkins.json 에 저장).
+    const code = await runMcpBin("mimi-seed-jenkins-auth");
+    if (code !== 0) process.exit(code);
     return;
   }
   if (args.setupGithub) {
@@ -374,15 +361,17 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
   // 빌드 단계 (--skip-build 없을 때)
   if (!args.skipBuild) {
     const ciProvider = loadCiProviderConfig();
-    const kind = resolveCi(args.ci, cfg.jenkins, ciProvider);
+    migrateLegacyJenkins(); // 레거시 config.json.jenkins → jenkins.json (1회성, 있을 때만)
+    const jenkinsCfg = loadJenkinsConfig() ?? undefined;
+    const kind = resolveCi(args.ci, jenkinsCfg, ciProvider);
     log(kleur.dim(`  CI: ${kind}`));
 
     if (kind === "jenkins") {
-      if (!cfg.jenkins?.url || !cfg.jenkins?.token) {
+      if (!jenkinsCfg?.url || !jenkinsCfg?.token) {
         log(kleur.yellow("Jenkins 설정 없음. `mimi-seed deploy setup-jenkins` 로 설정하거나 --skip-build 사용."));
         process.exit(1);
       }
-      const jenkins = cfg.jenkins;
+      const jenkins = jenkinsCfg;
       const jobName = args.platform === "android" ? jenkins.jobAndroid : jenkins.jobIos;
       if (!jobName) {
         log(kleur.red(`${args.platform} Jenkins job이 설정되지 않았습니다. setup-jenkins 실행.`));

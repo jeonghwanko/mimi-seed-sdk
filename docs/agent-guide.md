@@ -73,14 +73,23 @@ missing. This avoids a late `401`/`403` deep into a workflow.
 > a workspace admin registers a shared service account once and every member queries via the
 > **Remote MCP** with no personal key (`register_integration(provider="bigquery", …)`).
 
-If auth is missing or expired:
+If auth is missing or expired, the shortest path for a human is **`mimi-seed setup`** — one guided pass over
+every credential, which also tells them where to obtain each token
+([`credentials.md`](credentials.md)). Per-credential fixes:
 
 | Service | Fix |
 |---------|-----|
-| Google (Firebase/AdMob/Play) | tool `mimi_seed_auth_start` → give the user the OAuth URL, **or** `npx -y @yoonion/mimi-seed-mcp mimi-seed-auth` |
-| App Store Connect | `npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth` → verify with `appstore_verify_credentials` |
-| Play service account | `npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth`, or register per-package with `playstore_register_service_account` |
-| BigQuery | `npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth` |
+| Google (Firebase/AdMob/Play/Ads/GSC/GA4/IAM/BigQuery) | tool `mimi_seed_auth_start` → give the user the OAuth URL, **or** `mimi-seed auth login` |
+| App Store Connect | `mimi-seed auth appstore` → verify with `appstore_verify_credentials` |
+| Play service account | `mimi-seed auth playstore`, or register per-package with `playstore_register_service_account`. **Optional** — the OAuth token carries `androidpublisher`, so this is only needed for headless/CI |
+| BigQuery | `mimi-seed auth bigquery` (optional — OAuth works too) |
+| Jenkins | `mimi-seed auth jenkins` (probes the server before saving) |
+| GitHub / GitLab CI | `mimi-seed auth ci` |
+| Google Ads | `mimi-seed auth googleads` — needs the `adwords` OAuth scope; an old token may need `mimi-seed auth login --force` |
+| Facebook / Instagram | `mimi-seed auth facebook` / `mimi-seed auth instagram` |
+
+Each `mimi-seed auth <cred>` wraps the matching `npx -y @yoonion/mimi-seed-mcp mimi-seed-*-auth` binary, so
+either form works.
 
 ---
 
@@ -94,7 +103,10 @@ Credentials live under `~/.mimi-seed/` (legacy `~/.preseed/` is still read):
 | `appstore.json` | App Store Connect API key (JWT) |
 | `play-service-accounts/<packageName>.json` | **per-package** Play service account |
 | `play-service-account.json` | default/legacy Play SA (fallback when no per-package match) |
+| `bigquery-service-account.json` | BigQuery SA (exempt from Workspace reauth; OAuth is the fallback) |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection |
+| `google-ads.json` | Google Ads developer token + customer id |
+| `facebook.json`, `instagram.json` | Page / account access tokens for the social post tools |
 
 Notes that matter in practice:
 
@@ -109,23 +121,23 @@ Notes that matter in practice:
 
 ## 3. Tool catalog (by domain)
 
-Full schemas load on demand via `ToolSearch`. Counts below are representative; the exact per-domain inventory
-is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
+Full schemas load on demand via `ToolSearch`. These are representative tools, not a full list — the exact
+per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 
 | Domain | Representative tools |
 |--------|----------------------|
-| **Google Play** (~26) | `playstore_get_app` · `playstore_get_listing` · `playstore_update_listing` · `playstore_list_tracks` · `playstore_update_latest_release_notes` · `playstore_promote_release` · `playstore_submit_release` · `playstore_upload_image` · `playstore_replace_images` · `playstore_check_submission_risks` · `playstore_get_statistics` · `playstore_reply_review` · `playstore_register_service_account` |
-| **App Store Connect** (~30) | `appstore_list_apps` · `appstore_list_versions` · `appstore_create_version` · `appstore_update_whats_new` · `appstore_update_localization` · `appstore_list_builds` · `appstore_attach_latest_build` · `appstore_upload_screenshot` · `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_list_beta_groups` · `appstore_reply_review` |
-| **Firebase** (~18) | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_list_*_apps` |
-| **AdMob** (7) | `admob_create_app` · `admob_create_ad_unit` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` |
-| **CI/CD** (6) | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (**GitHub Actions / GitLab only**) |
+| **Google Play** | `playstore_get_app` · `playstore_get_listing` · `playstore_update_listing` · `playstore_list_tracks` · `playstore_update_latest_release_notes` · `playstore_promote_release` · `playstore_submit_release` · `playstore_upload_image` · `playstore_replace_images` · `playstore_check_submission_risks` · `playstore_get_statistics` · `playstore_reply_review` · `playstore_register_service_account` |
+| **App Store Connect** | `appstore_list_apps` · `appstore_list_versions` · `appstore_create_version` · `appstore_update_whats_new` · `appstore_update_localization` · `appstore_list_builds` · `appstore_attach_latest_build` · `appstore_upload_screenshot` · `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_list_beta_groups` · `appstore_reply_review` |
+| **Firebase** | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_list_*_apps` |
+| **AdMob** | `admob_create_app` · `admob_create_ad_unit` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` |
+| **CI/CD** | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (**GitHub Actions / GitLab only**) |
 | **Jenkins** (credentials + jobs) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` · `jenkins_create_job` · `jenkins_update_job` |
-| **Google Cloud IAM** (5) | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
-| **BigQuery** (5) | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
-| **Search Console** (6) | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
-| **Facebook / Instagram** (10) | `facebook_post_photo` · `instagram_post_carousel` |
-| **Checks** (4) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
-| **AI / Auth** (5) | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
+| **Google Cloud IAM** | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
+| **BigQuery** | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **Search Console** | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
+| **Facebook / Instagram** | `facebook_post_photo` · `instagram_post_carousel` |
+| **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
+| **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
 
 ---
 

@@ -87,6 +87,9 @@ cross-module wiring, why a thing is built the way it is, and traps that cost som
 | A CLI command's flags | `CMD_USAGE` in `cli/src/index.ts` |
 | How an agent should *call* tools at runtime | [`../agent-guide.md`](../agent-guide.md) |
 | Install / usage instructions for end users | `README.md` |
+| How a **user obtains** a credential (vendor consoles) | [`../credentials.md`](../credentials.md) |
+| What a user does about an **error** | [`../troubleshooting.md`](../troubleshooting.md) |
+| Clone → build → link → run from a checkout | [`../from-source.md`](../from-source.md) |
 | Package or plugin **version numbers** | `package.json`, `plugin.json` — versions rot on every release; never write one into this folder |
 | Secret values, real identifiers, console internals | nowhere — this is a public repo |
 
@@ -102,6 +105,9 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | Credential files & roles | `src/*/config.ts`, `src/auth/*` | [auth-credentials.md](auth-credentials.md) | ⚠️ manual |
 | CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |
 | Skills, prompts, resources | `skills/*/SKILL.md`, `prompts.ts`, `resources.ts` | [skills-plugins.md](skills-plugins.md) | ⚠️ manual (incl. the skill count in the table above) |
+| Auth error codes & their recovery | `mcp-server/src/auth/errors.ts` (`AuthErrorCode`) | [`../troubleshooting.md`](../troubleshooting.md) + `.ko` | ✅ `docs-onboarding.test.ts` — add a code without a recovery entry and CI fails |
+| Credential list & wizard deep-links | `cli/src/credentials.ts` (the registry) | [`../credentials.md`](../credentials.md) + `.ko` | ✅ anchors + EN/KO parity tested; the vendor click-paths themselves are ⚠️ manual (Apple/Meta/Google reorganize their consoles on their own schedule) |
+| Node floor | `.nvmrc` | both `package.json`s, READMEs, `from-source.md` | ✅ `docs-onboarding.test.ts` |
 
 ## Update triggers
 

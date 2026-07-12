@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseArgs, resolveCi } from '../deploy.js';
-import type { JenkinsConfig } from '../config.js';
+import type { JenkinsConfig } from '../jenkins-config.js';
 import type { CiProviderConfig } from '../ci-providers.js';
 
 // ── parseArgs ──
@@ -76,6 +76,7 @@ describe('parseArgs', () => {
 describe('resolveCi', () => {
   const validJenkins: JenkinsConfig = {
     url: 'http://j',
+    username: 'admin',
     token: 't',
     jobAndroid: 'android-job',
   };
@@ -114,12 +115,12 @@ describe('resolveCi', () => {
   });
 
   it('auto: skips Jenkins when only url given (no token)', () => {
-    const partialJenkins: JenkinsConfig = { url: 'http://j', token: '' };
+    const partialJenkins: JenkinsConfig = { url: 'http://j', username: 'admin', token: '' };
     expect(resolveCi('auto', partialJenkins, validGithub)).toBe('github');
   });
 
   it('auto: skips Jenkins when only token given (no url)', () => {
-    const partialJenkins: JenkinsConfig = { url: '', token: 't' };
+    const partialJenkins: JenkinsConfig = { url: '', username: 'admin', token: 't' };
     expect(resolveCi('auto', partialJenkins, validGithub)).toBe('github');
   });
 });

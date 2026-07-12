@@ -9,6 +9,10 @@
 > `*/setup-cli.ts` flows. Runtime call order for fixing missing auth is in
 > [`../agent-guide.md`](../agent-guide.md) §1–§2.
 
+> This is the **file map** — where each credential lives and which code reads it. How a *user* **obtains** one
+> (which vendor console, which role, what to download) is [`../credentials.md`](../credentials.md), and
+> `mimi-seed setup` walks them through it.
+
 ## Credential files (locations & roles)
 
 All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
@@ -19,6 +23,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `appstore.json` | App Store Connect API key material (issuer id + key id + `.p8`), signed into a short-lived JWT at call time | `mimi-seed-appstore-auth` (`appstore/setup-cli.ts`) |
 | `play-service-accounts/<packageName>.json` | **Per-package** Play service account — wins over the default | `mimi-seed-playstore-auth` / `playstore_register_service_account` |
 | `play-service-account.json` | Default / legacy Play service account — fallback when no per-package match | same |
+| `bigquery-service-account.json` | BigQuery SA — exempt from Workspace reauth (`invalid_rapt`); OAuth is the fallback | `mimi-seed-bigquery-auth` |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
 | `facebook.json`, `instagram.json` | Page / account access tokens for the social post tools (written `0600`) | `facebook_save_config` / `instagram_save_config` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |

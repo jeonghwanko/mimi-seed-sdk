@@ -16,10 +16,29 @@ export interface CiProviderConfig {
 
 export function loadCiProviderConfig(): CiProviderConfig | null {
   try {
-    return JSON.parse(fs.readFileSync(CI_CONFIG_PATH, "utf-8")) as CiProviderConfig;
+    const cfg = JSON.parse(fs.readFileSync(CI_CONFIG_PATH, "utf-8")) as CiProviderConfig;
+    // 읽을 때도 정규화한다 — 손으로 적었거나 구버전이 저장한 host 도 ghBase/glBase 가
+    // 항상 유효한 URL 을 만들 수 있게 (write 경로에만 의존하지 않는다).
+    const host = normalizeHost(cfg.host);
+    return host ? { ...cfg, host } : { ...cfg, host: undefined };
   } catch {
     return null;
   }
+}
+
+/**
+ * host 를 **한 번만** 정규화한다: 스킴 보정 + 끝 슬래시 제거.
+ *
+ * 사용자는 프롬프트에 `ghe.corp.com` 처럼 스킴 없이, 또는 `https://ghe.corp.com/` 처럼 끝
+ * 슬래시를 달아 적는다. 정규화 없이 저장하면 `ghBase()` 가 `ghe.corp.com/api/v3` 를 만들어
+ * fetch 가 `Invalid URL` 로 죽거나, `//api/v3` 로 404 가 난다 — 검증은 통과했는데 배포에서
+ * 터지는 최악의 조합이다. 저장 경로에서 한 번 고정하면 읽는 쪽은 신경 쓸 필요가 없다.
+ */
+export function normalizeHost(host?: string): string | undefined {
+  const h = host?.trim();
+  if (!h) return undefined;
+  const withScheme = /^https?:\/\//i.test(h) ? h : `https://${h}`;
+  return withScheme.replace(/\/+$/, "");
 }
 
 export function saveCiProviderConfig(cfg: CiProviderConfig): void {
@@ -27,9 +46,57 @@ export function saveCiProviderConfig(cfg: CiProviderConfig): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  fs.writeFileSync(CI_CONFIG_PATH, JSON.stringify(cfg, null, 2));
+  const normalized: CiProviderConfig = { ...cfg, host: normalizeHost(cfg.host) };
+  if (!normalized.host) delete normalized.host;
+  fs.writeFileSync(CI_CONFIG_PATH, JSON.stringify(normalized, null, 2));
   if (process.platform !== "win32") {
     fs.chmodSync(CI_CONFIG_PATH, 0o600);
+  }
+}
+
+/**
+ * 저장 전에 토큰을 실제로 써 본다. 잘못된/스코프 없는 PAT 가 조용히 저장되면
+ * 그 사실을 deploy 가 워크플로를 트리거하는 순간에야(403) 알게 된다.
+ *
+ * GitHub 은 `X-OAuth-Scopes` 헤더로 스코프까지 확인한다 — `workflow` 가 없으면
+ * 조회는 되는데 dispatch 만 실패하는, 진단이 까다로운 상태가 된다.
+ */
+export async function verifyCiToken(
+  cfg: CiProviderConfig,
+): Promise<{ ok: boolean; login?: string; reason?: string }> {
+  // 검증도 배포와 **똑같은 base URL 빌더**를 쓴다. 다른 규칙으로 조립하면
+  // "검증은 통과했는데 실제 호출은 실패" 하는 상태가 만들어진다.
+  const probe: CiProviderConfig = { ...cfg, host: normalizeHost(cfg.host) };
+
+  try {
+    if (probe.provider === "github") {
+      const res = await fetch(`${ghBase(probe)}/user`, {
+        headers: { Authorization: `Bearer ${probe.token}`, Accept: "application/vnd.github+json" },
+      });
+      if (!res.ok) {
+        return { ok: false, reason: `GitHub ${res.status} — 토큰이 유효하지 않아` };
+      }
+      const user = (await res.json()) as { login?: string };
+      // classic PAT 는 이 헤더를 준다 (스코프가 하나도 없으면 빈 문자열). fine-grained token 은
+      // 헤더 자체가 없으므로(null) 검사에서 제외한다 — 빈 문자열은 "스코프 없음"이라 반드시 잡는다.
+      const scopes = res.headers.get("x-oauth-scopes");
+      if (scopes !== null && !scopes.split(/,\s*/).filter(Boolean).includes("workflow")) {
+        return {
+          ok: false,
+          reason: `토큰에 \`workflow\` 스코프가 없어 (현재: ${scopes || "없음"}). 워크플로 실행이 403 으로 막힌다.`,
+        };
+      }
+      return { ok: true, login: user.login };
+    }
+
+    const res = await fetch(`${glBase(probe)}/user`, { headers: { "PRIVATE-TOKEN": probe.token } });
+    if (!res.ok) {
+      return { ok: false, reason: `GitLab ${res.status} — 토큰이 유효하지 않아` };
+    }
+    const user = (await res.json()) as { username?: string };
+    return { ok: true, login: user.username };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
 }
 

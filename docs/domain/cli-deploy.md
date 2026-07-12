@@ -13,8 +13,9 @@ Routed by `main()` in `cli/src/index.ts`:
 | Command | Module | What it does |
 |---|---|---|
 | `init` | `index.ts` (`cmdInit`) | detect app → browser PAT handshake → register apps → scaffold project context files |
+| `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
 | `status` | `index.ts` (`cmdStatus`) | show connection + `list_apps` via the remote MCP |
-| `auth` | `auth.ts` | local auth: Google OAuth / App Store / Play / BigQuery |
+| `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
 | `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI) |
 | `check` | `check.ts` | pre-release readiness (`--fail-on-blocker` for CI) |
@@ -26,6 +27,20 @@ Routed by `main()` in `cli/src/index.ts`:
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 
 Per-command options are the SSOT in `CMD_USAGE` in `index.ts` (also shown by `mimi-seed <cmd> --help`).
+
+### The credential registry — one list, three consumers
+
+`cli/src/credentials.ts` is the **SSOT for what credentials exist**. `doctor`, `auth status --all`, and `setup`
+all iterate it; previously `doctor` and `auth` each hand-maintained a 4-row list and neither could see Jenkins,
+CI, Google Ads, Facebook, or Instagram at all. Each `CredSpec` carries its `detect()` (pure fs/env, no network),
+`fix` command, `obtain` steps (the out-of-band vendor-console knowledge), and a `docsAnchor` into
+[`../credentials.md`](../credentials.md).
+
+**Who writes a credential file is a hard rule: exactly one owner per credential.** The CLI does not write
+`jenkins.json` / `google-ads.json` / `facebook.json` / `instagram.json` — it shells out to the mcp-server bins,
+because the *validation* (probe the server, call the API, refuse to save a bad token) lives there. Duplicating a
+writer across the two packages is what produced the Jenkins dual-config bug ([[pitfalls]]). The one exception is
+`ci.json`, which the CLI both writes and reads at deploy time.
 
 ## Environment variables
 

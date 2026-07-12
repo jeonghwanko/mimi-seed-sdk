@@ -135,7 +135,9 @@ export function registerAuthTools(server: McpServer) {
         const detail = pkgs || saInfo.default?.clientEmail || '(default)';
         lines.push(`✅ Play Store SA     — ${saCount}개 등록 (${detail})`);
       } else {
-        lines.push('❌ Play Store SA     — 미설정 → playstore_register_service_account 또는 setup_playstore_connection');
+        // SA 는 CI/헤드리스 전용 — 로컬은 OAuth(androidpublisher scope)로 대부분의 Play 작업이 된다.
+        // (helpers.ts requirePlayStoreAuth 가 SA → OAuth 로 폴백한다.) "필수"로 표기하면 안 된다.
+        lines.push('⚠️  Play Store SA     — 미설정 (선택 — 로컬은 OAuth 로 가능, CI/헤드리스는 필수) → setup_playstore_connection');
       }
 
       // 3. App Store Connect
@@ -202,12 +204,11 @@ export function registerAuthTools(server: McpServer) {
       if (oauthResult.status !== 'fresh' && oauthResult.status !== 'refreshed') {
         missing.push('  1. mimi_seed_auth_start  (Google 계정 로그인 — Firebase/AdMob/GSC 등 필수)');
       }
-      if (saCount === 0) {
-        missing.push('  2. setup_playstore_connection(packageName=..., projectId=...)  (Play Store 배포 필수)');
-      }
       if (!asc) {
-        missing.push('  3. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)');
+        missing.push('  2. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)');
       }
+      // Play SA 는 "다음 단계 (필수)" 에 넣지 않는다 — OAuth 로 대부분의 Play 작업이 되므로.
+      // CI/헤드리스에서만 필요하고, 그 안내는 위 상태 줄(⚠️)에 이미 있다.
 
       if (missing.length > 0) {
         lines.push('', '── 다음 단계 (필수) ─────────────────────────────', ...missing);

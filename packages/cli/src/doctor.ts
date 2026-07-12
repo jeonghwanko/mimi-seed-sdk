@@ -1,11 +1,10 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { mcpCall } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog } from "./git.js";
 import { detectHints } from "./detect.js";
+import { CREDENTIALS, tryCredById, detectAll, isSatisfied } from "./credentials.js";
+import { migrateLegacyJenkins } from "./jenkins-config.js";
 import {
   findProjectManifest,
   manifestServiceEntries,
@@ -65,39 +64,20 @@ export async function cmdDoctor(): Promise<void> {
     }
   }
 
-  section("로컬 MCP 자격증명 (~/.mimi-seed)");
-  const credDir = path.join(os.homedir(), ".mimi-seed");
-  const hasFile = (name: string) => fs.existsSync(path.join(credDir, name));
-  const hasPrefix = (prefix: string) => {
-    try {
-      return fs.readdirSync(credDir).some((f) => f.startsWith(prefix));
-    } catch {
-      return false;
-    }
-  };
-  const hasPlaySa =
-    hasFile("play-service-account.json") ||
-    (() => {
-      try {
-        return fs.readdirSync(path.join(credDir, "play-service-accounts")).some((f) => f.endsWith(".json"));
-      } catch {
-        return false;
-      }
-    })();
-  const oauthPresent = hasFile("tokens.json");
-  const appstorePresent = hasFile("appstore.json");
-  const bigquerySaPresent = hasPrefix("bigquery");
-  const creds: Array<[string, boolean, string]> = [
-    ["Google OAuth (Firebase/AdMob/Play/Ads)", oauthPresent, "mimi-seed auth login"],
-    ["App Store Connect", appstorePresent, "mimi-seed auth appstore"],
-    ["Play 서비스 계정 (선택 — OAuth로도 가능)", hasPlaySa, "mimi-seed auth playstore"],
-    ["BigQuery 서비스 계정", bigquerySaPresent, "mimi-seed auth bigquery"],
-  ];
-  for (const [label, present, cmd] of creds) {
-    if (present) ok(label);
-    else warn(label, `→ ${cmd}`);
+  section("로컬 자격증명 (~/.mimi-seed)");
+  // 목록은 credentials.ts 레지스트리가 SSOT — 예전엔 여기 4줄만 손으로 들고 있어서
+  // Jenkins/CI/Ads/Facebook/Instagram 은 doctor 에 아예 보이지 않았다.
+  migrateLegacyJenkins(); // 레거시 config.json.jenkins → jenkins.json (1회성)
+  const detected = detectAll();
+  for (const spec of CREDENTIALS) {
+    const d = detected.get(spec.id)!;
+    const label = spec.note ? `${spec.label} (${spec.note})` : spec.label;
+    if (d.present) ok(spec.label, d.detail);
+    else if (isSatisfied(spec, detected)) warn(label, "폴백으로 동작 중");
+    else if (spec.requirement === "optional") warn(`${label}`, `→ ${spec.fix}`);
+    else fail(spec.label, `→ ${spec.fix}`);
   }
-  process.stdout.write(kleur.dim("  OAuth 토큰 신선도 확인: mimi-seed auth status\n"));
+  process.stdout.write(kleur.dim("  전부 연결하기: mimi-seed setup   ·   OAuth 신선도: mimi-seed auth status\n"));
 
   // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ──
   // 저장소가 필요로 하는 서비스를 선언해두면, 로컬 자격증명 보유 여부와 대조해
@@ -106,42 +86,33 @@ export async function cmdDoctor(): Promise<void> {
   if (loaded) {
     const projName = loaded.manifest.displayName ?? loaded.manifest.project ?? "이 프로젝트";
     section(`${projName} 요구사항 (.mimi-seed.json)`);
-    // OAuth 는 BigQuery/Play 의 fallback 이기도 하므로 연결 판정에 함께 반영.
-    const connectedOf: Record<ManifestServiceId, boolean> = {
-      oauth: oauthPresent,
-      bigquery: bigquerySaPresent || oauthPresent,
-      playstore: hasPlaySa || oauthPresent,
-      appstore: appstorePresent,
-      jenkins: false, // mimi-seed 로컬 자격증명 대상 아님(별도 MCP) — note 로만 안내
-    };
-    const fixOf: Record<ManifestServiceId, string> = {
-      oauth: "mimi-seed auth login",
-      bigquery: "mimi-seed auth bigquery",
-      playstore: "mimi-seed auth playstore",
-      appstore: "mimi-seed auth appstore",
-      jenkins: "claude mcp add <your-jenkins-mcp> -s user",
-    };
+    // 연결 판정·복구 명령 모두 레지스트리에서 파생한다 (fallback 규칙 포함 — 예: Play SA 없어도 OAuth 면 OK).
+    // 매니페스트의 서비스 id 는 CredId 의 부분집합이다.
     for (const [id, svc] of manifestServiceEntries(loaded.manifest)) {
       const required = svc.required !== false;
-      const connected = connectedOf[id];
       const detail = manifestDetail(id, svc);
+      // 매니페스트는 손으로 쓰는 파일이라 레지스트리에 없는 서비스 id 가 들어올 수 있다.
+      // 그것 때문에 doctor 전체가 죽으면 안 된다 — 모르는 항목은 경고만 하고 넘어간다.
+      const spec = tryCredById(id);
+      if (!spec) {
+        warn(`${id} (알 수 없는 서비스)`, svc.note ?? detail);
+        continue;
+      }
+      const connected = isSatisfied(spec, detected);
       if (connected) ok(id, detail);
       else if (!required) warn(`${id} (선택)`, svc.note ?? detail);
-      else fail(id, `→ ${fixOf[id]}${detail ? "  " + detail : ""}`);
+      else fail(id, `→ ${spec.fix}${detail ? "  " + detail : ""}`);
     }
   }
 
   section("로컬 환경");
   const nodeVer = process.version;
   const [, major] = nodeVer.match(/v(\d+)/) ?? [];
-  // CLI 는 Node 18+ 로 돌지만 Local MCP 서버(@yoonion/mimi-seed-mcp)는 20+ 필요 —
-  // 18/19 에서 doctor 가 ✓ 를 주면 MCP 서버만 조용히 죽는 오진이 된다.
+  // Node 하한은 20 — CLI 와 MCP 서버가 같다 (.nvmrc 가 SSOT).
   if (Number(major) >= 20) {
     ok("Node.js", nodeVer);
-  } else if (Number(major) >= 18) {
-    warn("Node.js", `${nodeVer} — CLI 는 동작하지만 Local MCP 서버(@yoonion/mimi-seed-mcp)는 v20 이상 필요`);
   } else {
-    fail("Node.js", `${nodeVer} — v18 이상(CLI) / v20 이상(Local MCP) 필요`);
+    fail("Node.js", `${nodeVer} — v20 이상 필요 (.nvmrc 참고)`);
   }
 
   if (isGitRepo(cwd)) {
@@ -152,11 +123,7 @@ export async function cmdDoctor(): Promise<void> {
     warn("Git 저장소 없음", "mimi-seed notes 사용 불가");
   }
 
-  if (process.env.ANTHROPIC_API_KEY) {
-    ok("ANTHROPIC_API_KEY", "AI 릴리즈 노트 생성 사용 가능");
-  } else {
-    warn("ANTHROPIC_API_KEY 없음", "설정 시 AI 릴리즈 노트/리뷰 답변 생성 가능");
-  }
+  // ANTHROPIC_API_KEY 는 위 자격증명 섹션(레지스트리)에서 이미 보고했다 — 여기서 또 찍지 않는다.
 
   section("앱 감지");
   const hints = await detectHints(cwd);

@@ -17,8 +17,9 @@ npx mimi-seed init
 | 명령어 | 설명 |
 |--------|------|
 | `mimi-seed init` | 프로젝트를 Mimi Seed에 연결 (PAT 발급 + 앱 자동 등록 + `.claude/mimi-seed.md` / `AGENTS.md` 주입) |
+| `mimi-seed setup` | **가진 계정을 한 번에 연결** (안내형 마법사) — 뭐가 빠졌는지 보여주고, 각 토큰을 어디서 발급받는지 알려줌 |
 | `mimi-seed status` | 연결 상태 + 등록 앱 목록 |
-| `mimi-seed auth` | Google OAuth 인증 (Firebase / AdMob / Play). `login` / `status` / `refresh` / `logout` 서브명령 |
+| `mimi-seed auth` | 자격증명 개별 인증 — `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` |
 | `mimi-seed doctor` | 환경 진단 (토큰·Git·앱·CI 한 번에 체크) |
 | `mimi-seed check` | 출시 전 Readiness 점검 (점수 + 블로커) |
 | `mimi-seed notes` | AI 릴리즈 노트 생성 (git log → 3 톤 → 다국어 → 적용) |
@@ -151,15 +152,43 @@ mimi-seed review --text "버그 있어요" --rating 2 \
 
 ---
 
-## mimi-seed auth
+## mimi-seed setup
 
-Firebase · AdMob · Play Store 도구에 필요한 Google OAuth 인증을 처리합니다. 내부적으로 `@yoonion/mimi-seed-mcp`의 `mimi-seed-auth` CLI를 호출합니다.
+가진 계정을 **한 번에** 연결하는 안내형 마법사입니다. 연결 상태를 먼저 보여주고, 아직 안 된 것만 순서대로
+물어봅니다. 각 항목에서 `?` 를 누르면 그 토큰을 **어디서 어떻게 발급받는지** 알려줍니다.
 
 ```bash
-mimi-seed auth login      # 브라우저로 로그인 (이미 있으면 자동 refresh 시도)
-mimi-seed auth status     # 현재 토큰 상태
+mimi-seed setup                       # 안내를 따라가며 연결
+mimi-seed setup --only jenkins        # 특정 항목만
+mimi-seed setup --reconnect appstore  # 이미 연결된 것도 다시 설정
+mimi-seed setup --fail-on-missing     # 필수 자격증명 없으면 exit 1 (CI 게이트)
+```
+
+이미 연결된 항목은 건너뛰므로 중간에 그만두고 나중에 다시 실행해도 됩니다.
+비TTY / CI 환경에서는 아무것도 묻지 않고 상태표만 출력합니다.
+전체 레퍼런스: [`docs/credentials.md`](../../docs/credentials.md)
+
+---
+
+## mimi-seed auth
+
+자격증명을 **개별로** 인증합니다. 실제 로직은 `@yoonion/mimi-seed-mcp` 의 `mimi-seed-*-auth` CLI 에 있고,
+이 명령은 그걸 호출하는 통합 front door 입니다.
+
+```bash
+mimi-seed auth login      # Google OAuth — 브라우저 로그인 (Firebase/AdMob/Play/Ads/GSC/GA4/IAM/BigQuery)
+mimi-seed auth status     # 현재 토큰 상태  (--all: 모든 자격증명 보유 여부)
 mimi-seed auth refresh    # refresh_token으로 갱신만 시도 (브라우저 X)
 mimi-seed auth logout     # 토큰 삭제
+
+mimi-seed auth appstore   # App Store Connect API 키
+mimi-seed auth playstore  # Play 서비스 계정 (선택 — OAuth로도 대부분 동작)
+mimi-seed auth bigquery   # BigQuery 서비스 계정 (선택)
+mimi-seed auth jenkins    # Jenkins (저장 전 서버 프로브)
+mimi-seed auth ci         # GitHub Actions / GitLab CI
+mimi-seed auth googleads  # Google Ads
+mimi-seed auth facebook   # Facebook 페이지
+mimi-seed auth instagram  # Instagram
 ```
 
 ### login 옵션

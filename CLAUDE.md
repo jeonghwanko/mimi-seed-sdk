@@ -20,6 +20,11 @@ index below is imported automatically; the linked docs are not, so `Read` the on
 - [`docs/agent-guide.md`](docs/agent-guide.md) — operational contract for an **agent calling** the tools
   (deferred-tool loading, call order, safety, `select:` batches). The ontology is the why/how-built layer and
   links to it rather than duplicating it.
+- **User-facing onboarding** (EN + `.ko` mirrors, drift-guarded by `docs-onboarding.test.ts`):
+  [`docs/from-source.md`](docs/from-source.md) (clone → build → `npm link` → register),
+  [`docs/credentials.md`](docs/credentials.md) (how a user *obtains* each of the 12 credentials — the wizard
+  deep-links to its anchors, so they are an API), and
+  [`docs/troubleshooting.md`](docs/troubleshooting.md) (every `AuthErrorCode` → what the user does).
 - [`AGENTS.md`](AGENTS.md) — repo ownership, Codex support, and verification steps.
 
 ## Security (public repo)

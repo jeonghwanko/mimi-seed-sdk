@@ -21,6 +21,7 @@ import { cmdCheck } from "./check.js";
 import { cmdNotes } from "./notes.js";
 import { cmdReview } from "./review.js";
 import { cmdAuth } from "./auth.js";
+import { cmdSetup } from "./setup.js";
 import { cmdFirebase, cmdAdmob, cmdGa4 } from "./cloud.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
@@ -201,6 +202,10 @@ async function cmdInit(args: string[]): Promise<void> {
     log("2) 로컬 MCP 서버 등록 (원격 'mimi-seed' 와 별개):");
     log(kleur.cyan("   claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp"));
     log(kleur.dim('   Codex: ~/.codex/config.toml 에 [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp"]'));
+    log("");
+    log("3) 나머지 계정 연결 (App Store / Play / Jenkins / CI / 소셜 …):");
+    log(kleur.cyan("   mimi-seed setup"));
+    log(kleur.dim("   각 항목에서 [?] 를 누르면 토큰 발급 방법을 알려줍니다."));
   }
 }
 
@@ -279,6 +284,21 @@ const CMD_USAGE: Record<string, string> = {
 
 옵션:
   --local   추가로 Google OAuth 로그인 + 로컬 MCP(스토어 쓰기 도구 전체) 등록 안내`,
+  setup: `${kleur.bold("mimi-seed setup")} — 가진 계정을 한 번에 연결 (안내형 마법사)
+
+연결 상태를 먼저 보여주고, 아직 연결되지 않은 것만 순서대로 물어본다.
+각 항목에서 [?] 를 누르면 "그 토큰을 어디서 어떻게 발급받는지"를 알려준다.
+이미 연결된 항목은 건너뛰므로, 중간에 그만두고 나중에 다시 실행해도 된다.
+
+옵션:
+  --only <ids>        지정한 자격증명만 (쉼표 구분: oauth,appstore,jenkins …)
+  --reconnect <ids>   이미 연결돼 있어도 다시 설정
+  --platform android,ios   플랫폼 강제 지정 (기본: 프로젝트에서 자동 감지)
+  --yes, -y           아무것도 묻지 않고 상태표만 출력
+  --non-interactive   위와 동일 (CI 용)
+  --fail-on-missing   필수 자격증명이 없으면 exit 1 (CI 게이트)
+
+${kleur.dim("비TTY / CI 환경에서는 프롬프트 없이 상태표만 출력한다.")}`,
   status: `${kleur.bold("mimi-seed status")} — 연결 상태 + 등록 앱 목록. 옵션 없음.`,
   doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI). 옵션 없음.`,
   logout: `${kleur.bold("mimi-seed logout")} — 로컬 설정(config.json) 삭제. 옵션 없음.`,
@@ -349,8 +369,9 @@ function printHelp(): void {
 
 ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
+  ${kleur.cyan("mimi-seed setup")}       가진 계정을 한 번에 연결 (안내형 마법사)
   ${kleur.cyan("mimi-seed status")}      연결 상태 + 등록 앱 목록
-  ${kleur.cyan("mimi-seed auth")}        로컬 인증 (Google OAuth / App Store / Play / BigQuery)
+  ${kleur.cyan("mimi-seed auth")}        자격증명 개별 인증 (Google / App Store / Play / Jenkins / CI …)
   ${kleur.cyan("mimi-seed firebase")}    Firebase 앱 생성·config 다운로드·GA4 링크
   ${kleur.cyan("mimi-seed admob")}       AdMob 계정·앱·광고단위 조회 및 생성
   ${kleur.cyan("mimi-seed ga4")}         GA4 property·data stream 생성·조회
@@ -369,6 +390,8 @@ ${kleur.bold("환경변수:")}
   MIMI_SEED_TOKEN     PAT 토큰 (CI/CD 무인증 모드)
   MIMI_SEED_WEB_BASE  서버 주소 (기본: https://mimi-seed.pryzm.gg)
   ANTHROPIC_API_KEY   AI 노트 생성 활성화 (선택)
+  MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET
+                      직접 만든 Google OAuth 클라이언트 사용 (미지정 시 로그인 때 웹 콘솔에서 받아옴)
 `);
 }
 
@@ -385,6 +408,9 @@ async function main(): Promise<void> {
     switch (cmd) {
       case "init":
         await cmdInit(restArgs);
+        break;
+      case "setup":
+        await cmdSetup(restArgs);
         break;
       case "status":
         await cmdStatus();

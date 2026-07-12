@@ -2,12 +2,17 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
-export interface JenkinsConfig {
-  url: string;        // http://your-jenkins.example.com:8080
-  token: string;      // Jenkins API token
-  jobAndroid?: string; // Android job name
-  jobIos?: string;    // iOS job name (optional)
-  user?: string;      // Jenkins username (API token과 함께 Basic Auth)
+/**
+ * @deprecated Jenkins 설정의 정본은 `~/.mimi-seed/jenkins.json` 이다 (`jenkins-config.ts`).
+ * 이 형태는 예전 `deploy setup-jenkins` 가 config.json 안에 쓰던 것으로, 읽기(마이그레이션)용으로만 남긴다.
+ * 새 코드는 `jenkins-config.ts` 의 `JenkinsConfig` 를 쓸 것 — 필드명도 `user` 가 아니라 `username` 이다.
+ */
+export interface LegacyJenkinsConfig {
+  url: string;
+  token: string;
+  jobAndroid?: string;
+  jobIos?: string;
+  user?: string;
 }
 
 export interface MimiSeedConfig {
@@ -16,7 +21,8 @@ export interface MimiSeedConfig {
   endpoint: string; // MCP endpoint
   webBase: string; // https://mimi-seed.pryzm.gg
   createdAt: string;
-  jenkins?: JenkinsConfig;
+  /** @deprecated → `~/.mimi-seed/jenkins.json`. `migrateLegacyJenkins()` 가 1회 이관한다. */
+  jenkins?: LegacyJenkinsConfig;
 }
 
 const CONFIG_DIR = path.join(os.homedir(), ".mimi-seed");

@@ -48,11 +48,14 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 |---|---|
 | **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Option B — Local MCP** ↓ |
 | **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Option A — Remote MCP** ↓ |
+| **Hack on it** — run unpublished code from a git checkout | [Run from source](docs/from-source.md) |
 
 > **Three things that trip every first install:**
 > 1. The local MCP server requires **Node 20+**.
 > 2. Open a **new session** after `claude mcp add` (and after package updates) — tools only appear in fresh sessions.
 > 3. In Claude Code the 150+ tool schemas load lazily; if a first call fails with `InputValidationError`, tell Claude: *"load the mimi-seed tools with ToolSearch first"* ([agent guide](docs/agent-guide.md)).
+>
+> More → [troubleshooting](docs/troubleshooting.md).
 
 **Option A — Remote MCP** (status & readiness · requires web console account)
 
@@ -103,7 +106,7 @@ enabled = true
 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 ```
 
-> ⚠️ **If Google shows "access_denied" / "unverified app" on first login:** the OAuth app is in testing mode, so only registered test users can sign in. Ask the operator to add your Google account (Cloud Console → OAuth consent screen → Test users), then retry `mimi-seed-auth`. Retrying without being added will never succeed.
+> ⚠️ **Google says "access_denied" / "unverified app"?** The OAuth app is in testing mode — only registered test users can sign in, and retrying will never work until you're added. Full recovery → [troubleshooting](docs/troubleshooting.md#user-denied).
 
 Claude Desktop (`claude_desktop_config.json`):
 
@@ -118,19 +121,13 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Optional auth for more platforms:
+Connect the rest of your accounts — App Store Connect, Play, Jenkins, CI, Google Ads, Facebook, Instagram — with one guided wizard:
 
 ```bash
-npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth    # App Store Connect
-npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth   # Play Store service account
-npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth    # BigQuery (Crashlytics export, etc.)
+npx mimi-seed setup
 ```
 
-Enable AI features (release notes, review replies):
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
+It shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md).
 
 ---
 
@@ -145,8 +142,9 @@ Detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claud
 | Command | What it does |
 |---------|--------------|
 | `mimi-seed init` | Connect project (issue PAT + auto-register apps) |
+| `mimi-seed setup` | **Connect every account, guided** — shows what's missing, tells you where each token comes from |
 | `mimi-seed status` | Connection status + app list |
-| `mimi-seed auth` | Google OAuth (Firebase / AdMob / Play) — `login` / `status` / `refresh` / `logout` |
+| `mimi-seed auth` | Individual credentials — `login` / `appstore` / `playstore` / `jenkins` / `ci` / … |
 | `mimi-seed doctor` | Diagnose environment (token · Git · apps · CI) |
 | `mimi-seed check` | Pre-release readiness check (score + blockers) |
 | `mimi-seed notes` | AI release notes (git log → 3 tones → multi-locale → apply) |
@@ -411,6 +409,7 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/t
 | `MIMI_SEED_TOKEN` | PAT for CLI / CI headless mode |
 | `MIMI_SEED_WEB_BASE` | Server base URL (default: `https://mimi-seed.pryzm.gg`) |
 | `ANTHROPIC_API_KEY` | Enable AI release notes and review replies (optional) |
+| `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Bring your own Google OAuth client. Otherwise it is fetched from the web console at login — set these if you're offline, air-gapped, or self-hosting ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
 
 ---
 
