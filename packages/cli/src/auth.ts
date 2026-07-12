@@ -8,14 +8,16 @@
 import kleur from "kleur";
 import { CREDENTIALS, credLabel, detectAll, isSatisfied } from "./credentials.js";
 import { MCP_PKG, runMcpBin } from "./mcp-bin.js";
-import { t } from "./i18n.js";
+import { catalog, t } from "./i18n.js";
 
 function log(msg: string): void {
   process.stdout.write(msg + "\n");
 }
 
-function printAuthHelp(): void {
-  log(`${kleur.bold("mimi-seed auth")} — 로컬 자격증명 인증/관리
+// 이 명령 전용 문구. 공통 문구는 i18n.ts 의 t() 에 있다.
+const M = catalog(
+  {
+    help: `${kleur.bold("mimi-seed auth")} — 로컬 자격증명 인증/관리
 
 ${kleur.bold("Google OAuth (Firebase / AdMob / Play):")}
   ${kleur.cyan("mimi-seed auth login")}      브라우저로 로그인 (이미 있으면 자동 refresh 시도)
@@ -46,7 +48,48 @@ ${kleur.bold("login 옵션:")}
   --timeout <초>   콜백 대기 시간 (기본 600)
   --force          기존 토큰 무시하고 강제 재로그인
 
-${kleur.dim(`내부적으로 ${MCP_PKG} 의 mimi-seed-*-auth CLI를 호출합니다.`)}`);
+${kleur.dim(`내부적으로 ${MCP_PKG} 의 mimi-seed-*-auth CLI를 호출합니다.`)}`,
+    connectAll: "\n  한 번에 연결: mimi-seed setup",
+  },
+  {
+    help: `${kleur.bold("mimi-seed auth")} — local credential setup
+
+${kleur.bold("Google OAuth (Firebase / AdMob / Play):")}
+  ${kleur.cyan("mimi-seed auth login")}      sign in via browser (refreshes an existing token if it can)
+  ${kleur.cyan("mimi-seed auth status")}     current OAuth token status
+  ${kleur.cyan("mimi-seed auth refresh")}    refresh only, using refresh_token (no browser)
+  ${kleur.cyan("mimi-seed auth logout")}     delete the OAuth token
+
+${kleur.bold("Per-platform credentials:")}
+  ${kleur.cyan("mimi-seed auth appstore")}   App Store Connect API key (appstore.json)
+  ${kleur.cyan("mimi-seed auth playstore")}  register a Play service-account JSON
+  ${kleur.cyan("mimi-seed auth bigquery")}   BigQuery service account (Crashlytics export, etc.)
+
+${kleur.bold("Build / marketing:")}
+  ${kleur.cyan("mimi-seed auth jenkins")}    Jenkins connection (jenkins.json)
+  ${kleur.cyan("mimi-seed auth ci")}         GitHub Actions / GitLab CI (ci.json)
+  ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
+  ${kleur.cyan("mimi-seed auth facebook")}   Facebook Page
+  ${kleur.cyan("mimi-seed auth instagram")}  Instagram
+
+${kleur.bold("Everything at a glance:")}
+  ${kleur.cyan("mimi-seed auth status --all")}  which credentials you have
+
+${kleur.bold("Connect them all in one pass:")}
+  ${kleur.cyan("mimi-seed setup")}             guided, one credential at a time (recommended)
+
+${kleur.bold("login options:")}
+  --no-browser     don't open the URL automatically (paste it yourself)
+  --timeout <sec>  how long to wait for the callback (default 600)
+  --force          ignore the existing token and sign in again
+
+${kleur.dim(`Under the hood this calls the mimi-seed-*-auth CLIs from ${MCP_PKG}.`)}`,
+    connectAll: "\n  Connect everything at once: mimi-seed setup",
+  },
+);
+
+function printAuthHelp(): void {
+  log(M().help);
 }
 
 function printAllCredStatus(): void {
@@ -64,7 +107,7 @@ function printAllCredStatus(): void {
     const tail = d.present ? kleur.dim(d.detail ?? "") : kleur.dim(`→ ${spec.fix}`);
     log(`  ${mark} ${credLabel(spec).padEnd(24)} ${tail}`);
   }
-  log(kleur.dim("\n  한 번에 연결: mimi-seed setup"));
+  log(kleur.dim(M().connectAll));
 }
 
 export async function cmdAuth(args: string[]): Promise<void> {

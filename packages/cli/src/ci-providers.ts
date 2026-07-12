@@ -1,8 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { catalog } from "./i18n.js";
 
 const CI_CONFIG_PATH = path.join(os.homedir(), ".mimi-seed", "ci.json");
+
+// 사용자에게 보이는 검증 실패 사유만 번역한다. API base URL / 헤더 / 스코프 이름은 언어와 무관.
+const M = catalog(
+  {
+    badToken: (provider: string, status: number) => `${provider} ${status} — 토큰이 유효하지 않아`,
+    noScope: (scopes: string) =>
+      `토큰에 \`workflow\` 스코프가 없어 (현재: ${scopes || "없음"}). 워크플로 실행이 403 으로 막힌다.`,
+    pollFailed: (provider: string) => `${provider} API 연속 오류 3회`,
+    pollFailedHttp: (provider: string, status: number) => `${provider} API 연속 오류 (HTTP ${status})`,
+  },
+  {
+    badToken: (provider: string, status: number) => `${provider} ${status} — the token is not valid`,
+    noScope: (scopes: string) =>
+      `The token is missing the \`workflow\` scope (currently: ${scopes || "none"}). Triggering a workflow will be blocked with a 403.`,
+    // 프로바이더 이름("GitHub API")은 두 언어 모두에 남는다 — 테스트가 그걸로 단언한다.
+    pollFailed: (provider: string) => `${provider} API failed 3 times in a row`,
+    pollFailedHttp: (provider: string, status: number) =>
+      `${provider} API failed 3 times in a row (HTTP ${status})`,
+  },
+);
 
 export type CiProvider = "github" | "gitlab";
 
@@ -74,24 +95,21 @@ export async function verifyCiToken(
         headers: { Authorization: `Bearer ${probe.token}`, Accept: "application/vnd.github+json" },
       });
       if (!res.ok) {
-        return { ok: false, reason: `GitHub ${res.status} — 토큰이 유효하지 않아` };
+        return { ok: false, reason: M().badToken("GitHub", res.status) };
       }
       const user = (await res.json()) as { login?: string };
       // classic PAT 는 이 헤더를 준다 (스코프가 하나도 없으면 빈 문자열). fine-grained token 은
       // 헤더 자체가 없으므로(null) 검사에서 제외한다 — 빈 문자열은 "스코프 없음"이라 반드시 잡는다.
       const scopes = res.headers.get("x-oauth-scopes");
       if (scopes !== null && !scopes.split(/,\s*/).filter(Boolean).includes("workflow")) {
-        return {
-          ok: false,
-          reason: `토큰에 \`workflow\` 스코프가 없어 (현재: ${scopes || "없음"}). 워크플로 실행이 403 으로 막힌다.`,
-        };
+        return { ok: false, reason: M().noScope(scopes) };
       }
       return { ok: true, login: user.login };
     }
 
     const res = await fetch(`${glBase(probe)}/user`, { headers: { "PRIVATE-TOKEN": probe.token } });
     if (!res.ok) {
-      return { ok: false, reason: `GitLab ${res.status} — 토큰이 유효하지 않아` };
+      return { ok: false, reason: M().badToken("GitLab", res.status) };
     }
     const user = (await res.json()) as { username?: string };
     return { ok: true, login: user.username };
@@ -170,12 +188,12 @@ export async function ghPollRun(
       );
     } catch {
       consecutiveErrors++;
-      if (consecutiveErrors >= 3) throw new Error("GitHub API 연속 오류 3회");
+      if (consecutiveErrors >= 3) throw new Error(M().pollFailed("GitHub"));
       continue;
     }
     if (!res.ok) {
       consecutiveErrors++;
-      if (consecutiveErrors >= 3) throw new Error(`GitHub API 연속 오류 (HTTP ${res.status})`);
+      if (consecutiveErrors >= 3) throw new Error(M().pollFailedHttp("GitHub", res.status));
       continue;
     }
     consecutiveErrors = 0;
@@ -237,12 +255,12 @@ export async function glPollPipeline(
       );
     } catch {
       consecutiveErrors++;
-      if (consecutiveErrors >= 3) throw new Error("GitLab API 연속 오류 3회");
+      if (consecutiveErrors >= 3) throw new Error(M().pollFailed("GitLab"));
       continue;
     }
     if (!res.ok) {
       consecutiveErrors++;
-      if (consecutiveErrors >= 3) throw new Error(`GitLab API 연속 오류 (HTTP ${res.status})`);
+      if (consecutiveErrors >= 3) throw new Error(M().pollFailedHttp("GitLab", res.status));
       continue;
     }
     consecutiveErrors = 0;

@@ -3,8 +3,28 @@ import path from "node:path";
 import os from "node:os";
 import kleur from "kleur";
 import type { MimiSeedConfig } from "./config.js";
+import { catalog } from "./i18n.js";
 
 const SERVER_NAME = "mimi-seed";
+
+// 안내 문구만 번역한다. 실제로 실행/기록되는 것(등록 명령, TOML 블록)은 언어와 무관하게 동일하다.
+const M = catalog(
+  {
+    claudeTitle: "Claude Code MCP 등록 — 아래 한 줄을 그대로 실행하세요:",
+    tokenWarning: (loc: string) =>
+      `  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ${loc} 에도 저장되어 있습니다.`,
+    codexTitle: "Codex MCP 등록:",
+    codexManual: "  # 또는 수동으로 ~/.codex/config.toml 에 [mcp_servers.mimi-seed] 추가",
+  },
+  {
+    claudeTitle: "Register the MCP server with Claude Code — run this single line as-is:",
+    tokenWarning: (loc: string) =>
+      `  ⚠ This command contains your real token (it lands in your shell history). The token is also stored in ${loc}.`,
+    codexTitle: "Register with Codex:",
+    codexManual:
+      "  # or add [mcp_servers.mimi-seed] to ~/.codex/config.toml by hand",
+  },
+);
 
 function tomlString(value: string): string {
   return JSON.stringify(value);
@@ -46,13 +66,13 @@ export function claudeMcpAddCommand(cfg: MimiSeedConfig): string {
 export function printMcpSetup(cfg: MimiSeedConfig): void {
   process.stdout.write(
     [
-      kleur.bold("Claude Code MCP 등록 — 아래 한 줄을 그대로 실행하세요:"),
+      kleur.bold(M().claudeTitle),
       kleur.cyan(`  ${claudeMcpAddCommand(cfg)}`),
-      kleur.dim(`  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ${CONFIG_LOCATION_HINT} 에도 저장되어 있습니다.`),
+      kleur.dim(M().tokenWarning(CONFIG_LOCATION_HINT)),
       "",
-      kleur.dim("Codex MCP 등록:"),
+      kleur.dim(M().codexTitle),
       kleur.dim("  mimi-seed mcp codex --write"),
-      kleur.dim("  # 또는 수동으로 ~/.codex/config.toml 에 [mcp_servers.mimi-seed] 추가"),
+      kleur.dim(M().codexManual),
     ].join("\n") + "\n",
   );
 }

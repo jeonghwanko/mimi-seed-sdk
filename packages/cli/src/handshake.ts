@@ -2,6 +2,23 @@
 
 import http from "node:http";
 import { AddressInfo } from "node:net";
+import { catalog } from "./i18n.js";
+
+// 브라우저 콜백 페이지 + 타임아웃 메시지. 사용자가 읽는 유일한 출력이다.
+const M = catalog(
+  {
+    htmlLang: "ko",
+    connected: "✓ Mimi Seed 연결 완료",
+    backToTerminal: "터미널로 돌아가세요.",
+    timeout: (seconds: number) => `${seconds}초 안에 연결되지 않았습니다.`,
+  },
+  {
+    htmlLang: "en",
+    connected: "✓ Mimi Seed connected",
+    backToTerminal: "You can go back to your terminal.",
+    timeout: (seconds: number) => `Not connected within ${seconds}s.`,
+  },
+);
 
 export interface HandshakeResult {
   token: string;
@@ -40,9 +57,9 @@ export async function awaitHandshake(
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.end(`<!doctype html>
-<html lang="ko"><body style="font-family:system-ui;padding:40px;max-width:480px;margin:auto">
-<h2>✓ Mimi Seed 연결 완료</h2>
-<p>터미널로 돌아가세요.</p>
+<html lang="${M().htmlLang}"><body style="font-family:system-ui;padding:40px;max-width:480px;margin:auto">
+<h2>${M().connected}</h2>
+<p>${M().backToTerminal}</p>
 <script>setTimeout(()=>window.close(),1000)</script>
 </body></html>`);
 
@@ -57,7 +74,7 @@ export async function awaitHandshake(
 
   const timer = setTimeout(() => {
     server.close();
-    reject(new Error(`${timeoutMs / 1000}초 안에 연결되지 않았습니다.`));
+    reject(new Error(M().timeout(timeoutMs / 1000)));
   }, timeoutMs);
   promise.finally(() => clearTimeout(timer));
 

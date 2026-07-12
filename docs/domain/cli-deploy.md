@@ -41,8 +41,15 @@ is already in that language.
 Korean. The credential registry's human text (`label` / `note` / `obtain`) is `LocalizedText`, read through
 `credLabel()` / `credNote()` / `credObtain()`.
 
-MCP **tool descriptions are deliberately not translated** — they are the LLM's interface, not a human's, and
-translating them would move tool-selection quality around for no user benefit.
+Shared onboarding text lives in `i18n.ts`'s `t()`; per-command text lives in the command file itself via
+`catalog(ko, en)` (same pattern the mcp-server setup bins use), so `i18n.ts` doesn't grow into a thousand-line
+dumping ground. Two things enforce completeness: the **compiler** (`NoInfer` makes a missing English key a build
+error) and **`i18n-coverage.test.ts`**, which fails if a user-facing Korean literal never went through a catalog
+at all — something the compiler cannot see.
+
+Deliberately **not** translated: MCP tool descriptions (the LLM's interface, not a human's — translating them
+moves tool-selection quality for no user benefit), the `agentMd` context file written into the user's project,
+and `review.ts`'s sentiment-matching keywords (translating those would break the matching).
 
 ### The credential registry — one list, three consumers
 

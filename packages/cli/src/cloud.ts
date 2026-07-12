@@ -4,6 +4,7 @@
 // 사용자가 mimi-seed 한 패키지만 알아도 클라우드 리소스 프로비저닝 사이클을 돌릴 수 있게 한다.
 
 import { spawn } from "node:child_process";
+import { t } from "./i18n.js";
 
 const MCP_PKG = "@yoonion/mimi-seed-mcp";
 
@@ -16,7 +17,7 @@ async function runMcpBin(bin: string, extraArgs: string[]): Promise<number> {
       shell: true,
     });
     child.on("error", (e) => {
-      process.stderr.write(`\n  ❌ npx 실행 실패: ${e.message}\n`);
+      process.stderr.write(t().auth.npxFailed("npx", e.message));
       resolve(1);
     });
     child.on("exit", (code) => resolve(code ?? 0));

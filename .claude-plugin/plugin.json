@@ -1,7 +1,7 @@
 {
   "name": "mimi-seed",
   "displayName": "Mimi Seed",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Firebase, AdMob, Google Play, App Store Connect를 Claude Code에서 관리하는 MCP 도구와 출시 운영 스킬 번들.",
   "author": {
     "name": "yoonion",

@@ -163,12 +163,12 @@ describe('ghPollRun', () => {
       .mockResolvedValueOnce(new Response('err', { status: 500 }))
       .mockResolvedValueOnce(new Response('err', { status: 500 }))
       .mockResolvedValueOnce(new Response('err', { status: 500 }));
-    await expect(ghPollRun(ghCfg, 1, undefined, 5000, 0)).rejects.toThrow(/연속 오류/);
+    await expect(ghPollRun(ghCfg, 1, undefined, 5000, 0)).rejects.toThrow(/GitHub API/);
   });
 
   it('throws on 3 consecutive fetch exceptions', async () => {
     fetchMock.mockRejectedValue(new Error('network down'));
-    await expect(ghPollRun(ghCfg, 1, undefined, 5000, 0)).rejects.toThrow(/연속 오류 3회/);
+    await expect(ghPollRun(ghCfg, 1, undefined, 5000, 0)).rejects.toThrow(/GitHub API/);
   });
 
   it('resets error counter after a successful response', async () => {

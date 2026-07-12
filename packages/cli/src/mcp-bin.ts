@@ -7,6 +7,7 @@
 // 갈라졌던 원인이다. 규칙: **자격증명 하나당 writer 는 정확히 하나**.
 
 import { spawn, spawnSync } from "node:child_process";
+import { t } from "./i18n.js";
 import { resolveLang } from "./settings.js";
 
 export const MCP_PKG = "@yoonion/mimi-seed-mcp";
@@ -50,7 +51,7 @@ export async function runMcpBin(bin: McpBin, extraArgs: string[] = []): Promise<
       env: { ...process.env, MIMI_SEED_LANG: resolveLang() },
     });
     child.on("error", (e) => {
-      process.stderr.write(`\n  ❌ ${cmd} 실행 실패: ${e.message}\n`);
+      process.stderr.write(t().auth.npxFailed(cmd, e.message));
       resolve(1);
     });
     child.on("exit", (code) => resolve(code ?? 0));

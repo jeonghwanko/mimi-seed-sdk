@@ -10,6 +10,25 @@
 
 import { resolveLang, type Lang } from "./settings.js";
 
+/**
+ * 파일별 로컬 카탈로그를 만든다.
+ *
+ * 온보딩 공통 문구(setup/doctor/auth/lang)는 아래 `t()` 의 전역 카탈로그에 있지만, 명령마다
+ * 자기만 쓰는 문구는 그 파일 안에 두는 게 낫다 — i18n.ts 가 수천 줄로 부풀지 않고, 문구를
+ * 고칠 때 그 명령 파일만 열면 된다. (mcp-server 의 setup bin 들도 같은 패턴.)
+ *
+ *   const M = catalog(
+ *     { title: "배포", done: (n: number) => `${n}개 완료` },
+ *     { title: "Deploy", done: (n: number) => `${n} done` },
+ *   );
+ *   log(M().title);
+ *
+ * `en` 은 `ko` 와 같은 타입이어야 하므로, 키를 빠뜨리면 **컴파일이 깨진다**.
+ */
+export function catalog<T extends object>(ko: T, en: NoInfer<T>): () => T {
+  return () => (resolveLang() === "en" ? (en as T) : ko);
+}
+
 const ko = {
   common: {
     yes: "y",

@@ -2,6 +2,13 @@
 // Streamable HTTP (stateless)로 tools/call 호출.
 // 서버가 sessionIdGenerator: undefined (stateless) 모드이므로 initialize 불필요.
 
+import { catalog } from "./i18n.js";
+
+const M = catalog(
+  { noSseData: "MCP SSE 응답에 data 없음" },
+  { noSseData: "No data in the MCP SSE response" },
+);
+
 export interface McpCallResult {
   text: string;
   isError: boolean;
@@ -58,7 +65,7 @@ export async function mcpCall(
   if (contentType.includes("text/event-stream")) {
     const text = await res.text();
     const line = text.split("\n").map((l) => l.trim()).find((l) => l.startsWith("data:"));
-    if (!line) throw new Error("MCP SSE 응답에 data 없음");
+    if (!line) throw new Error(M().noSseData);
     payload = JSON.parse(line.slice(5).trim()) as JsonRpcResponse;
   } else {
     payload = (await res.json()) as JsonRpcResponse;
