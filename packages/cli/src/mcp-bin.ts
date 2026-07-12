@@ -40,7 +40,11 @@ function resolveOnPath(bin: string): boolean {
 export async function runMcpBin(bin: McpBin, extraArgs: string[] = []): Promise<number> {
   const local = resolveOnPath(bin);
   const cmd = local ? bin : "npx";
-  const args = local ? extraArgs : ["-y", MCP_PKG, bin, ...extraArgs];
+  // MIMI_SEED_FORCE_NPX 는 "배포판을 써라" 는 뜻이다. 그런데 전역 `npm link` 가 걸려 있으면
+  // 그냥 `npx -y @yoonion/mimi-seed-mcp` 도 PATH 의 **링크된** bin 을 먼저 집어서 결국 체크아웃
+  // 코드를 실행한다 (실측으로 확인). `@latest` 를 붙여야 레지스트리의 진짜 배포판을 받아온다.
+  const pkg = process.env.MIMI_SEED_FORCE_NPX ? `${MCP_PKG}@latest` : MCP_PKG;
+  const args = local ? extraArgs : ["-y", pkg, bin, ...extraArgs];
 
   return new Promise((resolve) => {
     // Windows / POSIX 양쪽 호환을 위해 shell:true (npm link 는 Windows 에서 .cmd 셰임을 깐다).

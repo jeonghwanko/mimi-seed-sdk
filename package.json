@@ -1,8 +1,8 @@
 {
   "name": "mimi-seed-sdk",
   "private": true,
-  "version": "0.0.0",
-  "description": "Monorepo root — bootstrap scripts only. The publishable packages live in packages/. This is NOT an npm workspace: each package installs independently.",
+  "version": "0.9.0",
+  "description": "Monorepo root — the SDK version (SSOT for both packages and both plugin manifests) plus bootstrap scripts. The publishable packages live in packages/. This is NOT an npm workspace: each package installs independently.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -11,7 +11,9 @@
     "setup": "node scripts/install.mjs --link --register-mcp",
     "install:all": "node scripts/install.mjs",
     "build": "node scripts/install.mjs",
-    "test": "npm test --prefix packages/mcp-server && npm test --prefix packages/cli"
+    "test": "npm test --prefix packages/mcp-server && npm test --prefix packages/cli",
+    "version:set": "node scripts/version.mjs",
+    "version:check": "node scripts/version.mjs --check"
   },
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {

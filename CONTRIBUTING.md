@@ -63,13 +63,21 @@ npm run build && npm test
 
 ## Releasing (maintainers)
 
-Releases are automated. Bump the version in the package you changed and push to `main`:
+Releases are automated. **The root `package.json` version is the SDK's single version** — both
+packages and both plugin manifests follow it. Never edit those four files by hand:
 
 ```bash
-cd packages/mcp-server
-npm version patch --no-git-tag-version   # patch only — see versioning note below
-git commit -am "feat(mcp): ..." && git push origin main
+npm run version:set 0.9.0     # or: patch | minor | major
+npm run version:check         # fails if anything drifted (also enforced by a test)
+git commit -am "feat(cli): ..." && git push origin main
 ```
+
+The four followers are `packages/cli`, `packages/mcp-server`, `.claude-plugin/plugin.json`, and
+`.codex-plugin/plugin.json`. They used to drift apart (0.7.0 / 0.8.1 / 0.4.1), which left nobody able
+to say which CLI matched which server; `version-sync.test.ts` now fails if they do.
+
+One consequence of a single version: bumping it republishes **both** packages, even the one you didn't
+touch. That's the trade for never having to reason about cross-package compatibility.
 
 CI then, for each package whose `package.json` version is not yet on npm:
 - publishes to npm with **provenance** (signed via GitHub OIDC), and

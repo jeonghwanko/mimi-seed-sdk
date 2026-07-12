@@ -90,7 +90,7 @@ cross-module wiring, why a thing is built the way it is, and traps that cost som
 | How a **user obtains** a credential (vendor consoles) | [`../credentials.md`](../credentials.md) |
 | What a user does about an **error** | [`../troubleshooting.md`](../troubleshooting.md) |
 | Clone → build → link → run from a checkout | [`../from-source.md`](../from-source.md) |
-| Package or plugin **version numbers** | `package.json`, `plugin.json` — versions rot on every release; never write one into this folder |
+| Package or plugin **version numbers** | the **root** `package.json` (`npm run version:set`) — it is the SDK's single version and the two packages + two plugin manifests follow it. Versions rot on every release; never write one into this folder |
 | Secret values, real identifiers, console internals | nowhere — this is a public repo |
 
 ## Fact → SSOT → mirror → who enforces it
@@ -108,6 +108,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | Auth error codes & their recovery | `mcp-server/src/auth/errors.ts` (`AuthErrorCode`) | [`../troubleshooting.md`](../troubleshooting.md) + `.ko` | ✅ `docs-onboarding.test.ts` — add a code without a recovery entry and CI fails |
 | Credential list & wizard deep-links | `cli/src/credentials.ts` (the registry) | [`../credentials.md`](../credentials.md) + `.ko` | ✅ anchors + EN/KO parity tested; the vendor click-paths themselves are ⚠️ manual (Apple/Meta/Google reorganize their consoles on their own schedule) |
 | Node floor | `.nvmrc` | both `package.json`s, READMEs, `from-source.md` | ✅ `docs-onboarding.test.ts` |
+| Release version | root `package.json` | `packages/*/package.json`, `.claude-plugin/`, `.codex-plugin/` | ✅ `version-sync.test.ts` — they drifted to 0.7.0 / 0.8.1 / 0.4.1 before this |
 | CLI output strings (ko/en) | `cli/src/i18n.ts` — `t()` for shared onboarding text, `catalog(ko, en)` for per-command text | each command file | ✅ **two** guards: the compiler (`catalog<T>(ko, en: NoInfer<T>)` — a missing English key fails the build) **and** `i18n-coverage.test.ts`, which fails if any user-facing Hangul literal sits outside a `ko` catalog. The compiler alone can't see a hardcoded Korean string that never went through a catalog |
 
 ## Update triggers
