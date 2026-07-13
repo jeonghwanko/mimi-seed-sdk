@@ -14,8 +14,18 @@ import type { OAuth2Client } from 'google-auth-library';
 const admin = () => google.analyticsadmin('v1beta');
 const data = () => google.analyticsdata('v1beta');
 
-/** GA4 도구가 요구하는 OAuth 스코프 — requireAuth() pre-flight 검사에 사용. */
+/** Admin API(analyticsadmin — property/data stream 생성·조회)가 요구하는 스코프. */
 export const GA4_SCOPE = 'https://www.googleapis.com/auth/analytics.edit';
+
+/**
+ * Data API(analyticsdata — runReport)가 요구하는 스코프.
+ *
+ * ⚠️ analytics.edit 은 **Admin API 전용**이라 Data API 가 받아주지 않는다. 둘을 같은
+ * 스코프로 묶으면 pre-flight 는 통과시켜 놓고 구글이 403 을 던져서, "API 가 꺼졌나"로
+ * 오진하게 된다 — property 목록은 멀쩡히 보이는데 리포트만 막히는 형태라 더 헷갈린다.
+ * (2026-07 실사고: 맑음 D1 지표를 뽑으려다 Analytics API 활성화 문제로 오인.)
+ */
+export const GA4_DATA_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 
 export type Ga4Auth = OAuth2Client;
 

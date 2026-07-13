@@ -58,7 +58,8 @@ runDomainCli({
       }),
     streams: async (p) => ga4.listDataStreams(await requireAuth(ga4.GA4_SCOPE), requireFlag(p, 'property')),
     report: async (p) =>
-      ga4.runReport(await requireAuth(ga4.GA4_SCOPE), requireFlag(p, 'property'), {
+      // Data API 는 analytics.readonly — Admin 스코프(analytics.edit)로는 403 이다
+      ga4.runReport(await requireAuth(ga4.GA4_DATA_SCOPE), requireFlag(p, 'property'), {
         startDate: requireFlag(p, 'start'),
         endDate: requireFlag(p, 'end'),
         dimensions: flagList(p, 'dimensions'),

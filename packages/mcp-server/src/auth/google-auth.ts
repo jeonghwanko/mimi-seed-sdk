@@ -16,6 +16,10 @@ const SCOPES = [
   'https://www.googleapis.com/auth/adwords', // Google Ads API (googleads_* tools)
   'https://www.googleapis.com/auth/webmasters', // Search Console API (gsc_* tools, 사이트맵 제출 포함)
   'https://www.googleapis.com/auth/analytics.edit', // GA4 Analytics Admin API (ga4_* tools — property/data stream 생성·조회)
+  // GA4 **Data API**(analyticsdata — ga4_run_report)는 analytics.edit 을 받지 않는다.
+  // Admin API 전용 스코프이기 때문. 이게 빠져 있으면 property 목록은 보이는데 리포트만
+  // 403 으로 막혀서, "API 가 꺼졌나" 로 오진하기 쉽다. (2026-07 실사고)
+  'https://www.googleapis.com/auth/analytics.readonly',
 ];
 
 // Primary config dir. Legacy `~/.preseed` is read as a fallback during the

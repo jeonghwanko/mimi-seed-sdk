@@ -114,7 +114,8 @@ export function registerGa4Tools(server: McpServer) {
       metrics: z.string().optional().describe('쉼표 구분 metric (기본 activeUsers,eventCount)'),
     },
     async ({ propertyId, startDate, endDate, dimensions, metrics }) => {
-      const auth = await requireAuth(ga4Raw.GA4_SCOPE);
+      // Data API 는 analytics.readonly 를 요구한다 — Admin 스코프로 검사하면 통과시켜 놓고 403 이 난다
+      const auth = await requireAuth(ga4Raw.GA4_DATA_SCOPE);
       const report = await ga4.runReport(auth, propertyId, {
         startDate,
         endDate,
