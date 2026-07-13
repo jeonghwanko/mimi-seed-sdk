@@ -207,16 +207,25 @@ export async function updateListing(
   language: string,
   data: { title?: string; shortDescription?: string; fullDescription?: string },
 ) {
+  // ⚠️ edits.listings.update 는 리소스를 **통째로 교체**한다(PUT). requestBody 에 없는 필드는
+  // 지워진다 — 특히 `video`(스토어 프로모 영상)는 이 함수의 시그니처에 아예 없으므로,
+  // "제목만 바꾸기"가 조용히 앱의 프로모 영상을 삭제한다. patch 는 넘긴 필드만 부분 갱신한다.
+  //
+  // undefined 를 걸러내는 이유: 호출자가 title 만 준 경우 { shortDescription: undefined } 가
+  // 그대로 실려 나가면 patch 라도 해당 필드를 비우려는 의도로 해석될 여지가 있다.
+  const requestBody = Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v !== undefined),
+  );
   return withEdit(
     auth,
     packageName,
     async (editId) => {
-      const updated = await publisher().edits.listings.update({
+      const updated = await publisher().edits.listings.patch({
         auth,
         packageName,
         editId,
         language,
-        requestBody: data,
+        requestBody,
       });
       return updated.data;
     },
