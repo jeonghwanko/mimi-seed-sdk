@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import { getMcpOAuthClient } from '../auth/constants.js';
 import { classifyError } from '../auth/errors.js';
 import { startAuth, ensureFreshAccessToken, getTokensLastRefreshMs } from '../auth/google-auth.js';
@@ -11,6 +12,7 @@ import { loadConfig as loadGoogleAdsConfig } from '../googleads/config.js';
 import { loadFacebookConfig } from '../facebook/config.js';
 import { loadInstagramConfig } from '../instagram/config.js';
 import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
+import { syncRemoteCredentials } from '../remote-sync.js';
 import {
   findProjectManifest,
   manifestServiceEntries,
@@ -364,5 +366,34 @@ export function registerAuthTools(server: McpServer) {
           };
       }
     },
+  );
+
+  server.tool(
+    'mimi_seed_remote_sync_credentials',
+    [
+      '로컬 ~/.mimi-seed의 App Store Connect 키와 패키지별 Google Play 서비스 계정을',
+      'Mimi Seed 원격 MCP에 검증 후 암호화 동기화합니다.',
+      '기본은 미리보기이며 실제 비밀값 전송에는 confirm=true가 필요합니다.',
+      '로컬 Google OAuth tokens.json은 보안 및 OAuth 클라이언트 호환성 때문에 복사하지 않습니다.',
+    ].join(' '),
+    {
+      confirm: z.boolean().optional().describe('true일 때만 원격에 비밀값을 전송하고 저장'),
+      include_appstore: z.boolean().optional().describe('App Store 키 포함 (기본 true)'),
+      include_playstore: z.boolean().optional().describe('Play 서비스 계정 포함 (기본 true)'),
+      package_names: z.array(z.string()).optional().describe('특정 Play 패키지만 동기화'),
+    },
+    async ({ confirm, include_appstore, include_playstore, package_names }) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: await syncRemoteCredentials({
+            confirm,
+            includeAppStore: include_appstore,
+            includePlayStore: include_playstore,
+            packageNames: package_names,
+          }),
+        },
+      ],
+    }),
   );
 }

@@ -44,7 +44,7 @@ tools directly — but the *call order* and *safety rules* below still apply.
 
 | Goal | `ToolSearch` query |
 |------|--------------------|
-| First contact / "what's connected?" | `select:mimi_seed_status,mimi_seed_auth_status,mimi_seed_auth_start` |
+| First contact / "what's connected?" | `select:mimi_seed_status,mimi_seed_auth_status,mimi_seed_auth_start,mimi_seed_remote_sync_credentials` |
 | Play Store release | `select:playstore_get_app,playstore_list_tracks,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release` |
 | Play Store listing + images | `select:playstore_get_listing,playstore_update_listing,playstore_upload_image,playstore_list_images,playstore_replace_images,playstore_delete_all_images` |
 | App Store / TestFlight | `select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
@@ -137,7 +137,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Search Console** | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Facebook / Instagram** | `facebook_post_photo` · `instagram_post_carousel` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
-| **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
+| **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 
 ---
 

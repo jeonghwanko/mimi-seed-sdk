@@ -63,6 +63,22 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth   # BigQuery auth
 The CLI also wraps Google login as `mimi-seed auth login` (`cli/src/auth.ts`). The MCP resource
 `mimi-seed://auth/status` reports Google OAuth freshness as JSON; `mimi_seed_status` scans all services.
 
+## Local to remote credential sync
+
+`mimi_seed_remote_sync_credentials` bridges reusable local Store credentials into the remote HTTP MCP:
+
+- Its default call is a preview and performs no network write.
+- `confirm=true` uploads the App Store Connect key and per-package Play service-account JSON over the
+  configured HTTPS MCP endpoint. The remote validates each credential against the provider before encrypted
+  storage and never returns the secret material.
+- `tokens.json` is deliberately excluded. A Google refresh token is bound to the local OAuth client and is not
+  a portable remote credential. Remote Firebase, AdMob, and Android vitals therefore still require one Google
+  platform-consent flow in the web console.
+- The remote PAT and endpoint come from `config.json` or `MIMI_SEED_TOKEN` / `MIMI_SEED_WEB_BASE`.
+
+Agents must preview first, explain the external secret storage, and obtain explicit user approval before a
+second call with `confirm=true`.
+
 ## When writing auth code (do / don't)
 
 - ✅ Resolve credentials through the existing helpers (`ensureFreshAccessToken`, the Play SA resolver, the ASC

@@ -1,4 +1,4 @@
-# Tool catalog — 156 tools across 17 domains
+# Tool catalog — 157 tools across 17 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -25,10 +25,10 @@
 | BigQuery | `registers/bigquery.ts` | 5 |
 | Instagram | `registers/instagram.ts` | 4 |
 | Checks | `registers/checks.ts` | 4 |
-| Auth | `registers/auth.ts` | 3 |
+| Auth | `registers/auth.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
-| **Total** | **17 modules** | **156** |
+| **Total** | **17 modules** | **157** |
 
 ## Google Play — `registers/playstore.ts` (29) · impl `playstore/tools.ts`
 
@@ -96,7 +96,7 @@
 | Domain (file) | Tools |
 |---|---|
 | Checks (`checks.ts`) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
-| Auth (`auth.ts`) | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
+| Auth (`auth.ts`) | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | AI (`ai.ts`) — needs `ANTHROPIC_API_KEY` | `generate_release_notes_from_commits` · `generate_review_reply` |
 
 ## Quirks worth knowing (tool name ≠ register file)

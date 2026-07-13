@@ -43,9 +43,25 @@ ToolSearch(query="select:<tool>[,<tool>...]")
 3. 스토어 **쓰기 전** `*_check_submission_risks` 또는 `*_plan_release`로 블로커를 먼저 점검하고 사용자에게 체크리스트로 보고.
 4. 적용 후 결과·실패 지점을 요약.
 
+## 로컬 자격증명을 원격 MCP에 연결
+
+원격 Mimi Seed에서 로컬과 같은 Store 연결이 필요하면 먼저
+`mimi_seed_remote_sync_credentials`를 `confirm=false`로 호출해 대상을 확인한다. 사용자에게
+Apple P8 키와 Play 서비스 계정 JSON이 원격 워크스페이스에 암호화 저장된다는 점을 알리고,
+명시 동의를 받은 뒤에만 `confirm=true`로 다시 호출한다. 특정 앱만 필요하면
+`package_names`를 지정한다.
+
+- 동기화 대상: `appstore.json`, `play-service-accounts/<packageName>.json`
+- 동기화 제외: `tokens.json`. 로컬 Google OAuth refresh token은 로컬 OAuth client에 묶여 있으므로
+  복사하지 않는다. Firebase·AdMob·Android vitals는 결과에 표시된 원격 웹에서 Google 플랫폼 권한을
+  한 번 동의해야 한다.
+- 도구 응답에는 private key, 서비스 계정 JSON, PAT가 포함되지 않아야 한다. 실패 시에도 비밀값을
+  재출력하지 않는다.
+
 ## 안전 규칙
 
 - 비가역 작업(`playstore_submit_release`/`promote_release` `status=completed`, `appstore_submit_for_review`, 스크린샷 셋 삭제, 상품/크리덴셜 삭제)은 **같은 턴에서 명시 승인** 없이는 실행하지 않는다.
+- `mimi_seed_remote_sync_credentials(confirm=true)`는 비밀값을 외부에 저장하는 작업이므로 같은 턴의 명시 승인 없이는 실행하지 않는다.
 - 반복 작업 중에는 `status=draft`를 쓰고, `completed` 전환은 명시 요청 시에만.
 - 파일은 절대경로로 전달하고, 이미지 바이트를 대화 컨텍스트에 싣지 않는다.
 - mimi-seed는 **앱 바이너리를 빌드하지 않는다** (메타데이터·릴리스·credential 관리 전용). `.ipa`/`.aab`는 EAS·Xcode·CI/Jenkins 잡으로 만든다.

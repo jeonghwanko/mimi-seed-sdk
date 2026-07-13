@@ -93,7 +93,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | 점검 / 위험 | 4 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `screenshot_validate` / `release_status` |
 | Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
-| 인증 | 3 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` |
+| 인증 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
 
 > 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `appstore_create_inapp_purchase` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` 등.
