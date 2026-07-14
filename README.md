@@ -52,7 +52,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 > **Three things that trip every first install:**
 > 1. The local MCP server requires **Node 20+**.
-> 2. Open a **new session** after `claude mcp add` (and after package updates) — tools only appear in fresh sessions.
+> 2. Open a **new session** after installing an MCP server or plugin (and after package updates) — tools only appear in fresh sessions.
 > 3. In Claude Code the 150+ tool schemas load lazily; if a first call fails with `InputValidationError`, tell Claude: *"load the mimi-seed tools with ToolSearch first"* ([agent guide](docs/agent-guide.md)).
 >
 > More → [troubleshooting](docs/troubleshooting.md).
@@ -85,14 +85,21 @@ Claude Code — **plugin install (recommended)**: bundles the MCP server **plus 
 /plugin install mimi-seed@yoonion
 ```
 
-Or register the bare MCP server:
+Codex — **plugin install (recommended)**: installs the Codex marketplace plus the same skill bundle.
+
+```bash
+codex plugin marketplace add jeonghwanko/mimi-seed-sdk
+codex plugin add mimi-seed@yoonion
+```
+
+Or register the bare MCP server without skills:
 
 ```bash
 # Claude Code
 claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
 ```
 
-Codex (`~/.codex/config.toml`):
+Codex (`~/.codex/config.toml`; plugin install registers this automatically):
 
 ```toml
 [mcp_servers.mimi-seed-local]

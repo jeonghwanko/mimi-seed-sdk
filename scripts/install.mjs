@@ -7,7 +7,8 @@
 //
 //   node scripts/install.mjs            # install + build (링크 없음)
 //   node scripts/install.mjs --link     # + npm link (전역에서 mimi-seed 사용)
-//   node scripts/install.mjs --link --register-mcp   # + claude mcp add mimi-seed-dev
+//   node scripts/install.mjs --link --register-mcp   # + Claude Code MCP 등록
+//   node scripts/install.mjs --link --register-codex-plugin  # + Codex marketplace/plugin 등록
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -17,7 +18,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const doLink = args.includes('--link');
-const doRegister = args.includes('--register-mcp');
+const doRegisterClaude = args.includes('--register-mcp');
+const doRegisterCodex = args.includes('--register-codex-plugin');
 
 const PKGS = [
   // mcp-server 를 먼저 — CLI 가 셸아웃하는 setup bin 들이 여기 있다.
@@ -73,7 +75,7 @@ for (const pkg of PKGS) {
 
 console.log('');
 
-if (doRegister) {
+if (doRegisterClaude) {
   // 링크된 bin 이 PATH 에 있으면 경로 없이 등록할 수 있다 (Windows 경로 이슈 회피).
   const cmd = doLink
     ? 'claude mcp add mimi-seed-dev -- mimi-seed-mcp'
@@ -81,6 +83,42 @@ if (doRegister) {
   const r = spawnSync(cmd, { shell: true, stdio: 'pipe', encoding: 'utf8' });
   if (r.status === 0) ok('claude mcp add mimi-seed-dev  (새 세션에서 도구가 보입니다)');
   else info(`MCP 등록은 직접 해줘:  ${cmd}`);
+  console.log('');
+}
+
+if (doRegisterCodex) {
+  run('node scripts/sync-codex-plugin.mjs', root);
+
+  // 최초 설치는 add, 이미 등록된 소스 체크아웃은 upgrade로 스냅샷을 갱신한다.
+  const add = spawnSync(`codex plugin marketplace add "${root}"`, {
+    cwd: root,
+    shell: true,
+    stdio: 'pipe',
+    encoding: 'utf8',
+  });
+  if (add.status !== 0) {
+    const upgrade = spawnSync('codex plugin marketplace upgrade yoonion', {
+      cwd: root,
+      shell: true,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    });
+    if (upgrade.status !== 0) {
+      info(`Codex marketplace 등록은 직접 해줘:  codex plugin marketplace add "${root}"`);
+    }
+  }
+
+  const install = spawnSync('codex plugin add mimi-seed@yoonion', {
+    cwd: root,
+    shell: true,
+    stdio: 'pipe',
+    encoding: 'utf8',
+  });
+  if (install.status === 0) {
+    ok('Codex plugin add mimi-seed@yoonion  (새 대화에서 스킬과 도구가 보입니다)');
+  } else {
+    info('Codex 플러그인 설치는 직접 해줘:  codex plugin add mimi-seed@yoonion');
+  }
   console.log('');
 }
 

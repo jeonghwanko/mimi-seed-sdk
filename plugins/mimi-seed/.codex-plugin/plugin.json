@@ -1,0 +1,41 @@
+{
+  "name": "mimi-seed",
+  "version": "0.9.4",
+  "description": "Firebase, AdMob, Google Play, App Store Connect를 Codex에서 관리하는 MCP 도구와 출시 운영 스킬 번들.",
+  "author": {
+    "name": "yoonion",
+    "url": "https://mimi-seed.pryzm.gg"
+  },
+  "homepage": "https://mimi-seed.pryzm.gg",
+  "repository": "https://github.com/jeonghwanko/mimi-seed-sdk",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "keywords": [
+    "mcp",
+    "codex",
+    "firebase",
+    "admob",
+    "google-play",
+    "app-store",
+    "release-automation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Mimi Seed",
+    "shortDescription": "앱 출시 운영을 Codex에서 바로 관리합니다.",
+    "longDescription": "Mimi Seed는 Firebase, AdMob, Google Play, App Store Connect를 MCP 도구로 연결해 앱 출시 점검, 릴리스 노트, 리뷰 답변, 스크린샷 업로드를 Codex 안에서 처리하게 해줍니다.",
+    "developerName": "yoonion",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://mimi-seed.pryzm.gg",
+    "defaultPrompt": [
+      "내 앱 출시 준비 상태 확인해줘.",
+      "최근 커밋으로 릴리스 노트 작성해줘.",
+      "App Store 스크린샷 업로드 도와줘."
+    ],
+    "brandColor": "#34D399"
+  }
+}

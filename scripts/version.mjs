@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 릴리스 버전을 한 곳에서 관리한다.
 //
-// 예전엔 릴리스마다 4개 파일(cli / mcp-server / .claude-plugin / .codex-plugin)을 손으로 올렸고,
+// 예전엔 릴리스마다 패키지와 클라이언트별 플러그인 버전을 손으로 올렸고,
 // 세 갈래 버전이 따로 놀았다 — "이 CLI 가 저 MCP 서버와 맞나?" 를 사람이 기억해야 했다.
 // 이제 **루트 package.json 의 version 이 SDK 의 유일한 버전**이고, 나머지는 그걸 따라간다.
 //
@@ -21,6 +21,7 @@ export const VERSIONED = [
   'packages/mcp-server/package.json',
   '.claude-plugin/plugin.json',
   '.codex-plugin/plugin.json',
+  'plugins/mimi-seed/.codex-plugin/plugin.json',
 ];
 
 const readJson = (rel) => JSON.parse(readFileSync(path.join(root, rel), 'utf8'));

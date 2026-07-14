@@ -14,7 +14,8 @@ never secrets, real identifiers, or private web-console internals.
 
 - `packages/cli`: `mimi-seed` npm CLI.
 - `packages/mcp-server`: `@yoonion/mimi-seed-mcp` local stdio MCP server.
-- `.codex-plugin`, `.mcp.json`, `skills`: Codex plugin and skill surface.
+- `.codex-plugin`, `.mcp.json`, `skills`: Codex plugin and skill source of truth.
+- `.agents/plugins/marketplace.json`, `plugins/mimi-seed`: Codex marketplace manifest and generated distribution; refresh with `npm run plugin:sync`.
 - Root README files: public installation docs mirrored by the private web console repo.
 
 The private web console lives in a separate repo (not this SDK). Do not move SDK package implementation back into that repo.
