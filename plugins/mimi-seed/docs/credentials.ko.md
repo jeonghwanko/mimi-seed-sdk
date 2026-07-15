@@ -278,8 +278,10 @@ Instagram 토큰은 여기서 안 통한다.
 
 **마법사에 넣을 것:** 토큰만. user ID 는 자동 조회된다. 저장 전에 검증한다.
 
-**토큰 만료:** `mimi-seed auth threads`를 실행한다. `mimi-seed setup`도 만료됐거나 7일 이내 만료되는
-토큰을 자동으로 재연결 목록에 올린다.
+**토큰 만료 임박:** `mimi-seed auth threads` 또는 `threads_refresh_token`을 실행한다. 기존 long-lived 토큰이
+아직 유효하면 Threads 공식 refresh endpoint로 갱신하고, 응답으로 받은 만료일을 저장한다. `mimi-seed setup`은
+7일 이내 만료되는 토큰을 자동으로 목록에 올린다. 이미 만료·철회된 토큰은 갱신할 수 없으며, 같은 CLI 흐름에서
+새로 발급한 토큰 입력으로 이어진다.
 
 주의할 점: 이미지·캐러셀 URL 은 **public** 이어야 하고(Graph API 는 로컬 파일 불가), 게시물당 **500자** 제한,
 이미지 게시는 Meta 가 미디어를 처리할 때까지 몇 초 대기한 뒤 발행된다.

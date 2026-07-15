@@ -97,6 +97,9 @@ either form works.
 For Facebook, Instagram, and Threads, `mimi-seed setup` reads the saved expiry estimate. Expired tokens and
 tokens with seven days or less remaining are automatically put back into the setup plan. A live Meta rejection
 (including OAuth code 190) returns the exact `mimi-seed auth <platform>` recovery command instead of a raw error.
+For an unexpired Threads long-lived token, `threads_refresh_token` (also the default path in `mimi-seed auth
+threads`) refreshes it without asking the user to paste a replacement. Expired or revoked tokens still require a
+new authorization.
 
 ---
 
@@ -142,7 +145,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Google Cloud IAM** | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
 | **Search Console** | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
-| **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` |
+| **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_refresh_token` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 

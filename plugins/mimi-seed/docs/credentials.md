@@ -285,8 +285,10 @@ token — an Instagram token will not work here.
 
 **Give it to the wizard:** just the token; the user ID is resolved for you. Verified before saving.
 
-**Expired token:** run `mimi-seed auth threads`. `mimi-seed setup` also flags an expired token (or one with
-seven days or less remaining) and offers to reconnect it.
+**Expiring token:** run `mimi-seed auth threads` or `threads_refresh_token`. While the current long-lived token
+is still valid, Mimi Seed uses Threads' official refresh endpoint and stores the returned expiry. `mimi-seed
+setup` automatically flags tokens with seven days or less remaining. An already expired or revoked token cannot
+be refreshed; the same CLI flow falls back to asking for a newly issued token.
 
 Notes that bite: image/carousel URLs must be **public** (Graph API can't take local files), each post is capped
 at **500 characters**, and image posts wait for Meta to process the media before publishing (a few seconds).

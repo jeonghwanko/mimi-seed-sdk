@@ -36,8 +36,9 @@ function writeVersion(rel, version) {
   const p = path.join(root, rel);
   const raw = readFileSync(p, 'utf8');
   // JSON.stringify 로 다시 쓰면 키 순서·포맷이 흔들린다 — version 한 줄만 바꾼다.
-  const next = raw.replace(/("version"\s*:\s*")[^"]*(")/, `$1${version}$2`);
-  if (next === raw) throw new Error(`${rel}: "version" 필드를 찾지 못했다`);
+  const pattern = /("version"\s*:\s*")[^"]*(")/;
+  if (!pattern.test(raw)) throw new Error(`${rel}: "version" 필드를 찾지 못했다`);
+  const next = raw.replace(pattern, `$1${version}$2`);
   writeFileSync(p, next);
 }
 
