@@ -71,6 +71,10 @@ claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
 
 # 3-b. Or register in Codex:
 npx mimi-seed mcp codex --write
+# The config references MIMI_SEED_TOKEN instead of storing the PAT.
+# Set it in the environment that launches Codex, then restart Codex.
+export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
+# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
 ```
 
 Done. Start talking to Claude Code or Codex.

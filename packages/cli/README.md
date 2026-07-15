@@ -310,6 +310,9 @@ Codex는 자동 쓰기 명령을 사용할 수 있습니다.
 mimi-seed mcp codex --write
 ```
 
+이 명령은 `mimi-seed-remote` HTTP 항목과 `bearer_token_env_var = "MIMI_SEED_TOKEN"`을 기록하며 PAT 자체는
+`config.toml`에 쓰지 않습니다. Codex를 실행하는 환경에 `MIMI_SEED_TOKEN`을 설정하고 Codex를 다시 시작하세요.
+
 등록 후 Claude Code 또는 Codex에서 대화로 제어:
 
 ```

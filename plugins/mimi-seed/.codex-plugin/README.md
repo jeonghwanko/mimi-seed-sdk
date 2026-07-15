@@ -40,6 +40,9 @@ mimi-seed init
 mimi-seed mcp codex --write
 ```
 
+원격 PAT는 `config.toml`에 평문으로 저장되지 않습니다. Codex를 실행하는 환경의 `MIMI_SEED_TOKEN`에 PAT를
+설정하고 Codex를 다시 시작하세요. 원격 항목 이름은 로컬 stdio 서버와 충돌하지 않는 `mimi-seed-remote`입니다.
+
 ## 프로젝트 측 설정
 
 프로젝트에서 `mimi-seed init`을 실행하면 Claude Code용 `.claude/mimi-seed.md`와 Codex용 `AGENTS.md`에 같은 운영 컨텍스트가 기록됩니다.

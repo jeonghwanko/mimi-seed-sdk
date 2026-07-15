@@ -69,6 +69,14 @@ describe('온보딩 문서 ↔ 코드', () => {
     }
   });
 
+  it('Codex 원격 설정 문서가 PAT 평문 대신 환경변수 계약을 안내한다', () => {
+    for (const f of USER_GUIDE_PAIRS[9]) {
+      const doc = read(f);
+      expect(doc).toContain('mcp_servers.mimi-seed-remote');
+      expect(doc).toContain('bearer_token_env_var = "MIMI_SEED_TOKEN"');
+    }
+  });
+
   // ① 가장 ROI 높은 가드 — errors.ts 의 AuthErrorCode 유니온이 SSOT.
   it('모든 AuthErrorCode 가 troubleshooting 문서(EN·KO 양쪽)에 나온다', () => {
     const src = read('packages/mcp-server/src/auth/errors.ts');

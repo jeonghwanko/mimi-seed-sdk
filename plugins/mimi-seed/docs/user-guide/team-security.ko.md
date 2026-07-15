@@ -26,8 +26,10 @@ Mimi Seed는 팀 상태를 공유할 수 있지만 모든 자격증명을 공유
 
 ## Codex 설정 주의
 
-`mimi-seed mcp codex --write`는 사용자 홈의 `~/.codex/config.toml`에 Remote PAT를 평문으로 저장할 수 있다.
-파일 권한을 제한하고 저장소의 `.codex/config.toml`로 복사하지 않는다. 프로젝트 설정에 토큰이 들어 있다면 커밋하지 않는다.
+`mimi-seed mcp codex --write`는 `[mcp_servers.mimi-seed-remote]` HTTP 항목을 별도로 만들고 PAT 대신
+`bearer_token_env_var = "MIMI_SEED_TOKEN"`만 기록한다. Codex를 실행하는 프로세스에 이 환경변수를 설정하고
+Codex를 다시 시작한 뒤 `codex mcp list`로 확인한다. 저장소 `.codex/config.toml`에는 PAT를 넣지 말고, 과거
+인라인 `http_headers` 토큰을 커밋하거나 복사한 적이 있다면 제거한다.
 
 ## CI 자동화 게이트
 

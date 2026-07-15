@@ -26,9 +26,10 @@ allows, and never put secrets in them.
 
 ## Codex configuration warning
 
-`mimi-seed mcp codex --write` can store a Remote PAT in plaintext in the user's `~/.codex/config.toml`. Restrict
-file permissions and do not copy it into a repository `.codex/config.toml`. Never commit project configuration
-that contains a token.
+`mimi-seed mcp codex --write` writes a separate `[mcp_servers.mimi-seed-remote]` HTTP entry. It stores
+`bearer_token_env_var = "MIMI_SEED_TOKEN"`, not the PAT itself. Set that environment variable in the process that
+launches Codex, restart Codex, and verify with `codex mcp list`. Never put the PAT in a repository
+`.codex/config.toml`; remove any legacy inline `http_headers` token if one was committed or copied elsewhere.
 
 ## CI automation gates
 
