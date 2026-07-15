@@ -1,5 +1,7 @@
 # Connecting your accounts
 
+For the complete journey from installation to deployment, start with the [Mimi Seed User Guide](user-guide/README.md).
+
 **You should not read this front to back.** Run the wizard — it shows what's missing, connects what it can, and
 sends you here only for the one credential you're stuck on:
 

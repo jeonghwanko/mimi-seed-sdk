@@ -40,6 +40,9 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 ---
 
+For a complete **account setup → CI build → release check → store deploy → social announcement** journey, start
+with the [Mimi Seed User Guide](docs/user-guide/README.md).
+
 ## 30-Second Setup
 
 **Pick your option first** (they can also be installed side by side):
