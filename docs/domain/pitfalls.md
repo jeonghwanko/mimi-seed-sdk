@@ -109,7 +109,7 @@ The rules that came out of it:
 
 - **Exactly one writer per credential.** The package that *validates* the credential owns writing it. The CLI
   shells out to the `mimi-seed-*-auth` bins rather than writing `jenkins.json` / `google-ads.json` /
-  `facebook.json` / `instagram.json` itself ([[cli-deploy]]). `ci.json` is the one CLI-owned file.
+  `facebook.json` / `instagram.json` / `threads.json` itself ([[cli-deploy]]). `ci.json` is the one CLI-owned file.
 - **Merge, don't overwrite**, when a file legitimately holds fields from two sources (`jenkins.json` carries
   connection info *and* the CLI's build-job names).
 - **Validate before saving.** A token that can't reach its API must never land on disk — otherwise `doctor`

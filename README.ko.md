@@ -128,10 +128,12 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-나머지 계정 — App Store Connect · Play · Jenkins · CI · Google Ads · Facebook · Instagram — 은 마법사 하나로 연결합니다:
+나머지 계정 — App Store Connect · Play · Jenkins · CI · Google Ads · Facebook · Instagram · Threads — 은 마법사 하나로 연결합니다:
 
 ```bash
 npx mimi-seed setup
+# 또는 Meta 세 플랫폼만 한 번에 다시 연결
+npx mimi-seed auth meta
 ```
 
 첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md).
@@ -351,7 +353,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ---
 
-## 도구 목록 (Local MCP · 150+ 개 · 17개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 18개 영역)
 
 > 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -369,6 +371,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **Threads** | 6 | `threads_post` · `threads_post_carousel` · `threads_refresh_token` |
 | **점검 / 위험** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android 서명** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |

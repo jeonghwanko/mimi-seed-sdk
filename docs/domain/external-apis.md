@@ -20,6 +20,7 @@
 | Search Console | Search Console API | `googleapis` |
 | Google Ads | Google Ads reporting | `googleapis` / REST per `googleads_save_config` |
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |
+| Facebook / Instagram / Threads | Meta Graph APIs | `fetch`; shared expiry/error recovery in `lib/meta-auth.ts` |
 | AI tools | Anthropic Messages API | `@anthropic-ai/sdk` (needs `ANTHROPIC_API_KEY`) |
 
 Key dependency versions (pin points): `googleapis ^171`, `@modelcontextprotocol/sdk ^1.12`, `jose ^5.10`,
@@ -49,6 +50,7 @@ outbound calls in them so the user sees *why*, not a stack trace:
 | `friendlyGoogleError(e)` — `lib/google-errors.ts` | any `googleapis` call (Firebase, AdMob, IAM, BigQuery, GA4, GSC, Ads) |
 | `friendlyPlayError(e, packageName?)` — `playstore/errors.ts` | Play Developer API calls — adds Play-specific reasons (app state, policy, draft-app track) on top of the Google one |
 | `friendlyAppStoreError(status, body)` — `appstore/errors.ts` | ASC REST responses |
+| `metaApiError(platform, status, message, code?)` — `lib/meta-auth.ts` | Meta token expiry/revocation and safe recovery commands |
 
 Supporting helpers in `lib/google-errors.ts`: `extractHttpStatus(e)`, `rawMessage(e)`, `googleErrorDetail(e)`
 (pulls the nested Google reason), `authReauthMessage(text)` (detects expired-token text → re-auth hint), and

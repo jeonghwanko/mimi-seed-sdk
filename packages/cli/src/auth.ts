@@ -31,11 +31,13 @@ ${kleur.bold("플랫폼별 자격증명:")}
   ${kleur.cyan("mimi-seed auth bigquery")}   BigQuery 서비스 계정 (Crashlytics export 등)
 
 ${kleur.bold("빌드 / 마케팅:")}
+  ${kleur.cyan("mimi-seed auth meta")}       Facebook · Instagram · Threads 한 번에
   ${kleur.cyan("mimi-seed auth jenkins")}    Jenkins 연결 (jenkins.json)
   ${kleur.cyan("mimi-seed auth ci")}         GitHub Actions / GitLab CI (ci.json)
   ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook 페이지
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
+  ${kleur.cyan("mimi-seed auth threads")}    Threads
 
 ${kleur.bold("전체 상태:")}
   ${kleur.cyan("mimi-seed auth status --all")}  모든 자격증명 보유 여부 한눈에
@@ -66,11 +68,13 @@ ${kleur.bold("Per-platform credentials:")}
   ${kleur.cyan("mimi-seed auth bigquery")}   BigQuery service account (Crashlytics export, etc.)
 
 ${kleur.bold("Build / marketing:")}
+  ${kleur.cyan("mimi-seed auth meta")}       Facebook · Instagram · Threads in one flow
   ${kleur.cyan("mimi-seed auth jenkins")}    Jenkins connection (jenkins.json)
   ${kleur.cyan("mimi-seed auth ci")}         GitHub Actions / GitLab CI (ci.json)
   ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook Page
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
+  ${kleur.cyan("mimi-seed auth threads")}    Threads
 
 ${kleur.bold("Everything at a glance:")}
   ${kleur.cyan("mimi-seed auth status --all")}  which credentials you have
@@ -97,14 +101,24 @@ function printAllCredStatus(): void {
   const detected = detectAll();
   for (const spec of CREDENTIALS) {
     const d = detected.get(spec.id)!;
-    const mark = d.present
-      ? kleur.green("✓")
+    const mark = d.freshness === "expired"
+      ? kleur.red("✗")
+      : d.freshness === "expiring"
+        ? kleur.yellow("!")
+      : d.present
+        ? kleur.green("✓")
       : isSatisfied(spec, detected)
         ? kleur.yellow("~") // 폴백(OAuth 등)으로 동작은 하는 상태
         : spec.requirement === "optional"
           ? kleur.dim("·")
           : kleur.red("✗");
-    const tail = d.present ? kleur.dim(d.detail ?? "") : kleur.dim(`→ ${spec.fix}`);
+    const tail = d.freshness === "expired"
+      ? kleur.red(`${t().setup.tokenExpired} → ${spec.fix}`)
+      : d.freshness === "expiring"
+        ? kleur.yellow(`${t().setup.tokenExpiring(d.daysRemaining ?? 0)} → ${spec.fix}`)
+        : d.present
+          ? kleur.dim(d.detail ?? "")
+          : kleur.dim(`→ ${spec.fix}`);
     log(`  ${mark} ${credLabel(spec).padEnd(24)} ${tail}`);
   }
   log(kleur.dim(M().connectAll));
@@ -119,7 +133,7 @@ export async function cmdAuth(args: string[]): Promise<void> {
     return;
   }
 
-  // status --all: 4개 자격증명 파일 존재 여부 요약 (네트워크 호출 없음)
+  // status --all: 전체 자격증명 파일 존재/만료 추정 상태 요약 (네트워크 호출 없음)
   if (sub === "status" && rest.includes("--all")) {
     printAllCredStatus();
     return;
@@ -131,8 +145,10 @@ export async function cmdAuth(args: string[]): Promise<void> {
   if (sub === "bigquery") return void exitWith(await runMcpBin("mimi-seed-bigquery-auth", rest));
   if (sub === "jenkins") return void exitWith(await runMcpBin("mimi-seed-jenkins-auth", rest));
   if (sub === "googleads") return void exitWith(await runMcpBin("mimi-seed-googleads-auth", rest));
+  if (sub === "meta") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["all"]));
   if (sub === "facebook") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["facebook"]));
   if (sub === "instagram") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["instagram"]));
+  if (sub === "threads") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["threads"]));
 
   // CI(ci.json)는 CLI 가 직접 소유하는 유일한 자격증명 — setup 마법사의 항목 하나만 돌린다.
   if (sub === "ci") {

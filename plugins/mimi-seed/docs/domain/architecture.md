@@ -75,7 +75,7 @@ count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
    | `mimi-seed-bigquery-auth` | `auth/bigquery-setup-cli.ts` | BigQuery auth |
    | `mimi-seed-jenkins-auth` | `jenkins/setup-cli.ts` | Jenkins — probes the server before saving |
    | `mimi-seed-googleads-auth` | `googleads/setup-cli.ts` | Google Ads — verifies via a live API call before saving |
-   | `mimi-seed-social-auth` | `social/setup-cli.ts` | Facebook / Instagram (`… facebook` \| `… instagram`) |
+   | `mimi-seed-social-auth` | `social/setup-cli.ts` | Facebook / Instagram / Threads (`… facebook` \| `… instagram` \| `… threads`) |
    | `mimi-seed-firebase` / `-admob` / `-ga4` | `firebase/cli.ts`, `admob/cli.ts`, `ga4/cli.ts` | admin sub-CLIs |
 
    These are also declared as `bin` entries in `mcp-server/package.json`, so each is runnable directly via
@@ -84,8 +84,8 @@ count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
    **The `bin` map is a cross-package contract**: the CLI's `mimi-seed setup` / `mimi-seed auth <cred>` shell
    out to these names (`cli/src/mcp-bin.ts`), and a CLI test asserts every bin the credential registry references
    actually exists here. The bins own **writing + validating** credentials so that a second, drifting writer never
-   appears in the CLI ([[cli-deploy]], [[pitfalls]]). The social/Facebook/Instagram *validation* itself is shared
-   with the MCP tools via `facebook/setup.ts` and `instagram/setup.ts` — one implementation, two entry points.
+   appears in the CLI ([[cli-deploy]], [[pitfalls]]). The social/Facebook/Instagram/Threads *validation* itself
+   is shared with the MCP tools via each domain's `setup.ts` — one implementation, two entry points.
 
 ## Bootstrapping a clone
 

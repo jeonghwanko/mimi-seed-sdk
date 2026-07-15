@@ -12,10 +12,10 @@
 
 - Public developer tooling for app launch ops: a **CLI** (`mimi-seed`) + a **local stdio MCP server**
   (`@yoonion/mimi-seed-mcp`) in a two-package monorepo under `packages/`.
-- The MCP server registers **150+ tools** across **17 domain modules** (exact inventory:
+- The MCP server registers **150+ tools** across **18 domain modules** (exact inventory:
   `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase,
   AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins credentials,
-  Facebook, Instagram, Android signing, AI, Auth, and Checks. (Prose docs use the "150+" floor; only the
+  Facebook, Instagram, Threads, Android signing, AI, Auth, and Checks. (Prose docs use the "150+" floor; only the
   manifest and [[tool-catalog]] carry exact counts.)
 - It drives Google / Apple APIs **directly** using local credentials under `~/.mimi-seed/`. It manages
   metadata, store releases, and CI/Jenkins *credentials* — it does **not** compile `.aab`/`.ipa` binaries.

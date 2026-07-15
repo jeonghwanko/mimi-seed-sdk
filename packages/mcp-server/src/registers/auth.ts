@@ -11,6 +11,8 @@ import { loadCiConfig } from '../ci/config.js';
 import { loadConfig as loadGoogleAdsConfig } from '../googleads/config.js';
 import { loadFacebookConfig } from '../facebook/config.js';
 import { loadInstagramConfig } from '../instagram/config.js';
+import { loadThreadsConfig } from '../threads/config.js';
+import { metaTokenFreshness } from '../lib/meta-auth.js';
 import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
 import { syncRemoteCredentials } from '../remote-sync.js';
 import {
@@ -44,6 +46,26 @@ function formatLastRefreshHint(lastMs: number | null): { label: string; recommen
     };
   }
   return { label };
+}
+
+function renderMetaConnection(
+  label: string,
+  config: { expiresAt?: string } | null,
+  detail: string,
+  fix: string,
+): string {
+  const padded = label.padEnd(18);
+  if (!config) return `❌ ${padded} — 미설정 → ${fix}  (선택)`;
+
+  const freshness = metaTokenFreshness(config.expiresAt);
+  if (freshness.state === 'expired') return `❌ ${padded} — 토큰 만료 → ${fix}`;
+  if (freshness.state === 'expiring') {
+    return `⚠️  ${padded} — ${freshness.daysRemaining}일 후 만료 (${detail}) → ${fix}`;
+  }
+  if (freshness.state === 'unknown') {
+    return `⚠️  ${padded} — 설정됨, 만료일 미상 (${detail}) → 계정 조회 도구로 검증`;
+  }
+  return `✅ ${padded} — 연결됨 (${detail}, ${freshness.daysRemaining}일 남음)`;
 }
 
 // 매니페스트 서비스별 셋업 명령. status/doctor 가 "정확한 다음 명령"으로 안내한다.
@@ -107,7 +129,7 @@ export function registerAuthTools(server: McpServer) {
     'mimi_seed_status',
     [
       '⭐ 새 세션을 시작하거나 "뭐가 연결됐지?" 라는 질문엔 이 도구를 먼저 호출하세요.',
-      '9개 서비스(Google OAuth / Play SA / App Store / Jenkins / CI / Google Ads / Facebook / Instagram / BigQuery)',
+      '10개 서비스(Google OAuth / Play SA / App Store / Jenkins / CI / Google Ads / Facebook / Instagram / Threads / BigQuery)',
       '설정 상태를 한 번에 스캔해 ✅ / ❌ 트래픽 라이트 리포트와 번호 매긴 다음 단계를 반환합니다.',
       '미설정 서비스마다 어떤 도구를 호출하면 되는지 구체적으로 알려줍니다.',
     ].join(' '),
@@ -176,21 +198,17 @@ export function registerAuthTools(server: McpServer) {
 
       // 7. Facebook
       const fb = loadFacebookConfig();
-      if (fb) {
-        lines.push(`✅ Facebook          — 연결됨 (pageId: ${fb.pageId})`);
-      } else {
-        lines.push('❌ Facebook          — 미설정 → facebook_save_config  (선택)');
-      }
+      lines.push(renderMetaConnection('Facebook', fb, `pageId: ${fb?.pageId ?? ''}`, 'mimi-seed auth facebook'));
 
       // 8. Instagram
       const ig = loadInstagramConfig();
-      if (ig) {
-        lines.push(`✅ Instagram         — 연결됨 (userId: ${ig.userId})`);
-      } else {
-        lines.push('❌ Instagram         — 미설정 → instagram_save_config  (선택)');
-      }
+      lines.push(renderMetaConnection('Instagram', ig, `userId: ${ig?.userId ?? ''}`, 'mimi-seed auth instagram'));
 
-      // 9. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
+      // 9. Threads
+      const threads = loadThreadsConfig();
+      lines.push(renderMetaConnection('Threads', threads, `userId: ${threads?.userId ?? ''}`, 'mimi-seed auth threads'));
+
+      // 10. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
       // 이전엔 SA 파일만 검사해 OAuth fallback 이 살아있어도 ❌ 로 오표기했다.
       const bqAuth = resolveBigQueryAuth();
       if (bqAuth?.source === 'service-account') {

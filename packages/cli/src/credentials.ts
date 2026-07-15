@@ -29,6 +29,7 @@ export type CredId =
   | "googleads"
   | "facebook"
   | "instagram"
+  | "threads"
   | "anthropic";
 
 /**
@@ -49,6 +50,10 @@ export type SetupKind =
 export interface Detected {
   present: boolean;
   detail?: string;
+  /** 파일은 있지만 곧 재연결이 필요한 시간 기반 자격증명 상태. */
+  freshness?: "fresh" | "expiring" | "expired";
+  /** 상태표 표시용 남은 일수. expired 면 0. */
+  daysRemaining?: number;
 }
 
 export interface CredSpec {
@@ -110,6 +115,45 @@ function readJson<T>(home: string, name: string): T | null {
   } catch {
     return null;
   }
+}
+
+const EXPIRING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Meta 장기 토큰은 파일 존재만으로 연결됐다고 보면 안 된다.
+ * 네트워크 없이도 setup/doctor 가 즉시 뜨도록 저장된 expiresAt 만 판정하고,
+ * 실제 API 검증은 기존 setup bin 이 저장 직전에 담당한다.
+ */
+function detectSocialToken(
+  home: string,
+  file: string,
+  idKey: "pageId" | "userId",
+  tokenKey: "pageAccessToken" | "accessToken",
+): Detected {
+  const cfg = readJson<Record<string, unknown>>(home, file);
+  const id = cfg?.[idKey];
+  const token = cfg?.[tokenKey];
+  if (typeof id !== "string" || !id || typeof token !== "string" || !token) {
+    return { present: false };
+  }
+
+  const display =
+    (typeof cfg.username === "string" && cfg.username) ||
+    (typeof cfg.pageName === "string" && cfg.pageName) ||
+    id;
+  const expiresAt = typeof cfg.expiresAt === "string" ? Date.parse(cfg.expiresAt) : NaN;
+  if (!Number.isFinite(expiresAt)) return { present: true, detail: display };
+
+  const remainingMs = expiresAt - Date.now();
+  if (remainingMs <= 0) {
+    return { present: true, detail: display, freshness: "expired", daysRemaining: 0 };
+  }
+
+  const daysRemaining = Math.max(1, Math.ceil(remainingMs / 86_400_000));
+  if (remainingMs <= EXPIRING_SOON_MS) {
+    return { present: true, detail: display, freshness: "expiring", daysRemaining };
+  }
+  return { present: true, detail: display, freshness: "fresh", daysRemaining };
 }
 
 /** Play SA 는 기본 파일과 패키지별 디렉토리 **양쪽**을 봐야 한다. */
@@ -439,10 +483,7 @@ export const CREDENTIALS: readonly CredSpec[] = [
       ],
     },
     docsAnchor: "facebook",
-    detect: (home) => {
-      const cfg = readJson<{ pageId?: string; pageName?: string }>(home, "facebook.json");
-      return cfg?.pageId ? { present: true, detail: cfg.pageName ?? cfg.pageId } : { present: false };
-    },
+    detect: (home) => detectSocialToken(home, "facebook.json", "pageId", "pageAccessToken"),
   },
   {
     id: "instagram",
@@ -470,10 +511,37 @@ export const CREDENTIALS: readonly CredSpec[] = [
       ],
     },
     docsAnchor: "instagram",
-    detect: (home) => {
-      const cfg = readJson<{ userId?: string; username?: string }>(home, "instagram.json");
-      return cfg?.userId ? { present: true, detail: cfg.username ?? cfg.userId } : { present: false };
+    detect: (home) => detectSocialToken(home, "instagram.json", "userId", "accessToken"),
+  },
+  {
+    id: "threads",
+    label: {
+      ko: "Threads",
+      en: "Threads",
     },
+    requirement: "optional",
+    group: "marketing",
+    file: "~/.mimi-seed/threads.json",
+    fix: "mimi-seed auth threads",
+    setup: { kind: "mcp-bin", bin: "mimi-seed-social-auth", args: ["threads"] },
+    obtain: {
+      ko: [
+        "Instagram 과 **별개 계정·별개 토큰**이다 (Threads Graph API).",
+        "developers.facebook.com → 앱 → Threads API use case 추가",
+        "→ 권한 threads_basic, threads_content_publish",
+        "→ Threads 로그인으로 authorize → long-lived 토큰 교환 (약 60일).",
+        "userId 는 토큰에서 자동 조회된다.",
+      ],
+      en: [
+        "A **separate account and token** from Instagram (Threads Graph API).",
+        "developers.facebook.com → your app → add the Threads API use case",
+        "→ permissions threads_basic, threads_content_publish",
+        "→ authorize with Threads login → exchange for a long-lived token (~60 days).",
+        "userId is looked up from the token.",
+      ],
+    },
+    docsAnchor: "threads",
+    detect: (home) => detectSocialToken(home, "threads.json", "userId", "accessToken"),
   },
   {
     id: "anthropic",
@@ -564,7 +632,10 @@ export function planSetup(detected: Map<CredId, Detected>, opts: PlanOpts = {}):
   return CREDENTIALS.filter((spec) => {
     if (only && !only.has(spec.id)) return false;
     if (reconnect.has(spec.id)) return true;
-    if (detected.get(spec.id)?.present) return false; // 이미 연결됨 → 건너뜀
+    const found = detected.get(spec.id);
+    // 만료됐거나 7일 안에 만료되는 토큰은 setup 이 알아서 재연결 대상으로 올린다.
+    if (found?.freshness === "expired" || found?.freshness === "expiring") return true;
+    if (found?.present) return false; // 이미 연결됨 → 건너뜀
     // 플랫폼 전용인데 그 플랫폼이 아니면 굳이 묻지 않는다.
     if (spec.requirement === "platform" && platforms.length > 0 && !platforms.includes(spec.platform!)) {
       return false;

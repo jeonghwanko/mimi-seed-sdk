@@ -29,7 +29,7 @@ Most people need two or three of these. Find your goal, connect only what it lis
 | Trigger builds | [GitHub / GitLab](#ci-github-gitlab) *or* [Jenkins](#jenkins) |
 | Query Crashlytics / analytics exports | [Google OAuth](#google-oauth), or [BigQuery SA](#bigquery) if OAuth keeps getting blocked |
 | Report on ad campaigns | [Google Ads](#google-ads) |
-| Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) |
+| Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) |
 | AI-written release notes / review replies | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(optional — it degrades gracefully)* |
 | Use the hosted dashboard / remote MCP | [Mimi Seed account](#cloud-pat) |
 
@@ -235,6 +235,9 @@ Pages, you'll be asked which one.
 
 The token is verified against the live API **before** it is saved — an invalid token is never written to disk.
 
+**Expired token:** run `mimi-seed auth facebook`. `mimi-seed setup` also flags an expired token (or one with
+seven days or less remaining) and offers to reconnect it.
+
 **Verify:** ask for `facebook_current_config`.
 
 ---
@@ -257,7 +260,38 @@ Tokens last about 60 days.
 
 **Give it to the wizard:** just the token; the account ID is resolved for you. Verified before saving.
 
+**Expired token:** run `mimi-seed auth instagram`. `mimi-seed setup` also flags an expired token (or one with
+seven days or less remaining) and offers to reconnect it.
+
 **Verify:** ask for `instagram_get_account`.
+
+---
+
+<a id="threads"></a>
+
+## Threads
+
+**Unlocks:** `threads_*` — posting to Threads. **Text-first**: `threads_post` publishes a text post, or an image
+if you pass one; `threads_post_carousel` does 2–20 images.
+
+**A separate account and token from Instagram.** Threads has its own Graph API (`graph.threads.net`) and its own
+token — an Instagram token will not work here.
+
+**Get it:**
+
+1. developers.facebook.com → your app → add the **Threads API** use case
+2. Permissions: **`threads_basic`, `threads_content_publish`**
+3. Authorize with Threads login, then exchange the short-lived token for a **long-lived** one (~60 days)
+
+**Give it to the wizard:** just the token; the user ID is resolved for you. Verified before saving.
+
+**Expired token:** run `mimi-seed auth threads`. `mimi-seed setup` also flags an expired token (or one with
+seven days or less remaining) and offers to reconnect it.
+
+Notes that bite: image/carousel URLs must be **public** (Graph API can't take local files), each post is capped
+at **500 characters**, and image posts wait for Meta to process the media before publishing (a few seconds).
+
+**Verify:** ask for `threads_get_account`.
 
 ---
 

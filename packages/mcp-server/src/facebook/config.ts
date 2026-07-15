@@ -13,7 +13,10 @@ export interface FacebookConfig {
 
 export function loadFacebookConfig(): FacebookConfig | null {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as FacebookConfig;
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Partial<FacebookConfig>;
+    if (typeof cfg.pageAccessToken !== 'string' || !cfg.pageAccessToken ||
+        typeof cfg.pageId !== 'string' || !cfg.pageId) return null;
+    return cfg as FacebookConfig;
   } catch {
     return null;
   }

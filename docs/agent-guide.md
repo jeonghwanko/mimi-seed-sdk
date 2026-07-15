@@ -16,7 +16,7 @@ and which actions are irreversible.
 
 ## 0. The one thing that trips every agent: deferred tools
 
-Mimi Seed exposes **150+ MCP tools** across 17 domains (full inventory:
+Mimi Seed exposes **150+ MCP tools** across 18 domains (full inventory:
 [`docs/domain/tool-catalog.md`](domain/tool-catalog.md)). Harnesses that lazy-load large tool catalogs —
 **Claude Code most notably** — register these tools as **deferred**: the tool *names*
 are visible (in a system reminder), but the **input schemas are not loaded**. If you
@@ -61,8 +61,8 @@ tools directly — but the *call order* and *safety rules* below still apply.
 
 ## 1. Always start with `mimi_seed_status`
 
-Before any task, call **`mimi_seed_status`** — the setup doctor. It scans 9 services
-(Google OAuth · Play SA · App Store · Jenkins · CI · Google Ads · Facebook · Instagram ·
+Before any task, call **`mimi_seed_status`** — the setup doctor. It scans 10 services
+(Google OAuth · Play SA · App Store · Jenkins · CI · Google Ads · Facebook · Instagram · Threads ·
 BigQuery) and returns a ✅/❌ report plus the exact next tool to call for anything
 missing. This avoids a late `401`/`403` deep into a workflow.
 
@@ -86,10 +86,20 @@ every credential, which also tells them where to obtain each token
 | Jenkins | `mimi-seed auth jenkins` (probes the server before saving) |
 | GitHub / GitLab CI | `mimi-seed auth ci` |
 | Google Ads | `mimi-seed auth googleads` — needs the `adwords` OAuth scope; an old token may need `mimi-seed auth login --force` |
-| Facebook / Instagram | `mimi-seed auth facebook` / `mimi-seed auth instagram` |
+| Facebook / Instagram / Threads | `mimi-seed auth facebook` / `mimi-seed auth instagram` / `mimi-seed auth threads` |
+
+`mimi-seed auth meta` opens the combined social setup entry point when the user wants to review or reconnect
+all three Meta platforms in one pass.
 
 Each `mimi-seed auth <cred>` wraps the matching `npx -y @yoonion/mimi-seed-mcp mimi-seed-*-auth` binary, so
 either form works.
+
+For Facebook, Instagram, and Threads, `mimi-seed setup` reads the saved expiry estimate. Expired tokens and
+tokens with seven days or less remaining are automatically put back into the setup plan. A live Meta rejection
+(including OAuth code 190) returns the exact `mimi-seed auth <platform>` recovery command instead of a raw error.
+For an unexpired Threads long-lived token, `threads_refresh_token` (also the default path in `mimi-seed auth
+threads`) refreshes it without asking the user to paste a replacement. Expired or revoked tokens still require a
+new authorization.
 
 ---
 
@@ -106,7 +116,7 @@ Credentials live under `~/.mimi-seed/` (legacy `~/.preseed/` is still read):
 | `bigquery-service-account.json` | BigQuery SA (exempt from Workspace reauth; OAuth is the fallback) |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection |
 | `google-ads.json` | Google Ads developer token + customer id |
-| `facebook.json`, `instagram.json` | Page / account access tokens for the social post tools |
+| `facebook.json`, `instagram.json`, `threads.json` | Page / account access tokens for the social post tools (Threads is a separate Meta account/token) |
 
 Notes that matter in practice:
 
@@ -135,7 +145,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Google Cloud IAM** | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
 | **Search Console** | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
-| **Facebook / Instagram** | `facebook_post_photo` · `instagram_post_carousel` |
+| **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_refresh_token` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 

@@ -1,4 +1,4 @@
-# Tool catalog — 157 tools across 17 domains
+# Tool catalog — 162 tools across 18 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -23,12 +23,13 @@
 | Facebook | `registers/facebook.ts` | 6 |
 | Google Cloud IAM | `registers/iam.ts` | 5 |
 | BigQuery | `registers/bigquery.ts` | 5 |
+| Threads | `registers/threads.ts` | 5 |
 | Instagram | `registers/instagram.ts` | 4 |
 | Checks | `registers/checks.ts` | 4 |
 | Auth | `registers/auth.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
-| **Total** | **17 modules** | **157** |
+| **Total** | **18 modules** | **162** |
 
 ## Google Play — `registers/playstore.ts` (29) · impl `playstore/tools.ts`
 
@@ -82,6 +83,7 @@
 | Google Ads (`googleads.ts`) | `googleads_list_campaigns` · `googleads_get_campaign_report` · `googleads_get_uac_report` · `googleads_list_accessible_customers` · `googleads_config_status` · **W** `googleads_save_config` (local config) |
 | Facebook (`facebook.ts`) | `facebook_list_pages` · `facebook_get_page` · `facebook_current_config` · **W** `facebook_save_config` · **W** `facebook_post_photo` (public) · **W** `facebook_post_multi_photo` (public) |
 | Instagram (`instagram.ts`) | `instagram_get_account` · **W** `instagram_save_config` · **W** `instagram_post_image` (public) · **W** `instagram_post_carousel` (public) |
+| Threads (`threads.ts`) — Meta Threads Graph API, **text-first** (IG 와 별개 계정·토큰) | `threads_get_account` · `threads_current_config` · **W** `threads_save_config` · **W** `threads_post` (public; text or image) · **W** `threads_post_carousel` (public; 2–20) |
 
 ## Build / CI / signing
 

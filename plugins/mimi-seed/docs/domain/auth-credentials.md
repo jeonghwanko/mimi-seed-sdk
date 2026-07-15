@@ -25,20 +25,21 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `play-service-account.json` | Default / legacy Play service account — fallback when no per-package match | same |
 | `bigquery-service-account.json` | BigQuery SA — exempt from Workspace reauth (`invalid_rapt`); OAuth is the fallback | `mimi-seed-bigquery-auth` |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
-| `facebook.json`, `instagram.json` | Page / account access tokens for the social post tools (written `0600`) | `facebook_save_config` / `instagram_save_config` |
+| `facebook.json`, `instagram.json`, `threads.json` | Page / account access tokens for the social post tools (written `0600`) | each domain's `*_save_config` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
 
 > Treat every file above as a secret. A repo `.gitignore` should keep them out even if a user runs the CLI
 > inside a project; the SDK itself never writes them into the repo tree.
 
-## The three auth models
+## The four auth models
 
 | Provider | Mechanism | Where in code |
 |---|---|---|
 | **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | One OAuth token in `tokens.json`; `ensureFreshAccessToken()` refreshes it before use | `auth/google-auth.ts` |
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
+| **Meta social posting** | Long-lived Page/account tokens with a saved expiry estimate; `mimi-seed setup` reconnects expired/expiring tokens | `facebook/`, `instagram/`, `threads/` |
 
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
   `playstore_list_service_accounts` shows the mapping. Resolution: look up
@@ -58,6 +59,7 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-auth            # Google OAuth → token
 npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth   # ASC API key → appstore.json
 npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth  # Play service account
 npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth   # BigQuery auth
+npx -y @yoonion/mimi-seed-mcp mimi-seed-social-auth     # Facebook / Instagram / Threads
 ```
 
 The CLI also wraps Google login as `mimi-seed auth login` (`cli/src/auth.ts`). The MCP resource

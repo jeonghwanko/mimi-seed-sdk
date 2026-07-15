@@ -24,6 +24,12 @@ export const VERSIONED = [
   'plugins/mimi-seed/.codex-plugin/plugin.json',
 ];
 
+/** npm 이 패키지 버전으로 기록하는 lockfile 최상위 두 필드도 함께 맞춘다. */
+export const VERSIONED_LOCKS = [
+  'packages/cli/package-lock.json',
+  'packages/mcp-server/package-lock.json',
+];
+
 const readJson = (rel) => JSON.parse(readFileSync(path.join(root, rel), 'utf8'));
 
 function writeVersion(rel, version) {
@@ -32,6 +38,25 @@ function writeVersion(rel, version) {
   // JSON.stringify 로 다시 쓰면 키 순서·포맷이 흔들린다 — version 한 줄만 바꾼다.
   const next = raw.replace(/("version"\s*:\s*")[^"]*(")/, `$1${version}$2`);
   if (next === raw) throw new Error(`${rel}: "version" 필드를 찾지 못했다`);
+  writeFileSync(p, next);
+}
+
+function lockVersion(rel) {
+  const lock = readJson(rel);
+  const packageVersion = lock.packages?.['']?.version;
+  return lock.version === packageVersion ? lock.version : `${lock.version} / ${packageVersion ?? 'missing'}`;
+}
+
+function writeLockVersion(rel, version) {
+  const p = path.join(root, rel);
+  const raw = readFileSync(p, 'utf8');
+  let replaced = 0;
+  const next = raw.replace(/("version"\s*:\s*")[^"]*(")/g, (match, start, end) => {
+    if (replaced >= 2) return match;
+    replaced += 1;
+    return `${start}${version}${end}`;
+  });
+  if (replaced !== 2) throw new Error(`${rel}: lockfile version 필드 두 개를 찾지 못했다`);
   writeFileSync(p, next);
 }
 
@@ -47,9 +72,11 @@ const rootVersion = readJson('package.json').version;
 
 if (arg === '--check' || !arg) {
   const bad = VERSIONED.filter((f) => readJson(f).version !== rootVersion);
-  if (bad.length > 0) {
+  const badLocks = VERSIONED_LOCKS.filter((f) => lockVersion(f) !== rootVersion);
+  if (bad.length > 0 || badLocks.length > 0) {
     console.error(`\n  ✗ 버전이 루트(${rootVersion})와 다릅니다:`);
     for (const f of bad) console.error(`      ${f}  ${readJson(f).version}`);
+    for (const f of badLocks) console.error(`      ${f}  ${lockVersion(f)}`);
     console.error(`\n  고치기:  node scripts/version.mjs ${rootVersion}\n`);
     process.exit(1);
   }
@@ -67,6 +94,11 @@ writeVersion('package.json', next);
 for (const f of VERSIONED) {
   const before = readJson(f).version;
   writeVersion(f, next);
+  console.log(`  ✓ ${f.padEnd(34)} ${before} → ${next}`);
+}
+for (const f of VERSIONED_LOCKS) {
+  const before = lockVersion(f);
+  writeLockVersion(f, next);
   console.log(`  ✓ ${f.padEnd(34)} ${before} → ${next}`);
 }
 console.log(`\n  루트 SDK 버전: ${rootVersion} → ${next}\n`);

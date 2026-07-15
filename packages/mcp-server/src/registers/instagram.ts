@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { loadInstagramConfig, requireInstagramConfig } from '../instagram/config.js';
 import { connectInstagram } from '../instagram/setup.js';
 import * as api from '../instagram/api.js';
+import { metaExpiryMessage } from '../lib/meta-auth.js';
 
 export function registerInstagramTools(server: McpServer) {
   server.tool(
@@ -35,10 +36,6 @@ export function registerInstagramTools(server: McpServer) {
       const cfg = requireInstagramConfig();
       const account = await api.getAccount(cfg);
 
-      const remainingDays = cfg.expiresAt
-        ? Math.round((new Date(cfg.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-        : null;
-
       return {
         content: [{
           type: 'text',
@@ -48,13 +45,7 @@ export function registerInstagramTools(server: McpServer) {
             account.account_type ? `   타입: ${account.account_type}` : '',
             account.followers_count !== undefined ? `   팔로워: ${account.followers_count.toLocaleString()}` : '',
             account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
-            remainingDays !== null
-              ? remainingDays > 7
-                ? `   토큰: ${remainingDays}일 남음`
-                : remainingDays > 0
-                  ? `   ⚠️ 토큰 ${remainingDays}일 남음 — 곧 갱신 필요`
-                  : `   ❌ 토큰 만료됨 — instagram_save_config로 재저장`
-              : '',
+            `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth instagram')}`,
           ].filter(Boolean).join('\n'),
         }],
       };

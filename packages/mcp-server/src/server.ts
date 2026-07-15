@@ -10,6 +10,7 @@ import { registerBigqueryTools } from './registers/bigquery.js';
 import { registerAuthTools } from './registers/auth.js';
 import { registerCiTools } from './registers/ci.js';
 import { registerInstagramTools } from './registers/instagram.js';
+import { registerThreadsTools } from './registers/threads.js';
 import { registerFacebookTools } from './registers/facebook.js';
 import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerGscTools } from './registers/gsc.js';
@@ -44,6 +45,7 @@ export function buildServer(version: string): McpServer {
   registerAuthTools(server);
   registerCiTools(server);
   registerInstagramTools(server);
+  registerThreadsTools(server);
   registerFacebookTools(server);
   registerGoogleAdsTools(server);
   registerGscTools(server);

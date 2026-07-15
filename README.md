@@ -128,10 +128,12 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Connect the rest of your accounts — App Store Connect, Play, Jenkins, CI, Google Ads, Facebook, Instagram — with one guided wizard:
+Connect the rest of your accounts — App Store Connect, Play, Jenkins, CI, Google Ads, Facebook, Instagram, Threads — with one guided wizard:
 
 ```bash
 npx mimi-seed setup
+# or reconnect the three Meta platforms from one entry point
+npx mimi-seed auth meta
 ```
 
 On first run it asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md).
@@ -355,7 +357,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-## Local MCP Tool List (150+ tools · 17 domains)
+## Local MCP Tool List (150+ tools · 18 domains)
 
 > These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -373,6 +375,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **Threads** | 6 | `threads_post` · `threads_post_carousel` · `threads_refresh_token` |
 | **Checks / Risk** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |

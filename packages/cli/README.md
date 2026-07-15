@@ -19,7 +19,7 @@ npx mimi-seed init
 | `mimi-seed init` | 프로젝트를 Mimi Seed에 연결 (PAT 발급 + 앱 자동 등록 + `.claude/mimi-seed.md` / `AGENTS.md` 주입) |
 | `mimi-seed setup` | **가진 계정을 한 번에 연결** (안내형 마법사) — 뭐가 빠졌는지 보여주고, 각 토큰을 어디서 발급받는지 알려줌 |
 | `mimi-seed status` | 연결 상태 + 등록 앱 목록 |
-| `mimi-seed auth` | 자격증명 개별 인증 — `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` |
+| `mimi-seed auth` | 자격증명 개별 인증 — `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` |
 | `mimi-seed doctor` | 환경 진단 (토큰·Git·앱·CI 한 번에 체크) |
 | `mimi-seed check` | 출시 전 Readiness 점검 (점수 + 블로커) |
 | `mimi-seed notes` | AI 릴리즈 노트 생성 (git log → 3 톤 → 다국어 → 적용) |
@@ -187,9 +187,14 @@ mimi-seed auth bigquery   # BigQuery 서비스 계정 (선택)
 mimi-seed auth jenkins    # Jenkins (저장 전 서버 프로브)
 mimi-seed auth ci         # GitHub Actions / GitLab CI
 mimi-seed auth googleads  # Google Ads
+mimi-seed auth meta       # Facebook · Instagram · Threads 통합 진입
 mimi-seed auth facebook   # Facebook 페이지
 mimi-seed auth instagram  # Instagram
+mimi-seed auth threads    # Threads
 ```
+
+Facebook·Instagram·Threads 토큰은 저장된 만료일을 함께 확인합니다. 만료됐거나 7일 이내 만료 예정이면
+`mimi-seed setup`이 자동으로 재연결 목록에 올리며, 위 개별 명령으로 바로 갱신할 수도 있습니다.
 
 ### login 옵션
 
