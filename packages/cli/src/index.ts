@@ -79,12 +79,12 @@ const M = catalog(
     logoutDone: "✓ 로컬 설정 삭제 완료.",
     logoutRevoke: "웹에서 토큰 해지: /workspace/api-tokens",
 
-    codexWritten: "✓ Codex MCP 설정 완료",
-    codexWriteWarn: "  ⚠ config.toml에 실제 토큰이 평문으로 저장됩니다 (파일 권한 확인 권장).",
+    codexWritten: "✓ Codex MCP 설정 완료 (mimi-seed-remote, HTTP)",
+    codexWriteWarn: "  ⚠ 토큰은 config 에 평문 저장하지 않습니다 — MIMI_SEED_TOKEN 환경변수에 PAT 를 넣어야 인증됩니다.",
     codexVerify: "Codex를 새로 열고 `/mcp` 또는 `codex mcp list`로 확인하세요.",
     codexTitle: "Codex MCP 등록",
     codexAuto: "자동 등록:",
-    codexManual: "수동 등록 예시 (~/.codex/config.toml) — 실제 토큰 포함:",
+    codexManual: "수동 등록 예시 (~/.codex/config.toml) — 토큰은 MIMI_SEED_TOKEN 환경변수로:",
     claudeTitle: "Claude Code MCP 등록 — 아래 한 줄을 그대로 실행하세요:",
     claudeWarn:
       "  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ~/.mimi-seed/config.json 에도 저장되어 있습니다.",
@@ -253,13 +253,13 @@ ${kleur.bold("환경변수:")}
     logoutDone: "✓ Local config deleted.",
     logoutRevoke: "Revoke the token on the web: /workspace/api-tokens",
 
-    codexWritten: "✓ Codex MCP configured",
+    codexWritten: "✓ Codex MCP configured (mimi-seed-remote, HTTP)",
     codexWriteWarn:
-      "  ⚠ The real token is stored in plain text in config.toml (check the file permissions).",
+      "  ⚠ The token is NOT written to the config — set MIMI_SEED_TOKEN to your PAT so the remote authenticates.",
     codexVerify: "Reopen Codex and verify with `/mcp` or `codex mcp list`.",
     codexTitle: "Codex MCP registration",
     codexAuto: "Automatic:",
-    codexManual: "Manual example (~/.codex/config.toml) — contains the real token:",
+    codexManual: "Manual example (~/.codex/config.toml) — token via the MIMI_SEED_TOKEN env var:",
     claudeTitle: "Claude Code MCP registration — run this one line as-is:",
     claudeWarn:
       "  ⚠ This command contains the real token (it stays in your shell history). The token is also stored in ~/.mimi-seed/config.json.",
@@ -612,10 +612,10 @@ async function cmdMcp(args: string[]): Promise<void> {
     log(kleur.cyan("  mimi-seed mcp codex --write"));
     log("");
     log(M().codexManual);
-    log(`[mcp_servers.mimi-seed]
+    log(`[mcp_servers.mimi-seed-remote]
 url = "${cfg.endpoint}"
-enabled = true
-http_headers = { Authorization = "Bearer ${cfg.token}" }`);
+bearer_token_env_var = "MIMI_SEED_TOKEN"
+enabled = true`);
     return;
   }
 
