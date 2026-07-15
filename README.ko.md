@@ -40,6 +40,9 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 ---
 
+처음 설치해서 **계정 연결 → CI 빌드 → 출시 점검 → 스토어 배포 → 소셜 공지**까지 따라가려면
+[Mimi Seed 사용자 가이드](docs/user-guide/README.ko.md)에서 시작하세요.
+
 ## 30초 시작
 
 **먼저 어느 쪽인지 고르세요** (둘 다 나란히 설치할 수도 있습니다):

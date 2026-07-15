@@ -1,5 +1,7 @@
 # Troubleshooting
 
+If the workflow itself is unclear, find the task first in the [Mimi Seed User Guide](user-guide/README.md).
+
 Every error below already prints an actionable hint. This page adds what a one-line hint can't say: **which
 console, whose permission, and how long to wait.**
 

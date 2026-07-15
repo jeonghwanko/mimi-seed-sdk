@@ -12,6 +12,9 @@ codex plugin add mimi-seed@yoonion
 소스 체크아웃에서는 `npm run setup:codex` 한 명령으로 같은 과정을 실행할 수 있습니다. 설치 후에는
 새 대화를 시작해야 스킬과 MCP 도구가 로드됩니다.
 
+처음 설치한 뒤 앱 빌드·스토어 배포·Firebase/AdMob·소셜 게시까지 이어지는 사람용 절차는
+[`docs/user-guide/README.ko.md`](../docs/user-guide/README.ko.md)에서 시작합니다.
+
 ## 포함 내용
 
 - **MCP 서버**: `mimi-seed` (`@yoonion/mimi-seed-mcp`)

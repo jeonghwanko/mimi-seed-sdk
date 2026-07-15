@@ -17,6 +17,19 @@ const DOC_PAIRS = [
   ['docs/from-source.md', 'docs/from-source.ko.md'],
 ] as const;
 
+const USER_GUIDE_PAIRS = [
+  ['docs/user-guide/README.md', 'docs/user-guide/README.ko.md'],
+  ['docs/user-guide/getting-started.md', 'docs/user-guide/getting-started.ko.md'],
+  ['docs/user-guide/accounts.md', 'docs/user-guide/accounts.ko.md'],
+  ['docs/user-guide/build-ci.md', 'docs/user-guide/build-ci.ko.md'],
+  ['docs/user-guide/release-readiness.md', 'docs/user-guide/release-readiness.ko.md'],
+  ['docs/user-guide/deploy.md', 'docs/user-guide/deploy.ko.md'],
+  ['docs/user-guide/stores.md', 'docs/user-guide/stores.ko.md'],
+  ['docs/user-guide/cloud-operations.md', 'docs/user-guide/cloud-operations.ko.md'],
+  ['docs/user-guide/social.md', 'docs/user-guide/social.ko.md'],
+  ['docs/user-guide/team-security.md', 'docs/user-guide/team-security.ko.md'],
+] as const;
+
 /** 마법사가 docs/credentials.md#<anchor> 로 딥링크한다 — 앵커는 API 다. */
 const CREDENTIAL_ANCHORS = [
   'google-oauth',
@@ -36,10 +49,23 @@ const CREDENTIAL_ANCHORS = [
 
 describe('온보딩 문서 ↔ 코드', () => {
   it('EN / KO 문서가 모두 존재한다', () => {
-    for (const pair of DOC_PAIRS) {
+    for (const pair of [...DOC_PAIRS, ...USER_GUIDE_PAIRS]) {
       for (const f of pair) {
         expect(existsSync(path.join(repoRoot, f)), `${f} 없음`).toBe(true);
       }
+    }
+  });
+
+  it('사용자 가이드 홈이 모든 작업 문서로 연결되고 빌드 책임 경계를 설명한다', () => {
+    for (const [en, ko] of [USER_GUIDE_PAIRS[0]]) {
+      const enDoc = read(en);
+      const koDoc = read(ko);
+      for (const [enPage, koPage] of USER_GUIDE_PAIRS.slice(1)) {
+        expect(enDoc, `${en} 에 ${enPage} 링크 없음`).toContain(path.basename(enPage));
+        expect(koDoc, `${ko} 에 ${koPage} 링크 없음`).toContain(path.basename(koPage));
+      }
+      expect(enDoc).toContain('does not compile `.aab` or `.ipa`');
+      expect(koDoc).toContain('`.aab`나 `.ipa`를 직접 컴파일하지 않는다');
     }
   });
 
@@ -103,9 +129,15 @@ describe('온보딩 문서 ↔ 코드', () => {
     }
   });
 
-  // ④ 6개 신규 문서는 서로 촘촘히 링크한다 — 깨진 링크가 1순위 부패 지점.
+  // ④ 사용자 문서는 서로 촘촘히 링크한다 — 깨진 링크가 1순위 부패 지점.
   it('문서의 상대 링크가 실제 파일로 해석된다', () => {
-    const files = [...DOC_PAIRS.flat(), 'README.md', 'README.ko.md'];
+    const files = [
+      ...DOC_PAIRS.flat(),
+      ...USER_GUIDE_PAIRS.flat(),
+      '.codex-plugin/README.md',
+      'README.md',
+      'README.ko.md',
+    ];
     const broken: string[] = [];
 
     for (const f of files) {
