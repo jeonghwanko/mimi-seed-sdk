@@ -1,0 +1,20 @@
+{
+  "name": "yoonion",
+  "interface": {
+    "displayName": "Mimi Seed"
+  },
+  "plugins": [
+    {
+      "name": "mimi-seed",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mimi-seed"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

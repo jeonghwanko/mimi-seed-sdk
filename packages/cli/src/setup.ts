@@ -111,13 +111,19 @@ function statusLine(spec: CredSpec, detected: Map<CredId, Detected>, platforms: 
     spec.requirement !== "platform" || platforms.length === 0 || platforms.includes(spec.platform!);
 
   let mark: string;
-  if (d.present) mark = kleur.green("✓");
+  if (d.freshness === "expired") mark = kleur.red("✗");
+  else if (d.freshness === "expiring") mark = kleur.yellow("!");
+  else if (d.present) mark = kleur.green("✓");
   else if (isSatisfied(spec, detected)) mark = kleur.yellow("~"); // fallback 으로 동작은 함
   else if (spec.requirement === "optional" || !relevant) mark = kleur.dim("·");
   else mark = kleur.red("✗");
 
-  const tail = d.present
-    ? kleur.dim(d.detail ?? "")
+  const tail = d.freshness === "expired"
+    ? kleur.red(`${t().setup.tokenExpired} → ${spec.fix}`)
+    : d.freshness === "expiring"
+      ? kleur.yellow(`${t().setup.tokenExpiring(d.daysRemaining ?? 0)} → ${spec.fix}`)
+    : d.present
+      ? kleur.dim(d.detail ?? "")
     : isSatisfied(spec, detected)
       ? kleur.dim(`${credNote(spec) ?? t().setup.fallbackWorking}`)
       : kleur.dim(`→ ${spec.fix}`);

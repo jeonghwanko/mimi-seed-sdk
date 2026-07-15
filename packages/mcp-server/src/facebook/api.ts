@@ -1,4 +1,5 @@
 import type { FacebookConfig } from './config.js';
+import { metaApiError } from '../lib/meta-auth.js';
 
 const BASE = 'https://graph.facebook.com/v21.0';
 
@@ -27,11 +28,11 @@ async function fbPost(pageAccessToken: string, endpoint: string, params: Record<
   try {
     json = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    throw new Error(`HTTP ${res.status}: ${text}`);
+    throw metaApiError('facebook', res.status, text);
   }
   if (json.error) {
     const err = json.error as { message: string; code: number };
-    throw new Error(`${err.message} (code ${err.code})`);
+    throw metaApiError('facebook', res.status, `${err.message} (code ${err.code})`, err.code);
   }
   return json;
 }
@@ -39,10 +40,16 @@ async function fbPost(pageAccessToken: string, endpoint: string, params: Record<
 async function fbGet(pageAccessToken: string, endpoint: string, params: Record<string, string> = {}): Promise<Record<string, unknown>> {
   const qs = new URLSearchParams({ ...params, access_token: pageAccessToken });
   const res = await fetch(`${BASE}${endpoint}?${qs}`);
-  const json = await res.json() as Record<string, unknown>;
+  const text = await res.text();
+  let json: Record<string, unknown>;
+  try {
+    json = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw metaApiError('facebook', res.status, text);
+  }
   if (json.error) {
     const err = json.error as { message: string; code: number };
-    throw new Error(`${err.message} (code ${err.code})`);
+    throw metaApiError('facebook', res.status, `${err.message} (code ${err.code})`, err.code);
   }
   return json;
 }
@@ -119,6 +126,13 @@ export async function listAccessiblePages(userAccessToken: string): Promise<Face
   });
   const res = await fetch(`${BASE}/me/accounts?${qs}`);
   const json = await res.json() as { data?: FacebookPage[]; error?: { message: string; code: number } };
-  if (json.error) throw new Error(`${json.error.message} (code ${json.error.code})`);
+  if (json.error) {
+    throw metaApiError(
+      'facebook',
+      res.status,
+      `${json.error.message} (code ${json.error.code})`,
+      json.error.code,
+    );
+  }
   return json.data ?? [];
 }

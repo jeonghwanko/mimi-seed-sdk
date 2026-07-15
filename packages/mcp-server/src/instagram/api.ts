@@ -1,4 +1,5 @@
 import type { InstagramConfig } from './config.js';
+import { metaApiError } from '../lib/meta-auth.js';
 
 // 두 가지 Meta API:
 //   IGAA... = Instagram API with Instagram Login (2024 신규) — graph.instagram.com
@@ -37,13 +38,15 @@ async function igFetch<T>(
   const text = await res.text();
   if (!res.ok) {
     let msg = text;
+    let code: number | undefined;
     try {
       const parsed = JSON.parse(text) as GraphErrorBody;
       if (parsed.error) {
+        code = parsed.error.code;
         msg = `${parsed.error.message} (code ${parsed.error.code}${parsed.error.error_subcode ? `/${parsed.error.error_subcode}` : ''})`;
       }
     } catch { /* fall through with raw text */ }
-    throw new Error(`Instagram API ${res.status}: ${msg}`);
+    throw metaApiError('instagram', res.status, msg, code);
   }
   return JSON.parse(text) as T;
 }

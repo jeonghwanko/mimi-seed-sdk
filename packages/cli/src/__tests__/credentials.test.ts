@@ -83,6 +83,32 @@ describe('detectAll', () => {
     process.env.MIMI_SEED_TOKEN = 'tok';
     expect(detectAll(home).get('mimiseed')!.present).toBe(true);
   });
+
+  it('Meta 토큰의 만료/임박 상태를 expiresAt 으로 감지한다', () => {
+    writeCred('facebook.json', {
+      pageAccessToken: 'EAA_TEST',
+      pageId: 'page-1',
+      pageName: 'Page',
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    writeCred('instagram.json', {
+      accessToken: 'IGAA_TEST',
+      userId: 'ig-1',
+      username: 'ig-user',
+      expiresAt: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    });
+    writeCred('threads.json', {
+      accessToken: 'TH_TEST',
+      userId: 'th-1',
+      username: 'th-user',
+      expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    });
+
+    const d = detectAll(home);
+    expect(d.get('facebook')).toMatchObject({ present: true, freshness: 'expired', daysRemaining: 0 });
+    expect(d.get('instagram')).toMatchObject({ present: true, freshness: 'expiring', daysRemaining: 3 });
+    expect(d.get('threads')).toMatchObject({ present: true, freshness: 'fresh', daysRemaining: 30 });
+  });
 });
 
 describe('isSatisfied — fallback', () => {
@@ -141,6 +167,29 @@ describe('planSetup', () => {
     writeCred('tokens.json', { access_token: 'x' });
     const plan = planSetup(detectAll(home), { reconnect: ['oauth'] });
     expect(plan.map((s) => s.id)).toContain('oauth');
+  });
+
+  it('만료됐거나 7일 안에 만료되는 Meta 토큰은 자동으로 다시 포함한다', () => {
+    writeCred('facebook.json', {
+      pageAccessToken: 'EAA_TEST',
+      pageId: 'page-1',
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    writeCred('instagram.json', {
+      accessToken: 'IGAA_TEST',
+      userId: 'ig-1',
+      expiresAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+    });
+    writeCred('threads.json', {
+      accessToken: 'TH_TEST',
+      userId: 'th-1',
+      expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    });
+
+    const ids = planSetup(detectAll(home)).map((s) => s.id);
+    expect(ids).toContain('facebook');
+    expect(ids).toContain('instagram');
+    expect(ids).not.toContain('threads');
   });
 
   it('--only 는 지정한 것만 남긴다', () => {

@@ -28,6 +28,7 @@ const CREDENTIAL_ANCHORS = [
   'google-ads',
   'facebook',
   'instagram',
+  'threads',
   'cloud-pat',
   'anthropic-api-key',
   'android-keystore',

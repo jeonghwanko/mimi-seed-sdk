@@ -13,7 +13,10 @@ export interface InstagramConfig {
 
 export function loadInstagramConfig(): InstagramConfig | null {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as InstagramConfig;
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Partial<InstagramConfig>;
+    if (typeof cfg.accessToken !== 'string' || !cfg.accessToken ||
+        typeof cfg.userId !== 'string' || !cfg.userId) return null;
+    return cfg as InstagramConfig;
   } catch {
     return null;
   }

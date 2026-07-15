@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { loadFacebookConfig, requireFacebookConfig } from '../facebook/config.js';
 import { connectFacebook } from '../facebook/setup.js';
 import * as api from '../facebook/api.js';
+import { metaExpiryMessage } from '../lib/meta-auth.js';
 
 export function registerFacebookTools(server: McpServer) {
   server.tool(
@@ -59,9 +60,6 @@ export function registerFacebookTools(server: McpServer) {
     async () => {
       const cfg = requireFacebookConfig();
       const page = await api.getPage(cfg);
-      const remainingDays = cfg.expiresAt
-        ? Math.round((new Date(cfg.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-        : null;
       return {
         content: [{
           type: 'text',
@@ -70,13 +68,7 @@ export function registerFacebookTools(server: McpServer) {
             page.category ? `   카테고리: ${page.category}` : '',
             page.followers_count !== undefined ? `   팔로워: ${page.followers_count.toLocaleString()}` : '',
             page.fan_count !== undefined ? `   좋아요: ${page.fan_count.toLocaleString()}` : '',
-            remainingDays !== null
-              ? remainingDays > 7
-                ? `   토큰: ${remainingDays}일 남음`
-                : remainingDays > 0
-                  ? `   ⚠️ 토큰 ${remainingDays}일 남음 — 갱신 필요`
-                  : `   ❌ 토큰 만료 — facebook_save_config로 재저장`
-              : '',
+            `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth facebook')}`,
           ].filter(Boolean).join('\n'),
         }],
       };
@@ -153,7 +145,7 @@ export function registerFacebookTools(server: McpServer) {
           type: 'text',
           text: [
             `페이지: ${cfg.pageName ?? '(미확인)'} (${cfg.pageId})`,
-            cfg.expiresAt ? `토큰 만료(추정): ${cfg.expiresAt.slice(0, 10)}` : '',
+            metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth facebook'),
           ].filter(Boolean).join('\n'),
         }],
       };

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mimi-seed": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@yoonion/mimi-seed-mcp"
+      ]
+    }
+  }
+}
