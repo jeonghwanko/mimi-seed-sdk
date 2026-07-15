@@ -108,6 +108,27 @@ export interface PublishResult {
   permalink?: string;  // 인스타 게시물 URL (best-effort)
 }
 
+// 이미지/캐러셀 컨테이너는 Meta 서버 처리가 끝난 뒤에만 publish 할 수 있다.
+// 완료 전에 media_publish 를 호출하면 code 9007/2207027 이 반환된다.
+async function waitForContainer(cfg: InstagramConfig, containerId: string): Promise<void> {
+  const MAX_ATTEMPTS = 20;
+  const INTERVAL_MS = 3000; // 최대 ~60초 대기
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const { status_code, status } = await igFetch<{ status_code?: string; status?: string }>(
+      cfg.accessToken,
+      `/${containerId}`,
+      { fields: 'status_code,status', access_token: cfg.accessToken },
+    );
+    const current = status_code ?? status;
+    if (current === 'FINISHED') return;
+    if (current === 'ERROR' || current === 'EXPIRED') {
+      throw new Error(`Instagram 미디어 처리 실패 (${current}).`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+  }
+  throw new Error('Instagram 미디어 처리 대기 시간 초과 (60초). 잠시 후 다시 시도하세요.');
+}
+
 async function fetchPermalink(cfg: InstagramConfig, mediaId: string): Promise<string | undefined> {
   try {
     const meta = await igFetch<{ permalink: string }>(
@@ -169,6 +190,8 @@ export async function postCarousel(
     childIds.push(child.id);
   }
 
+  for (const childId of childIds) await waitForContainer(cfg, childId);
+
   // Step 2: carousel container 생성
   const carousel = await igFetch<{ id: string }>(
     cfg.accessToken,
@@ -181,6 +204,8 @@ export async function postCarousel(
     },
     'POST',
   );
+
+  await waitForContainer(cfg, carousel.id);
 
   // Step 3: publish
   const published = await igFetch<{ id: string }>(

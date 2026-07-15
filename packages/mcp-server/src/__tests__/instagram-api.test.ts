@@ -219,7 +219,11 @@ describe('postCarousel', () => {
       .mockResolvedValueOnce(jsonResp({ id: 'CHILD_1' }))
       .mockResolvedValueOnce(jsonResp({ id: 'CHILD_2' }))
       .mockResolvedValueOnce(jsonResp({ id: 'CHILD_3' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResp({ id: 'CAROUSEL_X' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResp({ id: 'MEDIA_Y' }))
       .mockResolvedValueOnce(jsonResp({ permalink: 'https://www.instagram.com/p/y/' }));
 
@@ -230,14 +234,17 @@ describe('postCarousel', () => {
     );
 
     expect(result.id).toBe('MEDIA_Y');
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
   });
 
   it('children containers use is_carousel_item=true', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResp({ id: 'C1' }))
       .mockResolvedValueOnce(jsonResp({ id: 'C2' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResp({ id: 'CAROUSEL' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResp({ id: 'M' }))
       .mockResolvedValueOnce(jsonResp({ permalink: 'x' }));
 
@@ -251,13 +258,16 @@ describe('postCarousel', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResp({ id: 'C1' }))
       .mockResolvedValueOnce(jsonResp({ id: 'C2' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResp({ id: 'CAR' }))
+      .mockResolvedValueOnce(jsonResp({ status_code: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResp({ id: 'M' }))
       .mockResolvedValueOnce(jsonResp({ permalink: 'x' }));
 
     await api.postCarousel(cfg, ['https://cdn/1.jpg', 'https://cdn/2.jpg'], 'caption text');
 
-    const carouselCall = fetchMock.mock.calls[2];
+    const carouselCall = fetchMock.mock.calls[4];
     expect(carouselCall[1].body).toContain('media_type=CAROUSEL');
     expect(carouselCall[1].body).toContain('children=C1%2CC2');
     expect(carouselCall[1].body).toContain('caption=caption+text');
