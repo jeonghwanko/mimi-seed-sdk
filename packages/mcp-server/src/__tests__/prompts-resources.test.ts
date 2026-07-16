@@ -1,31 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { buildServer } from '../server.js';
-import type { ToolManifest } from '../resources.js';
+import { readToolManifest } from '../lib/package-root.js';
+import { withClient } from './helpers.js';
 
 // 프롬프트/리소스는 tool-manifest 의 대상이 아니므로 여기서 별도로 스모크한다.
 // 특히 mimi-seed://agent/guide 는 docs/agent-guide.md 의 "배포용 사본"(assets/)을 서빙하는데,
 // 사본이라 드리프트가 가능하다 — 이 테스트가 원본과의 바이트 동일성을 강제한다.
 
-const manifest = JSON.parse(
-  readFileSync(new URL('../../tool-manifest.json', import.meta.url), 'utf8'),
-) as ToolManifest;
-const manifestNames = new Set(Object.values(manifest.domains).flat());
-
-async function withClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
-  const server = buildServer('0.0.0-test');
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: 'prompts-resources-test', version: '0.0.0' });
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  try {
-    return await fn(client);
-  } finally {
-    await client.close();
-    await server.close();
-  }
-}
+const manifest = readToolManifest();
+const manifestNames = new Set(Object.values(manifest.domains).flatMap((d) => d.tools));
 
 describe('prompts & resources (boot smoke test)', () => {
   it('프롬프트 4종이 등록되어 있다', async () => {
@@ -75,18 +58,14 @@ describe('prompts & resources (boot smoke test)', () => {
       const catalogIds = catalog.domains.map((d) => d.id).sort();
       expect(catalogIds).toEqual(Object.keys(manifest.domains).sort());
 
-      // 도메인을 추가하면 resources.ts 의 DOMAIN_SUMMARY 에도 추가해야 한다.
-      const unsummarized = catalog.domains
-        .filter((d) => d.label === d.id || d.credential === '알 수 없음' || !d.summary)
-        .map((d) => d.id);
-      expect(
-        unsummarized,
-        `DOMAIN_SUMMARY 에 항목이 없는 도메인 — resources.ts 를 갱신하세요: ${unsummarized.join(', ')}`,
-      ).toEqual([]);
-
+      // 메타데이터는 manifest 가 SSOT — 리소스는 그대로 서빙해야 한다.
       for (const domain of catalog.domains) {
-        expect(domain.toolCount).toBe(manifest.domains[domain.id].length);
-        expect(domain.tools).toEqual(manifest.domains[domain.id]);
+        const entry = manifest.domains[domain.id];
+        expect(domain.label).toBe(entry.label);
+        expect(domain.credential).toBe(entry.credential);
+        expect(domain.summary).toBe(entry.summary);
+        expect(domain.toolCount).toBe(entry.tools.length);
+        expect(domain.tools).toEqual(entry.tools);
       }
     });
   });

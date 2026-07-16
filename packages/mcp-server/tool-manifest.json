@@ -1,205 +1,295 @@
 {
-  "$comment": "등록된 MCP 도구의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하여 강제한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것.",
+  "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary)의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
   "total": 163,
   "domains": {
-    "admob": [
-      "admob_list_accounts",
-      "admob_list_apps",
-      "admob_list_ad_units",
-      "admob_get_today_earnings",
-      "admob_get_report",
-      "admob_create_app",
-      "admob_create_ad_unit"
-    ],
-    "ai": [
-      "generate_release_notes_from_commits",
-      "generate_review_reply"
-    ],
-    "android": [
-      "android_signing_setup",
-      "android_generate_keystore",
-      "jenkins_upload_playstore_sa"
-    ],
-    "appstore": [
-      "appstore_list_apps",
-      "appstore_verify_credentials",
-      "appstore_get_app",
-      "appstore_list_versions",
-      "appstore_create_version",
-      "appstore_attach_build",
-      "appstore_attach_latest_build",
-      "appstore_get_metadata",
-      "appstore_update_localization",
-      "appstore_list_screenshots",
-      "appstore_upload_screenshot",
-      "appstore_delete_screenshot",
-      "appstore_delete_screenshot_set",
-      "appstore_update_whats_new",
-      "appstore_update_review_notes",
-      "appstore_get_review_notes",
-      "appstore_list_builds",
-      "appstore_list_beta_groups",
-      "appstore_get_app_info",
-      "appstore_list_app_info_localizations",
-      "appstore_update_app_info_localization",
-      "appstore_create_app_info_localization",
-      "appstore_list_reviews",
-      "appstore_reply_review",
-      "appstore_create_inapp_purchase",
-      "appstore_create_subscription",
-      "appstore_list_products",
-      "appstore_update_product_review_note",
-      "appstore_upload_product_review_screenshot",
-      "appstore_update_product",
-      "appstore_delete_product",
-      "appstore_plan_release",
-      "appstore_submit_for_review",
-      "appstore_cancel_review"
-    ],
-    "auth": [
-      "mimi_seed_status",
-      "mimi_seed_auth_start",
-      "mimi_seed_auth_status",
-      "mimi_seed_remote_sync_credentials"
-    ],
-    "bigquery": [
-      "bigquery_run_query",
-      "bigquery_list_datasets",
-      "bigquery_list_tables",
-      "bigquery_get_table_schema",
-      "bigquery_auth_status"
-    ],
-    "checks": [
-      "playstore_check_submission_risks",
-      "appstore_check_submission_risks",
-      "screenshot_validate",
-      "release_status"
-    ],
-    "ci": [
-      "ci_save_config",
-      "ci_list_workflows",
-      "ci_trigger_build",
-      "ci_get_build_status",
-      "ci_list_recent_builds",
-      "ci_cancel_build"
-    ],
-    "facebook": [
-      "facebook_save_config",
-      "facebook_list_pages",
-      "facebook_get_page",
-      "facebook_post_photo",
-      "facebook_post_multi_photo",
-      "facebook_current_config"
-    ],
-    "firebase": [
-      "firebase_list_projects",
-      "firebase_get_project",
-      "firebase_create_project",
-      "firebase_list_android_apps",
-      "firebase_create_android_app",
-      "firebase_get_android_config",
-      "firebase_delete_android_app",
-      "firebase_list_ios_apps",
-      "firebase_create_ios_app",
-      "firebase_get_ios_config",
-      "firebase_delete_ios_app",
-      "firebase_list_web_apps",
-      "firebase_create_web_app",
-      "firebase_get_web_config",
-      "firebase_delete_web_app",
-      "firebase_enable_service",
-      "firebase_enable_common_services",
-      "firebase_list_enabled_services",
-      "firebase_link_analytics",
-      "firebase_get_analytics_details"
-    ],
-    "ga4": [
-      "ga4_list_account_summaries",
-      "ga4_list_properties",
-      "ga4_create_property",
-      "ga4_create_data_stream",
-      "ga4_list_data_streams",
-      "ga4_run_report"
-    ],
-    "googleads": [
-      "googleads_save_config",
-      "googleads_list_campaigns",
-      "googleads_get_campaign_report",
-      "googleads_get_uac_report",
-      "googleads_list_accessible_customers",
-      "googleads_config_status"
-    ],
-    "gsc": [
-      "gsc_list_sites",
-      "gsc_list_sitemaps",
-      "gsc_get_sitemap",
-      "gsc_submit_sitemap",
-      "gsc_inspect_url",
-      "gsc_search_analytics"
-    ],
-    "iam": [
-      "iam_list_service_accounts",
-      "iam_create_service_account",
-      "iam_list_keys",
-      "iam_create_key",
-      "iam_add_iam_policy_binding"
-    ],
-    "instagram": [
-      "instagram_save_config",
-      "instagram_get_account",
-      "instagram_post_image",
-      "instagram_post_carousel"
-    ],
-    "jenkins": [
-      "jenkins_status",
-      "jenkins_save_config",
-      "jenkins_list_credentials",
-      "jenkins_create_credential",
-      "jenkins_upload_keystore",
-      "jenkins_delete_credential",
-      "jenkins_list_jobs",
-      "jenkins_get_job_config",
-      "jenkins_create_job",
-      "jenkins_update_job"
-    ],
-    "playstore": [
-      "playstore_get_app",
-      "playstore_update_details",
-      "playstore_get_listing",
-      "playstore_update_listing",
-      "playstore_list_tracks",
-      "playstore_get_statistics",
-      "playstore_list_images",
-      "playstore_upload_image",
-      "playstore_delete_all_images",
-      "playstore_replace_images",
-      "playstore_update_release_notes",
-      "playstore_update_latest_release_notes",
-      "playstore_list_reviews",
-      "playstore_reply_review",
-      "playstore_list_inapp_products",
-      "playstore_list_subscriptions",
-      "playstore_create_onetime_product",
-      "playstore_create_subscription",
-      "playstore_verify_service_account",
-      "playstore_register_service_account",
-      "playstore_list_service_accounts",
-      "playstore_delete_service_account",
-      "playstore_plan_release",
-      "playstore_submit_release",
-      "playstore_promote_release",
-      "playstore_list_products",
-      "playstore_update_product",
-      "playstore_delete_product",
-      "setup_playstore_connection"
-    ],
-    "threads": [
-      "threads_save_config",
-      "threads_refresh_token",
-      "threads_get_account",
-      "threads_post",
-      "threads_post_carousel",
-      "threads_current_config"
-    ]
+    "admob": {
+      "label": "AdMob",
+      "credential": "Google OAuth",
+      "summary": "앱·광고 단위 생성, 오늘 수익·기간 리포트",
+      "tools": [
+        "admob_list_accounts",
+        "admob_list_apps",
+        "admob_list_ad_units",
+        "admob_get_today_earnings",
+        "admob_get_report",
+        "admob_create_app",
+        "admob_create_ad_unit"
+      ]
+    },
+    "ai": {
+      "label": "AI 생성",
+      "credential": "ANTHROPIC_API_KEY 환경변수",
+      "summary": "커밋 기반 릴리스 노트·리뷰 답변 초안 생성",
+      "tools": [
+        "generate_release_notes_from_commits",
+        "generate_review_reply"
+      ]
+    },
+    "android": {
+      "label": "Android 서명",
+      "credential": "없음 (로컬 파일 작업)",
+      "summary": "keystore 생성·서명 설정·Jenkins 로 Play SA 업로드",
+      "tools": [
+        "android_signing_setup",
+        "android_generate_keystore",
+        "jenkins_upload_playstore_sa"
+      ]
+    },
+    "appstore": {
+      "label": "App Store Connect",
+      "credential": "ASC API 키 (mimi-seed auth appstore)",
+      "summary": "버전·빌드 attach·What's New·스크린샷·IAP 심사 메타데이터·심사 제출",
+      "tools": [
+        "appstore_list_apps",
+        "appstore_verify_credentials",
+        "appstore_get_app",
+        "appstore_list_versions",
+        "appstore_create_version",
+        "appstore_attach_build",
+        "appstore_attach_latest_build",
+        "appstore_get_metadata",
+        "appstore_update_localization",
+        "appstore_list_screenshots",
+        "appstore_upload_screenshot",
+        "appstore_delete_screenshot",
+        "appstore_delete_screenshot_set",
+        "appstore_update_whats_new",
+        "appstore_update_review_notes",
+        "appstore_get_review_notes",
+        "appstore_list_builds",
+        "appstore_list_beta_groups",
+        "appstore_get_app_info",
+        "appstore_list_app_info_localizations",
+        "appstore_update_app_info_localization",
+        "appstore_create_app_info_localization",
+        "appstore_list_reviews",
+        "appstore_reply_review",
+        "appstore_create_inapp_purchase",
+        "appstore_create_subscription",
+        "appstore_list_products",
+        "appstore_update_product_review_note",
+        "appstore_upload_product_review_screenshot",
+        "appstore_update_product",
+        "appstore_delete_product",
+        "appstore_plan_release",
+        "appstore_submit_for_review",
+        "appstore_cancel_review"
+      ]
+    },
+    "auth": {
+      "label": "연결/진단",
+      "credential": "없음 (이것이 셋업 도구)",
+      "summary": "전체 연결 상태 스캔(mimi_seed_status)·OAuth 시작·원격 크리덴셜 동기화",
+      "tools": [
+        "mimi_seed_status",
+        "mimi_seed_auth_start",
+        "mimi_seed_auth_status",
+        "mimi_seed_remote_sync_credentials"
+      ]
+    },
+    "bigquery": {
+      "label": "BigQuery",
+      "credential": "Google OAuth (또는 BigQuery 서비스 계정)",
+      "summary": "쿼리 실행·데이터셋/테이블/스키마 조회",
+      "tools": [
+        "bigquery_run_query",
+        "bigquery_list_datasets",
+        "bigquery_list_tables",
+        "bigquery_get_table_schema",
+        "bigquery_auth_status"
+      ]
+    },
+    "checks": {
+      "label": "출시 점검",
+      "credential": "점검 대상 스토어의 자격증명",
+      "summary": "제출 전 위험 점검·스크린샷 규격 검증·릴리스 상태",
+      "tools": [
+        "playstore_check_submission_risks",
+        "appstore_check_submission_risks",
+        "screenshot_validate",
+        "release_status"
+      ]
+    },
+    "ci": {
+      "label": "CI (GitHub Actions / GitLab)",
+      "credential": "GitHub/GitLab 토큰 (mimi-seed auth ci)",
+      "summary": "워크플로 조회·빌드 트리거/상태/취소 — Jenkins 빌드는 대상 아님",
+      "tools": [
+        "ci_save_config",
+        "ci_list_workflows",
+        "ci_trigger_build",
+        "ci_get_build_status",
+        "ci_list_recent_builds",
+        "ci_cancel_build"
+      ]
+    },
+    "facebook": {
+      "label": "Facebook",
+      "credential": "Facebook 페이지 토큰 (mimi-seed auth facebook)",
+      "summary": "페이지 텍스트/사진/링크 포스팅",
+      "tools": [
+        "facebook_save_config",
+        "facebook_list_pages",
+        "facebook_get_page",
+        "facebook_post_photo",
+        "facebook_post_multi_photo",
+        "facebook_current_config"
+      ]
+    },
+    "firebase": {
+      "label": "Firebase",
+      "credential": "Google OAuth",
+      "summary": "프로젝트/앱 생성·설정 파일 다운로드·서비스 활성화",
+      "tools": [
+        "firebase_list_projects",
+        "firebase_get_project",
+        "firebase_create_project",
+        "firebase_list_android_apps",
+        "firebase_create_android_app",
+        "firebase_get_android_config",
+        "firebase_delete_android_app",
+        "firebase_list_ios_apps",
+        "firebase_create_ios_app",
+        "firebase_get_ios_config",
+        "firebase_delete_ios_app",
+        "firebase_list_web_apps",
+        "firebase_create_web_app",
+        "firebase_get_web_config",
+        "firebase_delete_web_app",
+        "firebase_enable_service",
+        "firebase_enable_common_services",
+        "firebase_list_enabled_services",
+        "firebase_link_analytics",
+        "firebase_get_analytics_details"
+      ]
+    },
+    "ga4": {
+      "label": "Google Analytics 4",
+      "credential": "Google OAuth",
+      "summary": "계정/속성·데이터 스트림 관리, 리포트 실행",
+      "tools": [
+        "ga4_list_account_summaries",
+        "ga4_list_properties",
+        "ga4_create_property",
+        "ga4_create_data_stream",
+        "ga4_list_data_streams",
+        "ga4_run_report"
+      ]
+    },
+    "googleads": {
+      "label": "Google Ads",
+      "credential": "Google Ads 설정 (mimi-seed auth googleads, adwords 스코프)",
+      "summary": "캠페인 목록·캠페인/UAC 리포트",
+      "tools": [
+        "googleads_save_config",
+        "googleads_list_campaigns",
+        "googleads_get_campaign_report",
+        "googleads_get_uac_report",
+        "googleads_list_accessible_customers",
+        "googleads_config_status"
+      ]
+    },
+    "gsc": {
+      "label": "Search Console",
+      "credential": "Google OAuth",
+      "summary": "URL 검사·검색 성과 분석·사이트맵 제출",
+      "tools": [
+        "gsc_list_sites",
+        "gsc_list_sitemaps",
+        "gsc_get_sitemap",
+        "gsc_submit_sitemap",
+        "gsc_inspect_url",
+        "gsc_search_analytics"
+      ]
+    },
+    "iam": {
+      "label": "Google Cloud IAM",
+      "credential": "Google OAuth",
+      "summary": "서비스 계정 생성·키 발급·IAM 정책 바인딩",
+      "tools": [
+        "iam_list_service_accounts",
+        "iam_create_service_account",
+        "iam_list_keys",
+        "iam_create_key",
+        "iam_add_iam_policy_binding"
+      ]
+    },
+    "instagram": {
+      "label": "Instagram",
+      "credential": "Instagram 토큰 (mimi-seed auth instagram)",
+      "summary": "사진·캐러셀·릴스 포스팅",
+      "tools": [
+        "instagram_save_config",
+        "instagram_get_account",
+        "instagram_post_image",
+        "instagram_post_carousel"
+      ]
+    },
+    "jenkins": {
+      "label": "Jenkins",
+      "credential": "Jenkins URL + API 토큰 (mimi-seed auth jenkins)",
+      "summary": "크리덴셜·keystore 업로드·잡 생성/수정 — 빌드 트리거 도구는 없음",
+      "tools": [
+        "jenkins_status",
+        "jenkins_save_config",
+        "jenkins_list_credentials",
+        "jenkins_create_credential",
+        "jenkins_upload_keystore",
+        "jenkins_delete_credential",
+        "jenkins_list_jobs",
+        "jenkins_get_job_config",
+        "jenkins_create_job",
+        "jenkins_update_job"
+      ]
+    },
+    "playstore": {
+      "label": "Google Play",
+      "credential": "Google OAuth (CI/헤드리스는 Play 서비스 계정)",
+      "summary": "리스팅·트랙 릴리스·이미지·리뷰 답변·통계·서비스 계정 등록",
+      "tools": [
+        "playstore_get_app",
+        "playstore_update_details",
+        "playstore_get_listing",
+        "playstore_update_listing",
+        "playstore_list_tracks",
+        "playstore_get_statistics",
+        "playstore_list_images",
+        "playstore_upload_image",
+        "playstore_delete_all_images",
+        "playstore_replace_images",
+        "playstore_update_release_notes",
+        "playstore_update_latest_release_notes",
+        "playstore_list_reviews",
+        "playstore_reply_review",
+        "playstore_list_inapp_products",
+        "playstore_list_subscriptions",
+        "playstore_create_onetime_product",
+        "playstore_create_subscription",
+        "playstore_verify_service_account",
+        "playstore_register_service_account",
+        "playstore_list_service_accounts",
+        "playstore_delete_service_account",
+        "playstore_plan_release",
+        "playstore_submit_release",
+        "playstore_promote_release",
+        "playstore_list_products",
+        "playstore_update_product",
+        "playstore_delete_product",
+        "setup_playstore_connection"
+      ]
+    },
+    "threads": {
+      "label": "Threads",
+      "credential": "Threads 토큰 (mimi-seed auth threads)",
+      "summary": "텍스트/이미지 포스팅·토큰 갱신",
+      "tools": [
+        "threads_save_config",
+        "threads_refresh_token",
+        "threads_get_account",
+        "threads_post",
+        "threads_post_carousel",
+        "threads_current_config"
+      ]
+    }
   }
 }

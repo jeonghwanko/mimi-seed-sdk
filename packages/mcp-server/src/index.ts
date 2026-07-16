@@ -1,13 +1,11 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { buildServer } from './server.js';
+import { readPackageRootText } from './lib/package-root.js';
 
-// dist/index.js 기준 ../package.json — npm 패키지 루트의 버전을 단일 출처로 사용.
+// npm 패키지 루트의 버전을 단일 출처로 사용.
 // 하드코딩하면 publish 때마다 serverInfo.version 이 드리프트하므로 런타임에 읽는다.
-const { version } = JSON.parse(
-  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-) as { version: string };
+const { version } = JSON.parse(readPackageRootText('package.json')) as { version: string };
 
 // `npx -y @yoonion/mimi-seed-mcp <subcommand>` 처리.
 // npx는 스코프 패키지의 basename(`mimi-seed-mcp`)을 매치해 이 bin을 실행하므로,
