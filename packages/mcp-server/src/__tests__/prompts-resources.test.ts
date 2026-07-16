@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { buildServer } from '../server.js';
+import type { ToolManifest } from '../resources.js';
 
 // 프롬프트/리소스는 tool-manifest 의 대상이 아니므로 여기서 별도로 스모크한다.
 // 특히 mimi-seed://agent/guide 는 docs/agent-guide.md 의 "배포용 사본"(assets/)을 서빙하는데,
@@ -10,7 +11,8 @@ import { buildServer } from '../server.js';
 
 const manifest = JSON.parse(
   readFileSync(new URL('../../tool-manifest.json', import.meta.url), 'utf8'),
-) as { total: number; domains: Record<string, string[]> };
+) as ToolManifest;
+const manifestNames = new Set(Object.values(manifest.domains).flat());
 
 async function withClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
   const server = buildServer('0.0.0-test');
@@ -61,10 +63,12 @@ describe('prompts & resources (boot smoke test)', () => {
     await withClient(async (client) => {
       const { contents } = await client.readResource({ uri: 'mimi-seed://tools/catalog' });
       const catalog = JSON.parse(String(contents[0]?.text ?? '')) as {
+        error?: string;
         total: number;
         deferredHint: string;
         domains: { id: string; label: string; credential: string; summary: string; toolCount: number; tools: string[] }[];
       };
+      expect(catalog.error, '정상 설치에서 카탈로그가 degraded 페이로드를 서빙함').toBeUndefined();
       expect(catalog.total).toBe(manifest.total);
       expect(catalog.deferredHint).toContain('ToolSearch');
 
@@ -85,6 +89,28 @@ describe('prompts & resources (boot smoke test)', () => {
         expect(domain.tools).toEqual(manifest.domains[domain.id]);
       }
     });
+  });
+
+  it('온보딩 표면이 이름을 대는 도구가 전부 manifest 에 실존한다 (리네임 드리프트 가드)', async () => {
+    const promptText = await withClient(async (client) => {
+      const r = await client.getPrompt({ name: 'getting-started', arguments: {} });
+      return r.messages
+        .map((m) => (m.content.type === 'text' ? m.content.text : ''))
+        .join('\n');
+    });
+    const skillText = readFileSync(
+      new URL('../../../../skills/mimi-seed-onboarding/SKILL.md', import.meta.url),
+      'utf8',
+    );
+    // 도구명 패턴: <도메인 접두어>_<snake_case>. 산문 속 도구 이름이 리네임 후에도 남아
+    // 첫 사용자를 죽은 도구로 안내하는 사고를 막는다.
+    const named = new Set(
+      `${promptText}\n${skillText}`.match(
+        /\b(?:playstore|appstore|firebase|admob|ga4|gsc|googleads|bigquery|iam|ci|jenkins|android|facebook|instagram|threads|mimi_seed|generate|screenshot|release)_[a-z0-9_]+\b/g,
+      ) ?? [],
+    );
+    const dead = [...named].filter((n) => !manifestNames.has(n));
+    expect(dead, `온보딩 표면이 존재하지 않는 도구를 안내함: ${dead.join(', ')}`).toEqual([]);
   });
 
   it('assets/agent-guide.md 가 docs/agent-guide.md 원본과 동일하다', () => {

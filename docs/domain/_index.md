@@ -100,7 +100,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | Fact | SSOT (code) | Mirrored in | Enforced by |
 |---|---|---|---|
 | Tool names & inventory | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) | ✅ `tool-manifest.test.ts` (manifest ↔ live server) + `docs-drift.test.ts` (manifest ↔ catalog) |
-| Exact tool counts | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) **only** | ✅ `docs-drift.test.ts` — prose elsewhere must say "150+", never a number |
+| Exact tool counts | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) **only** | ✅ `docs-drift.test.ts` (manifest ↔ catalog counts); the "prose elsewhere says 150+, never a number" rule is ⚠️ manual convention |
 | Domain counts in the READMEs | `tool-manifest.json` | `README.md`, `README.ko.md` | ⚠️ **manual** — check on release |
 | Credential files & roles | `src/*/config.ts`, `src/auth/*` | [auth-credentials.md](auth-credentials.md) | ⚠️ manual |
 | CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |

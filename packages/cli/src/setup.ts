@@ -371,12 +371,12 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   const stillMissing = missingRequired(detected, platforms);
   if (stillMissing.length === 0) {
     log(kleur.green(t().setup.requiredDone));
+    log(kleur.cyan(t().setup.tryPrompt));
   } else {
     log(kleur.yellow(t().setup.stillMissing));
     for (const spec of stillMissing) log(kleur.yellow(`    • ${credLabel(spec)} → ${spec.fix}`));
   }
   log(kleur.dim(t().setup.nextSteps));
-  if (stillMissing.length === 0) log(kleur.cyan(t().setup.tryPrompt));
   log();
 
   if (opts.failOnMissing && stillMissing.length > 0) process.exit(1);

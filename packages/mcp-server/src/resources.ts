@@ -2,36 +2,21 @@ import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ensureFreshAccessToken } from './auth/google-auth.js';
 
+/** tool-manifest.json 의 형태. 테스트들도 이 타입을 import 해 캐스트 드리프트를 막는다. */
+export type ToolManifest = { total: number; domains: Record<string, string[]> };
+
 // assets/agent-guide.md = docs/agent-guide.md 의 배포용 사본 (npm 배포본에는 docs/ 가 없다).
 // 갱신은 `npm run plugin:sync`, 드리프트는 prompts-resources.test.ts 가 잡는다.
-// 파일을 읽지 못하는 비정상 설치에서도 리소스가 죽지 않도록 최소 폴백을 유지한다.
+// 읽기 실패는 정상 설치에서 불가능하다(files 화이트리스트에 포함) — 그래서 폴백은 가이드
+// 요약본이 아니라 "깨진 설치" 신호 + 원본 포인터만 담는다. 요약본을 하나 더 관리하지 않는다.
 const AGENT_GUIDE_FALLBACK = [
-  '# Mimi Seed — 앱 출시·운영 Agent',
+  '# Mimi Seed agent guide — 자산 누락 (degraded)',
   '',
-  '당신은 Mimi Seed MCP를 통해 인디 개발자의 앱 출시와 운영을 돕는 에이전트입니다.',
-  'Google Play · App Store · Firebase · AdMob · CI/CD · BigQuery를 직접 제어하는 150+ 도구를 사용할 수 있습니다.',
+  '⚠️ 이 설치본에서 assets/agent-guide.md 를 읽지 못했습니다 — 패키지가 손상됐습니다.',
+  '`npx -y @yoonion/mimi-seed-mcp` 재설치(필요 시 npx 캐시 정리) 후 새 세션을 여세요.',
   '',
-  '## 출시 요청 처리 순서',
-  '',
-  '1. **항상** `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인',
-  '2. 릴리즈 노트: `generate_release_notes_from_commits` → 검토 → 적용',
-  '3. **쓰기 작업**(submit, apply, reply 등)은 반드시 사용자 명시 동의 후 실행',
-  '4. 완료 후 결과 요약 제공',
-  '',
-  '## 슬래시 커맨드',
-  '',
-  '- `/mimi-seed:getting-started` — 처음 사용자 온보딩',
-  '- `/mimi-seed:deploy` — 전체 출시 파이프라인',
-  '- `/mimi-seed:health` — 연결·인증 상태 빠른 확인',
-  '- `/mimi-seed:review-inbox` — 미답변 리뷰 조회 + 답변 생성',
-  '',
-  '## 주의사항',
-  '',
-  '- `playstore_submit_release(status=completed)` — 비가역, 반드시 명시 동의 필요',
-  '- `appstore_submit_for_review` — 비가역, 반드시 명시 동의 필요',
-  '- `playstore_reply_review` — 공개 게시, 반드시 검토 후 동의 필요',
-  '',
-  '전체 가이드: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/agent-guide.md',
+  '가이드 전문: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/agent-guide.md',
+  '최소 안전수칙: 스토어 제출·승격·삭제·공개 게시는 사용자 명시 동의 없이 실행하지 않는다.',
 ].join('\n');
 
 function readPackageAsset(relativePath: string): string | null {
@@ -186,26 +171,42 @@ export function registerResources(server: McpServer) {
       mimeType: 'application/json',
     },
     async () => {
-      const manifest = JSON.parse(
-        readPackageAsset('../tool-manifest.json') ?? '{"total":0,"domains":{}}',
-      ) as { total: number; domains: Record<string, string[]> };
+      // LLM 이 읽는 페이로드라 compact 로 직렬화한다 (pretty 들여쓰기는 ~40% 바이트 낭비).
+      let payload: string;
+      try {
+        const raw = readFileSync(new URL('../tool-manifest.json', import.meta.url), 'utf8');
+        const manifest = JSON.parse(raw) as ToolManifest;
+        if (typeof manifest?.total !== 'number' || typeof manifest?.domains !== 'object' || manifest.domains === null) {
+          throw new Error('tool-manifest.json 의 형태가 예상과 다릅니다');
+        }
+        payload = JSON.stringify({
+          total: manifest.total,
+          deferredHint:
+            'Claude Code 에서는 도구 schema 가 lazy 로드됩니다 — 호출 전 ToolSearch(query="select:<tool,...>") 로 선로드하세요. 상세: mimi-seed://agent/guide',
+          domains: Object.entries(manifest.domains).map(([id, tools]) => ({
+            id,
+            label: DOMAIN_SUMMARY[id]?.label ?? id,
+            credential: DOMAIN_SUMMARY[id]?.credential ?? '알 수 없음',
+            summary: DOMAIN_SUMMARY[id]?.summary ?? '',
+            toolCount: tools.length,
+            tools,
+          })),
+        });
+      } catch (e) {
+        // 가짜 성공(빈 카탈로그)을 서빙하지 않는다 — 깨진 설치임을 명시적으로 알린다.
+        payload = JSON.stringify({
+          error:
+            'tool-manifest.json 을 읽지 못했습니다 — 패키지가 손상됐습니다. `npx -y @yoonion/mimi-seed-mcp` 재설치 후 새 세션을 여세요.',
+          detail: e instanceof Error ? e.message : String(e),
+          total: null,
+          domains: [],
+        });
+      }
       return {
         contents: [{
           uri: 'mimi-seed://tools/catalog',
           mimeType: 'application/json',
-          text: JSON.stringify({
-            total: manifest.total,
-            deferredHint:
-              'Claude Code 에서는 도구 schema 가 lazy 로드됩니다 — 호출 전 ToolSearch(query="select:<tool,...>") 로 선로드하세요. 상세: mimi-seed://agent/guide',
-            domains: Object.entries(manifest.domains).map(([id, tools]) => ({
-              id,
-              label: DOMAIN_SUMMARY[id]?.label ?? id,
-              credential: DOMAIN_SUMMARY[id]?.credential ?? '알 수 없음',
-              summary: DOMAIN_SUMMARY[id]?.summary ?? '',
-              toolCount: tools.length,
-              tools,
-            })),
-          }, null, 2),
+          text: payload,
         }],
       };
     },

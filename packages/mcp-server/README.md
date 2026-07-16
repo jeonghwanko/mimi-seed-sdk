@@ -108,6 +108,7 @@ MCP 클라이언트(Claude Code, Codex 등)에서 슬래시 커맨드로 바로 
 
 | 커맨드 | 설명 |
 |--------|------|
+| `/mimi-seed:getting-started` | 처음 사용자 온보딩 — 연결 스캔 → 능력 투어 → 첫 읽기 전용 액션 |
 | `/mimi-seed:deploy` | 블로커 점검 → 릴리즈 노트 생성 → 스토어 적용을 한 번에 |
 | `/mimi-seed:health` | 인증 상태 + 앱 출시 준비도 빠른 요약 |
 | `/mimi-seed:review-inbox` | 미답변 리뷰 조회 → AI 답변 초안 생성 |
@@ -117,7 +118,8 @@ MCP 클라이언트(Claude Code, Codex 등)에서 슬래시 커맨드로 바로 
 | URI | 설명 |
 |-----|------|
 | `mimi-seed://auth/status` | Google OAuth 토큰 상태 (JSON) |
-| `mimi-seed://agent/guide` | 에이전트 역할 정의 — 출시 워크플로우·주의사항 (Markdown) |
+| `mimi-seed://agent/guide` | 에이전트 운영 규약 전문 — deferred 도구 로딩·`select:` 배치·호출 순서·안전수칙 (Markdown) |
+| `mimi-seed://tools/catalog` | 도메인별 전체 도구 목록 + 필요 자격증명 + 요약 (JSON) — "뭘 할 수 있어?"의 런타임 답 |
 
 ---
 

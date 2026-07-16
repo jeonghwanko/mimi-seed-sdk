@@ -28,7 +28,7 @@
     "auth": "tsx src/auth/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "tsc"
+    "prepublishOnly": "node ../../scripts/sync-agent-guide.mjs --check && tsc"
   },
   "keywords": [
     "mcp",

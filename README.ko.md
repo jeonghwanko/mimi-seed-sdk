@@ -132,12 +132,12 @@ export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
 ```bash
 cd <내-앱-폴더>
 npx mimi-seed init    # 프로젝트: 앱 자동 감지 → 브라우저 로그인 → 앱 등록 → 에이전트 컨텍스트 파일 생성
-npx mimi-seed setup   # 계정: 안내형 마법사 — 뭐가 빠졌는지 보여주고, 안 된 것만 물어봄
+npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 번에 연결하는 안내형 마법사
 ```
 
 `init` 은 Expo · Gradle · Info.plist · pbxproj 를 자동 감지하고, `.claude/mimi-seed.md`와 `AGENTS.md`를 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식하게 합니다. (플러그인 대신 MCP 서버만 등록했다면? `npx mimi-seed init --local` 이 Google 로그인과 로컬 MCP 등록까지 한 번에 이어서 해줍니다.)
 
-첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버됩니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
+첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버되고, 같은 마법사가 필요할 때 App Store Connect · Play 서비스 계정 · Jenkins · GitHub/GitLab CI · Facebook / Instagram / Threads까지 연결해줍니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
 
 `setup` 은 첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
 
@@ -158,7 +158,7 @@ npx mimi-seed doctor   # 모든 자격증명 + 누락 항목별 정확한 복구
 
 **새** Claude Code / Codex 세션을 열고 (위 함정 2번) 물어보세요:
 
-> *"내 앱 출시 준비됐어?"* — 또는 `/mimi-seed:getting-started` 로 안내형 첫 투어를 시작하세요.
+> *"내 앱 출시 준비됐어?"* — 플러그인 설치라면 `/mimi-seed:getting-started` 로 안내형 첫 투어도 가능합니다. (슬래시 접두어는 서버 등록 이름을 따릅니다 — bare 등록이면 `/mimi-seed-local:getting-started`, Remote MCP에는 프롬프트가 없습니다.)
 
 ### CLI 빠른 참조
 

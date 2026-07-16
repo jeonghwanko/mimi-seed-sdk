@@ -117,14 +117,18 @@ only.)
 
 Registered in `mcp-server/src/resources.ts` and `prompts.ts`:
 
-- **Resources** — `mimi-seed://auth/status` (Google OAuth freshness as JSON) and `mimi-seed://agent/guide`
-  (the agent role definition).
-- **Prompts → slash commands** — `deploy`, `health`, `review-inbox`, surfaced in MCP clients as
-  `/mimi-seed:deploy`, `/mimi-seed:health`, `/mimi-seed:review-inbox`. More in [[skills-plugins]].
+- **Resources** — `mimi-seed://auth/status` (Google OAuth freshness as JSON), `mimi-seed://agent/guide`
+  (the full `docs/agent-guide.md`, served from the committed copy `packages/mcp-server/assets/agent-guide.md`
+  — refreshed by `npm run plugin:sync`), and `mimi-seed://tools/catalog` (runtime capability index derived
+  from `tool-manifest.json` + the `DOMAIN_SUMMARY` map in `resources.ts`).
+- **Prompts → slash commands** — `getting-started`, `deploy`, `health`, `review-inbox`, surfaced in MCP
+  clients as `/mimi-seed:<name>`. More in [[skills-plugins]].
 
 ## Build & module conventions
 
 - **ESM everywhere** (`"type": "module"`); imports use `.js` specifiers even from `.ts` sources (NodeNext).
 - Tool names: `snake_case` (`playstore_get_app`). Files: `kebab-case`. Domain folders: lowercase.
-- MCP server builds with `tsc` to `dist/`; the CLI bundles with `tsup`. Both publish only `dist` + `LICENSE`
-  and test with `vitest`. Verify a change with `npm run build && npm test` **inside the changed package**.
+- MCP server builds with `tsc` to `dist/`; the CLI bundles with `tsup`. The CLI publishes `dist` + `LICENSE`;
+  the MCP server additionally ships `assets/` (the served agent guide) and `tool-manifest.json` (the catalog
+  resource's data). Both test with `vitest`. Verify a change with `npm run build && npm test` **inside the
+  changed package**.

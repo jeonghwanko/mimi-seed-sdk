@@ -132,12 +132,12 @@ export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
 ```bash
 cd <your-app>
 npx mimi-seed init    # project: auto-detect app → browser sign-in → register apps → agent context files
-npx mimi-seed setup   # accounts: guided wizard — shows what's missing, asks only about what isn't connected
+npx mimi-seed setup   # accounts: one guided wizard for stores · CI · social
 ```
 
 `init` detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session. (Skipped the plugin and registered the bare MCP server instead? `npx mimi-seed init --local` chains the Google sign-in and the local-MCP registration into the same pass.)
 
-You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery → [What do you actually need?](docs/credentials.md#what-you-need)
+You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery; the same wizard also connects App Store Connect, a Play service account, Jenkins, GitHub/GitLab CI, and Facebook / Instagram / Threads whenever you need them → [What do you actually need?](docs/credentials.md#what-you-need)
 
 On first run `setup` asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Reconnect the three Meta platforms any time with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
 
@@ -158,7 +158,7 @@ npx mimi-seed doctor   # every credential + the exact fix command for anything m
 
 Open a **new** Claude Code / Codex session (trap #2 above) and ask:
 
-> *"Is my app ready to ship?"* — or run `/mimi-seed:getting-started` for a guided first tour.
+> *"Is my app ready to ship?"* — plugin installs can also run `/mimi-seed:getting-started` for a guided first tour. (The slash prefix follows your server name — a bare registration exposes it as `/mimi-seed-local:getting-started`; the Remote MCP has no prompts.)
 
 ### CLI quick reference
 
