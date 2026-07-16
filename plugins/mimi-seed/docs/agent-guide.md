@@ -61,9 +61,9 @@ tools directly — but the *call order* and *safety rules* below still apply.
 
 ## 1. Always start with `mimi_seed_status`
 
-Before any task, call **`mimi_seed_status`** — the setup doctor. It scans 10 services
-(Google OAuth · Play SA · App Store · Jenkins · CI · Google Ads · Facebook · Instagram · Threads ·
-BigQuery) and returns a ✅/❌ report plus the exact next tool to call for anything
+Before any task, call **`mimi_seed_status`** — the setup doctor. It scans your service
+credentials (Google OAuth · Play SA · App Store · Jenkins · CI · Google Ads · Facebook · Instagram ·
+Threads · BigQuery) and returns a ✅/❌ report plus the exact next tool to call for anything
 missing. This avoids a late `401`/`403` deep into a workflow.
 
 > If the repo has a **`.mimi-seed.json`** manifest at its root, `mimi_seed_status` (and
@@ -225,12 +225,14 @@ General rules:
 
 Available in any MCP client as native slash commands:
 
+- `/mimi-seed:getting-started` — first-run onboarding: status scan → capability tour → first read-only action
 - `/mimi-seed:deploy` — blockers → release notes → apply to stores
 - `/mimi-seed:health` — auth status + readiness summary
 - `/mimi-seed:review-inbox` — fetch unanswered reviews → draft replies
 
-MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agent/guide`
-(agent role definition).
+MCP resources: `mimi-seed://auth/status` (live token state) · `mimi-seed://agent/guide`
+(this guide, served over MCP) · `mimi-seed://tools/catalog` (the full tool inventory by
+domain, with the credential each domain needs — read it to answer "what can Mimi Seed do?").
 
 ---
 

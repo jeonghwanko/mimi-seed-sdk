@@ -309,6 +309,7 @@ export async function cmdSetup(argv: string[]): Promise<void> {
       log(kleur.dim(t().setup.onlyReconnectHint));
     } else {
       log(kleur.green(t().setup.allDone));
+      log(kleur.cyan(t().setup.tryPrompt));
     }
     log(kleur.dim("     " + t().common.checkWith));
     // 여기서 그냥 return 하면 --fail-on-missing 이 무시된다 (--only 오타로 plan 이 빌 수도 있다).
@@ -375,6 +376,7 @@ export async function cmdSetup(argv: string[]): Promise<void> {
     for (const spec of stillMissing) log(kleur.yellow(`    • ${credLabel(spec)} → ${spec.fix}`));
   }
   log(kleur.dim(t().setup.nextSteps));
+  if (stillMissing.length === 0) log(kleur.cyan(t().setup.tryPrompt));
   log();
 
   if (opts.failOnMissing && stillMissing.length > 0) process.exit(1);

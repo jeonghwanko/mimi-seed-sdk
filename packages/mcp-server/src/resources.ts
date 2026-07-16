@@ -1,5 +1,142 @@
+import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ensureFreshAccessToken } from './auth/google-auth.js';
+
+// assets/agent-guide.md = docs/agent-guide.md 의 배포용 사본 (npm 배포본에는 docs/ 가 없다).
+// 갱신은 `npm run plugin:sync`, 드리프트는 prompts-resources.test.ts 가 잡는다.
+// 파일을 읽지 못하는 비정상 설치에서도 리소스가 죽지 않도록 최소 폴백을 유지한다.
+const AGENT_GUIDE_FALLBACK = [
+  '# Mimi Seed — 앱 출시·운영 Agent',
+  '',
+  '당신은 Mimi Seed MCP를 통해 인디 개발자의 앱 출시와 운영을 돕는 에이전트입니다.',
+  'Google Play · App Store · Firebase · AdMob · CI/CD · BigQuery를 직접 제어하는 150+ 도구를 사용할 수 있습니다.',
+  '',
+  '## 출시 요청 처리 순서',
+  '',
+  '1. **항상** `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인',
+  '2. 릴리즈 노트: `generate_release_notes_from_commits` → 검토 → 적용',
+  '3. **쓰기 작업**(submit, apply, reply 등)은 반드시 사용자 명시 동의 후 실행',
+  '4. 완료 후 결과 요약 제공',
+  '',
+  '## 슬래시 커맨드',
+  '',
+  '- `/mimi-seed:getting-started` — 처음 사용자 온보딩',
+  '- `/mimi-seed:deploy` — 전체 출시 파이프라인',
+  '- `/mimi-seed:health` — 연결·인증 상태 빠른 확인',
+  '- `/mimi-seed:review-inbox` — 미답변 리뷰 조회 + 답변 생성',
+  '',
+  '## 주의사항',
+  '',
+  '- `playstore_submit_release(status=completed)` — 비가역, 반드시 명시 동의 필요',
+  '- `appstore_submit_for_review` — 비가역, 반드시 명시 동의 필요',
+  '- `playstore_reply_review` — 공개 게시, 반드시 검토 후 동의 필요',
+  '',
+  '전체 가이드: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/agent-guide.md',
+].join('\n');
+
+function readPackageAsset(relativePath: string): string | null {
+  try {
+    // src/ 와 dist/ 모두 패키지 루트 바로 아래라 ../ 가 같은 곳을 가리킨다 (index.ts 의 package.json 읽기와 동일 패턴).
+    return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** 도메인 id → 라벨·필요 자격증명·한줄 요약. 키 집합은 tool-manifest.json 의 domains 와
+ *  일치해야 한다 (prompts-resources.test.ts 가 강제) — 도메인을 추가하면 여기도 추가할 것. */
+const DOMAIN_SUMMARY: Record<string, { label: string; credential: string; summary: string }> = {
+  playstore: {
+    label: 'Google Play',
+    credential: 'Google OAuth (CI/헤드리스는 Play 서비스 계정)',
+    summary: '리스팅·트랙 릴리스·이미지·리뷰 답변·통계·서비스 계정 등록',
+  },
+  appstore: {
+    label: 'App Store Connect',
+    credential: 'ASC API 키 (mimi-seed auth appstore)',
+    summary: '버전·빌드 attach·What\'s New·스크린샷·IAP 심사 메타데이터·심사 제출',
+  },
+  firebase: {
+    label: 'Firebase',
+    credential: 'Google OAuth',
+    summary: '프로젝트/앱 생성·설정 파일 다운로드·서비스 활성화',
+  },
+  admob: {
+    label: 'AdMob',
+    credential: 'Google OAuth',
+    summary: '앱·광고 단위 생성, 오늘 수익·기간 리포트',
+  },
+  iam: {
+    label: 'Google Cloud IAM',
+    credential: 'Google OAuth',
+    summary: '서비스 계정 생성·키 발급·IAM 정책 바인딩',
+  },
+  bigquery: {
+    label: 'BigQuery',
+    credential: 'Google OAuth (또는 BigQuery 서비스 계정)',
+    summary: '쿼리 실행·데이터셋/테이블/스키마 조회',
+  },
+  ga4: {
+    label: 'Google Analytics 4',
+    credential: 'Google OAuth',
+    summary: '계정/속성·데이터 스트림 관리, 리포트 실행',
+  },
+  gsc: {
+    label: 'Search Console',
+    credential: 'Google OAuth',
+    summary: 'URL 검사·검색 성과 분석·사이트맵 제출',
+  },
+  googleads: {
+    label: 'Google Ads',
+    credential: 'Google Ads 설정 (mimi-seed auth googleads, adwords 스코프)',
+    summary: '캠페인 목록·캠페인/UAC 리포트',
+  },
+  ci: {
+    label: 'CI (GitHub Actions / GitLab)',
+    credential: 'GitHub/GitLab 토큰 (mimi-seed auth ci)',
+    summary: '워크플로 조회·빌드 트리거/상태/취소 — Jenkins 빌드는 대상 아님',
+  },
+  jenkins: {
+    label: 'Jenkins',
+    credential: 'Jenkins URL + API 토큰 (mimi-seed auth jenkins)',
+    summary: '크리덴셜·keystore 업로드·잡 생성/수정 — 빌드 트리거 도구는 없음',
+  },
+  android: {
+    label: 'Android 서명',
+    credential: '없음 (로컬 파일 작업)',
+    summary: 'keystore 생성·서명 설정·Jenkins 로 Play SA 업로드',
+  },
+  facebook: {
+    label: 'Facebook',
+    credential: 'Facebook 페이지 토큰 (mimi-seed auth facebook)',
+    summary: '페이지 텍스트/사진/링크 포스팅',
+  },
+  instagram: {
+    label: 'Instagram',
+    credential: 'Instagram 토큰 (mimi-seed auth instagram)',
+    summary: '사진·캐러셀·릴스 포스팅',
+  },
+  threads: {
+    label: 'Threads',
+    credential: 'Threads 토큰 (mimi-seed auth threads)',
+    summary: '텍스트/이미지 포스팅·토큰 갱신',
+  },
+  checks: {
+    label: '출시 점검',
+    credential: '점검 대상 스토어의 자격증명',
+    summary: '제출 전 위험 점검·스크린샷 규격 검증·릴리스 상태',
+  },
+  ai: {
+    label: 'AI 생성',
+    credential: 'ANTHROPIC_API_KEY 환경변수',
+    summary: '커밋 기반 릴리스 노트·리뷰 답변 초안 생성',
+  },
+  auth: {
+    label: '연결/진단',
+    credential: '없음 (이것이 셋업 도구)',
+    summary: '전체 연결 상태 스캔(mimi_seed_status)·OAuth 시작·원격 크리덴셜 동기화',
+  },
+};
 
 export function registerResources(server: McpServer) {
   server.resource(
@@ -28,37 +165,49 @@ export function registerResources(server: McpServer) {
   server.resource(
     'agent-guide',
     'mimi-seed://agent/guide',
-    { description: 'Mimi Seed 에이전트 역할 정의 — 출시 워크플로우 · 주의사항 · 슬래시 커맨드', mimeType: 'text/markdown' },
+    {
+      description: 'Mimi Seed 에이전트 운영 규약 전문 (docs/agent-guide.md) — deferred 도구 로딩·ToolSearch select: 배치·호출 순서·비가역 액션 안전수칙',
+      mimeType: 'text/markdown',
+    },
     async () => ({
       contents: [{
         uri: 'mimi-seed://agent/guide',
         mimeType: 'text/markdown',
-        text: [
-          '# Mimi Seed — 앱 출시·운영 Agent',
-          '',
-          '당신은 Mimi Seed MCP를 통해 인디 개발자의 앱 출시와 운영을 돕는 에이전트입니다.',
-          'Google Play · App Store · Firebase · AdMob · CI/CD · BigQuery를 직접 제어하는 150+ 도구를 사용할 수 있습니다.',
-          '',
-          '## 출시 요청 처리 순서',
-          '',
-          '1. **항상** `playstore_check_submission_risks` / `appstore_check_submission_risks` 로 블로커 먼저 확인',
-          '2. 릴리즈 노트: `generate_release_notes_from_commits` → 검토 → 적용',
-          '3. **쓰기 작업**(submit, apply, reply 등)은 반드시 사용자 명시 동의 후 실행',
-          '4. 완료 후 결과 요약 제공',
-          '',
-          '## 슬래시 커맨드',
-          '',
-          '- `/mimi-seed:deploy` — 전체 출시 파이프라인',
-          '- `/mimi-seed:health` — 연결·인증 상태 빠른 확인',
-          '- `/mimi-seed:review-inbox` — 미답변 리뷰 조회 + 답변 생성',
-          '',
-          '## 주의사항',
-          '',
-          '- `playstore_submit_release(status=completed)` — 비가역, 반드시 명시 동의 필요',
-          '- `appstore_submit_for_review` — 비가역, 반드시 명시 동의 필요',
-          '- `playstore_reply_review` — 공개 게시, 반드시 검토 후 동의 필요',
-        ].join('\n'),
+        text: readPackageAsset('../assets/agent-guide.md') ?? AGENT_GUIDE_FALLBACK,
       }],
     }),
+  );
+
+  server.resource(
+    'tools-catalog',
+    'mimi-seed://tools/catalog',
+    {
+      description: '150+ 도구 전체 카탈로그 — 도메인별 도구 목록·필요 자격증명·한줄 요약. "mimi-seed 로 뭘 할 수 있어?" 에는 이 리소스를 읽고 답하세요.',
+      mimeType: 'application/json',
+    },
+    async () => {
+      const manifest = JSON.parse(
+        readPackageAsset('../tool-manifest.json') ?? '{"total":0,"domains":{}}',
+      ) as { total: number; domains: Record<string, string[]> };
+      return {
+        contents: [{
+          uri: 'mimi-seed://tools/catalog',
+          mimeType: 'application/json',
+          text: JSON.stringify({
+            total: manifest.total,
+            deferredHint:
+              'Claude Code 에서는 도구 schema 가 lazy 로드됩니다 — 호출 전 ToolSearch(query="select:<tool,...>") 로 선로드하세요. 상세: mimi-seed://agent/guide',
+            domains: Object.entries(manifest.domains).map(([id, tools]) => ({
+              id,
+              label: DOMAIN_SUMMARY[id]?.label ?? id,
+              credential: DOMAIN_SUMMARY[id]?.credential ?? '알 수 없음',
+              summary: DOMAIN_SUMMARY[id]?.summary ?? '',
+              toolCount: tools.length,
+              tools,
+            })),
+          }, null, 2),
+        }],
+      };
+    },
   );
 }

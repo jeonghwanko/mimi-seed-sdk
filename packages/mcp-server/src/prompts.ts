@@ -3,6 +3,31 @@ import { z } from 'zod';
 
 export function registerPrompts(server: McpServer) {
   server.prompt(
+    'getting-started',
+    '처음 사용자 온보딩 — 연결 스캔 → 뭘 할 수 있는지 → 첫 안전한 액션까지',
+    {},
+    async () => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text: [
+            '나는 mimi-seed 를 처음 써봐. 온보딩을 도와줘.',
+            '',
+            '진행 순서:',
+            '1. mimi_seed_status 호출 — 연결 상태 스캔 (Claude Code 라면 먼저 ToolSearch(query="select:mimi_seed_status") 로 schema 로드)',
+            '2. 리소스 mimi-seed://tools/catalog 를 읽고 뭘 할 수 있는지 도메인별로 간단히 요약 (150+ 도구)',
+            '3. 내 목표를 물어봐: ① 스토어 출시/운영 ② Firebase/AdMob 설정 ③ 분석(GA4/Search Console/Ads/BigQuery) ④ 소셜 포스팅 ⑤ CI/Jenkins',
+            '4. 목표에 필요한 자격증명이 ❌ 면: 터미널에서 `npx mimi-seed setup` 실행을 안내 (대화형이므로 네가 대신 실행하지 말 것)',
+            '5. 자격증명이 준비되면 목표에 맞는 첫 읽기 전용 액션을 실행해서 보여줘 (예: playstore_list_tracks · appstore_list_apps · firebase_list_projects · admob_list_accounts)',
+            '6. 다음 단계 제안: /mimi-seed:deploy · /mimi-seed:health · /mimi-seed:review-inbox, 심화 규약은 mimi-seed://agent/guide',
+          ].join('\n'),
+        },
+      }],
+    }),
+  );
+
+  server.prompt(
     'deploy',
     '앱 출시 전 체크 → 릴리즈 노트 생성 → 스토어 적용까지 한 번에 진행',
     {
@@ -46,7 +71,7 @@ export function registerPrompts(server: McpServer) {
             '현재 Mimi Seed 연결 상태와 앱 출시 준비도를 요약해줘.',
             '',
             '확인 순서:',
-            '1. mimi_seed_status 호출 — 9개 서비스 전체 연결 상태 스캔',
+            '1. mimi_seed_status 호출 — 전체 서비스 연결 상태 스캔',
             '2. ❌ 필수 항목(Google OAuth / Play SA / App Store)이 있으면 먼저 설정 안내',
             '3. firebase_list_projects 로 연결된 Firebase 프로젝트 확인 (OAuth 연결 시)',
             '4. playstore_check_submission_risks / appstore_check_submission_risks 로 블로커 점검',

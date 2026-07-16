@@ -40,18 +40,11 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 ---
 
-For a complete **account setup → CI build → release check → store deploy → social announcement** journey, start
-with the [Mimi Seed User Guide](docs/user-guide/README.md).
-
 ## 30-Second Setup
 
-**Pick your option first** (they can also be installed side by side):
-
-| You want to… | Install |
-|---|---|
-| **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Option B — Local MCP** ↓ |
-| **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Option A — Remote MCP** ↓ |
-| **Hack on it** — run unpublished code from a git checkout | `git clone … && npm run setup` → [Run from source](docs/from-source.md) |
+Three steps: **1 Install → 2 Connect → 3 Verify**. This page is the short version — for the complete
+**account setup → CI build → release check → store deploy → social announcement** journey, follow the
+[Mimi Seed User Guide](docs/user-guide/README.md).
 
 > **Three things that trip every first install:**
 > 1. The local MCP server requires **Node 20+**.
@@ -60,30 +53,17 @@ with the [Mimi Seed User Guide](docs/user-guide/README.md).
 >
 > More → [troubleshooting](docs/troubleshooting.md).
 
-**Option A — Remote MCP** (status & readiness · requires web console account)
+### 1 · Install — pick where Mimi Seed runs
 
-```bash
-# 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
-# 2. Issue a PAT:   https://mimi-seed.pryzm.gg/workspace/api-tokens
-# 3-a. Register in Claude Code:
-claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
-  --header "Authorization: Bearer <PAT>"
+Pick by what you want to do (they can also be installed side by side):
 
-# 3-b. Or register in Codex:
-npx mimi-seed mcp codex --write
-# The config references MIMI_SEED_TOKEN instead of storing the PAT.
-# Set it in the environment that launches Codex, then restart Codex.
-export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
-# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
-```
+| You want to… | Install |
+|---|---|
+| **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Local MCP** ↓ (recommended) |
+| **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Remote MCP** ↓ |
+| **Hack on it** — run unpublished code from a git checkout | `git clone … && npm run setup` → [Run from source](docs/from-source.md) |
 
-Done. Start talking to Claude Code or Codex.
-
-> **What Option A can and can't do.** Remote MCP exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** and App Store IAP review-note/review-screenshot writes. Broader store writes — release-note apply, listing screenshots, Firebase / AdMob / IAM — need **Option B** ([full tool catalog](docs/domain/tool-catalog.md)).
-
----
-
-**Option B — Local MCP** (store-write automation · Google OAuth · runs on your machine, Node 20+)
+**Local MCP — recommended** (store-write automation · Google OAuth · runs on your machine, Node 20+)
 
 Claude Code — **plugin install (recommended)**: bundles the MCP server **plus the skills** that auto-handle deferred tool loading (trap #3) and auth recovery. One fresh session after install is still needed (trap #2):
 
@@ -115,13 +95,6 @@ args = ["-y", "@yoonion/mimi-seed-mcp"]
 enabled = true
 ```
 
-```bash
-# First-time auth (opens browser)
-npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
-```
-
-> ⚠️ **Google says "access_denied" / "unverified app"?** The OAuth app is in testing mode — only registered test users can sign in, and retrying will never work until you're added. Full recovery → [troubleshooting](docs/troubleshooting.md#user-denied).
-
 Claude Desktop (`claude_desktop_config.json`):
 
 ```json
@@ -135,27 +108,59 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Connect the rest of your accounts — App Store Connect, Play, Jenkins, CI, Google Ads, Facebook, Instagram, Threads — with one guided wizard:
+**Remote MCP** (status & readiness · requires web console account)
 
 ```bash
-npx mimi-seed setup
-# or reconnect the three Meta platforms from one entry point
-npx mimi-seed auth meta
+# 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
+# 2. Issue a PAT:   https://mimi-seed.pryzm.gg/workspace/api-tokens
+# 3-a. Register in Claude Code:
+claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
+  --header "Authorization: Bearer <PAT>"
+
+# 3-b. Or register in Codex:
+npx mimi-seed mcp codex --write
+# The config references MIMI_SEED_TOKEN instead of storing the PAT.
+# Set it in the environment that launches Codex, then restart Codex.
+export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
+# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
 ```
 
-On first run it asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md).
+> **What the Remote MCP can and can't do.** It exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** and App Store IAP review-note/review-screenshot writes. Broader store writes — release-note apply, listing screenshots, Firebase / AdMob / IAM — need the **Local MCP** ([full tool catalog](docs/domain/tool-catalog.md)).
 
-Switch language any time: `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
-
----
-
-**Option C — CLI project connect**
+### 2 · Connect your project and accounts
 
 ```bash
-npx mimi-seed init   # auto-detect app → connect account → register MCP
+cd <your-app>
+npx mimi-seed init    # project: auto-detect app → browser sign-in → register apps → agent context files
+npx mimi-seed setup   # accounts: guided wizard — shows what's missing, asks only about what isn't connected
 ```
 
-Detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session.
+`init` detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session. (Skipped the plugin and registered the bare MCP server instead? `npx mimi-seed init --local` chains the Google sign-in and the local-MCP registration into the same pass.)
+
+You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery → [What do you actually need?](docs/credentials.md#what-you-need)
+
+On first run `setup` asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Reconnect the three Meta platforms any time with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
+
+Using the bare MCP server without the CLI? The Google sign-in alone is:
+
+```bash
+# First-time auth (opens browser)
+npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
+```
+
+> ⚠️ **Google says "access_denied" / "unverified app"?** The OAuth app is in testing mode — only registered test users can sign in, and retrying will never work until you're added. Full recovery → [troubleshooting](docs/troubleshooting.md#user-denied).
+
+### 3 · Verify, then ask your agent
+
+```bash
+npx mimi-seed doctor   # every credential + the exact fix command for anything missing
+```
+
+Open a **new** Claude Code / Codex session (trap #2 above) and ask:
+
+> *"Is my app ready to ship?"* — or run `/mimi-seed:getting-started` for a guided first tour.
+
+### CLI quick reference
 
 | Command | What it does |
 |---------|--------------|
@@ -297,7 +302,7 @@ Members can **use** the SA for read-only queries but **cannot read the key back*
 returns stored secret values), and write statements are blocked. Recommended IAM on the SA:
 `roles/bigquery.jobUser` + `roles/bigquery.dataViewer`.
 
-> Local MCP (Option B) also has `bigquery_*` tools, but those authenticate with **your own**
+> The Local MCP also has `bigquery_*` tools, but those authenticate with **your own**
 > `~/.mimi-seed` key/OAuth — the *shared* SA lives on the **Remote** endpoint.
 
 ---
@@ -334,11 +339,12 @@ Available in any MCP client (Claude Code, Codex, etc.) as native slash commands:
 
 | Command | What it does |
 |---------|--------------|
+| `/mimi-seed:getting-started` | First-run onboarding — connection scan → capability tour → first read-only action |
 | `/mimi-seed:deploy` | Check blockers → generate release notes → apply to stores |
 | `/mimi-seed:health` | Auth status + launch readiness summary |
 | `/mimi-seed:review-inbox` | Fetch unanswered reviews → draft AI replies |
 
-Plus MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agent/guide` (agent role definition).
+Plus MCP resources: `mimi-seed://auth/status` (token state) · `mimi-seed://agent/guide` (the full [agent guide](docs/agent-guide.md), served over MCP) · `mimi-seed://tools/catalog` (every tool by domain, with the credential each domain needs).
 
 ---
 
@@ -349,9 +355,11 @@ Bundled skills (auto-loaded by the Claude Code / Codex plugin from [`skills/`](s
 | Skill | Use it for |
 |-------|-----------|
 | `mimi-seed` | General entry — status → readiness → release notes → store apply |
+| `mimi-seed-onboarding` | First run — install check → what can it do → minimal credentials → first safe action |
 | `playstore-publish` | Play Store listing, images, release notes, track promote |
 | `appstore-publish` | App Store Connect What's New + screenshots |
 | `deploy` | End-to-end: CI build → blocker check → notes → apply |
+| `mimi-seed-install` | Install & register from a git checkout — contributors / unpublished code |
 | `mimi-seed-update` | Update to the latest server / skills / CLI — and verify the *running* version |
 
 Building an agent on top of Mimi Seed? Read **[`docs/agent-guide.md`](docs/agent-guide.md)** —
@@ -366,7 +374,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ## Local MCP Tool List (150+ tools · 18 domains)
 
-> These run via **Option B (Local MCP)** — Google OAuth on your machine. The Remote MCP (Option A) exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
+> These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
 | Domain | Count | Key Tools |
 |--------|-------|-----------|

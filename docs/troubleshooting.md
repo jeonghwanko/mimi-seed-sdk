@@ -5,7 +5,7 @@ If the workflow itself is unclear, find the task first in the [Mimi Seed User Gu
 Every error below already prints an actionable hint. This page adds what a one-line hint can't say: **which
 console, whose permission, and how long to wait.**
 
-Start here: `mimi-seed doctor` — it reports all twelve credentials and the exact command to fix each one.
+Start here: `mimi-seed doctor` — it reports every local credential and the exact command to fix each one.
 
 ---
 
@@ -230,7 +230,7 @@ The *why* behind each of these lives in [`domain/pitfalls.md`](domain/pitfalls.m
 
 ## 5. Still stuck
 
-1. `mimi-seed doctor` — the twelve-credential report and the fix command for each.
+1. `mimi-seed doctor` — the full credential report and the fix command for each.
 2. Ask your agent for `mimi_seed_status` — same idea, plus live OAuth freshness.
 3. File an issue with the **error code** and what you were doing.
 

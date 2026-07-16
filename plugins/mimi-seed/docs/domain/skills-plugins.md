@@ -9,11 +9,12 @@
 
 ## Skills (`skills/`)
 
-Six skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
+Seven skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
 
 | Skill | Role |
 |---|---|
 | `mimi-seed` | General entry point. Teaches deferred-tool loading (`ToolSearch select:`) and safety, then **branches** to the domain skills below |
+| `mimi-seed-onboarding` | First-run onboarding: install check → `mimi_seed_status` scan → goal-based minimal credentials (`mimi-seed setup`) → first read-only action → hand-off. Answers "what can mimi-seed do?" from `mimi-seed://tools/catalog` |
 | `playstore-publish` | Play Store listing / track release / image replace / review reply |
 | `appstore-publish` | App Store Connect metadata, TestFlight builds, screenshots |
 | `deploy` | End-to-end: CI build → readiness check → release notes → store apply |
@@ -49,9 +50,13 @@ the update path users should follow rather than reinstalling in a loop.
 
 Exposed by the MCP server (`prompts.ts` / `resources.ts`, see [[architecture]]):
 
-- **Prompts → slash commands**: `/mimi-seed:deploy`, `/mimi-seed:health`, `/mimi-seed:review-inbox`.
-- **Resources**: `mimi-seed://auth/status` (Google OAuth freshness, JSON) and `mimi-seed://agent/guide` (agent
-  role definition, markdown).
+- **Prompts → slash commands**: `/mimi-seed:getting-started`, `/mimi-seed:deploy`, `/mimi-seed:health`,
+  `/mimi-seed:review-inbox`.
+- **Resources**: `mimi-seed://auth/status` (Google OAuth freshness, JSON), `mimi-seed://agent/guide` (the full
+  [`docs/agent-guide.md`](../agent-guide.md), served from the committed copy `packages/mcp-server/assets/agent-guide.md`
+  — refreshed by `npm run plugin:sync`, drift-guarded by `prompts-resources.test.ts`), and
+  `mimi-seed://tools/catalog` (runtime capability index: every tool by domain with the credential each domain
+  needs, derived from `tool-manifest.json` + the `DOMAIN_SUMMARY` map in `resources.ts`).
 
 These are available in **any** MCP client, independent of the skills (which are a Claude Code / Codex packaging
 concept).

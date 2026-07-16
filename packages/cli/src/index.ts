@@ -58,6 +58,9 @@ const M = catalog(
     ask2: '  "릴리즈 노트 써줘"',
     ask3: '  "등록된 앱 목록 보여줘"',
     dashboard: (url: string) => `대시보드: ${url}`,
+    nextTitle: "다음 단계:",
+    nextSetup: "  1) mimi-seed setup    계정 연결 (안내형 — 각 단계에서 ? 를 누르면 발급처 안내)",
+    nextDoctor: "  2) mimi-seed doctor   전체 점검 + 누락 항목별 복구 명령",
 
     localTitle: "── 로컬 MCP 추가 설정 (--local) ──",
     localIntro:
@@ -232,6 +235,9 @@ ${kleur.bold("환경변수:")}
     ask2: '  "Write the release notes"',
     ask3: '  "Show my registered apps"',
     dashboard: (url: string) => `Dashboard: ${url}`,
+    nextTitle: "Next steps:",
+    nextSetup: "  1) mimi-seed setup    connect your accounts (guided — press ? for where each token comes from)",
+    nextDoctor: "  2) mimi-seed doctor   verify everything + the exact fix for anything missing",
 
     localTitle: "── Extra local MCP setup (--local) ──",
     localIntro:
@@ -511,6 +517,7 @@ async function cmdInit(args: string[]): Promise<void> {
     "",
     "## 슬래시 커맨드",
     "",
+    "- `/mimi-seed:getting-started` — 처음 사용자 온보딩 (연결 스캔 → 능력 카탈로그 → 첫 액션)",
     "- `/mimi-seed:deploy` — 전체 출시 파이프라인",
     "- `/mimi-seed:health` — 연결 상태 빠른 확인",
     "- `/mimi-seed:review-inbox` — 미답변 리뷰 답변",
@@ -544,6 +551,13 @@ async function cmdInit(args: string[]): Promise<void> {
   log(M().dashboard(kleur.underline(DEFAULT_WEB_BASE + "/apps")));
   log("");
   printMcpSetup(cfg);
+
+  if (!local) {
+    log("");
+    log(kleur.bold(M().nextTitle));
+    log(kleur.cyan(M().nextSetup));
+    log(kleur.cyan(M().nextDoctor));
+  }
 
   if (local) {
     log("");

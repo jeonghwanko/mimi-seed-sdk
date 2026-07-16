@@ -67,7 +67,8 @@ const ko = {
     missingRequired: "  필수 항목 누락:",
     cannotInteract: "  ✗ 이 자격증명은 대화형 입력이 필요해서 여기서는 설정할 수 없어:",
     cannotInteractHint: "    터미널에서 실행해줘 (Git Bash 등 TTY 미감지 환경이면 --interactive).",
-    runInTerminal: "  대화형으로 연결하려면 터미널에서:  mimi-seed setup",
+    runInTerminal:
+      "  대화형으로 연결하려면 터미널에서:  mimi-seed setup   (Git Bash/mintty 는 TTY 미감지 — --interactive 를 붙이거나 PowerShell 에서)",
     onlyAlreadyDone: "  ✅ 요청한 항목은 이미 연결돼 있어.",
     onlyReconnectHint: "     다시 설정하려면: mimi-seed setup --reconnect <id>",
     tokenExpired: "토큰 만료 — 다시 연결 필요",
@@ -93,6 +94,7 @@ const ko = {
     stillMissing: "  아직 필수 항목이 남아 있어:",
     requiredDone: "  ✅ 필수 연결 완료.",
     nextSteps: "     점검: mimi-seed doctor   ·   배포: mimi-seed deploy",
+    tryPrompt: '     첫 프롬프트 — Claude Code / Codex 새 세션에서:  "내 앱 출시 준비됐어?"',
   },
 
   doctor: {
@@ -183,7 +185,8 @@ MIMI_SEED_LANG takes precedence when set.`,
     cannotInteract: "  ✗ These need interactive input and cannot be set up here:",
     cannotInteractHint:
       "    Run it in a terminal (add --interactive if your shell hides the TTY, e.g. Git Bash).",
-    runInTerminal: "  To connect interactively, run:  mimi-seed setup",
+    runInTerminal:
+      "  To connect interactively, run:  mimi-seed setup   (Git Bash/mintty hide the TTY — add --interactive, or use PowerShell)",
     onlyAlreadyDone: "  ✅ What you asked for is already connected.",
     onlyReconnectHint: "     To redo it: mimi-seed setup --reconnect <id>",
     tokenExpired: "token expired — reconnect required",
@@ -209,6 +212,7 @@ MIMI_SEED_LANG takes precedence when set.`,
     stillMissing: "  Still missing, and required:",
     requiredDone: "  ✅ All required credentials connected.",
     nextSteps: "     Check: mimi-seed doctor   ·   Ship: mimi-seed deploy",
+    tryPrompt: '     First prompt — in a new Claude Code / Codex session:  "Is my app ready to ship?"',
   },
 
   doctor: {
