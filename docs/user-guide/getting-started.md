@@ -45,7 +45,7 @@ codex plugin add mimi-seed@yoonion
 ```
 
 Start a new session after installing or updating. For manual MCP-only registration, see the root
-[README](../../README.md#30-second-start).
+[README](../../README.md#30-second-setup).
 
 ## 3. Connect the first accounts
 

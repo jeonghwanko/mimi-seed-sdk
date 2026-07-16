@@ -40,18 +40,11 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 ---
 
-처음 설치해서 **계정 연결 → CI 빌드 → 출시 점검 → 스토어 배포 → 소셜 공지**까지 따라가려면
-[Mimi Seed 사용자 가이드](docs/user-guide/README.ko.md)에서 시작하세요.
-
 ## 30초 시작
 
-**먼저 어느 쪽인지 고르세요** (둘 다 나란히 설치할 수도 있습니다):
-
-| 하고 싶은 것 | 설치할 것 |
-|---|---|
-| **스토어에 쓰기** — 릴리스 노트 적용, 스크린샷 업로드, 심사 제출, Firebase / AdMob / IAM (위 데모의 전부) | **방법 B — Local MCP** ↓ |
-| **상태·준비도** + App Store IAP 심사 노트/스크린샷 — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **방법 A — Remote MCP** ↓ |
-| **코드를 고치거나** 배포 전 코드를 git 체크아웃에서 돌리기 | `git clone … && npm run setup` → [소스에서 실행](docs/from-source.ko.md) |
+세 단계입니다: **1 설치 → 2 연결 → 3 확인**. 이 페이지는 짧은 버전이고 — **계정 연결 → CI 빌드 →
+출시 점검 → 스토어 배포 → 소셜 공지**까지의 전체 여정은
+[Mimi Seed 사용자 가이드](docs/user-guide/README.ko.md)를 따라가세요.
 
 > **첫 설치에서 누구나 걸리는 세 가지:**
 > 1. Local MCP 서버는 **Node 20+** 가 필요합니다.
@@ -60,30 +53,17 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 >
 > 그 밖의 문제 → [문제 해결](docs/troubleshooting.ko.md).
 
-**방법 A — Remote MCP** (상태·준비도 확인 · 웹 콘솔 계정 필요)
+### 1 · 설치 — Mimi Seed를 어디서 돌릴지 고르세요
 
-```bash
-# 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
-# 2. PAT 발급:    https://mimi-seed.pryzm.gg/workspace/api-tokens
-# 3-a. Claude Code에 등록:
-claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
-  --header "Authorization: Bearer <PAT>"
+하고 싶은 것으로 고르면 됩니다 (둘 다 나란히 설치할 수도 있습니다):
 
-# 3-b. 또는 Codex에 등록:
-npx mimi-seed mcp codex --write
-# 설정 파일에는 PAT 대신 MIMI_SEED_TOKEN 환경변수 이름만 기록됩니다.
-# Codex를 실행하는 환경에 값을 넣고 Codex를 다시 시작하세요.
-export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
-# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
-```
+| 하고 싶은 것 | 설치할 것 |
+|---|---|
+| **스토어에 쓰기** — 릴리스 노트 적용, 스크린샷 업로드, 심사 제출, Firebase / AdMob / IAM (위 데모의 전부) | **Local MCP** ↓ (권장) |
+| **상태·준비도** + App Store IAP 심사 노트/스크린샷 — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **Remote MCP** ↓ |
+| **코드를 고치거나** 배포 전 코드를 git 체크아웃에서 돌리기 | `git clone … && npm run setup` → [소스에서 실행](docs/from-source.ko.md) |
 
-끝. Claude Code 또는 Codex에서 바로 사용할 수 있어요.
-
-> **방법 A가 할 수 있는 것 / 없는 것.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시), **워크스페이스 공유 BigQuery**, App Store IAP 심사 노트/심사 스크린샷 쓰기를 제공합니다. 릴리스 노트 적용, 리스팅 스크린샷, Firebase / AdMob / IAM 등 더 넓은 스토어 쓰기는 **방법 B**가 필요합니다 ([전체 도구 카탈로그](docs/domain/tool-catalog.md)).
-
----
-
-**방법 B — Local MCP** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 20+)
+**Local MCP — 권장** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 20+)
 
 Claude Code — **플러그인 설치 (권장)**: MCP 서버에 더해 지연 로딩(함정 3번)·인증 복구를 자동 처리하는 **스킬 번들**이 함께 설치됩니다. 설치 후 새 세션 1회는 여전히 필요합니다(함정 2번):
 
@@ -115,13 +95,6 @@ args = ["-y", "@yoonion/mimi-seed-mcp"]
 enabled = true
 ```
 
-```bash
-# 첫 인증 (브라우저 Google 로그인)
-npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
-```
-
-> ⚠️ **첫 로그인에서 Google이 "access_denied" / "확인되지 않은 앱"을 띄우면:** OAuth 앱이 테스트 모드라 등록된 테스트 사용자만 로그인할 수 있습니다. 운영자에게 계정 추가(Cloud Console → OAuth 동의 화면 → 테스트 사용자)를 요청한 뒤 `mimi-seed-auth`를 재시도하세요. 등록 없이 재시도만 반복하면 절대 성공하지 않습니다.
-
 Claude Desktop (`claude_desktop_config.json`):
 
 ```json
@@ -135,27 +108,59 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-나머지 계정 — App Store Connect · Play · Jenkins · CI · Google Ads · Facebook · Instagram · Threads — 은 마법사 하나로 연결합니다:
+**Remote MCP** (상태·준비도 확인 · 웹 콘솔 계정 필요)
 
 ```bash
-npx mimi-seed setup
-# 또는 Meta 세 플랫폼만 한 번에 다시 연결
-npx mimi-seed auth meta
+# 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
+# 2. PAT 발급:    https://mimi-seed.pryzm.gg/workspace/api-tokens
+# 3-a. Claude Code에 등록:
+claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
+  --header "Authorization: Bearer <PAT>"
+
+# 3-b. 또는 Codex에 등록:
+npx mimi-seed mcp codex --write
+# 설정 파일에는 PAT 대신 MIMI_SEED_TOKEN 환경변수 이름만 기록됩니다.
+# Codex를 실행하는 환경에 값을 넣고 Codex를 다시 시작하세요.
+export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
+# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
 ```
 
-첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md).
+> **Remote MCP가 할 수 있는 것 / 없는 것.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시), **워크스페이스 공유 BigQuery**, App Store IAP 심사 노트/심사 스크린샷 쓰기를 제공합니다. 릴리스 노트 적용, 리스팅 스크린샷, Firebase / AdMob / IAM 등 더 넓은 스토어 쓰기는 **Local MCP**가 필요합니다 ([전체 도구 카탈로그](docs/domain/tool-catalog.md)).
 
-언어 변경: `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
-
----
-
-**방법 C — CLI 프로젝트 연결**
+### 2 · 프로젝트와 계정 연결
 
 ```bash
-npx mimi-seed init   # 앱 자동 감지 → 계정 연결 → MCP 등록 안내
+cd <내-앱-폴더>
+npx mimi-seed init    # 프로젝트: 앱 자동 감지 → 브라우저 로그인 → 앱 등록 → 에이전트 컨텍스트 파일 생성
+npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 번에 연결하는 안내형 마법사
 ```
 
-Expo · Gradle · Info.plist · pbxproj 자동 감지. `.claude/mimi-seed.md`와 `AGENTS.md`를 함께 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식합니다.
+`init` 은 Expo · Gradle · Info.plist · pbxproj 를 자동 감지하고, `.claude/mimi-seed.md`와 `AGENTS.md`를 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식하게 합니다. (플러그인 대신 MCP 서버만 등록했다면? `npx mimi-seed init --local` 이 Google 로그인과 로컬 MCP 등록까지 한 번에 이어서 해줍니다.)
+
+첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버되고, 같은 마법사가 필요할 때 App Store Connect · Play 서비스 계정 · Jenkins · GitHub/GitLab CI · Facebook / Instagram / Threads까지 연결해줍니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
+
+`setup` 은 첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
+
+CLI 없이 MCP 서버만 쓰나요? Google 로그인만 따로 하려면:
+
+```bash
+# 첫 인증 (브라우저 Google 로그인)
+npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
+```
+
+> ⚠️ **첫 로그인에서 Google이 "access_denied" / "확인되지 않은 앱"을 띄우면:** OAuth 앱이 테스트 모드라 등록된 테스트 사용자만 로그인할 수 있습니다. 운영자에게 계정 추가(Cloud Console → OAuth 동의 화면 → 테스트 사용자)를 요청한 뒤 `mimi-seed-auth`를 재시도하세요. 등록 없이 재시도만 반복하면 절대 성공하지 않습니다.
+
+### 3 · 확인하고, 에이전트에게 물어보기
+
+```bash
+npx mimi-seed doctor   # 모든 자격증명 + 누락 항목별 정확한 복구 명령
+```
+
+**새** Claude Code / Codex 세션을 열고 (위 함정 2번) 물어보세요:
+
+> *"내 앱 출시 준비됐어?"* — 플러그인 설치라면 `/mimi-seed:getting-started` 로 안내형 첫 투어도 가능합니다. (슬래시 접두어는 서버 등록 이름을 따릅니다 — bare 등록이면 `/mimi-seed-local:getting-started`, Remote MCP에는 프롬프트가 없습니다.)
+
+### CLI 빠른 참조
 
 | 명령어 | 설명 |
 |--------|------|
@@ -297,7 +302,7 @@ claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
 반환하지 않음), 쓰기 문(statement)은 차단됩니다. 권장 IAM 역할:
 `roles/bigquery.jobUser` + `roles/bigquery.dataViewer`.
 
-> Local MCP(방법 B)에도 `bigquery_*` 도구가 있지만, 그건 **자기** `~/.mimi-seed` 키/OAuth로
+> Local MCP에도 `bigquery_*` 도구가 있지만, 그건 **자기** `~/.mimi-seed` 키/OAuth로
 > 인증합니다 — *공유* SA는 **Remote** 엔드포인트에 있습니다.
 
 ---
@@ -334,11 +339,12 @@ MCP 클라이언트(Claude Code, Codex 등)에서 슬래시 커맨드로 바로 
 
 | 커맨드 | 설명 |
 |--------|------|
+| `/mimi-seed:getting-started` | 처음 사용자 온보딩 — 연결 스캔 → 능력 투어 → 첫 읽기 전용 액션 |
 | `/mimi-seed:deploy` | 블로커 점검 → 릴리즈 노트 생성 → 스토어 적용 |
 | `/mimi-seed:health` | 인증 상태 + 출시 준비도 요약 |
 | `/mimi-seed:review-inbox` | 미답변 리뷰 조회 → AI 답변 초안 |
 
-MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/guide` (에이전트 역할 정의).
+MCP Resources: `mimi-seed://auth/status` (토큰 상태) · `mimi-seed://agent/guide` ([에이전트 가이드](docs/agent-guide.md) 전문을 MCP로 서빙) · `mimi-seed://tools/catalog` (도메인별 전체 도구 목록 + 필요 자격증명).
 
 ---
 
@@ -349,9 +355,11 @@ Claude Code / Codex 플러그인은 [`skills/`](skills/)의 스킬을 함께 로
 | 스킬 | 용도 |
 |------|------|
 | `mimi-seed` | 범용 진입 — 상태 점검 → 준비도 → 릴리즈 노트 → 스토어 적용 |
+| `mimi-seed-onboarding` | 처음 사용 — 설치 확인 → 뭘 할 수 있는지 → 최소 자격증명 → 첫 안전한 액션 |
 | `playstore-publish` | Play Store 등록정보, 이미지, 릴리즈 노트, 트랙 출시/승격 |
 | `appstore-publish` | App Store Connect What's New + 스크린샷 |
 | `deploy` | CI 빌드 → 블로커 점검 → 노트 → 스토어 적용 end-to-end |
+| `mimi-seed-install` | git 체크아웃을 소스에서 설치·등록 — 기여자 / 미배포 코드 |
 | `mimi-seed-update` | 서버·스킬·CLI를 최신으로 올리고 **실제 돌고 있는 버전**까지 검증 |
 
 에이전트를 직접 붙인다면 **[`docs/agent-guide.md`](docs/agent-guide.md)** 를 먼저 보세요. 도구 로딩 방식(deferred-tool / `ToolSearch select:`), 호출 순서, 인증 모델, 비가역 작업 안전수칙이 정리되어 있습니다.
@@ -362,7 +370,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ## 도구 목록 (Local MCP · 150+ 개 · 18개 영역)
 
-> 아래 도구는 **방법 B (Local MCP)** — 로컬 Google OAuth — 로 동작합니다. Remote MCP(방법 A)는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
+> 아래 도구는 **Local MCP** — 로컬 Google OAuth — 로 동작합니다. Remote MCP는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|

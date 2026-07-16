@@ -30,8 +30,10 @@ const USER_GUIDE_PAIRS = [
   ['docs/user-guide/team-security.md', 'docs/user-guide/team-security.ko.md'],
 ] as const;
 
-/** 마법사가 docs/credentials.md#<anchor> 로 딥링크한다 — 앵커는 API 다. */
+/** 마법사가 docs/credentials.md#<anchor> 로 딥링크한다 — 앵커는 API 다.
+ *  'what-you-need' 는 README 의 최소 자격증명 안내가 딥링크하는 목표→자격증명 매트릭스. */
 const CREDENTIAL_ANCHORS = [
+  'what-you-need',
   'google-oauth',
   'app-store-connect',
   'play-service-account',

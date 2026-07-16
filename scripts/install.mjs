@@ -56,6 +56,10 @@ console.log('\n  🌱 Mimi Seed — 소스에서 설치\n');
 info(`Node v${process.versions.node}  ·  ${root}`);
 console.log('');
 
+// MCP 서버가 mimi-seed://agent/guide 로 서빙하는 asset 사본을 원본과 동기화.
+// (codex 등록 여부와 무관 — 링크된 서버가 낡은 가이드를 서빙하는 사고 방지.)
+run('node scripts/sync-agent-guide.mjs', root);
+
 for (const pkg of PKGS) {
   const cwd = path.join(root, pkg.dir);
   if (!existsSync(path.join(cwd, 'package.json'))) die(`${pkg.dir} 가 없어. 리포 루트에서 실행해줘.`);

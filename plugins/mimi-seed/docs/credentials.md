@@ -18,6 +18,8 @@ parts that happen in *someone else's console*, which the wizard can walk you to 
 
 ---
 
+<a id="what-you-need"></a>
+
 ## What do you actually need?
 
 Most people need two or three of these. Find your goal, connect only what it lists.

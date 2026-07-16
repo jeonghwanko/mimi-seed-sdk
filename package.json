@@ -1,7 +1,7 @@
 {
   "name": "mimi-seed-sdk",
   "private": true,
-  "version": "0.10.3",
+  "version": "0.11.0",
   "description": "Monorepo root — the SDK version (SSOT for both packages and client plugin manifests) plus bootstrap scripts. The publishable packages live in packages/. This is NOT an npm workspace: each package installs independently.",
   "type": "module",
   "engines": {
@@ -13,8 +13,8 @@
     "install:all": "node scripts/install.mjs",
     "build": "node scripts/install.mjs",
     "test": "npm run plugin:check && npm test --prefix packages/mcp-server && npm test --prefix packages/cli",
-    "plugin:sync": "node scripts/sync-codex-plugin.mjs",
-    "plugin:check": "node scripts/sync-codex-plugin.mjs --check && node scripts/version.mjs --check",
+    "plugin:sync": "node scripts/sync-agent-guide.mjs && node scripts/sync-codex-plugin.mjs",
+    "plugin:check": "node scripts/sync-agent-guide.mjs --check && node scripts/sync-codex-plugin.mjs --check && node scripts/version.mjs --check",
     "version:set": "node scripts/version.mjs",
     "version:check": "node scripts/version.mjs --check"
   },

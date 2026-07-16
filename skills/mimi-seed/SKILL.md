@@ -34,8 +34,9 @@ ToolSearch(query="select:<tool>[,<tool>...]")
 
 ## 실행 흐름
 
-1. **`mimi_seed_status` 먼저 호출** — 10개 서비스 연결을 ✅/❌로 스캔하고 미설정·만료 항목별 다음 명령을 알려준다. 인증 누락이면 위 auth 명령으로 안내.
+1. **`mimi_seed_status` 먼저 호출** — 서비스 연결을 ✅/❌로 스캔하고 미설정·만료 항목별 다음 명령을 알려준다. 인증 누락이면 위 auth 명령으로 안내.
 2. 작업 의도를 파악해 분기:
+   - 처음 설정 / "뭘 할 수 있어?" 탐색 → `mimi-seed-onboarding` 스킬
    - Play 스토어 출시/승격/리스팅 → `playstore-publish` 스킬
    - App Store 메타데이터/스크린샷/TestFlight → `appstore-publish` 스킬
    - CI 빌드→점검→노트→적용 풀 파이프라인 → `deploy` 스킬
