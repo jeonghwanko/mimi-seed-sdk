@@ -56,7 +56,8 @@ Exposed by the MCP server (`prompts.ts` / `resources.ts`, see [[architecture]]):
   [`docs/agent-guide.md`](../agent-guide.md), served from the committed copy `packages/mcp-server/assets/agent-guide.md`
   — refreshed by `npm run plugin:sync`, drift-guarded by `prompts-resources.test.ts`), and
   `mimi-seed://tools/catalog` (runtime capability index: every tool by domain with the credential each domain
-  needs, derived from `tool-manifest.json` + the `DOMAIN_SUMMARY` map in `resources.ts`).
+  needs, served verbatim from `tool-manifest.json` — the manifest carries the per-domain
+  `label`/`credential`/`summary` metadata, integrity-checked by `tool-manifest.test.ts`).
 
 These are available in **any** MCP client, independent of the skills (which are a Claude Code / Codex packaging
 concept).

@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getMcpOAuthClient } from '../auth/constants.js';
@@ -13,6 +12,7 @@ import { loadFacebookConfig } from '../facebook/config.js';
 import { loadInstagramConfig } from '../instagram/config.js';
 import { loadThreadsConfig } from '../threads/config.js';
 import { metaTokenFreshness } from '../lib/meta-auth.js';
+import { readPackageRootText } from '../lib/package-root.js';
 import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
 import { syncRemoteCredentials } from '../remote-sync.js';
 import {
@@ -82,9 +82,7 @@ const MANIFEST_FIX: Record<ManifestServiceId, (svc: ManifestService) => string> 
 
 // 두 MCP 가 모두 'mimi-seed' 로 등록되는 환경에서 에이전트가 프로그램적으로
 // 어느 서버인지 판별할 수 있도록 status 첫 줄에 자기소개를 넣는다.
-const { version: PKG_VERSION } = JSON.parse(
-  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-) as { version: string };
+const { version: PKG_VERSION } = JSON.parse(readPackageRootText('package.json')) as { version: string };
 
 /** 서비스별 식별자를 한 줄 detail 로 (예: "ads-coffee / analytics_530080532"). */
 function manifestServiceDetail(id: ManifestServiceId, svc: ManifestService): string {
