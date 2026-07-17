@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import { JWT } from 'google-auth-library';
 import fs from 'node:fs';
+import { extractHttpStatus } from '../lib/google-errors.js';
 
 export type PlayImageType =
   | 'featureGraphic'
@@ -220,14 +221,38 @@ export async function updateListing(
     auth,
     packageName,
     async (editId) => {
-      const updated = await publisher().edits.listings.patch({
-        auth,
-        packageName,
-        editId,
-        language,
-        requestBody,
-      });
-      return updated.data;
+      try {
+        const updated = await publisher().edits.listings.patch({
+          auth,
+          packageName,
+          editId,
+          language,
+          requestBody,
+        });
+        return updated.data;
+      } catch (error) {
+        // PATCH only works when the locale already exists. A missing translation returns
+        // 404 even though the package and edit are valid. In that case a complete PUT is
+        // the documented create-or-replace operation for the new locale.
+        if (extractHttpStatus(error) !== 404) throw error;
+
+        const { title, shortDescription, fullDescription } = data;
+        if (!title || !shortDescription || !fullDescription) {
+          throw new Error(
+            `Google Play ${language} 리스팅이 아직 없어요. 새 언어를 만들려면 title, shortDescription, fullDescription을 모두 보내야 해요.`,
+            { cause: error },
+          );
+        }
+
+        const created = await publisher().edits.listings.update({
+          auth,
+          packageName,
+          editId,
+          language,
+          requestBody: { title, shortDescription, fullDescription },
+        });
+        return created.data;
+      }
     },
     true, // commit
   );

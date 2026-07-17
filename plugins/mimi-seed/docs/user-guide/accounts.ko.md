@@ -34,6 +34,7 @@ npx mimi-seed auth meta        # Facebook + Instagram + Threads
 | App Store Connect·TestFlight | App Store Connect API key |
 | CI 빌드 | GitHub/GitLab CI 또는 Jenkins |
 | AI 릴리스 노트·리뷰 초안 | `ANTHROPIC_API_KEY` |
+| story 기반 영상 제작 | `ANTHROPIC_API_KEY` + 실제 사용할 공급자의 `YOUTUBE_API_KEY`, `PEXELS_API_KEY`, `OPENAI_API_KEY`; 렌더링용 FFmpeg |
 | 소셜 게시 | 사용하는 Facebook/Instagram/Threads 계정만 |
 
 ## 저장 전에 검증되는 것

@@ -12,7 +12,7 @@
 
 - Public developer tooling for app launch ops: a **CLI** (`mimi-seed`) + a **local stdio MCP server**
   (`@yoonion/mimi-seed-mcp`) in a two-package monorepo under `packages/`.
-- The MCP server registers **150+ tools** across **18 domain modules** (exact inventory:
+- The MCP server registers **150+ tools** across **19 domain modules** (exact inventory:
   `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase,
   AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins credentials,
   Facebook, Instagram, Threads, Android signing, AI, Auth, and Checks. (Prose docs use the "150+" floor; only the
@@ -41,7 +41,7 @@ Each file lives under `docs/domain/`. Read the one that matches your task first.
 |------|--------|----------|
 | [architecture.md](architecture.md) | ★ **ontology core** — two packages, the `registers/<domain>.ts → tools.ts → API client` pattern, MCP bootstrap + `SUBCOMMANDS` dispatch, stdio vs HTTP, builds (tsup/tsc), resources & prompts | packages, monorepo, register pattern, server.tool, bootstrap, subcommand, stdio, transport, build |
 | [tool-catalog.md](tool-catalog.md) | The tools by domain → register file → tool group, with write/destructive markers and cross-named-tool quirks | tools, catalog, domains, playstore_, appstore_, firebase_, counts, destructive |
-| [auth-credentials.md](auth-credentials.md) | `~/.mimi-seed/` credential map (locations & roles only), OAuth vs ASC JWT vs Play SA, per-package SA resolution, setup sub-CLIs, `ANTHROPIC_API_KEY` | auth, credentials, tokens.json, appstore.json, service account, per-package, JWT, OAuth |
+| [auth-credentials.md](auth-credentials.md) | `~/.mimi-seed/` credential map (locations & roles only), OAuth vs ASC JWT vs Play SA, per-package SA resolution, setup sub-CLIs, media API environment keys | auth, credentials, tokens.json, appstore.json, service account, per-package, JWT, OAuth, video |
 | [external-apis.md](external-apis.md) | What each domain talks to (`googleapis` surfaces, ASC REST+JWT, `@onesub/providers`, Anthropic) and the friendly-error translation layer | googleapis, App Store Connect, jose, friendly error, google-errors, 403, providers |
 | [cli-deploy.md](cli-deploy.md) | CLI command topology, app detection, CI providers, the deploy pipeline data flow, MCP registration, init handshake, release manifest | cli, init, deploy, detect, ci-providers, handshake, mcp-config, releases.json |
 | [skills-plugins.md](skills-plugins.md) | The 7 skills, plugin manifests (`.claude-plugin` vs `.codex-plugin`), multi-client surface differences, slash commands & MCP resources | skills, plugin, codex, slash command, resources, prompts, multi-client |

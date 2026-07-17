@@ -8,3 +8,7 @@ dist/
 # Claude Code local settings (per-machine permission allowlist — not shared)
 .claude/settings.json
 .claude/settings.local.json
+
+# Personal local tooling config / generated marketing assets (not part of the SDK)
+.codex/
+artifacts/

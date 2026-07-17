@@ -76,6 +76,15 @@ git pull
 cd packages/mcp-server && npm install && npm run build
 ```
 
+⚠️ **클론을 당겨 빌드해도, MCP 등록이 `npx`면 클론은 안 돈다.** npx는 npm 배포판을 따로 받아 쓰므로 클론과 무관하다. **전역 설치본만 클론 심볼릭 링크이고 등록은 npx인 상태가 흔하다** — `npm ls -g`의 화살표와 `~/.claude.json`의 `args`를 **둘 다** 봐야 보인다(하나만 보면 형태를 오판한다). 클론을 런타임으로 쓰려면 등록을 직결로 바꾼다:
+
+```jsonc
+{ "type":"stdio", "command":"node",
+  "args":["<클론>/packages/mcp-server/dist/index.js"], "env":{} }
+```
+
+런타임이 `dist/`이므로 **클론 수정 후 `npm run build`는 필수**다. 빼먹으면 옛 코드가 조용히 돈다. `dist/index.js`가 `src/**`보다 오래됐는지 확인하면 잡힌다.
+
 새 버전 **퍼블리시는 이 스킬의 범위가 아니다.** `main` 푸시 시 `ci.yml`이 package.json 버전이 올라가 있으면 npm publish를 자동 수행한다.
 
 ## 3. 적용 — 새 서버를 실제로 띄운다
@@ -90,11 +99,30 @@ cd packages/mcp-server && npm install && npm run build
 1. `mimi_seed_status` 호출 — 서버가 응답하는지, 서비스 연결이 그대로인지.
 2. 최신 버전에서 새로 추가된 도구가 실제로 잡히는지 확인한다: `ToolSearch(query="select:<신규 도구명>")`. 스키마가 로드되면 새 서버가 돌고 있는 것이다. 안 잡히면 옛 프로세스이거나 npx 캐시다 → 2C·3번을 다시 한다.
 3. 전역 설치라면 `npm ls -g --depth=0`의 버전이 `npm view @yoonion/mimi-seed-mcp version`과 같은지 대조한다.
+4. 도구가 끝내 안 잡히면 **프로세스를 직접 본다** — 원칙("돌고 있는 버전")의 실행법이다.
+
+   ```bash
+   # Windows
+   Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ? { $_.CommandLine -match 'mimi-seed' }
+   # macOS/Linux
+   ps aux | grep -v grep | grep mimi-seed
+   ```
+
+   **정상이면 1개만 뜬다.** npx와 클론/전역 직결이 **동시에** 떠 있으면 그게 원인이다(아래 함정 2번).
 
 인증 파일(`~/.mimi-seed/`)은 업데이트가 건드리지 않는다. 재인증 신호가 나올 때만 `mimi-seed-auth`를 안내한다.
 
 ## 함정
 
 - **"업데이트했는데 새 도구가 없다"** → 십중팔구 세션 미재시작 또는 npx 캐시. 재설치를 반복하지 말고 3·4번을 확인한다.
+- **도구가 deferred 목록에조차 안 뜨고, "still connecting"이 조용히 사라진다** → **인증 문제가 아니다.** npx 콜드스타트(120초+)가 MCP 연결 타임아웃을 넘겨 등록 자체가 실패한 것이다. 재설치·재인증으로 오진하기 쉬우니, 등록을 전역/클론 직결(`node <경로>/dist/index.js`)로 바꾼다 — 기동이 20초 아래로 떨어진다.
+- **스코프는 덮어쓰지 않고 *같이 스폰된다*.** user/local 등록을 직결로 바꿔도 프로젝트 `.mcp.json`의 npx가 **같은 이름으로 함께 뜨고**, 느린 쪽이 등록을 붙잡아 결국 전부 죽는다. "local > project > user라 알아서 덮이겠지"는 **틀렸다**. `.mcp.json`은 팀원이 clone 하면 바로 되게 하는 용도라 고치면 안 되므로, 그 항목만 로컬에서 끈다:
+
+  ```jsonc
+  // ~/.claude.json → projects["<프로젝트 경로>"]
+  "disabledMcpjsonServers": ["mimi-seed"]
+  ```
+
+- **`~/.mimi-seed/tokens.json`이 없어도 정상이다.** 현행 인증은 PAT(`MIMI_SEED_TOKEN` 환경변수 + `config.json`)라 이 파일은 원래 없을 수 있다. 파일 부재를 미인증으로 단정하지 말고 `mimi-seed doctor`로 확인한다.
 - **CLI를 올려도 도구는 안 늘어난다.** 도구는 `@yoonion/mimi-seed-mcp`에 있다. `mimi-seed`(CLI)는 별개 패키지이고 버전도 따로 논다.
 - **스킬만 최신, 서버는 구버전** (2A의 함정). 스킬 문구는 새 도구를 설명하는데 그 도구가 없는 상태가 되어 디버깅이 꼬인다.

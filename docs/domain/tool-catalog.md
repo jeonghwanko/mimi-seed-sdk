@@ -1,4 +1,4 @@
-# Tool catalog — 163 tools across 18 domains
+# Tool catalog — 174 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -29,7 +29,8 @@
 | Auth | `registers/auth.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
-| **Total** | **18 modules** | **163** |
+| Video production | `registers/video.ts` | 11 |
+| **Total** | **19 modules** | **174** |
 
 ## Google Play — `registers/playstore.ts` (29) · impl `playstore/tools.ts`
 
@@ -100,6 +101,17 @@
 | Checks (`checks.ts`) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | Auth (`auth.ts`) | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | AI (`ai.ts`) — needs `ANTHROPIC_API_KEY` | `generate_release_notes_from_commits` · `generate_review_reply` |
+
+## Video production — `registers/video.ts` (11) · impl `video/*.ts`
+
+- Research/read: `video_research_youtube` (metadata/reference-only) · `video_search_stock_assets` ·
+  `video_job_status` · `video_validate`
+- **W** `video_plan_from_story` (Anthropic + local project) · `video_synthesize_research` (metadata/user notes →
+  bounded brief) · `video_download_stock_assets` (Pexels, preview then
+  confirm) · `video_generate_image` (OpenAI, preview then confirm) · `video_add_local_asset` ·
+  `video_build_timeline` · `video_render` (local FFmpeg job, preview then confirm)
+- YouTube results are permanently marked `reference-only`; only assets with recorded provenance and
+  `allowedForRendering=true` can enter a timeline.
 
 ## Quirks worth knowing (tool name ≠ register file)
 

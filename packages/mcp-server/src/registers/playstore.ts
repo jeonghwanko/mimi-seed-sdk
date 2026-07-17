@@ -87,7 +87,7 @@ export function registerPlaystoreTools(server: McpServer) {
 
   server.tool(
     'playstore_update_listing',
-    'Google Play 스토어 리스팅 수정 (제목, 설명문 변경). 넘긴 필드만 부분 갱신(edits.listings.patch) — 생략한 필드와 프로모 영상(video)은 보존된다. ⚠️ Play API 편집과 Console 동시 편집은 충돌 — Console에서 같은 리스팅을 편집·미게시 중이면 그 변경이 덮어써질 수 있음.',
+    'Google Play 스토어 리스팅 수정 또는 새 언어 생성. 기존 언어는 넘긴 필드만 부분 갱신(edits.listings.patch)해 생략한 필드와 프로모 영상(video)을 보존한다. 새 언어는 title·shortDescription·fullDescription을 모두 전달해야 하며 전체 리스팅을 생성한다. ⚠️ Play API 편집과 Console 동시 편집은 충돌 — Console에서 같은 리스팅을 편집·미게시 중이면 그 변경이 덮어써질 수 있음.',
     {
       packageName: z.string().describe('패키지명'),
       language: z.string().describe('언어 코드 (예: ko-KR, en-US)'),

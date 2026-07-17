@@ -22,6 +22,7 @@
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |
 | Facebook / Instagram / Threads | Meta Graph APIs | `fetch`; shared expiry/error recovery in `lib/meta-auth.ts` |
 | AI tools | Anthropic Messages API | `@anthropic-ai/sdk` (needs `ANTHROPIC_API_KEY`) |
+| Video production | Anthropic storyboard + YouTube Data API + Pexels API + OpenAI Image API + local FFmpeg/ffprobe | `@anthropic-ai/sdk` + `fetch` + `child_process` |
 
 Key dependency versions (pin points): `googleapis ^171`, `@modelcontextprotocol/sdk ^1.12`, `jose ^5.10`,
 `@onesub/providers ^0.2`, `zod ^3.24`. Note the `gaxios` override (`7.1.5`) in `mcp-server/package.json` — it

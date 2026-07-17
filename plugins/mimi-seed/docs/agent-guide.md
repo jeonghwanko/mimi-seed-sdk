@@ -16,7 +16,7 @@ and which actions are irreversible.
 
 ## 0. The one thing that trips every agent: deferred tools
 
-Mimi Seed exposes **150+ MCP tools** across 18 domains (full inventory:
+Mimi Seed exposes **150+ MCP tools** across 19 domains (full inventory:
 [`docs/domain/tool-catalog.md`](domain/tool-catalog.md)). Harnesses that lazy-load large tool catalogs —
 **Claude Code most notably** — register these tools as **deferred**: the tool *names*
 are visible (in a system reminder), but the **input schemas are not loaded**. If you
@@ -56,6 +56,7 @@ tools directly — but the *call order* and *safety rules* below still apply.
 | Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds` |
 | Service account end-to-end | `select:iam_create_service_account,iam_create_key,iam_add_iam_policy_binding,playstore_register_service_account,playstore_verify_service_account` |
+| Story → researched video | `select:video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
 
 ---
 
@@ -126,6 +127,10 @@ Notes that matter in practice:
   `playstore_*` call returns `403`.
 - AI features (`generate_release_notes_from_commits`, `generate_review_reply`) need
   `ANTHROPIC_API_KEY` in the environment.
+- Video production uses capability-specific environment keys: `ANTHROPIC_API_KEY` (storyboard),
+  `YOUTUBE_API_KEY` (reference research), `PEXELS_API_KEY` (licensed stock search), and
+  `OPENAI_API_KEY` (generated images). Rendering needs FFmpeg on `PATH` or
+  `MIMI_SEED_FFMPEG_PATH`.
 
 ---
 
@@ -148,6 +153,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_refresh_token` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
+| **Video production** | `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
 
 ---
 
@@ -168,6 +174,18 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 ### Release notes from git
 `generate_release_notes_from_commits` (pass commit array + locales) → review with user →
 `playstore_update_release_notes` / `appstore_update_whats_new`.
+
+### Story → researched video
+1. `video_plan_from_story` — create the project and scene plan.
+2. `video_research_youtube` — collect reference-only metadata; never treat a result as a render asset.
+3. `video_search_stock_assets` — find licensed Pexels candidates.
+4. `video_synthesize_research` — combine metadata with any direct human/agent observations. Treat its output as
+   metadata-bounded guidance, not proof that the source videos were watched.
+5. Preview then confirm `video_download_stock_assets`; use `video_generate_image(confirm=false)` before any paid
+   generation and call it again with `confirm=true` only after approval. User-owned media goes through
+   `video_add_local_asset` with its ownership/license basis.
+6. `video_build_timeline` — provenance-gated scene assignment.
+7. Preview then confirm `video_render`; poll `video_job_status`, then run `video_validate` on the completed MP4.
 
 > **Mimi Seed does not compile app binaries.** It manages metadata, store releases, and
 > CI/Jenkins *credentials and job definitions* — not Xcode/Gradle builds. To produce an

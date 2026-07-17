@@ -74,7 +74,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (150+ 개 · 18개 영역)
+## 제공 도구 (150+ 개 · 19개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
@@ -96,6 +96,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
 | 인증 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
+| 영상 제작 | 11 | `video_plan_from_story` / `video_research_youtube` / `video_synthesize_research` / `video_generate_image` / `video_render` |
 
 > 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `appstore_create_inapp_purchase` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` 등.
 > 전체 카탈로그(항상 최신): [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)
@@ -225,6 +226,10 @@ Claude가 연쇄 호출:
 | 변수 | 설명 |
 |------|------|
 | `ANTHROPIC_API_KEY` | AI 릴리즈 노트 생성 / 리뷰 답변 활성화 (선택) |
+| `YOUTUBE_API_KEY` | 참고 영상 메타데이터 조사 (선택) |
+| `PEXELS_API_KEY` | Pexels 스톡 영상 검색 (선택) |
+| `OPENAI_API_KEY` | 장면 이미지 생성 (선택) |
+| `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 PATH에 없을 때 실행 파일 경로 (선택) |
 
 ---
 

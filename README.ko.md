@@ -368,7 +368,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ---
 
-## 도구 목록 (Local MCP · 150+ 개 · 18개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 19개 영역)
 
 > 아래 도구는 **Local MCP** — 로컬 Google OAuth — 로 동작합니다. Remote MCP는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -390,8 +390,9 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **점검 / 위험** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android 서명** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
-| **인증** | 3 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
+| **인증** | 4 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
+| **영상 제작** | 11 | `video_plan_from_story` · `video_research_youtube` · `video_synthesize_research` · `video_generate_image` · `video_render` |
 
 전체 카탈로그 → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · 소스 → [packages/mcp-server](packages/mcp-server)
 
@@ -433,6 +434,10 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | `MIMI_SEED_TOKEN` | PAT — CLI / CI 무인증 모드 |
 | `MIMI_SEED_WEB_BASE` | 서버 주소 (기본: `https://mimi-seed.pryzm.gg`) |
 | `ANTHROPIC_API_KEY` | AI 릴리즈 노트·리뷰 답변 활성화 (선택) |
+| `YOUTUBE_API_KEY` | `video_research_youtube`의 참고 영상 메타데이터 조사 (선택) |
+| `PEXELS_API_KEY` | `video_search_stock_assets`의 라이선스 스톡 영상 검색 (선택) |
+| `OPENAI_API_KEY` | `video_generate_image`의 장면 이미지 생성 (선택) |
+| `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 `PATH`에 없을 때 지정하는 선택적 절대경로 |
 | `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선 |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 자체 Google OAuth 클라이언트 사용. 미지정 시 로그인 때 웹 콘솔에서 받아온다 — 오프라인·폐쇄망·자체호스팅이면 지정할 것 ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
 

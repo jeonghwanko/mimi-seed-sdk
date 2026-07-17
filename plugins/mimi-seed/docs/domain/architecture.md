@@ -46,7 +46,7 @@ mcp-server/src/index.ts
 ```
 
 - `index.ts` constructs one `McpServer({ name: 'mimi-seed', version })` (version read at runtime from
-  `package.json` so it never drifts), then calls all 17 `registerXxxTools(server)` functions plus
+  `package.json` so it never drifts), then calls all 19 `registerXxxTools(server)` functions plus
   `registerPrompts(server)` and `registerResources(server)`.
 - Each `registers/<domain>.ts` declares tools with `server.tool(...)`. Input validation is **zod** schemas;
   there is no separate schema file.

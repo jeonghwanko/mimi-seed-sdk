@@ -12,7 +12,8 @@ export interface SubmissionRisk {
   fixUrl?: string;
 }
 
-const APPSTORE_EDITABLE_STATES = 'PREPARE_FOR_SUBMISSION,WAITING_FOR_REVIEW';
+const APPSTORE_EDITABLE_STATES =
+  'PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,METADATA_REJECTED,REJECTED';
 
 export async function checkPlayStoreRisks(
   auth: OAuth2Client,
@@ -162,22 +163,26 @@ export async function checkAppStoreRisks(appId: string): Promise<SubmissionRisk[
     risks.push({ level: 'blocker', code: 'NO_LOCALIZATIONS', title: '로컬라이제이션 없음', detail: '메타데이터를 입력하세요.' });
   } else {
     for (const loc of locs.data) {
-      const { locale, description, whatsNew, keywords } = loc.attributes ?? {};
+      const { locale: rawLocale, description, whatsNew, keywords } = loc.attributes ?? {};
+      const locale = rawLocale ?? loc.id;
       if (!description) risks.push({ level: 'blocker', code: `NO_DESC_${locale}`, title: `${locale} 설명 없음`, detail: '앱 설명은 필수 항목입니다.' });
       if (!whatsNew) risks.push({ level: 'warning', code: `NO_WHATS_NEW_${locale}`, title: `${locale} 새로운 기능 없음`, detail: '릴리즈 노트를 입력하면 다운로드 전환율이 높아집니다.' });
       if (!keywords) risks.push({ level: 'warning', code: `NO_KEYWORDS_${locale}`, title: `${locale} 키워드 없음`, detail: '키워드는 검색 노출에 직접 영향을 줍니다.' });
-    }
 
-    // screenshots depend on locs being present
-    const locId = locs.data[0].id;
-    const screenshots = await safeGet(
-      () => apiGet(`/appStoreVersionLocalizations/${locId}/appScreenshotSets`),
-      risks,
-      'SCREENSHOTS',
-      '스크린샷 셋',
-    );
-    if (screenshots && !screenshots?.data?.length) {
-      risks.push({ level: 'blocker', code: 'NO_SCREENSHOTS', title: '스크린샷 없음', detail: 'iPhone 6.5" 또는 6.9" 스크린샷이 필요합니다.' });
+      const screenshots = await safeGet(
+        () => apiGet(`/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`),
+        risks,
+        `SCREENSHOTS_${locale}`,
+        `${locale} 스크린샷 셋`,
+      );
+      if (screenshots && !screenshots.data?.length) {
+        risks.push({
+          level: 'blocker',
+          code: `NO_SCREENSHOTS_${locale}`,
+          title: `${locale} 스크린샷 없음`,
+          detail: 'iPhone 6.5" 또는 6.9" 스크린샷이 필요합니다.',
+        });
+      }
     }
   }
 

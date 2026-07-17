@@ -35,6 +35,7 @@ The exact vendor-console steps and prerequisites live in the [credential referen
 | App Store Connect and TestFlight | App Store Connect API key |
 | CI build | GitHub/GitLab CI or Jenkins |
 | AI release notes and review drafts | `ANTHROPIC_API_KEY` |
+| Story-based video production | `ANTHROPIC_API_KEY` plus only the provider keys used: `YOUTUBE_API_KEY`, `PEXELS_API_KEY`, `OPENAI_API_KEY`; FFmpeg for rendering |
 | Social publishing | Only the Facebook/Instagram/Threads accounts you use |
 
 ## What is validated before saving

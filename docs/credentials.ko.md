@@ -35,6 +35,7 @@ mimi-seed setup
 | 광고 캠페인 리포트 | [Google Ads](#google-ads) |
 | 출시 공지 게시 | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) |
 | AI 릴리스 노트 / 리뷰 답변 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(선택 — 없어도 동작한다)* |
+| story 기반 영상 리서치·제작 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + 실제로 쓸 공급자의 [영상 API 키](#video-api-keys) |
 | 호스팅 대시보드 / 원격 MCP | [Mimi Seed 계정](#cloud-pat) |
 
 **Google 로그인 하나가 8개 서비스를 연다.** Firebase · AdMob · Play · Google Ads · Search Console · GA4 ·
@@ -323,6 +324,27 @@ Instagram 토큰은 여기서 안 통한다.
 export ANTHROPIC_API_KEY=sk-ant-...        # bash / zsh
 $env:ANTHROPIC_API_KEY = "sk-ant-..."      # PowerShell
 ```
+
+---
+
+<a id="video-api-keys"></a>
+
+## 영상 API 키와 FFmpeg
+
+**열리는 것:** YouTube 참고 영상 메타데이터(`video_research_youtube`), Pexels 스톡 검색
+(`video_search_stock_assets`), OpenAI 장면 이미지 생성(`video_generate_image`). 각 기능은 선택이며,
+로컬/사용자 소유 자산과 FFmpeg 렌더링에는 이 API 키들이 필요하지 않다.
+
+실제로 사용할 공급자만 환경변수로 설정한다. 키는 프로젝트에 저장하지 않는다.
+
+```bash
+export YOUTUBE_API_KEY=<youtube-data-api-key>
+export PEXELS_API_KEY=<pexels-api-key>
+export OPENAI_API_KEY=<openai-api-key>
+```
+
+렌더링에는 `PATH`의 `ffmpeg`와 `ffprobe`가 필요하다. 다른 위치에 있다면
+`MIMI_SEED_FFMPEG_PATH`와 선택적으로 `MIMI_SEED_FFPROBE_PATH`에 실행 파일 절대경로를 지정한다.
 
 ---
 

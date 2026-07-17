@@ -35,6 +35,7 @@ Most people need two or three of these. Find your goal, connect only what it lis
 | Report on ad campaigns | [Google Ads](#google-ads) |
 | Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) |
 | AI-written release notes / review replies | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(optional — it degrades gracefully)* |
+| Research and produce a story-based video | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + [video API keys](#video-api-keys) for only the providers you use |
 | Use the hosted dashboard / remote MCP | [Mimi Seed account](#cloud-pat) |
 
 **One Google login covers eight services.** Firebase, AdMob, Play, Google Ads, Search Console, GA4, Cloud IAM,
@@ -330,6 +331,27 @@ CI, set `MIMI_SEED_TOKEN` instead and `init` skips the browser entirely.
 export ANTHROPIC_API_KEY=sk-ant-...        # bash / zsh
 $env:ANTHROPIC_API_KEY = "sk-ant-..."      # PowerShell
 ```
+
+---
+
+<a id="video-api-keys"></a>
+
+## Video API keys and FFmpeg
+
+**Unlocks:** YouTube reference metadata (`video_research_youtube`), Pexels stock search
+(`video_search_stock_assets`), and OpenAI scene-image generation (`video_generate_image`). Each capability is
+optional; local/user-owned assets and FFmpeg rendering do not require these API keys.
+
+Set only the providers you plan to use. Keys are read from the environment and are never stored in the project:
+
+```bash
+export YOUTUBE_API_KEY=<youtube-data-api-key>
+export PEXELS_API_KEY=<pexels-api-key>
+export OPENAI_API_KEY=<openai-api-key>
+```
+
+Rendering requires `ffmpeg` and `ffprobe` on `PATH`. If they live elsewhere, set
+`MIMI_SEED_FFMPEG_PATH` and optionally `MIMI_SEED_FFPROBE_PATH` to their absolute executable paths.
 
 ---
 

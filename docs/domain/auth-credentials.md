@@ -46,8 +46,11 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
   `play-service-accounts/<packageName>.json` first, else fall back to `play-service-account.json`.
 - The Play SA's **GCP project must have the Android Publisher API enabled**, or every `playstore_*` call returns
   `403` (this is *not* a permissions gap — see [[external-apis]] and [[pitfalls]]).
-- **AI tools** (`generate_release_notes_from_commits`, `generate_review_reply`) read `ANTHROPIC_API_KEY` from the
-  **environment**, not from `~/.mimi-seed/`.
+- **AI tools** (`generate_release_notes_from_commits`, `generate_review_reply`) and video storyboard generation
+  read `ANTHROPIC_API_KEY` from the **environment**, not from `~/.mimi-seed/`.
+- Video production uses optional environment credentials per capability: `YOUTUBE_API_KEY` for reference
+  metadata research, `PEXELS_API_KEY` for stock search, and `OPENAI_API_KEY` for generated images. Rendering
+  itself is local and needs FFmpeg on `PATH` or `MIMI_SEED_FFMPEG_PATH`.
 
 ## Setup sub-CLIs
 

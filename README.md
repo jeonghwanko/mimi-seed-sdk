@@ -372,7 +372,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-## Local MCP Tool List (150+ tools · 18 domains)
+## Local MCP Tool List (150+ tools · 19 domains)
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -394,8 +394,9 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Checks / Risk** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
-| **Auth** | 3 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` |
+| **Auth** | 4 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
+| **Video production** | 11 | `video_plan_from_story` · `video_research_youtube` · `video_synthesize_research` · `video_generate_image` · `video_render` |
 
 Full catalog → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · source → [packages/mcp-server](packages/mcp-server)
 
@@ -437,6 +438,10 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/t
 | `MIMI_SEED_TOKEN` | PAT for CLI / CI headless mode |
 | `MIMI_SEED_WEB_BASE` | Server base URL (default: `https://mimi-seed.pryzm.gg`) |
 | `ANTHROPIC_API_KEY` | Enable AI release notes and review replies (optional) |
+| `YOUTUBE_API_KEY` | Reference-video metadata research for `video_research_youtube` (optional) |
+| `PEXELS_API_KEY` | Licensed stock-video search for `video_search_stock_assets` (optional) |
+| `OPENAI_API_KEY` | Generated scene images for `video_generate_image` (optional) |
+| `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | Optional absolute executable paths when FFmpeg/ffprobe are not on `PATH` |
 | `MIMI_SEED_LANG` | Force CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json` |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Bring your own Google OAuth client. Otherwise it is fetched from the web console at login — set these if you're offline, air-gapped, or self-hosting ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
 
