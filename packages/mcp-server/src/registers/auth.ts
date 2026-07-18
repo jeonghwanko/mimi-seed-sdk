@@ -2,7 +2,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getMcpOAuthClient } from '../auth/constants.js';
 import { classifyError } from '../auth/errors.js';
-import { startAuth, ensureFreshAccessToken, getTokensLastRefreshMs } from '../auth/google-auth.js';
+import {
+  startAuth,
+  ensureFreshAccessToken,
+  getTokensLastRefreshMs,
+  getStoredTokens,
+} from '../auth/google-auth.js';
+import { AUTH_DOMAINS, DOMAIN_IDS, summarizeGrantedDomains } from '../auth/scopes.js';
 import { listRegisteredServiceAccounts } from '../auth/playstore-auth.js';
 import { getAppStoreCredentials } from '../appstore/auth.js';
 import { loadJenkinsConfig } from '../jenkins/config.js';
@@ -284,10 +290,19 @@ export function registerAuthTools(server: McpServer) {
       'Google OAuth 로그인 링크를 발급하고 백그라운드 콜백 서버를 시작.',
       '응답에 포함된 URL을 브라우저에서 열고 승인하면 localhost:9876으로 자동 콜백 → 토큰이 ~/.mimi-seed/tokens.json에 저장됨.',
       '이후 playstore_*, firebase_*, admob_* 등 다른 MCP 도구 바로 호출 가능.',
+      'domains 로 필요한 권한 도메인만 골라 요청 가능 (미지정 시 전체). 재로그인 시 기존 부여 권한은 유지되고 새 권한만 추가됨(incremental).',
       '토큰 만료(invalid_rapt) / 재인증 필요 시 사용. 10분 내 완료해야 함.',
     ].join(' '),
-    {},
-    async () => {
+    {
+      domains: z
+        .array(z.enum(DOMAIN_IDS))
+        .optional()
+        .describe(
+          `요청할 권한 도메인 서브셋 (미지정 시 전체). 가능한 값: ${DOMAIN_IDS.join(', ')}. ` +
+            '예: ["ga4","googleads"] — 기존에 부여된 다른 도메인 권한은 유지된다.',
+        ),
+    },
+    async ({ domains }) => {
       // 설정 조회 실패를 분류된 안내로 — raw throw 는 MCP 클라이언트에 마커 문자열만 노출된다.
       let clientId: string;
       let clientSecret: string;
@@ -302,12 +317,15 @@ export function registerAuthTools(server: McpServer) {
           }],
         };
       }
-      const { url, wait } = startAuth(clientId, clientSecret);
+      const { url, wait } = startAuth(clientId, clientSecret, { domains });
       // fire-and-forget — 토큰은 콜백 서버가 자동 저장
       wait.then(
         () => { /* saved */ },
         (err: Error) => { console.error('[mimi-seed auth]', err.message); },
       );
+      const scopeLine = domains?.length
+        ? `요청 도메인: ${domains.map((d) => `${d} (${AUTH_DOMAINS[d].label})`).join(', ')} — 기존 부여 권한은 유지됨.`
+        : `요청 도메인: 전체 (${DOMAIN_IDS.join(', ')})`;
       return {
         content: [{
           type: 'text',
@@ -315,6 +333,8 @@ export function registerAuthTools(server: McpServer) {
             '🔐 Google 로그인 링크 (10분 유효):',
             '',
             url,
+            '',
+            scopeLine,
             '',
             '이 URL을 브라우저에서 열고 Google 계정으로 승인해줘.',
             '완료되면 localhost:9876으로 자동 리다이렉트되고 토큰이 저장돼.',
@@ -335,6 +355,25 @@ export function registerAuthTools(server: McpServer) {
       const refreshLine = `   마지막 갱신: ${refreshHint.label}`;
       const recommendation = refreshHint.recommendation ? `\n\n${refreshHint.recommendation}` : '';
 
+      // 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께
+      // 보여준다. 유효/갱신된 상태에서만 쓰므로 그 두 arm 에서만 계산한다(불필요한 토큰
+      // 재조회 + 도메인 스캔 방지).
+      const domainStatusBlock = (): string => {
+        const summary = summarizeGrantedDomains(getStoredTokens()?.scope);
+        const domainLines: string[] = [];
+        if (!summary.known) {
+          domainLines.push('   권한 도메인: (구 토큰 — scope 기록 없음. 재로그인하면 기록됨)');
+        } else {
+          domainLines.push(`   권한 도메인: ${summary.granted.join(', ') || '(없음)'}`);
+          if (summary.missing.length > 0) {
+            domainLines.push(
+              `   미부여: ${summary.missing.join(', ')} → mimi_seed_auth_start(domains=[...]) 로 추가 (기존 권한 유지)`,
+            );
+          }
+        }
+        return `\n${domainLines.join('\n')}`;
+      };
+
       switch (r.status) {
         case 'unauthenticated':
           return {
@@ -351,7 +390,7 @@ export function registerAuthTools(server: McpServer) {
           return {
             content: [{
               type: 'text',
-              text: `✅ 인증 유효 (${min}분 남음).\n${refreshLine}${recommendation}`,
+              text: `✅ 인증 유효 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`,
             }],
           };
         }
@@ -360,7 +399,7 @@ export function registerAuthTools(server: McpServer) {
           return {
             content: [{
               type: 'text',
-              text: `✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).\n${refreshLine}${recommendation}`,
+              text: `✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`,
             }],
           };
         }

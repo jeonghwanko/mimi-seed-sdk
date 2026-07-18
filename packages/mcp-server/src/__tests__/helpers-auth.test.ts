@@ -6,11 +6,13 @@ const h = vi.hoisted(() => ({
   ensureFreshAccessToken: vi.fn(),
   getAuthenticatedClient: vi.fn(),
   getServiceAccountClient: vi.fn(),
+  getStoredTokens: vi.fn(),
 }));
 
 vi.mock('../auth/google-auth.js', () => ({
   ensureFreshAccessToken: h.ensureFreshAccessToken,
   getAuthenticatedClient: h.getAuthenticatedClient,
+  getStoredTokens: h.getStoredTokens,
 }));
 vi.mock('../auth/playstore-auth.js', () => ({
   getServiceAccountClient: h.getServiceAccountClient,
@@ -47,6 +49,39 @@ describe('requireAuth — 사전 갱신 + 친절한 에러', () => {
     const client = { id: 'oauth' };
     h.getAuthenticatedClient.mockReturnValue(client);
     await expect(requireAuth()).resolves.toBe(client);
+  });
+});
+
+describe('requireAuth — 스코프 pre-flight (도메인 선택형 로그인)', () => {
+  const CLOUD_PLATFORM = 'https://www.googleapis.com/auth/cloud-platform';
+  const GA4_EDIT = 'https://www.googleapis.com/auth/analytics.edit';
+  const client = { id: 'oauth' };
+
+  beforeEach(() => {
+    h.ensureFreshAccessToken.mockResolvedValue({ status: 'fresh', tokens: {}, msUntilExpiry: 999999 });
+    h.getAuthenticatedClient.mockReturnValue(client);
+  });
+
+  it('요구 스코프가 부여돼 있으면 통과', async () => {
+    h.getStoredTokens.mockReturnValue({ scope: `${CLOUD_PLATFORM} ${GA4_EDIT}` });
+    await expect(requireAuth(CLOUD_PLATFORM)).resolves.toBe(client);
+  });
+
+  it('요구 스코프 미부여면 INSUFFICIENT_SCOPE + 해당 도메인 --domains 안내로 throw', async () => {
+    h.getStoredTokens.mockReturnValue({ scope: GA4_EDIT });
+    await expect(requireAuth(CLOUD_PLATFORM)).rejects.toThrow(/INSUFFICIENT_SCOPE/);
+    await expect(requireAuth(CLOUD_PLATFORM)).rejects.toThrow(/--domains gcp/);
+  });
+
+  it('구 토큰(scope 미기록) + 추적 이전 스코프면 보유로 간주해 통과 (기존 사용자 재로그인 강제 금지)', async () => {
+    h.getStoredTokens.mockReturnValue({ scope: undefined });
+    await expect(requireAuth(CLOUD_PLATFORM)).resolves.toBe(client);
+  });
+
+  it('구 토큰(scope 미기록) + 추적 이후 스코프(GA4)면 재로그인 안내로 throw', async () => {
+    h.getStoredTokens.mockReturnValue({ scope: undefined });
+    await expect(requireAuth(GA4_EDIT)).rejects.toThrow(/INSUFFICIENT_SCOPE/);
+    await expect(requireAuth(GA4_EDIT)).rejects.toThrow(/--domains ga4/);
   });
 });
 

@@ -1,4 +1,5 @@
 import { getAuthenticatedClient, ensureFreshAccessToken, getStoredTokens } from './auth/google-auth.js';
+import { domainsForScope, isPreTrackingScope } from './auth/scopes.js';
 import { getServiceAccountClient, getServiceAccountJson } from './auth/playstore-auth.js';
 import { getAppStoreCredentials } from './appstore/auth.js';
 import type { AuthErrorPayload } from './auth/errors.js';
@@ -44,18 +45,30 @@ export async function requireAuth(requiredScope?: string) {
       }),
     );
   }
-  // 신규 스코프(GA4 analytics.edit 등)는 변경 전 발급된 토큰엔 없다. expiry 만 보는
-  // ensureFreshAccessToken 은 이를 못 걸러내므로(런타임 ACCESS_TOKEN_SCOPE_INSUFFICIENT),
-  // 저장된 scope 로 pre-flight 검사해 결정적인 재로그인 안내를 던진다.
-  // (scope 가 undefined 인 구 토큰은 미보유로 간주 → 재로그인 유도.)
+  // 도구가 요구하는 스코프의 pre-flight 검사. expiry 만 보는 ensureFreshAccessToken 은
+  // 스코프 미보유를 못 걸러내므로(런타임 ACCESS_TOKEN_SCOPE_INSUFFICIENT), 저장된 scope 로
+  // 결정적인 안내를 던진다. 도메인 선택형 로그인 도입 후에는 "전체 재로그인"이 아니라
+  // "--domains <해당 도메인> 으로 추가 부여(기존 권한 유지)"가 올바른 해법이다.
+  //
+  // scope 가 undefined 인 구 토큰(스코프 추적 도입 전 full-scope 로그인)은 추적 도입
+  // 이전부터 있던 스코프는 보유한 게 확실하므로 통과시킨다 — 안 그러면 pre-flight 를 새로
+  // 다는 순간 멀쩡한 기존 사용자에게 재로그인을 강제한다. 추적 이후 추가된 스코프(GA4)만
+  // 미보유 확정으로 본다.
   if (requiredScope) {
-    const granted = (getStoredTokens()?.scope ?? '').split(' ').filter(Boolean);
-    if (!granted.includes(requiredScope)) {
+    const scopeStr = getStoredTokens()?.scope;
+    const missing =
+      scopeStr === undefined
+        ? !isPreTrackingScope(requiredScope)
+        : !scopeStr.split(' ').filter(Boolean).includes(requiredScope);
+    if (missing) {
+      const domainArg = domainsForScope(requiredScope).join(',');
       throw new Error(
         formatAuthError({
           code: 'INSUFFICIENT_SCOPE',
-          message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 기존 로그인에 없어서 1회 재로그인이 필요해.`,
-          hint: 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
+          message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 현재 로그인에 그 권한이 없어.`,
+          hint: domainArg
+            ? `mimi-seed-auth --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
+            : 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
           retriable: false,
           needsReauth: true,
         }),

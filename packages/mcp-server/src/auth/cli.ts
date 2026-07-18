@@ -9,6 +9,13 @@ import {
 } from './google-auth.js';
 import { AuthError, type AuthErrorPayload, classifyError } from './errors.js';
 import { getMcpOAuthClient } from './constants.js';
+import {
+  AUTH_DOMAINS,
+  DOMAIN_IDS,
+  parseDomainList,
+  summarizeGrantedDomains,
+  type AuthDomainId,
+} from './scopes.js';
 import { resolveLang } from '../lib/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
@@ -20,11 +27,14 @@ const ko = {
 
   사용법:
     mimi-seed-auth                  # 로그인 (이미 있으면 자동 refresh 시도)
+    mimi-seed-auth --domains ga4,googleads   # 필요한 권한 도메인만 요청 (기존 권한 유지)
     mimi-seed-auth --refresh        # refresh_token으로 갱신만 시도 (브라우저 X)
-    mimi-seed-auth --status         # 현재 토큰 상태 출력
+    mimi-seed-auth --status         # 현재 토큰 상태 + 부여 도메인 출력
     mimi-seed-auth --logout         # 토큰 삭제
 
   옵션:
+    --domains <ids>  요청할 권한 도메인 (쉼표 구분, 미지정 시 전체).
+                     가능한 값: ${DOMAIN_IDS.join(', ')}
     --no-browser     URL 자동 오픈 안 함 (직접 복붙)
     --timeout <초>   콜백 대기 시간 (기본 600)
     --force          기존 토큰 무시하고 강제 재로그인
@@ -41,6 +51,13 @@ const ko = {
   statusRefreshed: (left: string) => `  ✅ 연결됨 — refresh_token으로 갱신 (${left})`,
   statusExpired: '  ⚠️  토큰 만료 + 자동 갱신 실패',
   statusNone: '  ❌ 연결된 계정 없음.',
+  grantedDomains: (list: string) => `     권한 도메인: ${list}`,
+  missingDomains: (list: string) =>
+    `     미부여: ${list} — mimi-seed-auth --domains <id> 로 추가 (기존 권한 유지)`,
+  domainsUnknown: '     권한 도메인: (구 토큰 — scope 기록 없음. 재로그인하면 기록됨)',
+  invalidDomains: (bad: string, valid: string) =>
+    `  ❌ 알 수 없는 도메인: ${bad}\n     가능한 값: ${valid}`,
+  domainsRequested: (list: string) => `  🎯 요청 도메인: ${list} (기존 부여 권한은 유지)`,
 
   refreshTrying: '  🔄 refresh_token으로 갱신 시도 중...',
   refreshNotNeeded: (left: string) => `  ✅ 토큰 유효 — 갱신 불필요 (${left})`,
@@ -82,11 +99,14 @@ const en: typeof ko = {
 
   Usage:
     mimi-seed-auth                  # log in (tries a silent refresh if a token exists)
+    mimi-seed-auth --domains ga4,googleads   # request only the domains you need (keeps prior grants)
     mimi-seed-auth --refresh        # only refresh with refresh_token (no browser)
-    mimi-seed-auth --status         # print the current token status
+    mimi-seed-auth --status         # print the current token status + granted domains
     mimi-seed-auth --logout         # delete the token
 
   Options:
+    --domains <ids>  Permission domains to request (comma-separated; all when omitted).
+                     Available: ${DOMAIN_IDS.join(', ')}
     --no-browser     Do not open the URL automatically (copy-paste it yourself)
     --timeout <sec>  How long to wait for the callback (default 600)
     --force          Ignore the existing token and force a re-login
@@ -103,6 +123,13 @@ const en: typeof ko = {
   statusRefreshed: (left: string) => `  ✅ Connected — refreshed with refresh_token (${left})`,
   statusExpired: '  ⚠️  Token expired + automatic refresh failed',
   statusNone: '  ❌ No connected account.',
+  grantedDomains: (list: string) => `     Granted domains: ${list}`,
+  missingDomains: (list: string) =>
+    `     Not granted: ${list} — add with mimi-seed-auth --domains <id> (prior grants are kept)`,
+  domainsUnknown: '     Granted domains: (legacy token — no scope record; re-login records it)',
+  invalidDomains: (bad: string, valid: string) =>
+    `  ❌ Unknown domain(s): ${bad}\n     Available: ${valid}`,
+  domainsRequested: (list: string) => `  🎯 Requesting domains: ${list} (prior grants are kept)`,
 
   refreshTrying: '  🔄 Trying to refresh with refresh_token...',
   refreshNotNeeded: (left: string) => `  ✅ Token still valid — no refresh needed (${left})`,
@@ -173,6 +200,17 @@ function printAuthError(p: AuthErrorPayload): void {
   if (p.cause && process.env.DEBUG) err(`     (cause: ${p.cause})`);
 }
 
+/** 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께 출력. */
+function printGrantedDomains(): void {
+  const summary = summarizeGrantedDomains(getStoredTokens()?.scope);
+  if (!summary.known) {
+    err(M.domainsUnknown);
+    return;
+  }
+  err(M.grantedDomains(summary.granted.join(', ') || '-'));
+  if (summary.missing.length > 0) err(M.missingDomains(summary.missing.join(', ')));
+}
+
 async function cmdStatus(): Promise<number> {
   err('');
   err(M.statusTitle);
@@ -181,10 +219,12 @@ async function cmdStatus(): Promise<number> {
   switch (r.status) {
     case 'fresh':
       err(M.statusFresh(fmtRemaining(r.msUntilExpiry)));
+      printGrantedDomains();
       err('');
       return 0;
     case 'refreshed':
       err(M.statusRefreshed(fmtRemaining(r.msUntilExpiry)));
+      printGrantedDomains();
       err('');
       return 0;
     case 'expired_refresh_failed':
@@ -248,12 +288,31 @@ async function cmdLogin(): Promise<number> {
   const force = hasFlag('force');
   const timeoutSec = parseInt(flagValue('timeout') ?? '600', 10);
 
+  // --domains 파싱. 공백형(--domains ga4)과 equals형(--domains=ga4) 모두 지원하고,
+  // 플래그는 있는데 값이 없거나(--domains, --domains --force) 잘못된 id 면 조용히 전체
+  // 스코프로 폴백하지 않고 에러로 안내한다 — least-privilege 의도가 훼손되지 않도록.
+  const domainsEq = args.find((a) => a.startsWith('--domains='));
+  const domainsRaw = domainsEq ? domainsEq.slice('--domains='.length) : flagValue('domains');
+  const domainsFlagPresent = hasFlag('domains') || domainsEq !== undefined;
+  let domains: AuthDomainId[] | undefined;
+  if (domainsFlagPresent) {
+    const parsed = domainsRaw ? parseDomainList(domainsRaw) : { domains: [], invalid: [] };
+    if (parsed.invalid.length > 0 || parsed.domains.length === 0) {
+      err('');
+      err(M.invalidDomains(parsed.invalid.join(', ') || domainsRaw || '(값 없음)', DOMAIN_IDS.join(', ')));
+      err('');
+      return 1;
+    }
+    domains = parsed.domains;
+  }
+
   err('');
   err(M.loginTitle);
   err('');
 
-  // 1) 기존 토큰이 있으면 silent refresh 먼저 시도
-  if (!force) {
+  // 1) 기존 토큰이 있으면 silent refresh 먼저 시도.
+  //    --domains 는 "권한을 추가로 부여하겠다"는 명시적 의도라 이 단축 경로를 건너뛴다.
+  if (!force && !domains) {
     const existing = getStoredTokens();
     if (existing) {
       err(M.loginChecking);
@@ -285,6 +344,7 @@ async function cmdLogin(): Promise<number> {
     const { clientId, clientSecret } = await getMcpOAuthClient();
     const r = startAuth(clientId, clientSecret, {
       timeoutMs: timeoutSec * 1000,
+      domains,
     });
     url = r.url;
     wait = r.wait;
@@ -293,6 +353,10 @@ async function cmdLogin(): Promise<number> {
     printAuthError(classifyError(e, { phase: 'login' }));
     err('');
     return 1;
+  }
+
+  if (domains) {
+    err(M.domainsRequested(domains.map((d) => `${d} (${AUTH_DOMAINS[d].label})`).join(', ')));
   }
 
   // 3) 브라우저 열기 (or URL 출력)
@@ -338,6 +402,7 @@ async function cmdLogin(): Promise<number> {
   err('');
   err('');
   err(M.done);
+  printGrantedDomains();
   err('');
   err(M.nextTitle);
   err(M.nextExample1);

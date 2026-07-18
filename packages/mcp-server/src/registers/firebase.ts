@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as firebaseRaw from '../firebase/tools.js';
 import { requireAuth } from '../helpers.js';
+import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { friendlyGoogleError } from '../lib/google-errors.js';
 
 // 모든 firebase tools 호출을 친절 에러로 감싸는 프록시 — 17개 핸들러에 개별
@@ -70,7 +71,8 @@ export function registerFirebaseTools(server: McpServer) {
         .describe("조직/폴더 소속이 필요한 계정일 때만: 'organizations/<id>' 또는 'folders/<id>'. 생략 시 계정 기본 정책대로 생성"),
     },
     async ({ projectId, displayName, parent }) => {
-      const auth = await requireAuth();
+      // 프로젝트 생성은 Cloud Resource Manager 라 firebase 스코프만으로는 안 된다.
+      const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const project = await firebase.createProject(auth, projectId, displayName, { parent });
       return {
         content: [
@@ -262,7 +264,8 @@ export function registerFirebaseTools(server: McpServer) {
       serviceId: z.string().describe('서비스 ID (예: firestore.googleapis.com)'),
     },
     async ({ projectId, serviceId }) => {
-      const auth = await requireAuth();
+      // Service Usage API — firebase 스코프가 아니라 cloud-platform 을 요구한다.
+      const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const result = await firebase.enableService(auth, projectId, serviceId);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },
@@ -273,7 +276,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase 기본 서비스 일괄 활성화 (Firestore, Auth, Storage, FCM 등)',
     { projectId: z.string().describe('프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = await requireAuth();
+      const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const results = await firebase.enableCommonServices(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
     },
@@ -284,7 +287,7 @@ export function registerFirebaseTools(server: McpServer) {
     '프로젝트에서 활성화된 GCP 서비스 목록',
     { projectId: z.string().describe('프로젝트 ID') },
     async ({ projectId }) => {
-      const auth = await requireAuth();
+      const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const services = await firebase.listEnabledServices(auth, projectId);
       return { content: [{ type: 'text', text: JSON.stringify(services, null, 2) }] };
     },

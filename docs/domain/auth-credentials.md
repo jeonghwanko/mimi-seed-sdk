@@ -52,6 +52,24 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
   metadata research, `PEXELS_API_KEY` for stock search, and `OPENAI_API_KEY` for generated images. Rendering
   itself is local and needs FFmpeg on `PATH` or `MIMI_SEED_FFMPEG_PATH`.
 
+## Domain-selective (incremental) Google OAuth
+
+The Google OAuth login no longer forces the full scope list. The SSOT for the **auth-domain → scope**
+mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `admob`, `playstore`,
+`googleads`, `gsc`, `ga4`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
+
+- `mimi-seed-auth --domains ga4,googleads` (CLI) and `mimi_seed_auth_start(domains=[…])` (MCP) request only
+  the selected domains' scopes; omitting the option requests everything (old behavior).
+- Requests are sent with `include_granted_scopes=true`, so a re-login **adds** the new scopes on top of the
+  existing grant instead of replacing it. `tokens.json` stores the cumulative granted `scope` string.
+- `requireAuth(<scope>)` in `helpers.ts` pre-flights a tool's required scope against the stored grant and, on
+  a miss, tells the user exactly which `--domains <id>` to add. Legacy tokens with no `scope` field are
+  assumed to hold every pre-tracking scope (only the GA4 scopes postdate scope tracking) so existing users
+  are not forced into a pointless re-login.
+- `cloud-platform` is isolated in the `gcp` domain because the IAM API offers no narrower scope; the
+  `firebase` domain alone cannot create projects (Cloud Resource Manager) or enable services (Service
+  Usage) — those tools pre-flight `cloud-platform` and point at `gcp`.
+
 ## Setup sub-CLIs
 
 Each setup flow is both a `bin` in `mcp-server/package.json` and an entry in the `SUBCOMMANDS` map
