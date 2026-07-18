@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { postCarousel, refreshAccessToken } from '../threads/api.js';
+import { postCarousel, postText, refreshAccessToken } from '../threads/api.js';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -59,8 +59,30 @@ describe('Threads API', () => {
     }));
     const parentStatusIndex = calls.findIndex(({ url, method }) =>
       method === 'GET' && url.includes('/carousel-1?'));
-    const publishIndex = calls.findIndex(({ url }) => url.includes('/user-1/threads_publish'));
+    const publishIndex = calls.findIndex(({ url }) => url.includes('/me/threads_publish'));
     expect(parentStatusIndex).toBeGreaterThan(-1);
     expect(publishIndex).toBeGreaterThan(parentStatusIndex);
+
+    const createCalls = calls.filter(({ method, url }) =>
+      method === 'POST' && new URL(url).pathname === '/v1.0/me/threads');
+    expect(createCalls).toHaveLength(3);
+    expect(calls.every(({ url }) => !url.includes('/user-1/threads'))).toBe(true);
+  });
+
+  it('텍스트 게시도 저장된 숫자 ID 대신 공식 /me 경로를 사용한다', async () => {
+    const responses = [
+      { id: 'container-1' },
+      { id: 'published-1' },
+      { permalink: 'https://www.threads.net/@example/post/1' },
+    ];
+    const fetchMock = vi.fn(async () => json(responses.shift()));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await postText({ accessToken: 'THQVJ_TOKEN', userId: 'stale-user-id' }, 'hello');
+
+    const paths = fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname);
+    expect(paths[0]).toBe('/v1.0/me/threads');
+    expect(paths[1]).toBe('/v1.0/me/threads_publish');
+    expect(paths).not.toContain('/v1.0/stale-user-id/threads');
   });
 });

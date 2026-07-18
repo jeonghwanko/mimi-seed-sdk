@@ -155,3 +155,15 @@ edit. Values from those files eventually reach FFmpeg arguments and filters, so 
 a security boundary. Every read goes through the Zod schemas in `video/schemas.ts`; project, asset manifest, and
 timeline also carry the same `projectId` to reject stale cross-project state. Keep JSON writes atomic and validate
 again at the file boundary before building a render command.
+
+## 17. Meta carousel publishing can outlive the default MCP timeout
+
+Threads publishing should use the token-scoped `/me/threads` and `/me/threads_publish` endpoints. A saved numeric
+user ID is still useful for account reads, but using it for writes can return Meta `code 24/4279009` even when the
+token and account are valid.
+
+Instagram and Threads carousels also create and poll every child container before polling the parent. That can
+legitimately exceed the MCP SDK's 60-second default request timeout. Callers that own the MCP client should set a
+timeout longer than the server's total media-processing budget. If the client still times out, the publish result
+is unknown: inspect the account's latest media before retrying, because the provider may have completed the post
+after the client stopped waiting.
