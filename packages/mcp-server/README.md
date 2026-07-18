@@ -96,7 +96,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
 | 인증 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
-| 영상 제작 | 11 | `video_plan_from_story` / `video_research_youtube` / `video_synthesize_research` / `video_generate_image` / `video_render` |
+| 영상 제작·YouTube | 14 | `youtube_upload_video` / `youtube_get_video_status` / `youtube_update_video_privacy` / `video_plan_from_story` / `video_render` |
 
 > 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `appstore_create_inapp_purchase` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` 등.
 > 전체 카탈로그(항상 최신): [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)

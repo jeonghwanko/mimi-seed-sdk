@@ -47,7 +47,7 @@ and BigQuery all ride on the same OAuth token. Start there.
 
 ## Google OAuth
 
-**Unlocks:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`
+**Unlocks:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`
 
 **You need first:** a Google account. That's all.
 

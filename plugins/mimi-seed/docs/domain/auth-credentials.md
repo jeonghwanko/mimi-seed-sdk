@@ -56,10 +56,12 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 
 The Google OAuth login no longer forces the full scope list. The SSOT for the **auth-domain → scope**
 mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `admob`, `playstore`,
-`googleads`, `gsc`, `ga4`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
+`googleads`, `gsc`, `ga4`, `youtube`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
 
 - `mimi-seed-auth --domains ga4,googleads` (CLI) and `mimi_seed_auth_start(domains=[…])` (MCP) request only
   the selected domains' scopes; omitting the option requests everything (old behavior).
+- The `youtube` domain unlocks video upload, processing/status reads, and privacy changes without introducing
+  a second credential store.
 - Requests are sent with `include_granted_scopes=true`, so a re-login **adds** the new scopes on top of the
   existing grant instead of replacing it. `tokens.json` stores the cumulative granted `scope` string.
 - `requireAuth(<scope>)` in `helpers.ts` pre-flights a tool's required scope against the stored grant and, on

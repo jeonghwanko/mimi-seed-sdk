@@ -396,7 +396,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
 | **Auth** | 4 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
-| **Video production** | 11 | `video_plan_from_story` · `video_research_youtube` · `video_synthesize_research` · `video_generate_image` · `video_render` |
+| **Video production** | 14 | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_plan_from_story` · `video_research_youtube` · `video_render` |
 
 Full catalog → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · source → [packages/mcp-server](packages/mcp-server)
 

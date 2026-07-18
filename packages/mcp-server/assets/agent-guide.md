@@ -57,6 +57,7 @@ tools directly — but the *call order* and *safety rules* below still apply.
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds` |
 | Service account end-to-end | `select:iam_create_service_account,iam_create_key,iam_add_iam_policy_binding,playstore_register_service_account,playstore_verify_service_account` |
 | Story → researched video | `select:video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
+| YouTube upload / publish | `select:youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,mimi_seed_auth_start` |
 
 ---
 
@@ -80,7 +81,7 @@ every credential, which also tells them where to obtain each token
 
 | Service | Fix |
 |---------|-----|
-| Google (Firebase/AdMob/Play/Ads/GSC/GA4/IAM/BigQuery) | tool `mimi_seed_auth_start` → give the user the OAuth URL, **or** `mimi-seed auth login`. Both accept a **domain subset** (`domains=["ga4","googleads"]` / `--domains ga4,googleads`) — request only what the task needs; re-auth keeps prior grants (incremental). Omit for all domains |
+| Google (Firebase/AdMob/Play/Ads/GSC/GA4/IAM/BigQuery/YouTube) | tool `mimi_seed_auth_start` → give the user the OAuth URL, **or** `mimi-seed auth login`. Both accept a **domain subset** (`domains=["youtube"]` / `--domains youtube`) — request only what the task needs; re-auth keeps prior grants (incremental). Omit for all domains |
 | App Store Connect | `mimi-seed auth appstore` → verify with `appstore_verify_credentials` |
 | Play service account | `mimi-seed auth playstore`, or register per-package with `playstore_register_service_account`. **Optional** — the OAuth token carries `androidpublisher`, so this is only needed for headless/CI |
 | BigQuery | `mimi-seed auth bigquery` (optional — OAuth works too) |
@@ -153,7 +154,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_refresh_token` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
-| **Video production** | `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
+| **Video production** | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
 
 ---
 

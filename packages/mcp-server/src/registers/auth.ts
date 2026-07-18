@@ -155,6 +155,13 @@ export function registerAuthTools(server: McpServer) {
         lines.push('❌ Google OAuth      — 미연결 → mimi_seed_auth_start');
       }
 
+      const youtubeGranted = summarizeGrantedDomains(getStoredTokens()?.scope).granted.includes('youtube');
+      if (youtubeGranted && (oauthResult.status === 'fresh' || oauthResult.status === 'refreshed')) {
+        lines.push('✅ YouTube           — 업로드·상태 관리 권한 연결됨');
+      } else {
+        lines.push('❌ YouTube           — 미연결 → mimi_seed_auth_start(domains=["youtube"])  (선택)');
+      }
+
       // 2. Play Store SA
       const saInfo = listRegisteredServiceAccounts();
       const saCount = saInfo.perPackage.length + (saInfo.default ? 1 : 0);
