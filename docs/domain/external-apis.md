@@ -19,6 +19,7 @@
 | GA4 | GA4 Admin + Data APIs | `googleapis` |
 | Search Console | Search Console API | `googleapis` |
 | Google Ads | Google Ads reporting | `googleapis` / REST per `googleads_save_config` |
+| YouTube publishing | YouTube Data API v3 (upload, processing/status, privacy) | `googleapis` + local file streams |
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |
 | Facebook / Instagram / Threads | Meta Graph APIs | `fetch`; shared expiry/error recovery in `lib/meta-auth.ts` |
 | AI tools | Anthropic Messages API | `@anthropic-ai/sdk` (needs `ANTHROPIC_API_KEY`) |

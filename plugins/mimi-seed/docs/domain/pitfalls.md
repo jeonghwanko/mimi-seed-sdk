@@ -167,3 +167,8 @@ legitimately exceed the MCP SDK's 60-second default request timeout. Callers tha
 timeout longer than the server's total media-processing budget. If the client still times out, the publish result
 is unknown: inspect the account's latest media before retrying, because the provider may have completed the post
 after the client stopped waiting.
+
+The same unknown-result rule applies to `youtube_upload_video`. The upload request streams the local file directly
+and can outlive the MCP client's timeout even though YouTube later finishes creating the video. Never automatically
+retry a timed-out upload. Check YouTube Studio for a matching recent title/file first; if the call returned a
+`videoId`, use `youtube_get_video_status` to reconcile processing and privacy state.

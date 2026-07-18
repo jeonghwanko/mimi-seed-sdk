@@ -27,6 +27,7 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
         'https://www.googleapis.com/auth/webmasters',
         'https://www.googleapis.com/auth/analytics.edit',
         'https://www.googleapis.com/auth/analytics.readonly',
+        'https://www.googleapis.com/auth/youtube.force-ssl',
       ].sort(),
     );
   });
@@ -61,6 +62,7 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
   it('domainsForScope: cloud-platform → gcp (INSUFFICIENT_SCOPE 안내에 사용)', () => {
     expect(domainsForScope(CLOUD_PLATFORM_SCOPE)).toEqual(['gcp']);
     expect(domainsForScope('https://www.googleapis.com/auth/analytics.readonly')).toEqual(['ga4']);
+    expect(domainsForScope('https://www.googleapis.com/auth/youtube.force-ssl')).toEqual(['youtube']);
     expect(domainsForScope('https://example.com/unknown')).toEqual([]);
   });
 
@@ -92,6 +94,7 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
     expect(isPreTrackingScope('https://www.googleapis.com/auth/androidpublisher')).toBe(true);
     expect(isPreTrackingScope('https://www.googleapis.com/auth/analytics.edit')).toBe(false);
     expect(isPreTrackingScope('https://www.googleapis.com/auth/analytics.readonly')).toBe(false);
+    expect(isPreTrackingScope('https://www.googleapis.com/auth/youtube.force-ssl')).toBe(false);
     // 미래에 추가될 임의의 신규 스코프는 동결 스냅샷에 없으므로 자동으로 false(미보유) —
     // 목록 갱신을 잊어도 pre-flight 가 무력화되지 않는다는 게 핵심 불변식.
     expect(isPreTrackingScope('https://www.googleapis.com/auth/some.future.scope')).toBe(false);

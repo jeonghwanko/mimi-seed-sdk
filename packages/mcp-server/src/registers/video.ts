@@ -15,6 +15,13 @@ import {
 } from '../video/providers.js';
 import { getRenderJob, startRender, validateVideo } from '../video/render.js';
 import { synthesizeResearch } from '../video/research.js';
+import { requireAuth } from '../helpers.js';
+import {
+  YOUTUBE_SCOPE,
+  getYouTubeVideoStatus,
+  updateYouTubeVideoPrivacy,
+  uploadYouTubeVideo,
+} from '../video/youtube-publish.js';
 
 function text(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
@@ -27,6 +34,63 @@ const httpUrl = z.string().url().refine((value) => {
 }, 'HTTP(S) URL만 허용합니다.');
 
 export function registerVideoTools(server: McpServer) {
+  server.tool(
+    'youtube_upload_video',
+    [
+      '로컬 영상 파일을 현재 Google OAuth 계정의 YouTube 채널에 업로드합니다.',
+      '기본 공개 상태는 private이며 public/unlisted는 같은 턴의 명시 승인 후 confirmVisible=true가 필요합니다.',
+      '업로드 후 youtube_get_video_status로 처리 완료 여부와 실제 공개 상태를 확인하세요.',
+      '요청이 타임아웃되면 업로드가 뒤늦게 완료될 수 있으므로 YouTube Studio를 먼저 확인하고 중복 재시도하지 마세요.',
+      'YouTube OAuth 권한이 없으면 mimi_seed_auth_start(domains=["youtube"])로 증분 연결하세요.',
+    ].join(' '),
+    {
+      filePath: absolutePath.describe('업로드할 .mp4/.mov/.webm 영상 절대경로'),
+      title: z.string().min(1).max(100).describe('YouTube 영상 제목'),
+      description: z.string().max(5_000).optional().describe('영상 설명과 음원 출처/라이선스 표기'),
+      tags: z.array(z.string().min(1).max(500)).max(100).optional(),
+      categoryId: z.string().regex(/^\d+$/).default('24').describe('YouTube 카테고리 ID'),
+      privacyStatus: z.enum(['private', 'unlisted', 'public']).default('private'),
+      madeForKids: z.boolean().default(false),
+      containsSyntheticMedia: z.boolean().optional().describe('현실적으로 보이는 AI 생성·변형 콘텐츠 여부를 YouTube에 고지'),
+      notifySubscribers: z.boolean().default(false),
+      shortsOnly: z.boolean().default(false).describe('true면 세로/정사각형·180초 이하 쇼츠 규격을 강제'),
+      confirmVisible: z.boolean().default(false).describe('public/unlisted 게시에 대한 명시 확인'),
+    },
+    async (input) => {
+      const auth = await requireAuth(YOUTUBE_SCOPE);
+      return text(await uploadYouTubeVideo(auth, input));
+    },
+  );
+
+  server.tool(
+    'youtube_get_video_status',
+    '내 YouTube 영상의 업로드 처리 상태와 현재 공개 상태를 조회합니다.',
+    {
+      videoId: z.string().min(1).max(64).describe('YouTube video ID'),
+    },
+    async ({ videoId }) => {
+      const auth = await requireAuth(YOUTUBE_SCOPE);
+      return text(await getYouTubeVideoStatus(auth, videoId));
+    },
+  );
+
+  server.tool(
+    'youtube_update_video_privacy',
+    [
+      '내 YouTube 영상의 공개 상태를 변경하고 실제 반영 상태를 다시 조회합니다.',
+      'public/unlisted 변경은 같은 턴의 명시 승인 후 confirmVisible=true가 필요합니다.',
+    ].join(' '),
+    {
+      videoId: z.string().min(1).max(64).describe('YouTube video ID'),
+      privacyStatus: z.enum(['private', 'unlisted', 'public']),
+      confirmVisible: z.boolean().default(false).describe('public/unlisted 변경에 대한 명시 확인'),
+    },
+    async (input) => {
+      const auth = await requireAuth(YOUTUBE_SCOPE);
+      return text(await updateYouTubeVideoPrivacy(auth, input));
+    },
+  );
+
   server.tool(
     'video_plan_from_story',
     [

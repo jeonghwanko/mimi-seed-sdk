@@ -71,6 +71,11 @@ export const AUTH_DOMAINS = {
     ],
     summary: 'ga4_* — property/data stream 생성·조회 + 리포트',
   },
+  youtube: {
+    label: 'YouTube',
+    scopes: ['https://www.googleapis.com/auth/youtube.force-ssl'],
+    summary: 'youtube_* — 영상 업로드·처리 상태 조회·공개 상태 변경',
+  },
 } as const satisfies Record<string, AuthDomainDef>;
 
 export type AuthDomainId = keyof typeof AUTH_DOMAINS;
