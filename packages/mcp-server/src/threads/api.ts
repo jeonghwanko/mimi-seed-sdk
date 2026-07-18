@@ -3,7 +3,7 @@ import { metaApiError } from '../lib/meta-auth.js';
 
 // Threads Graph API. Instagram 과 달리 base 가 하나뿐이라 토큰 prefix 분기가 없다.
 //   graph.threads.net/v1.0
-// 게시 흐름은 인스타와 같은 2단계: container 생성(/threads) → publish(/threads_publish).
+// 게시 흐름은 인스타와 같은 2단계: container 생성(/me/threads) → publish(/me/threads_publish).
 // 차이: (1) 텍스트 전용 게시가 1급 시민(media_type=TEXT), (2) 미디어 컨테이너는 처리 시간이
 //       필요해 publish 전에 status 를 폴링해야 한다, (3) 캐러셀 최대 20장(인스타는 10장).
 const BASE = 'https://graph.threads.net/v1.0';
@@ -158,7 +158,7 @@ async function waitForContainer(cfg: ThreadsConfig, containerId: string): Promis
 async function publish(cfg: ThreadsConfig, creationId: string): Promise<PublishResult> {
   const published = await thFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/threads_publish`,
+    '/me/threads_publish',
     { creation_id: creationId, access_token: cfg.accessToken },
     'POST',
   );
@@ -180,7 +180,7 @@ export async function postText(
 
   const container = await thFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/threads`,
+    '/me/threads',
     params,
     'POST',
   );
@@ -203,7 +203,7 @@ export async function postCarousel(
   for (const url of imageUrls) {
     const child = await thFetch<{ id: string }>(
       cfg.accessToken,
-      `/${cfg.userId}/threads`,
+      '/me/threads',
       { media_type: 'IMAGE', image_url: url, is_carousel_item: 'true', access_token: cfg.accessToken },
       'POST',
     );
@@ -216,7 +216,7 @@ export async function postCarousel(
   // Step 2: carousel container 생성
   const carousel = await thFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/threads`,
+    '/me/threads',
     { media_type: 'CAROUSEL', children: childIds.join(','), text, access_token: cfg.accessToken },
     'POST',
   );
