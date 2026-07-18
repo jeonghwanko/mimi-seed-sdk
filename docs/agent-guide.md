@@ -80,13 +80,13 @@ every credential, which also tells them where to obtain each token
 
 | Service | Fix |
 |---------|-----|
-| Google (Firebase/AdMob/Play/Ads/GSC/GA4/IAM/BigQuery) | tool `mimi_seed_auth_start` → give the user the OAuth URL, **or** `mimi-seed auth login` |
+| Google (Firebase/AdMob/Play/Ads/GSC/GA4/IAM/BigQuery) | tool `mimi_seed_auth_start` → give the user the OAuth URL, **or** `mimi-seed auth login`. Both accept a **domain subset** (`domains=["ga4","googleads"]` / `--domains ga4,googleads`) — request only what the task needs; re-auth keeps prior grants (incremental). Omit for all domains |
 | App Store Connect | `mimi-seed auth appstore` → verify with `appstore_verify_credentials` |
 | Play service account | `mimi-seed auth playstore`, or register per-package with `playstore_register_service_account`. **Optional** — the OAuth token carries `androidpublisher`, so this is only needed for headless/CI |
 | BigQuery | `mimi-seed auth bigquery` (optional — OAuth works too) |
 | Jenkins | `mimi-seed auth jenkins` (probes the server before saving) |
 | GitHub / GitLab CI | `mimi-seed auth ci` |
-| Google Ads | `mimi-seed auth googleads` — needs the `adwords` OAuth scope; an old token may need `mimi-seed auth login --force` |
+| Google Ads | `mimi-seed auth googleads` — needs the `adwords` OAuth scope; an old token may need `mimi-seed auth login --domains googleads` (adds the grant, keeps the rest) |
 | Facebook / Instagram / Threads | `mimi-seed auth facebook` / `mimi-seed auth instagram` / `mimi-seed auth threads` |
 
 `mimi-seed auth meta` opens the combined social setup entry point when the user wants to review or reconnect

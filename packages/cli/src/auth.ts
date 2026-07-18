@@ -46,6 +46,7 @@ ${kleur.bold("한 번에 다 연결:")}
   ${kleur.cyan("mimi-seed setup")}             안내를 따라가며 순서대로 연결 (권장)
 
 ${kleur.bold("login 옵션:")}
+  --domains <ids>  요청할 권한 도메인만 선택 (쉼표 구분, 예: ga4,googleads — 기존 권한 유지)
   --no-browser     URL 자동 오픈 안 함 (직접 복붙)
   --timeout <초>   콜백 대기 시간 (기본 600)
   --force          기존 토큰 무시하고 강제 재로그인
@@ -83,6 +84,7 @@ ${kleur.bold("Connect them all in one pass:")}
   ${kleur.cyan("mimi-seed setup")}             guided, one credential at a time (recommended)
 
 ${kleur.bold("login options:")}
+  --domains <ids>  request only these permission domains (comma-separated, e.g. ga4,googleads — prior grants are kept)
   --no-browser     don't open the URL automatically (paste it yourself)
   --timeout <sec>  how long to wait for the callback (default 600)
   --force          ignore the existing token and sign in again
@@ -158,6 +160,10 @@ export async function cmdAuth(args: string[]): Promise<void> {
   }
 
   // 기본 Google OAuth (mimi-seed-auth)
+  // `mimi-seed auth --domains ga4` 처럼 서브명령 없이 플래그부터 시작하면 login 으로 위임.
+  if (sub?.startsWith("--")) {
+    return void exitWith(await runMcpBin("mimi-seed-auth", args));
+  }
   let mcpArgs: string[];
   switch (sub) {
     case undefined:

@@ -7,20 +7,10 @@ import os from 'node:os';
 import { getMcpOAuthClient } from './constants.js';
 import { AuthError, classifyError, type AuthErrorPayload } from './errors.js';
 
-const SCOPES = [
-  'https://www.googleapis.com/auth/firebase',
-  'https://www.googleapis.com/auth/cloud-platform',
-  'https://www.googleapis.com/auth/admob.readonly',
-  'https://www.googleapis.com/auth/admob.monetization',
-  'https://www.googleapis.com/auth/androidpublisher',
-  'https://www.googleapis.com/auth/adwords', // Google Ads API (googleads_* tools)
-  'https://www.googleapis.com/auth/webmasters', // Search Console API (gsc_* tools, 사이트맵 제출 포함)
-  'https://www.googleapis.com/auth/analytics.edit', // GA4 Analytics Admin API (ga4_* tools — property/data stream 생성·조회)
-  // GA4 **Data API**(analyticsdata — ga4_run_report)는 analytics.edit 을 받지 않는다.
-  // Admin API 전용 스코프이기 때문. 이게 빠져 있으면 property 목록은 보이는데 리포트만
-  // 403 으로 막혀서, "API 가 꺼졌나" 로 오진하기 쉽다. (2026-07 실사고)
-  'https://www.googleapis.com/auth/analytics.readonly',
-];
+// 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
+import { scopesForDomains, mergeScopeStrings, type AuthDomainId } from './scopes.js';
+
+export type { AuthDomainId } from './scopes.js';
 
 // Primary config dir. Legacy `~/.preseed` is read as a fallback during the
 // rebrand so existing auth sessions don't force a re-login; new writes go to
@@ -149,11 +139,15 @@ let activeAuthServer: http.Server | null = null;
  * 호출자가 URL을 사용자에게 전달하거나 `open()`을 직접 호출.
  * `wait` Promise: 토큰 저장 시 resolve, 타임아웃/에러 시 reject.
  * 재호출 시 기존 세션 자동 정리.
+ *
+ * `domains` 로 권한 도메인 서브셋만 요청할 수 있다 (미지정 시 전체 — 기존 동작).
+ * include_granted_scopes 덕에 재로그인은 기존 부여 스코프를 유지한 채 새 스코프만
+ * 얹는다(incremental authorization) — 토큰 응답의 scope 필드에도 누적 전체가 온다.
  */
 export function startAuth(
   clientId: string,
   clientSecret: string,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; domains?: readonly AuthDomainId[] } = {},
 ): { url: string; wait: Promise<StoredTokens> } {
   if (activeAuthServer) {
     try { activeAuthServer.close(); } catch { /* noop */ }
@@ -162,10 +156,12 @@ export function startAuth(
 
   saveCredentials(clientId, clientSecret);
   const oauth2Client = createOAuth2Client(clientId, clientSecret);
+  const requestedScopes = scopesForDomains(options.domains);
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    scope: SCOPES,
+    scope: requestedScopes,
     prompt: 'consent',
+    include_granted_scopes: true,
   });
 
   const wait = new Promise<StoredTokens>((resolve, reject) => {
@@ -221,12 +217,20 @@ export function startAuth(
           }));
           return;
         }
+        // scope 는 항상 기록한다 — 그리고 누적(monotonic)으로 저장한다.
+        //   1) include_granted_scopes 로 Google 측 grant 는 (기존 부여분 ∪ 이번 요청분)이다.
+        //   2) 응답의 tokens.scope 는 그 합집합이어야 하지만, 만약 Google 이 좁혀서 주거나
+        //      생략하면(빈 값) 여기서 기존 기록 + 이번 요청 스코프로 보정한다.
+        // 이렇게 해야 "scope 미기록 = 추적 이전 legacy 토큰" 불변식이 유지된다 — 도메인
+        // 선택형 로그인이 이를 깨서, 좁은 로그인이 legacy 로 오인돼 pre-flight 를 우회하는
+        // 것을 막는다. (기존엔 응답 scope 로 통째 덮어써서 이 두 위험에 모두 노출됐다.)
+        const priorScope = getStoredTokens()?.scope;
         const stored: StoredTokens = {
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           token_type: tokens.token_type ?? 'Bearer',
           expiry_date: tokens.expiry_date ?? Date.now() + 3600_000,
-          ...(tokens.scope && { scope: tokens.scope }),
+          scope: mergeScopeStrings(priorScope, tokens.scope ?? requestedScopes.join(' ')),
         };
         saveTokens(stored);
 
@@ -279,8 +283,12 @@ export function startAuth(
  * Interactive login — opens browser, waits for callback.
  * startAuth() 래퍼 — CLI에서 사용.
  */
-export async function login(clientId: string, clientSecret: string): Promise<StoredTokens> {
-  const { url, wait } = startAuth(clientId, clientSecret);
+export async function login(
+  clientId: string,
+  clientSecret: string,
+  options: { domains?: readonly AuthDomainId[] } = {},
+): Promise<StoredTokens> {
+  const { url, wait } = startAuth(clientId, clientSecret, options);
   console.log('🔐 브라우저에서 Google 로그인 중...');
   open(url);
   return wait;
