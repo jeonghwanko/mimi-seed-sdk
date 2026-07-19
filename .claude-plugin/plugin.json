@@ -2,7 +2,7 @@
   "name": "mimi-seed",
   "displayName": "Mimi Seed",
   "version": "0.13.0",
-  "description": "Firebase, AdMob, Google Play, App Store Connect를 Claude Code에서 관리하는 MCP 도구와 출시 운영 스킬 번들.",
+  "description": "Firebase, AdMob, Google Play, App Store Connect와 스토리 기반 영상·YouTube 게시를 Claude Code에서 관리하는 MCP 도구·스킬 번들.",
   "author": {
     "name": "yoonion",
     "url": "https://mimi-seed.pryzm.gg"
@@ -16,6 +16,8 @@
     "admob",
     "google-play",
     "app-store",
+    "youtube",
+    "video",
     "release-automation"
   ]
 }

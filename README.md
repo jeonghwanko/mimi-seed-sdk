@@ -359,6 +359,7 @@ Bundled skills (auto-loaded by the Claude Code / Codex plugin from [`skills/`](s
 | `playstore-publish` | Play Store listing, images, release notes, track promote |
 | `appstore-publish` | App Store Connect What's New + screenshots |
 | `deploy` | End-to-end: CI build → blocker check → notes → apply |
+| `video-create-publish` | Story/Shorts production → typography and crop review → render validation → optional YouTube publish |
 | `mimi-seed-install` | Install & register from a git checkout — contributors / unpublished code |
 | `mimi-seed-update` | Update to the latest server / skills / CLI — and verify the *running* version |
 

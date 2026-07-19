@@ -1,0 +1,4 @@
+interface:
+  display_name: "영상 제작·YouTube 게시"
+  short_description: "피사체·타이포·모션을 검수해 고품질 영상을 제작·게시"
+  default_prompt: "Use $video-create-publish to produce a polished vertical short and publish it to YouTube with Mimi Seed."

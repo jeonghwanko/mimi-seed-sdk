@@ -177,6 +177,10 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 `playstore_update_release_notes` / `appstore_update_whats_new`.
 
 ### Story → researched video
+For visual production, use the bundled `video-create-publish` skill. It requires an explicit typography system,
+aspect-ratio-specific human-safe crops, video-native motion, an original-resolution frame review, and a saved
+contact sheet; codec validation alone is not a quality pass.
+
 1. `video_plan_from_story` — create the project and scene plan.
 2. `video_research_youtube` — collect reference-only metadata; never treat a result as a render asset.
 3. `video_search_stock_assets` — find licensed Pexels candidates.
