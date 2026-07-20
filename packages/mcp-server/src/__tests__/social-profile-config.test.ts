@@ -75,6 +75,17 @@ describe('social profile config', () => {
     expect(loadThreadsConfig({ homeDir, startDir: projectDir })).toBeNull();
   });
 
+  it('socialProfiles 컨테이너가 잘못되면 기본 계정으로 폴백하지 않는다', () => {
+    const legacyDir = path.join(homeDir, '.mimi-seed');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'instagram.json'), JSON.stringify({
+      accessToken: 'IGAA_LEGACY', userId: 'legacy',
+    }));
+    writeManifest({ socialProfiles: 'weather' });
+
+    expect(() => loadInstagramConfig({ homeDir, startDir: projectDir })).toThrow(/객체여야/);
+  });
+
   it('경로 탈출이 가능한 프로필 ID를 거부한다', () => {
     expect(() => resolveSocialConfigTarget('instagram', {
       profile: '../outside',

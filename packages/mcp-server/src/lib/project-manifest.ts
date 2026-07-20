@@ -109,7 +109,12 @@ export function manifestSocialProfile(
   m: ProjectManifest,
   platform: SocialPlatform,
 ): string | null {
-  const value = m.socialProfiles?.[platform];
+  const profiles = m.socialProfiles as unknown;
+  if (profiles === undefined) return null;
+  if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    throw new Error(`${MANIFEST_FILENAME}의 socialProfiles는 객체여야 합니다.`);
+  }
+  const value = (profiles as Partial<Record<SocialPlatform, unknown>>)[platform];
   if (value === undefined) return null;
   if (typeof value !== 'string' || !isValidSocialProfileId(value)) {
     throw new Error(

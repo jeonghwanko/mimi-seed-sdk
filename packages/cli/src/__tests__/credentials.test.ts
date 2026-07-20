@@ -143,6 +143,20 @@ describe('detectAll', () => {
       detail: 'profile missing-profile',
     });
   });
+
+  it('socialProfiles 컨테이너가 잘못되면 기존 기본 토큰을 연결로 보지 않는다', () => {
+    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY', userId: 'legacy' });
+    const project = path.join(home, 'project');
+    fs.mkdirSync(project);
+    fs.writeFileSync(path.join(project, '.mimi-seed.json'), JSON.stringify({
+      socialProfiles: 'weather',
+    }));
+
+    expect(detectAll(home, project).get('instagram')).toMatchObject({
+      present: false,
+      detail: expect.stringContaining('must be an object'),
+    });
+  });
 });
 
 describe('isSatisfied — fallback', () => {
