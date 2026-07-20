@@ -11,6 +11,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const MANIFEST_FILENAME = '.mimi-seed.json';
+export const SOCIAL_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+export type SocialPlatform = 'instagram' | 'threads';
 
 /** 매니페스트가 인지하는 서비스 id. status 매칭 로직이 이 키를 기준으로 동작한다. */
 export type ManifestServiceId =
@@ -41,6 +44,8 @@ export interface ProjectManifest {
   displayName?: string;
   description?: string;
   services?: Partial<Record<ManifestServiceId, ManifestService>>;
+  /** 플랫폼별로 ~/.mimi-seed/social-profiles/<id>.json 을 선택한다. */
+  socialProfiles?: Partial<Record<SocialPlatform, string>>;
 }
 
 export interface LoadedManifest {
@@ -92,4 +97,25 @@ export function manifestServiceEntries(
   return (Object.keys(svc) as ManifestServiceId[])
     .filter((k) => svc[k] != null)
     .map((k) => [k, svc[k] as ManifestService]);
+}
+
+/** 파일명으로 안전하게 사용할 수 있는 공개 프로필 id인지 확인한다. */
+export function isValidSocialProfileId(value: string): boolean {
+  return SOCIAL_PROFILE_ID_PATTERN.test(value);
+}
+
+/** 매니페스트에 지정된 플랫폼 프로필. 잘못된 값은 조용히 무시하지 않고 오류로 막는다. */
+export function manifestSocialProfile(
+  m: ProjectManifest,
+  platform: SocialPlatform,
+): string | null {
+  const value = m.socialProfiles?.[platform];
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !isValidSocialProfileId(value)) {
+    throw new Error(
+      `${MANIFEST_FILENAME}의 socialProfiles.${platform} 값이 올바르지 않습니다. ` +
+      '영문자·숫자로 시작하는 1~64자의 영문자/숫자/점/밑줄/하이픈만 사용할 수 있습니다.',
+    );
+  }
+  return value;
 }

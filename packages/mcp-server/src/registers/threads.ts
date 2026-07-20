@@ -4,14 +4,21 @@ import { loadThreadsConfig, requireThreadsConfig } from '../threads/config.js';
 import { connectThreads, refreshThreadsToken } from '../threads/setup.js';
 import * as api from '../threads/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
+import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
+import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
 
 export function registerThreadsTools(server: McpServer) {
+  const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
+    '저장/사용할 소셜 프로필 ID. 생략 시 .mimi-seed.json의 socialProfiles.threads, 없으면 기존 기본 설정',
+  );
+
   server.tool(
     'threads_save_config',
     [
       'Threads 토큰을 ~/.mimi-seed/threads.json (mode 0600)에 저장합니다.',
       'accessToken은 Threads Graph API long-lived 토큰 (약 60일).',
       'userId 미입력 시 토큰으로 자동 조회 (GET /me).',
+      'profile 지정 시 ~/.mimi-seed/social-profiles/<profile>.json에 저장합니다.',
       '저장 직후 토큰 유효성도 자동 검증.',
       'Instagram 과 별개 계정·별개 토큰입니다 (threads_basic, threads_content_publish 권한 필요).',
     ].join(' '),
@@ -19,10 +26,11 @@ export function registerThreadsTools(server: McpServer) {
       accessToken: z.string().describe('Threads Graph API long-lived access token (약 60일)'),
       userId: z.string().optional().describe('Threads user ID (생략 시 자동 조회)'),
       assumeIssuedNow: z.boolean().default(true).describe('expiresAt = 지금 + 60일 자동 계산'),
+      profile: profileSchema,
     },
-    async ({ accessToken, userId, assumeIssuedNow }) => {
+    async ({ accessToken, userId, assumeIssuedNow, profile }) => {
       // 구현은 threads/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
-      const result = await connectThreads(accessToken, userId, assumeIssuedNow);
+      const result = await connectThreads(accessToken, userId, assumeIssuedNow, { profile });
       return { content: [{ type: 'text', text: result.text }] };
     },
   );
@@ -34,10 +42,10 @@ export function registerThreadsTools(server: McpServer) {
       '성공하면 새 토큰과 실제 expires_in을 저장하고 계정을 다시 검증합니다.',
       '이미 만료·철회된 토큰은 갱신할 수 없으므로 mimi-seed auth threads로 재연결하세요.',
     ].join(' '),
-    {},
-    async () => {
-      const cfg = requireThreadsConfig();
-      const result = await refreshThreadsToken(cfg.accessToken);
+    { profile: profileSchema },
+    async ({ profile }) => {
+      const cfg = requireThreadsConfig({ profile });
+      const result = await refreshThreadsToken(cfg.accessToken, { profile });
       return { content: [{ type: 'text', text: result.text }], isError: !result.ok };
     },
   );
@@ -45,9 +53,9 @@ export function registerThreadsTools(server: McpServer) {
   server.tool(
     'threads_get_account',
     'Threads 계정 정보 조회 + 저장된 토큰 유효성 검증.',
-    {},
-    async () => {
-      const cfg = requireThreadsConfig();
+    { profile: profileSchema },
+    async ({ profile }) => {
+      const cfg = requireThreadsConfig({ profile });
       const account = await api.getAccount(cfg);
 
       return {
@@ -75,9 +83,10 @@ export function registerThreadsTools(server: McpServer) {
     {
       text: z.string().max(500).describe('게시할 텍스트 (최대 500자, 멘션/해시태그/줄바꿈 가능)'),
       imageUrl: z.string().url().optional().describe('이미지의 public URL (생략 시 텍스트 전용 게시)'),
+      profile: profileSchema,
     },
-    async ({ text, imageUrl }) => {
-      const cfg = requireThreadsConfig();
+    async ({ text, imageUrl, profile }) => {
+      const cfg = requireThreadsConfig({ profile });
       const result = await api.postText(cfg, text, imageUrl);
       return {
         content: [{
@@ -102,9 +111,10 @@ export function registerThreadsTools(server: McpServer) {
     {
       imageUrls: z.array(z.string().url()).min(2).max(20).describe('이미지 URL 배열 (2~20장)'),
       text: z.string().max(500).describe('캡션 텍스트 (최대 500자)'),
+      profile: profileSchema,
     },
-    async ({ imageUrls, text }) => {
-      const cfg = requireThreadsConfig();
+    async ({ imageUrls, text, profile }) => {
+      const cfg = requireThreadsConfig({ profile });
       const result = await api.postCarousel(cfg, imageUrls, text);
       return {
         content: [{
@@ -122,13 +132,18 @@ export function registerThreadsTools(server: McpServer) {
   // 진단용 — 현재 저장된 Threads 설정 요약 (facebook_current_config 와 동일한 패턴).
   server.tool(
     'threads_current_config',
-    '현재 저장된 Threads 연결 설정을 확인합니다 (~/.mimi-seed/threads.json).',
-    {},
-    async () => {
-      const cfg = loadThreadsConfig();
+    '현재 선택된 Threads 연결 설정을 확인합니다. 프로젝트 매핑 또는 profile 인자를 따릅니다.',
+    { profile: profileSchema },
+    async ({ profile }) => {
+      const options = { profile };
+      const target = resolveSocialConfigTarget('threads', options);
+      const cfg = loadThreadsConfig(options);
       if (!cfg) {
         return {
-          content: [{ type: 'text', text: '❌ Threads 미설정 → threads_save_config 또는 mimi-seed auth threads' }],
+          content: [{
+            type: 'text',
+            text: `❌ Threads ${socialTargetLabel(target)} 미설정 → threads_save_config 또는 mimi-seed auth threads`,
+          }],
         };
       }
       return {
@@ -136,6 +151,7 @@ export function registerThreadsTools(server: McpServer) {
           type: 'text',
           text: [
             '✅ Threads 연결됨',
+            `   대상: ${socialTargetLabel(target)}`,
             `   @${cfg.username ?? '(username 미저장)'}`,
             `   userId: ${cfg.userId}`,
             `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,

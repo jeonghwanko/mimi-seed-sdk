@@ -30,6 +30,20 @@ npx mimi-seed auth instagram
 npx mimi-seed auth threads
 ```
 
+For multiple accounts, save named profiles and map them per project:
+
+```bash
+npx mimi-seed auth instagram --profile my-app
+npx mimi-seed auth threads --profile my-app
+```
+
+```json
+{ "socialProfiles": { "instagram": "my-app", "threads": "my-app" } }
+```
+
+Put the JSON in the project's `.mimi-seed.json`. The mapping is automatic; an explicit MCP `profile` argument
+overrides it. With no mapping, the existing default account files continue to work.
+
 See the [credential reference](../credentials.md#facebook) for token and account-type requirements.
 
 ## 2. Verify the target before posting

@@ -4,6 +4,8 @@
 import { saveInstagramConfig } from './config.js';
 import * as api from './api.js';
 import type { ConnectResult } from '../facebook/setup.js';
+import type { SocialConfigOptions } from '../social/profile-store.js';
+import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -16,7 +18,10 @@ export async function connectInstagram(
   accessToken: string,
   userId?: string,
   assumeIssuedNow = true,
+  options: SocialConfigOptions = {},
 ): Promise<ConnectResult> {
+  // 프로필 ID를 네트워크 호출 전에 검증하고, 성공 응답에 실제 저장 대상을 남긴다.
+  const target = resolveSocialConfigTarget('instagram', options);
   const apiType = detectApiType(accessToken);
 
   let resolvedUserId = userId;
@@ -47,11 +52,12 @@ export async function connectInstagram(
       userId: resolvedUserId,
       expiresAt,
       username: account.username,
-    });
+    }, options);
     return {
       ok: true,
       text: [
         `✅ Instagram 연결 확인 완료 (${apiType})`,
+        `   저장 대상: ${socialTargetLabel(target)}`,
         `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
         `   ID: ${account.id}`,
         account.account_type ? `   타입: ${account.account_type}` : '',

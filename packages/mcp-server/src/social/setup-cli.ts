@@ -11,6 +11,7 @@
 //   mimi-seed-social-auth instagram    → Instagram 만
 //   mimi-seed-social-auth threads      → Threads 만
 //   mimi-seed-social-auth all          → 세 플랫폼을 순서대로
+//   mimi-seed-social-auth instagram --profile my-app → 명시한 프로필에 저장
 //
 // 주의: connectFacebook / connectInstagram / connectThreads 이 돌려주는 result.text 는 MCP 도구와
 // 공유하는 텍스트라 여기서 번역하지 않는다 (그대로 출력한다).
@@ -23,6 +24,7 @@ import { connectFacebook } from '../facebook/setup.js';
 import { connectInstagram } from '../instagram/setup.js';
 import { connectThreads, refreshThreadsToken } from '../threads/setup.js';
 import { resolveLang } from '../lib/lang.js';
+import { resolveSocialConfigTarget } from './profile-store.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
 const ko = {
@@ -64,6 +66,8 @@ const ko = {
   thExistingAction: '  [Enter/y] 기존 토큰 자동 갱신  [r] 새 토큰으로 재연결  [n] 건너뛰기: ',
   thRefreshing: '  🔄 기존 Threads 토큰 갱신 중...',
   thRefreshFallback: '  자동 갱신에 실패했습니다. 새 토큰을 입력해 재연결할 수 있습니다.',
+  profile: (id: string) => `  소셜 프로필: ${id}`,
+  invalidArgs: '  사용법: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>]',
 };
 
 const en: typeof ko = {
@@ -106,6 +110,8 @@ const en: typeof ko = {
   thExistingAction: '  [Enter/y] refresh current token  [r] reconnect with a new token  [n] skip: ',
   thRefreshing: '  🔄 Refreshing the existing Threads token...',
   thRefreshFallback: '  Automatic refresh failed. You can reconnect with a new token.',
+  profile: (id: string) => `  Social profile: ${id}`,
+  invalidArgs: '  Usage: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>]',
 };
 
 const M = resolveLang() === 'en' ? en : ko;
@@ -164,10 +170,13 @@ async function setupFacebook(): Promise<boolean> {
   return result.ok;
 }
 
-async function setupInstagram(): Promise<boolean> {
+async function setupInstagram(profile?: string): Promise<boolean> {
   console.log('');
   console.log(M.igHeader);
-  const existing = loadInstagramConfig();
+  const options = { profile };
+  const target = resolveSocialConfigTarget('instagram', options);
+  if (target.profile) console.log(M.profile(target.profile));
+  const existing = loadInstagramConfig(options);
   if (existing && !(await confirmReconnect('Instagram', existing.username ?? existing.userId))) {
     return true;
   }
@@ -186,24 +195,27 @@ async function setupInstagram(): Promise<boolean> {
   const userId = await ask(M.igAskUserId);
 
   console.log(M.verifying);
-  const result = await connectInstagram(token, userId || undefined);
+  const result = await connectInstagram(token, userId || undefined, true, options);
   console.log('');
   console.log(indent(result.text));
   if (!result.ok) console.log(M.notSaved);
   return result.ok;
 }
 
-async function setupThreads(): Promise<boolean> {
+async function setupThreads(profile?: string): Promise<boolean> {
   console.log('');
   console.log(M.thHeader);
-  const existing = loadThreadsConfig();
+  const options = { profile };
+  const target = resolveSocialConfigTarget('threads', options);
+  if (target.profile) console.log(M.profile(target.profile));
+  const existing = loadThreadsConfig(options);
   if (existing) {
     console.log(M.already('Threads', existing.username ?? existing.userId));
     const action = (await ask(M.thExistingAction)).toLowerCase();
     if (action === 'n') return true;
     if (action !== 'r') {
       console.log(M.thRefreshing);
-      const refreshed = await refreshThreadsToken(existing.accessToken);
+      const refreshed = await refreshThreadsToken(existing.accessToken, options);
       console.log('');
       console.log(indent(refreshed.text));
       if (refreshed.ok) return true;
@@ -226,7 +238,7 @@ async function setupThreads(): Promise<boolean> {
   const userId = await ask(M.thAskUserId);
 
   console.log(M.verifying);
-  const result = await connectThreads(token, userId || undefined);
+  const result = await connectThreads(token, userId || undefined, true, options);
   console.log('');
   console.log(indent(result.text));
   if (!result.ok) console.log(M.notSaved);
@@ -241,7 +253,20 @@ function indent(text: string): string {
 }
 
 async function main() {
-  const target = (process.argv[2] ?? '').toLowerCase();
+  const args = process.argv.slice(2);
+  const profileIndex = args.indexOf('--profile');
+  const profile = profileIndex >= 0 ? args[profileIndex + 1] : undefined;
+  if (profileIndex >= 0 && !profile) {
+    console.error(M.invalidArgs);
+    process.exit(1);
+  }
+  const positional = args.filter((arg, index) =>
+    arg !== '--profile' && (profileIndex < 0 || index !== profileIndex + 1));
+  if (positional.length > 1 || args.some((arg) => arg.startsWith('--') && arg !== '--profile')) {
+    console.error(M.invalidArgs);
+    process.exit(1);
+  }
+  const target = (positional[0] ?? '').toLowerCase();
 
   console.log('');
   console.log(M.title);
@@ -250,29 +275,29 @@ async function main() {
   if (target === 'facebook' || target === 'fb') {
     ok = await setupFacebook();
   } else if (target === 'instagram' || target === 'ig') {
-    ok = await setupInstagram();
+    ok = await setupInstagram(profile);
   } else if (target === 'threads' || target === 'th') {
-    ok = await setupThreads();
+    ok = await setupThreads(profile);
   } else if (target === 'all' || target === 'meta') {
     const fb = await setupFacebook();
-    const ig = await setupInstagram();
-    const th = await setupThreads();
+    const ig = await setupInstagram(profile);
+    const th = await setupThreads(profile);
     ok = fb && ig && th;
   } else {
     const which = await ask(M.which);
     const c = which.toLowerCase();
     if (c === 'f') ok = await setupFacebook();
-    else if (c === 'i') ok = await setupInstagram();
-    else if (c === 't') ok = await setupThreads();
+    else if (c === 'i') ok = await setupInstagram(profile);
+    else if (c === 't') ok = await setupThreads(profile);
     else if (c === 'b') {
       // 기존 b=Facebook+Instagram 동작을 유지한다.
       const fb = await setupFacebook();
-      const ig = await setupInstagram();
+      const ig = await setupInstagram(profile);
       ok = fb && ig;
     } else if (c === 'a') {
       const fb = await setupFacebook();
-      const ig = await setupInstagram();
-      const th = await setupThreads();
+      const ig = await setupInstagram(profile);
+      const th = await setupThreads(profile);
       ok = fb && ig && th;
     } else {
       console.log(M.cancelled);

@@ -316,6 +316,10 @@ Drop a **`.mimi-seed.json`** at your repo root declaring the services the projec
 ```json
 {
   "project": "my-app",
+  "socialProfiles": {
+    "instagram": "my-app",
+    "threads": "my-app"
+  },
   "services": {
     "oauth":     { "required": true },
     "bigquery":  { "required": true, "projectId": "my-gcp-project", "dataset": "analytics_123",
@@ -326,6 +330,12 @@ Drop a **`.mimi-seed.json`** at your repo root declaring the services the projec
   }
 }
 ```
+
+`socialProfiles` selects named local credentials from
+`~/.mimi-seed/social-profiles/<profile>.json`. A profile file may hold both `instagram` and `threads`
+credentials, and different projects can map either platform to a different profile. When no mapping is present,
+the legacy `~/.mimi-seed/instagram.json` and `threads.json` files remain the defaults. Create or refresh a named
+profile with `mimi-seed auth instagram --profile my-app` and `mimi-seed auth threads --profile my-app`.
 
 A teammate who clones the repo just runs `mimi-seed doctor` (or asks the agent "what am I
 missing?") and follows the ❌ items. `bigquery` reports honestly whether a service account

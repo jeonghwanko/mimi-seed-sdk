@@ -12,6 +12,11 @@ import path from "node:path";
 import type { McpBin } from "./mcp-bin.js";
 import type { Lang } from "./settings.js";
 import { resolveLang } from "./settings.js";
+import {
+  findProjectManifest,
+  manifestSocialProfile,
+  type SocialPlatform,
+} from "./project-manifest.js";
 
 /** 사람이 읽는 텍스트는 언어별로 들고 있는다 — 렌더 시점에 resolveLang() 으로 고른다. */
 export type LocalizedText = Record<Lang, string>;
@@ -74,7 +79,7 @@ export interface CredSpec {
   /** docs/credentials.md 의 앵커 (마법사가 딥링크한다). */
   docsAnchor?: string;
   note?: LocalizedText;
-  detect(home: string): Detected;
+  detect(home: string, startDir?: string): Detected;
 }
 
 // ── 지역화 접근자 — 렌더 시점에 언어를 고른다 (모듈 로드 시점이 아니다). ──
@@ -129,8 +134,13 @@ function detectSocialToken(
   file: string,
   idKey: "pageId" | "userId",
   tokenKey: "pageAccessToken" | "accessToken",
+  nestedPlatform?: SocialPlatform,
 ): Detected {
-  const cfg = readJson<Record<string, unknown>>(home, file);
+  const root = readJson<Record<string, unknown>>(home, file);
+  const nested = nestedPlatform ? root?.[nestedPlatform] : root;
+  const cfg = nested && typeof nested === "object" && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : null;
   const id = cfg?.[idKey];
   const token = cfg?.[tokenKey];
   if (typeof id !== "string" || !id || typeof token !== "string" || !token) {
@@ -154,6 +164,37 @@ function detectSocialToken(
     return { present: true, detail: display, freshness: "expiring", daysRemaining };
   }
   return { present: true, detail: display, freshness: "fresh", daysRemaining };
+}
+
+function detectProjectSocialToken(
+  home: string,
+  startDir: string | undefined,
+  platform: SocialPlatform,
+): Detected {
+  const idKey = "userId" as const;
+  const tokenKey = "accessToken" as const;
+  const loaded = findProjectManifest(startDir ?? process.cwd());
+  if (!loaded) return detectSocialToken(home, `${platform}.json`, idKey, tokenKey);
+
+  let profile: string | null;
+  try {
+    profile = manifestSocialProfile(loaded.manifest, platform);
+  } catch (error) {
+    return { present: false, detail: error instanceof Error ? error.message : String(error) };
+  }
+  if (!profile) return detectSocialToken(home, `${platform}.json`, idKey, tokenKey);
+
+  const detected = detectSocialToken(
+    home,
+    path.join("social-profiles", `${profile}.json`),
+    idKey,
+    tokenKey,
+    platform,
+  );
+  return {
+    ...detected,
+    detail: detected.detail ? `${profile}: ${detected.detail}` : `profile ${profile}`,
+  };
 }
 
 /** Play SA 는 기본 파일과 패키지별 디렉토리 **양쪽**을 봐야 한다. */
@@ -511,7 +552,7 @@ export const CREDENTIALS: readonly CredSpec[] = [
       ],
     },
     docsAnchor: "instagram",
-    detect: (home) => detectSocialToken(home, "instagram.json", "userId", "accessToken"),
+    detect: (home, startDir) => detectProjectSocialToken(home, startDir, "instagram"),
   },
   {
     id: "threads",
@@ -541,7 +582,7 @@ export const CREDENTIALS: readonly CredSpec[] = [
       ],
     },
     docsAnchor: "threads",
-    detect: (home) => detectSocialToken(home, "threads.json", "userId", "accessToken"),
+    detect: (home, startDir) => detectProjectSocialToken(home, startDir, "threads"),
   },
   {
     id: "anthropic",
@@ -585,8 +626,11 @@ export function tryCredById(id: string): CredSpec | undefined {
   return CREDENTIALS.find((c) => c.id === id);
 }
 
-export function detectAll(home: string = os.homedir()): Map<CredId, Detected> {
-  return new Map(CREDENTIALS.map((c) => [c.id, c.detect(home)]));
+export function detectAll(
+  home: string = os.homedir(),
+  startDir: string = process.cwd(),
+): Map<CredId, Detected> {
+  return new Map(CREDENTIALS.map((c) => [c.id, c.detect(home, startDir)]));
 }
 
 /** fallback 을 감안한 "동작하는가" 판정 — 예: Play SA 가 없어도 OAuth 가 있으면 동작한다. */

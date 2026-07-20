@@ -26,4 +26,12 @@ describe('cmdAuth social routes', () => {
       expect(runMcpBin).toHaveBeenCalledWith('mimi-seed-social-auth', [platform]);
     },
   );
+
+  it('Instagram/Threads 프로필 옵션을 setup bin에 전달한다', async () => {
+    await cmdAuth(['instagram', '--profile', 'weather-app']);
+    expect(runMcpBin).toHaveBeenCalledWith(
+      'mimi-seed-social-auth',
+      ['instagram', '--profile', 'weather-app'],
+    );
+  });
 });

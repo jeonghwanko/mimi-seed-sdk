@@ -77,7 +77,7 @@ export async function cmdDoctor(): Promise<void> {
   // 목록은 credentials.ts 레지스트리가 SSOT — 예전엔 여기 4줄만 손으로 들고 있어서
   // Jenkins/CI/Ads/Facebook/Instagram 은 doctor 에 아예 보이지 않았다.
   migrateLegacyJenkins(); // 레거시 config.json.jenkins → jenkins.json (1회성)
-  const detected = detectAll();
+  const detected = detectAll(undefined, cwd);
   for (const spec of CREDENTIALS) {
     const d = detected.get(spec.id)!;
     const base = credLabel(spec);

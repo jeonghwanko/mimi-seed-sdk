@@ -29,6 +29,20 @@ npx mimi-seed auth instagram
 npx mimi-seed auth threads
 ```
 
+여러 계정은 이름 있는 프로필로 저장하고 프로젝트별로 매핑한다.
+
+```bash
+npx mimi-seed auth instagram --profile my-app
+npx mimi-seed auth threads --profile my-app
+```
+
+```json
+{ "socialProfiles": { "instagram": "my-app", "threads": "my-app" } }
+```
+
+위 JSON을 프로젝트의 `.mimi-seed.json`에 넣는다. 매핑은 자동 적용되며 MCP 도구의 명시적 `profile`
+인자가 있으면 그것이 우선한다. 매핑이 없으면 기존 기본 계정 파일을 계속 사용한다.
+
 토큰 발급과 계정 유형은 [계정 연결 레퍼런스](../credentials.ko.md#facebook)를 참고한다.
 
 ## 2. 게시 전 계정 확인

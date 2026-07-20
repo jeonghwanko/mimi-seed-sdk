@@ -4,6 +4,8 @@
 import { saveThreadsConfig } from './config.js';
 import * as api from './api.js';
 import type { ConnectResult } from '../facebook/setup.js';
+import type { SocialConfigOptions } from '../social/profile-store.js';
+import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -11,7 +13,10 @@ export async function connectThreads(
   accessToken: string,
   userId?: string,
   assumeIssuedNow = true,
+  options: SocialConfigOptions = {},
 ): Promise<ConnectResult> {
+  // 프로필 ID를 네트워크 호출 전에 검증하고, 성공 응답에 실제 저장 대상을 남긴다.
+  const target = resolveSocialConfigTarget('threads', options);
   let resolvedUserId = userId;
   if (!resolvedUserId) {
     try {
@@ -40,11 +45,12 @@ export async function connectThreads(
       userId: resolvedUserId,
       expiresAt,
       username: account.username,
-    });
+    }, options);
     return {
       ok: true,
       text: [
         '✅ Threads 연결 확인 완료',
+        `   저장 대상: ${socialTargetLabel(target)}`,
         `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
         `   ID: ${account.id}`,
         expiresAt ? `   토큰 만료(추정): ${expiresAt.slice(0, 10)}` : '',
@@ -68,7 +74,11 @@ export async function connectThreads(
 }
 
 /** 기존 long-lived 토큰을 만료 전에 갱신하고, 계정 검증 성공 시에만 덮어쓴다. */
-export async function refreshThreadsToken(currentAccessToken: string): Promise<ConnectResult> {
+export async function refreshThreadsToken(
+  currentAccessToken: string,
+  options: SocialConfigOptions = {},
+): Promise<ConnectResult> {
+  const target = resolveSocialConfigTarget('threads', options);
   try {
     const refreshed = await api.refreshAccessToken(currentAccessToken);
     const userId = await api.fetchUserId(refreshed.accessToken);
@@ -79,11 +89,12 @@ export async function refreshThreadsToken(currentAccessToken: string): Promise<C
       userId,
       username: account.username,
       expiresAt,
-    });
+    }, options);
     return {
       ok: true,
       text: [
         '✅ Threads 토큰 갱신 완료',
+        `   저장 대상: ${socialTargetLabel(target)}`,
         `   계정: @${account.username}`,
         `   새 만료일: ${expiresAt.slice(0, 10)}`,
       ].join('\n'),

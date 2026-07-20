@@ -4,8 +4,13 @@ import { loadInstagramConfig, requireInstagramConfig } from '../instagram/config
 import { connectInstagram } from '../instagram/setup.js';
 import * as api from '../instagram/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
+import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
 
 export function registerInstagramTools(server: McpServer) {
+  const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
+    '저장/사용할 소셜 프로필 ID. 생략 시 .mimi-seed.json의 socialProfiles.instagram, 없으면 기존 기본 설정',
+  );
+
   server.tool(
     'instagram_save_config',
     [
@@ -14,16 +19,18 @@ export function registerInstagramTools(server: McpServer) {
       '  IGAA... = Instagram API with Instagram Login (Meta 신규, FB Page 불필요)',
       '  EAA...  = Instagram Graph API via Facebook Login (FB Page+IG Business 연결 필요)',
       'userId 미입력 시 토큰으로 자동 조회 (/me 또는 /me/accounts).',
+      'profile 지정 시 ~/.mimi-seed/social-profiles/<profile>.json에 저장합니다.',
       '저장 직후 토큰 유효성도 자동 검증.',
     ].join(' '),
     {
       accessToken: z.string().describe('Long-lived access token (60일)'),
       userId: z.string().optional().describe('Instagram Business Account ID (생략 시 자동 조회)'),
       assumeIssuedNow: z.boolean().default(true).describe('expiresAt = 지금 + 60일 자동 계산'),
+      profile: profileSchema,
     },
-    async ({ accessToken, userId, assumeIssuedNow }) => {
+    async ({ accessToken, userId, assumeIssuedNow, profile }) => {
       // 구현은 instagram/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
-      const result = await connectInstagram(accessToken, userId, assumeIssuedNow);
+      const result = await connectInstagram(accessToken, userId, assumeIssuedNow, { profile });
       return { content: [{ type: 'text', text: result.text }] };
     },
   );
@@ -31,9 +38,9 @@ export function registerInstagramTools(server: McpServer) {
   server.tool(
     'instagram_get_account',
     'Instagram 계정 정보 조회 + 저장된 토큰 유효성 검증.',
-    {},
-    async () => {
-      const cfg = requireInstagramConfig();
+    { profile: profileSchema },
+    async ({ profile }) => {
+      const cfg = requireInstagramConfig({ profile });
       const account = await api.getAccount(cfg);
 
       return {
@@ -63,9 +70,10 @@ export function registerInstagramTools(server: McpServer) {
     {
       imageUrl: z.string().url().describe('이미지의 public URL (HTTPS 권장)'),
       caption: z.string().describe('캡션 — 해시태그/멘션/줄바꿈 포함 가능'),
+      profile: profileSchema,
     },
-    async ({ imageUrl, caption }) => {
-      const cfg = requireInstagramConfig();
+    async ({ imageUrl, caption, profile }) => {
+      const cfg = requireInstagramConfig({ profile });
       const result = await api.postImage(cfg, imageUrl, caption);
       return {
         content: [{
@@ -91,9 +99,10 @@ export function registerInstagramTools(server: McpServer) {
     {
       imageUrls: z.array(z.string().url()).min(2).max(10).describe('이미지 URL 배열 (2~10장)'),
       caption: z.string().describe('캡션'),
+      profile: profileSchema,
     },
-    async ({ imageUrls, caption }) => {
-      const cfg = requireInstagramConfig();
+    async ({ imageUrls, caption, profile }) => {
+      const cfg = requireInstagramConfig({ profile });
       const result = await api.postCarousel(cfg, imageUrls, caption);
       return {
         content: [{
