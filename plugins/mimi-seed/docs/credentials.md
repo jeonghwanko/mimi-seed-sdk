@@ -265,6 +265,10 @@ Tokens last about 60 days.
 
 **Give it to the wizard:** just the token; the account ID is resolved for you. Verified before saving.
 
+**Multiple accounts:** save a named account with `mimi-seed auth instagram --profile <id>`. Map a project to it
+with `.mimi-seed.json` → `socialProfiles.instagram`. Named Instagram and Threads credentials share
+`~/.mimi-seed/social-profiles/<id>.json` but remain separate platform entries.
+
 **Expired token:** run `mimi-seed auth instagram`. `mimi-seed setup` also flags an expired token (or one with
 seven days or less remaining) and offers to reconnect it.
 
@@ -289,6 +293,9 @@ token — an Instagram token will not work here.
 3. Authorize with Threads login, then exchange the short-lived token for a **long-lived** one (~60 days)
 
 **Give it to the wizard:** just the token; the user ID is resolved for you. Verified before saving.
+
+**Multiple accounts:** save a named account with `mimi-seed auth threads --profile <id>`. Map a project to it
+with `.mimi-seed.json` → `socialProfiles.threads`. The project mapping is used automatically by Threads tools.
 
 **Expiring token:** run `mimi-seed auth threads` or `threads_refresh_token`. While the current long-lived token
 is still valid, Mimi Seed uses Threads' official refresh endpoint and stores the returned expiry. `mimi-seed

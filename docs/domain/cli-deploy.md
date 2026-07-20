@@ -65,6 +65,10 @@ because the *validation* (probe the server, call the API, refuse to save a bad t
 writer across the two packages is what produced the Jenkins dual-config bug ([[pitfalls]]). The one exception is
 `ci.json`, which the CLI both writes and reads at deploy time.
 
+Instagram and Threads support named local profiles. `mimi-seed auth instagram|threads --profile <id>` forwards
+the profile to the owning MCP setup binary. Without an explicit flag, the binary reads the current project's
+`.mimi-seed.json.socialProfiles` mapping; without a mapping it preserves the legacy single-file behavior.
+
 Social credential detection remains filesystem-only for fast offline startup, but it also classifies the saved
 `expiresAt` as fresh, expiring (seven days or less), or expired. `setup` automatically includes expiring/expired
 social tokens in its reconnect plan; the setup bin still performs the authoritative live validation before save.

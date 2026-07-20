@@ -21,6 +21,7 @@ import { metaTokenFreshness } from '../lib/meta-auth.js';
 import { readPackageRootText } from '../lib/package-root.js';
 import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
 import { syncRemoteCredentials } from '../remote-sync.js';
+import { resolveSocialConfigTarget } from '../social/profile-store.js';
 import {
   findProjectManifest,
   manifestServiceEntries,
@@ -212,12 +213,24 @@ export function registerAuthTools(server: McpServer) {
       lines.push(renderMetaConnection('Facebook', fb, `pageId: ${fb?.pageId ?? ''}`, 'mimi-seed auth facebook'));
 
       // 8. Instagram
+      const igTarget = resolveSocialConfigTarget('instagram');
       const ig = loadInstagramConfig();
-      lines.push(renderMetaConnection('Instagram', ig, `userId: ${ig?.userId ?? ''}`, 'mimi-seed auth instagram'));
+      lines.push(renderMetaConnection(
+        'Instagram',
+        ig,
+        `${igTarget.profile ? `profile: ${igTarget.profile}, ` : ''}userId: ${ig?.userId ?? ''}`,
+        `mimi-seed auth instagram${igTarget.profile ? ` --profile ${igTarget.profile}` : ''}`,
+      ));
 
       // 9. Threads
+      const threadsTarget = resolveSocialConfigTarget('threads');
       const threads = loadThreadsConfig();
-      lines.push(renderMetaConnection('Threads', threads, `userId: ${threads?.userId ?? ''}`, 'mimi-seed auth threads'));
+      lines.push(renderMetaConnection(
+        'Threads',
+        threads,
+        `${threadsTarget.profile ? `profile: ${threadsTarget.profile}, ` : ''}userId: ${threads?.userId ?? ''}`,
+        `mimi-seed auth threads${threadsTarget.profile ? ` --profile ${threadsTarget.profile}` : ''}`,
+      ));
 
       // 10. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
       // 이전엔 SA 파일만 검사해 OAuth fallback 이 살아있어도 ❌ 로 오표기했다.

@@ -109,6 +109,54 @@ describe('detectAll', () => {
     expect(d.get('instagram')).toMatchObject({ present: true, freshness: 'expiring', daysRemaining: 3 });
     expect(d.get('threads')).toMatchObject({ present: true, freshness: 'fresh', daysRemaining: 30 });
   });
+
+  it('프로젝트 매니페스트가 지정한 Instagram/Threads 프로필을 감지한다', () => {
+    const project = path.join(home, 'project');
+    fs.mkdirSync(project);
+    fs.writeFileSync(path.join(project, '.mimi-seed.json'), JSON.stringify({
+      socialProfiles: { instagram: 'weather', threads: 'community' },
+    }));
+    const profilesDir = path.join(home, '.mimi-seed', 'social-profiles');
+    fs.mkdirSync(profilesDir, { recursive: true });
+    fs.writeFileSync(path.join(profilesDir, 'weather.json'), JSON.stringify({
+      instagram: { accessToken: 'IGAA_TEST', userId: 'ig-1', username: 'weather' },
+    }));
+    fs.writeFileSync(path.join(profilesDir, 'community.json'), JSON.stringify({
+      threads: { accessToken: 'TH_TEST', userId: 'th-1', username: 'community' },
+    }));
+
+    const d = detectAll(home, project);
+    expect(d.get('instagram')).toMatchObject({ present: true, detail: 'weather: weather' });
+    expect(d.get('threads')).toMatchObject({ present: true, detail: 'community: community' });
+  });
+
+  it('프로젝트에 프로필 매핑이 있으면 기존 기본 토큰으로 폴백하지 않는다', () => {
+    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY', userId: 'legacy' });
+    const project = path.join(home, 'project');
+    fs.mkdirSync(project);
+    fs.writeFileSync(path.join(project, '.mimi-seed.json'), JSON.stringify({
+      socialProfiles: { instagram: 'missing-profile' },
+    }));
+
+    expect(detectAll(home, project).get('instagram')).toMatchObject({
+      present: false,
+      detail: 'profile missing-profile',
+    });
+  });
+
+  it('socialProfiles 컨테이너가 잘못되면 기존 기본 토큰을 연결로 보지 않는다', () => {
+    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY', userId: 'legacy' });
+    const project = path.join(home, 'project');
+    fs.mkdirSync(project);
+    fs.writeFileSync(path.join(project, '.mimi-seed.json'), JSON.stringify({
+      socialProfiles: 'weather',
+    }));
+
+    expect(detectAll(home, project).get('instagram')).toMatchObject({
+      present: false,
+      detail: expect.stringContaining('must be an object'),
+    });
+  });
 });
 
 describe('isSatisfied — fallback', () => {

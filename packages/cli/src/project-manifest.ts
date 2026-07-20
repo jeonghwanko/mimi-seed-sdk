@@ -7,6 +7,8 @@ import path from "node:path";
 
 export const MANIFEST_FILENAME = ".mimi-seed.json";
 
+export type SocialPlatform = "instagram" | "threads";
+
 export type ManifestServiceId =
   | "oauth"
   | "bigquery"
@@ -31,6 +33,30 @@ export interface ProjectManifest {
   displayName?: string;
   description?: string;
   services?: Partial<Record<ManifestServiceId, ManifestService>>;
+  socialProfiles?: Partial<Record<SocialPlatform, string>>;
+}
+
+export function isValidSocialProfileId(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value);
+}
+
+export function manifestSocialProfile(
+  m: ProjectManifest,
+  platform: SocialPlatform,
+): string | null {
+  const profiles = m.socialProfiles as unknown;
+  if (profiles === undefined) return null;
+  if (!profiles || typeof profiles !== "object" || Array.isArray(profiles)) {
+    throw new Error(`${MANIFEST_FILENAME} socialProfiles must be an object`);
+  }
+  const value = (profiles as Partial<Record<SocialPlatform, unknown>>)[platform];
+  if (value === undefined) return null;
+  if (typeof value !== "string" || !isValidSocialProfileId(value)) {
+    throw new Error(
+      `${MANIFEST_FILENAME} socialProfiles.${platform} must be a safe 1-64 character profile id`,
+    );
+  }
+  return value;
 }
 
 export interface LoadedManifest {

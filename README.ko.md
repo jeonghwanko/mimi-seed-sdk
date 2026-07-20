@@ -316,6 +316,10 @@ claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
 ```json
 {
   "project": "my-app",
+  "socialProfiles": {
+    "instagram": "my-app",
+    "threads": "my-app"
+  },
   "services": {
     "oauth":     { "required": true },
     "bigquery":  { "required": true, "projectId": "my-gcp-project", "dataset": "analytics_123",
@@ -326,6 +330,13 @@ claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
   }
 }
 ```
+
+`socialProfiles`는 `~/.mimi-seed/social-profiles/<profile>.json`에 저장된 로컬 자격증명을 선택합니다.
+하나의 프로필 파일에 `instagram`과 `threads` 설정을 함께 둘 수 있고, 프로젝트마다 각 플랫폼을 서로
+다른 프로필에 매핑할 수도 있습니다. 매핑이 없으면 기존 `~/.mimi-seed/instagram.json`과
+`threads.json`을 그대로 기본값으로 사용합니다. 이름 있는 프로필은
+`mimi-seed auth instagram --profile my-app`, `mimi-seed auth threads --profile my-app`으로 생성하거나
+갱신합니다.
 
 저장소를 clone 한 팀원은 `mimi-seed doctor` 를 돌리거나(또는 에이전트에게 "나 뭐 빠졌어?" 라고
 물으면) ❌ 항목만 따라가면 됩니다. `bigquery` 는 서비스 계정 **또는** OAuth fallback 존재 여부를
