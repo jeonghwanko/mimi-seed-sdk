@@ -10,6 +10,7 @@ import {
   summarizeGrantedDomains,
   isPreTrackingScope,
   mergeScopeStrings,
+  PLAY_DEVELOPER_REPORTING_SCOPE,
 } from '../auth/scopes.js';
 
 describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
@@ -71,6 +72,13 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
     expect(domainsForScope('https://www.googleapis.com/auth/youtube.force-ssl')).toEqual(['youtube']);
     expect(domainsForScope('https://www.googleapis.com/auth/playdeveloperreporting')).toEqual(['playstore']);
     expect(domainsForScope('https://example.com/unknown')).toEqual([]);
+  });
+
+  it('PLAY_DEVELOPER_REPORTING_SCOPE 는 playstore 도메인에서 파생돼 리터럴과 어긋나지 않는다', () => {
+    // 파생(AUTH_DOMAINS.playstore.scopes[1])이므로 도메인 배열을 재정렬/변경하면 여기서 깨진다 —
+    // SA(const) 와 OAuth pre-flight(도메인) 가 다른 문자열을 보는 드리프트를 원천 차단.
+    expect(PLAY_DEVELOPER_REPORTING_SCOPE).toBe('https://www.googleapis.com/auth/playdeveloperreporting');
+    expect(AUTH_DOMAINS.playstore.scopes).toContain(PLAY_DEVELOPER_REPORTING_SCOPE);
   });
 
   it('parseDomainList: 공백 허용, dedupe, 잘못된 id 는 invalid 로 분리', () => {

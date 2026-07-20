@@ -94,9 +94,13 @@ export const CLOUD_PLATFORM_SCOPE = AUTH_DOMAINS.gcp.scopes[0];
 /**
  * Play Developer Reporting API(Android vitals 통계) 전용 스코프. androidpublisher 와
  * 별개다 — SA JWT 와 OAuth playstore 도메인 양쪽에 함께 실어야 통계 도구가 동작한다.
+ *
+ * CLOUD_PLATFORM_SCOPE 처럼 도메인 정의에서 **파생**한다(리터럴을 두 번 적지 않는다).
+ * 별도 리터럴로 두면 도메인 배열과 어긋나도 어떤 테스트도 못 잡고, SA(const 사용)와
+ * OAuth pre-flight(도메인 리터럴)가 다른 문자열을 봐 정상 로그인이 INSUFFICIENT_SCOPE 로
+ * 죽는 함정이 된다. auth-scopes.test.ts 가 값과 도메인 포함 여부를 함께 고정한다.
  */
-export const PLAY_DEVELOPER_REPORTING_SCOPE =
-  'https://www.googleapis.com/auth/playdeveloperreporting';
+export const PLAY_DEVELOPER_REPORTING_SCOPE = AUTH_DOMAINS.playstore.scopes[1];
 
 function dedupe(scopes: readonly string[]): string[] {
   return [...new Set(scopes)];
