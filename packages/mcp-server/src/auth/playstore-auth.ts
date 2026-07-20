@@ -2,6 +2,7 @@ import { JWT } from 'google-auth-library';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { PLAY_DEVELOPER_REPORTING_SCOPE } from './scopes.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const SA_DIR = path.join(CONFIG_DIR, 'play-service-accounts');
@@ -113,7 +114,12 @@ export function getServiceAccountClient(packageName?: string): JWT | null {
     return new JWT({
       email: parsed.client_email,
       key: parsed.private_key,
-      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
+      // androidpublisher(edits/리스팅 등) + Developer Reporting(vitals 통계). 통계 도구가
+      // Reporting API 를 쓰므로 이 스코프가 없으면 SA 경로에서도 통계만 403 으로 죽는다.
+      scopes: [
+        'https://www.googleapis.com/auth/androidpublisher',
+        PLAY_DEVELOPER_REPORTING_SCOPE,
+      ],
     });
   } catch {
     return null;

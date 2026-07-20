@@ -12,6 +12,7 @@ import {
   updateGoogleProduct, deleteGoogleProduct, listGoogleProducts,
 } from '@onesub/providers';
 import { requirePlayStoreAuth, requireServiceAccountJson, requireAuth } from '../helpers.js';
+import { PLAY_DEVELOPER_REPORTING_SCOPE } from '../auth/scopes.js';
 import * as iam from '../iam/tools.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
@@ -157,7 +158,9 @@ export function registerPlaystoreTools(server: McpServer) {
       timeZone: z.string().optional().describe('날짜 기준 timezone. 기본: America/Los_Angeles (Play Reporting API 샘플/지원 기준)'),
     },
     async (args) => {
-      const auth = requirePlayStoreAuth(args.packageName);
+      // 통계는 Play Developer Reporting API 를 쓰므로 OAuth 폴백 시 reporting 스코프를
+      // 요구한다. 미보유면 generic 403 대신 "--domains playstore 재로그인" 안내가 나간다.
+      const auth = requirePlayStoreAuth(args.packageName, PLAY_DEVELOPER_REPORTING_SCOPE);
       const result = await playstore.getStatistics(auth, args.packageName, args);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     },

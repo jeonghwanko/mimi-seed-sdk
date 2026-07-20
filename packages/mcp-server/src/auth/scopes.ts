@@ -47,8 +47,14 @@ export const AUTH_DOMAINS = {
   },
   playstore: {
     label: 'Play Store',
-    scopes: ['https://www.googleapis.com/auth/androidpublisher'],
-    summary: 'playstore_* — 서비스 계정 없이 OAuth 로 하는 Play Console 작업',
+    scopes: [
+      'https://www.googleapis.com/auth/androidpublisher',
+      // Android vitals 통계(playstore_get_statistics)는 Play Developer Reporting API 를
+      // 쓰는데 androidpublisher 와 별개 스코프가 필요하다. 빠져 있으면 통계만 런타임
+      // 403(ACCESS_TOKEN_SCOPE_INSUFFICIENT)으로 죽고, 다른 Play 도구는 멀쩡해 원인 추적이 어렵다.
+      'https://www.googleapis.com/auth/playdeveloperreporting',
+    ],
+    summary: 'playstore_* — OAuth 로 하는 Play Console 작업 + Android vitals 통계',
   },
   googleads: {
     label: 'Google Ads',
@@ -84,6 +90,13 @@ export type AuthDomainId = keyof typeof AUTH_DOMAINS;
 export const DOMAIN_IDS = Object.keys(AUTH_DOMAINS) as [AuthDomainId, ...AuthDomainId[]];
 
 export const CLOUD_PLATFORM_SCOPE = AUTH_DOMAINS.gcp.scopes[0];
+
+/**
+ * Play Developer Reporting API(Android vitals 통계) 전용 스코프. androidpublisher 와
+ * 별개다 — SA JWT 와 OAuth playstore 도메인 양쪽에 함께 실어야 통계 도구가 동작한다.
+ */
+export const PLAY_DEVELOPER_REPORTING_SCOPE =
+  'https://www.googleapis.com/auth/playdeveloperreporting';
 
 function dedupe(scopes: readonly string[]): string[] {
   return [...new Set(scopes)];

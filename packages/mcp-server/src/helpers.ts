@@ -21,6 +21,41 @@ function formatAuthError(p: AuthErrorPayload): string {
 }
 
 /**
+ * 도구가 요구하는 스코프의 pre-flight 검사. expiry 만 보는 ensureFreshAccessToken 은
+ * 스코프 미보유를 못 걸러내므로(런타임 ACCESS_TOKEN_SCOPE_INSUFFICIENT), 저장된 scope 로
+ * 결정적인 안내를 던진다. 도메인 선택형 로그인 도입 후에는 "전체 재로그인"이 아니라
+ * "--domains <해당 도메인> 으로 추가 부여(기존 권한 유지)"가 올바른 해법이다.
+ *
+ * scope 가 undefined 인 구 토큰(스코프 추적 도입 전 full-scope 로그인)은 추적 도입
+ * 이전부터 있던 스코프는 보유한 게 확실하므로 통과시킨다 — 안 그러면 pre-flight 를 새로
+ * 다는 순간 멀쩡한 기존 사용자에게 재로그인을 강제한다. 추적 이후 추가된 스코프(GA4,
+ * Play Developer Reporting)만 미보유 확정으로 본다.
+ *
+ * OAuth 토큰에만 적용된다 — SA JWT 는 자체 scopes 로 토큰을 받으므로 이 검사 대상이 아니다.
+ */
+function assertStoredScope(requiredScope?: string): void {
+  if (!requiredScope) return;
+  const scopeStr = getStoredTokens()?.scope;
+  const missing =
+    scopeStr === undefined
+      ? !isPreTrackingScope(requiredScope)
+      : !scopeStr.split(' ').filter(Boolean).includes(requiredScope);
+  if (!missing) return;
+  const domainArg = domainsForScope(requiredScope).join(',');
+  throw new Error(
+    formatAuthError({
+      code: 'INSUFFICIENT_SCOPE',
+      message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 현재 로그인에 그 권한이 없어.`,
+      hint: domainArg
+        ? `mimi-seed-auth --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
+        : 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
+      retriable: false,
+      needsReauth: true,
+    }),
+  );
+}
+
+/**
  * OAuth 클라이언트 확보 — 호출 전에 access_token 을 사전 갱신하고,
  * refresh_token 이 만료/누락이면 raw googleapis 에러(invalid_grant 등) 대신
  * 친절한 재로그인 안내를 던진다.
@@ -45,36 +80,7 @@ export async function requireAuth(requiredScope?: string) {
       }),
     );
   }
-  // 도구가 요구하는 스코프의 pre-flight 검사. expiry 만 보는 ensureFreshAccessToken 은
-  // 스코프 미보유를 못 걸러내므로(런타임 ACCESS_TOKEN_SCOPE_INSUFFICIENT), 저장된 scope 로
-  // 결정적인 안내를 던진다. 도메인 선택형 로그인 도입 후에는 "전체 재로그인"이 아니라
-  // "--domains <해당 도메인> 으로 추가 부여(기존 권한 유지)"가 올바른 해법이다.
-  //
-  // scope 가 undefined 인 구 토큰(스코프 추적 도입 전 full-scope 로그인)은 추적 도입
-  // 이전부터 있던 스코프는 보유한 게 확실하므로 통과시킨다 — 안 그러면 pre-flight 를 새로
-  // 다는 순간 멀쩡한 기존 사용자에게 재로그인을 강제한다. 추적 이후 추가된 스코프(GA4)만
-  // 미보유 확정으로 본다.
-  if (requiredScope) {
-    const scopeStr = getStoredTokens()?.scope;
-    const missing =
-      scopeStr === undefined
-        ? !isPreTrackingScope(requiredScope)
-        : !scopeStr.split(' ').filter(Boolean).includes(requiredScope);
-    if (missing) {
-      const domainArg = domainsForScope(requiredScope).join(',');
-      throw new Error(
-        formatAuthError({
-          code: 'INSUFFICIENT_SCOPE',
-          message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 현재 로그인에 그 권한이 없어.`,
-          hint: domainArg
-            ? `mimi-seed-auth --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
-            : 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
-          retriable: false,
-          needsReauth: true,
-        }),
-      );
-    }
-  }
+  assertStoredScope(requiredScope);
   return client;
 }
 
@@ -108,11 +114,16 @@ export const APPSTORE_AUTH_HINT = [
  * 별도 서비스 계정 JSON 을 받지 않아도 대부분의 Play 작업이 가능하다.
  * (서비스 계정은 서버/헤드리스 — onesub 영수증 검증 등 — 용도로 계속 우선 적용.)
  */
-export function requirePlayStoreAuth(packageName?: string) {
+export function requirePlayStoreAuth(packageName?: string, requiredScope?: string) {
   const sa = getServiceAccountClient(packageName);
   if (sa) return sa;
   const oauth = getAuthenticatedClient();
-  if (oauth) return oauth;
+  if (oauth) {
+    // OAuth 폴백일 때만 스코프 pre-flight — SA JWT 는 자체 scopes 로 토큰을 받으므로
+    // (getServiceAccountClient 가 reporting 스코프를 이미 싣는다) 해당 없음.
+    assertStoredScope(requiredScope);
+    return oauth;
+  }
   throw new Error(PLAY_AUTH_HINT);
 }
 
