@@ -755,41 +755,75 @@ export async function buildSubmitForReviewPreview(versionId: string): Promise<{
   };
 }
 
+async function createReviewSubmission(appId: string, platform: string): Promise<string> {
+  const created = await apiPost('/reviewSubmissions', {
+    data: {
+      type: 'reviewSubmissions',
+      attributes: { platform },
+      relationships: {
+        app: { data: { type: 'apps', id: appId } },
+      },
+    },
+  });
+  const submissionId = created?.data?.id;
+  if (!submissionId) {
+    throw new Error(`reviewSubmission 생성 응답에 id가 없어: ${JSON.stringify(created)}`);
+  }
+  return submissionId;
+}
+
+function isItemAddRejected(error: unknown): boolean {
+  const cause = (error as { cause?: { status?: number; parsedErrors?: Array<{ code?: string }> } })?.cause;
+  if (cause?.status !== 409) return false;
+  return (cause.parsedErrors ?? []).some((e) => (e.code ?? '').startsWith('STATE_ERROR'));
+}
+
 export async function submitVersionForReview(versionId: string) {
   const { appId, platform } = await getVersionAppAndPlatform(versionId);
 
-  // 1. CREATED 상태의 reviewSubmission이 있으면 재사용, 없으면 새로 생성
+  // 1. 열린 reviewSubmission이 있으면 재사용, 없으면 새로 생성
   let submissionId = await findOpenReviewSubmission(appId, platform);
-  const reusedSubmission = Boolean(submissionId);
+  let reusedSubmission = Boolean(submissionId);
+  // findOpenReviewSubmission 은 WAITING_FOR_REVIEW 도 잡아온다. 그 상태의 실제 진행도는
+  // API 의 state 필드보다 앞서 있을 수 있어(실측: 이미 심사 큐를 탄 옛 제출), 항목 추가
+  // 자체를 거부당하는 경우가 있다 — 아래 recoveredFromStaleSubmission 이 그 케이스다.
+  let recoveredFromStaleSubmission = false;
 
   if (!submissionId) {
-    const created = await apiPost('/reviewSubmissions', {
-      data: {
-        type: 'reviewSubmissions',
-        attributes: { platform },
-        relationships: {
-          app: { data: { type: 'apps', id: appId } },
-        },
-      },
-    });
-    submissionId = created?.data?.id;
-    if (!submissionId) {
-      throw new Error(`reviewSubmission 생성 응답에 id가 없어: ${JSON.stringify(created)}`);
-    }
+    submissionId = await createReviewSubmission(appId, platform);
+    reusedSubmission = false;
   }
 
   // 2. 버전을 reviewSubmissionItems로 attach (이미 붙어있으면 skip)
-  const alreadyAttached = reusedSubmission ? await isVersionAttached(submissionId, versionId) : false;
+  let alreadyAttached = reusedSubmission ? await isVersionAttached(submissionId, versionId) : false;
   if (!alreadyAttached) {
-    await apiPost('/reviewSubmissionItems', {
-      data: {
-        type: 'reviewSubmissionItems',
-        relationships: {
-          reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
-          appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+    try {
+      await apiPost('/reviewSubmissionItems', {
+        data: {
+          type: 'reviewSubmissionItems',
+          relationships: {
+            reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      if (!reusedSubmission || !isItemAddRejected(error)) throw error;
+      // 재사용하려던 묶음이 실제로는 잠겨 있었다 — 새 묶음을 만들어 한 번만 재시도한다.
+      submissionId = await createReviewSubmission(appId, platform);
+      reusedSubmission = false;
+      recoveredFromStaleSubmission = true;
+      alreadyAttached = false;
+      await apiPost('/reviewSubmissionItems', {
+        data: {
+          type: 'reviewSubmissionItems',
+          relationships: {
+            reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+          },
+        },
+      });
+    }
   }
 
   // 3. PATCH submitted=true → state: CREATED → WAITING_FOR_REVIEW
@@ -808,6 +842,7 @@ export async function submitVersionForReview(versionId: string) {
     versionId,
     reusedSubmission,
     itemAttached: !alreadyAttached,
+    recoveredFromStaleSubmission,
     state: submitted?.data?.attributes?.state ?? 'WAITING_FOR_REVIEW',
   };
 }
