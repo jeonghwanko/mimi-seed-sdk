@@ -1,5 +1,6 @@
 import { getAuthHeaders, getAppStoreCredentials, generateToken } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
+import type { AppStoreProductType } from './http.js';
 
 /**
  * App Store Connect API v1 래퍼
@@ -808,6 +809,78 @@ export async function submitVersionForReview(versionId: string) {
     reusedSubmission,
     itemAttached: !alreadyAttached,
     state: submitted?.data?.attributes?.state ?? 'WAITING_FOR_REVIEW',
+  };
+}
+
+// ─── IAP/구독을 심사 제출 묶음에 추가 ───
+//
+// App Store Connect 웹의 "심사에 추가" 버튼과 같은 동작이다. 제출하지는 않는다 —
+// 항목만 담고, 실제 제출은 submitVersionForReview 가 한다.
+//
+// 이게 왜 별도로 필요한가: 어떤 앱의 **첫 소모성 IAP** 는 앱 버전과 같은 묶음으로만
+// 심사에 넣을 수 있다. IAP 만 담긴 초안은 "심사에 제출할 수 없음" 으로 막힌다.
+// 그래서 순서가 중요하다 — IAP 를 전부 담은 뒤 버전을 제출해야 한 번에 나간다.
+
+function productReviewItemRelationship(productType: AppStoreProductType) {
+  if (productType === 'subscription') {
+    return { key: 'subscription', type: 'subscriptions' };
+  }
+  return { key: 'inAppPurchaseV2', type: 'inAppPurchases' };
+}
+
+export async function addProductToReviewSubmission(args: {
+  appId: string;
+  internalId: string;
+  productType: AppStoreProductType;
+  platform?: string;
+}) {
+  const { appId, internalId, productType } = args;
+  const platform = args.platform ?? 'IOS';
+  const relationship = productReviewItemRelationship(productType);
+
+  let submissionId = await findOpenReviewSubmission(appId, platform);
+  const reusedSubmission = Boolean(submissionId);
+  if (!submissionId) {
+    const created = await apiPost('/reviewSubmissions', {
+      data: {
+        type: 'reviewSubmissions',
+        attributes: { platform },
+        relationships: { app: { data: { type: 'apps', id: appId } } },
+      },
+    });
+    submissionId = created?.data?.id;
+    if (!submissionId) {
+      throw new Error(`reviewSubmission 생성 응답에 id가 없어: ${JSON.stringify(created)}`);
+    }
+  }
+
+  // 같은 상품을 두 번 담으면 Apple 이 409 를 준다. 재시도가 안전하도록 먼저 확인한다.
+  const items = await apiGet(`/reviewSubmissions/${submissionId}/items`, { limit: '50' });
+  const rows = (items?.data ?? []) as Array<{ relationships?: Record<string, { data?: { id?: string } }> }>;
+  const alreadyAttached = rows.some(
+    (row) => row?.relationships?.[relationship.key]?.data?.id === internalId,
+  );
+
+  if (!alreadyAttached) {
+    await apiPost('/reviewSubmissionItems', {
+      data: {
+        type: 'reviewSubmissionItems',
+        relationships: {
+          reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+          [relationship.key]: { data: { type: relationship.type, id: internalId } },
+        },
+      },
+    });
+  }
+
+  return {
+    submissionId,
+    appId,
+    platform,
+    internalId,
+    productType,
+    reusedSubmission,
+    itemAttached: !alreadyAttached,
   };
 }
 

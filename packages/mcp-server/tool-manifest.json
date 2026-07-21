@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary)의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
-  "total": 179,
+  "total": 183,
   "domains": {
     "admob": {
       "label": "AdMob",
@@ -71,6 +71,7 @@
         "appstore_list_product_localizations",
         "appstore_update_product_localization",
         "appstore_upload_product_review_screenshot",
+        "appstore_add_product_to_review",
         "appstore_update_product",
         "appstore_delete_product",
         "appstore_plan_release",
@@ -275,6 +276,9 @@
         "playstore_submit_release",
         "playstore_promote_release",
         "playstore_list_products",
+        "playstore_update_product_listing",
+        "playstore_update_subscription_listing",
+        "playstore_update_product_state",
         "playstore_update_product",
         "playstore_delete_product",
         "setup_playstore_connection"

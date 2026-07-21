@@ -784,8 +784,54 @@ export function registerAppstoreTools(server: McpServer) {
   );
 
   server.tool(
+    'appstore_add_product_to_review',
+    'App Store IAP/구독을 심사 제출 묶음에 담는다 — App Store Connect 웹의 "심사에 추가" 버튼과 같다. ' +
+    '담기만 하고 제출하지는 않는다 (제출은 appstore_submit_for_review). ' +
+    '⚠️ 그 앱의 첫 소모성 IAP 는 앱 버전과 같은 묶음으로만 심사에 넣을 수 있다 — IAP 를 전부 담은 뒤 버전을 제출해야 한 번에 나간다. ' +
+    '상품 상태가 READY_TO_SUBMIT 이어야 한다 (MISSING_METADATA 면 appstore_update_product_localization 먼저).',
+    {
+      appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
+      productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
+      productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
+      platform: z.enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS']).default('IOS').optional()
+        .describe('플랫폼 (기본 IOS)'),
+    },
+    async ({ appId, productId, productType, platform }) => {
+      const creds = requireAppStoreCreds();
+      const products = await listAppleProducts({
+        appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
+      });
+      const product = products.find((item) => item.productId === productId && item.type === productType);
+      if (!product) {
+        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+      }
+
+      const result = await appstore.addProductToReviewSubmission({
+        appId,
+        internalId: product.internalId,
+        productType,
+        platform,
+      });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            result.itemAttached ? '✓ 심사 묶음에 추가됨' : '이미 묶음에 들어 있음 (변경 없음)',
+            `productId: ${productId}`,
+            `submissionId: ${result.submissionId}`,
+            `기존 묶음 재사용: ${result.reusedSubmission}`,
+            '',
+            '제출은 아직 안 됐다. 담을 상품을 전부 담은 뒤 appstore_submit_for_review 로 버전과 함께 제출한다.',
+          ].join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
     'appstore_update_product',
-    'App Store IAP 상품의 reference name 변경. productId / 유형은 변경 불가.',
+    'App Store IAP 상품의 reference name 변경. productId / 유형은 변경 불가. ' +
+    '스토어에 보이는 표시 이름·설명은 appstore_update_product_localization 을 쓴다.',
     {
       appId: z.string().optional().describe('App Store 앱 ID'),
       bundleId: z.string().optional().describe('번들 ID (appId 대신 사용 가능)'),
