@@ -35,9 +35,22 @@ const CODE_HINTS: Record<string, string> = {
   ENTITY_STATE_INVALID:
     '버전 상태가 편집 가능 단계가 아니에요 (이미 심사중/출시됨). 새 versionString 으로 appstore_create_version 필요할 수 있어요.',
   // 필수 필드 누락
+  // ⚠️ Apple 이 실제로 보내는 코드는 점 표기다 (ENTITY_ERROR.ATTRIBUTE.REQUIRED).
+  // 아래 언더스코어 키들은 오래 매칭된 적이 없었다 — 점 표기를 정본으로 두고
+  // 언더스코어 변형은 혹시 모를 옛 응답용으로 남긴다 (2026-07-21 실측으로 발견).
+  'ENTITY_ERROR.ATTRIBUTE.REQUIRED':
+    '필수 필드가 빠졌어요 — source.pointer 위치 확인.',
   ENTITY_ERROR_ATTRIBUTE_REQUIRED:
     '필수 필드가 빠졌어요 — source.pointer 위치 확인.',
-  // 길이 / 형식 위반
+  // 길이 초과 — detail 에 실제 상한이 숫자로 들어온다 ("Max number of characters is (55)").
+  'ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG':
+    '길이 초과 — detail 의 괄호 숫자가 Apple 이 강제하는 실제 상한이에요. 그 값에 맞춰 줄이세요.',
+  // 심사 중이라 필드가 잠김. 상품이 WAITING_FOR_REVIEW/IN_REVIEW 면 현지화를 못 고친다.
+  'ENTITY_ERROR.ATTRIBUTE.INVALID.UNMODIFIABLE':
+    '지금 상태에선 못 고치는 필드예요 — 상품이 심사 중이면 현지화가 잠깁니다. '
+    + '심사 결과를 기다리거나 appstore_cancel_review 로 철회한 뒤 수정하세요.',
+  'ENTITY_ERROR.ATTRIBUTE.INVALID':
+    '필드 값이 정책 위반(길이/형식). source.pointer 위치 확인.',
   ENTITY_ERROR_ATTRIBUTE_INVALID:
     '필드 값이 정책 위반(길이/형식). source.pointer 위치 확인.',
   // 빌드 attach 시 빌드를 못 찾음
@@ -68,12 +81,28 @@ function parseAppleErrorBody(body: string): AppleError[] | null {
   }
 }
 
+/**
+ * 코드 → hint. 정확히 일치하는 게 없으면 점 표기를 뒤에서부터 잘라 상위 코드로 폴백한다.
+ * Apple 은 `ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG` 처럼 세분화된 코드를 계속 늘리는데,
+ * 그때마다 키를 추가하지 않아도 `...INVALID` 수준의 안내는 나가야 한다.
+ */
+function resolveHint(code: string | undefined): string | undefined {
+  if (!code) return undefined;
+  if (CODE_HINTS[code]) return CODE_HINTS[code];
+  const parts = code.split('.');
+  for (let i = parts.length - 1; i > 0; i -= 1) {
+    const hint = CODE_HINTS[parts.slice(0, i).join('.')];
+    if (hint) return hint;
+  }
+  return undefined;
+}
+
 /** 단일 Apple error → 한 줄 사람용 표기. */
 function formatAppleError(e: AppleError): string {
   const code = e.code ?? 'UNKNOWN';
   const detail = e.detail ?? e.title ?? '(no detail)';
   const pointer = e.source?.pointer ?? e.source?.parameter;
-  const hint = e.code ? CODE_HINTS[e.code] : undefined;
+  const hint = resolveHint(e.code);
   const parts = [`[${code}] ${detail}`];
   if (pointer) parts.push(`@ ${pointer}`);
   if (hint) parts.push(`\n  💡 ${hint}`);

@@ -118,3 +118,45 @@ describe('__testing.parseAppleErrorBody', () => {
     expect(__testing.parseAppleErrorBody('{"foo":"bar"}')).toBe(null);
   });
 });
+
+// 2026-07-21 실측: Apple 이 실제로 보내는 코드는 점 표기다. 오래 쓰던 언더스코어
+// 키(ENTITY_ERROR_ATTRIBUTE_INVALID 등)는 한 번도 매칭되지 않는 죽은 코드였다.
+describe('점 표기 에러 코드 hint (실측 응답 기반)', () => {
+  it('길이 초과 코드에 hint 가 붙고 Apple 이 알려준 상한이 그대로 보인다', () => {
+    const err = friendlyAppStoreError(409, JSON.stringify({
+      errors: [{
+        code: 'ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG',
+        title: 'The provided entity contains a field whose value is too long',
+        detail: 'The field (DESCRIPTION) is too long. Max number of characters is (55).',
+      }],
+    }));
+    expect(err.message).toContain('Max number of characters is (55)');
+    expect(err.message).toContain('💡');
+  });
+
+  it('심사 중 잠김(UNMODIFIABLE)은 무엇을 해야 하는지 알려준다', () => {
+    const err = friendlyAppStoreError(409, JSON.stringify({
+      errors: [{
+        code: 'ENTITY_ERROR.ATTRIBUTE.INVALID.UNMODIFIABLE',
+        detail: 'The field (NAME) can not be modified',
+      }],
+    }));
+    expect(err.message).toContain('심사 중');
+    expect(err.message).toContain('cancel_review');
+  });
+
+  it('모르는 하위 코드는 상위 코드 hint 로 폴백한다', () => {
+    const err = friendlyAppStoreError(409, JSON.stringify({
+      errors: [{ code: 'ENTITY_ERROR.ATTRIBUTE.INVALID.SOMETHING_NEW', detail: 'nope' }],
+    }));
+    expect(err.message).toContain('💡');
+  });
+
+  it('아무 데도 안 걸리는 코드는 hint 없이 detail 만 낸다', () => {
+    const err = friendlyAppStoreError(409, JSON.stringify({
+      errors: [{ code: 'TOTALLY_UNKNOWN', detail: 'nope' }],
+    }));
+    expect(err.message).toContain('nope');
+    expect(err.message).not.toContain('💡');
+  });
+});

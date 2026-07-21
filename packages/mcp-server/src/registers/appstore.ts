@@ -700,14 +700,20 @@ export function registerAppstoreTools(server: McpServer) {
     'appstore_update_product_localization',
     'App Store IAP/구독 상품의 현지화(표시 이름·설명)를 로케일 단위로 upsert — 있으면 수정, 없으면 생성. ' +
     '현지화가 비면 상품이 MISSING_METADATA 에서 안 풀려 심사에 넣을 수 없다 (리뷰 노트·스크린샷과는 별개 리소스). ' +
-    'locale 은 App Store 표기(ko, en-US, ja, zh-Hant)를 쓴다. name 30자 / description 45자 제한.',
+    'locale 은 App Store 표기(ko, en-US, ja, zh-Hant)를 쓴다. ' +
+    '길이 상한은 리소스마다 다르고 Apple 이 강제한다 — 구독은 실측으로 name 35 / description 55 다. ' +
+    '초과하면 Apple 이 "Max number of characters is (N)" 으로 실제 상한을 알려주므로 그 값에 맞춰 줄이면 된다. ' +
+    '⚠️ 심사 중인 상품은 현지화가 잠겨 UNMODIFIABLE 로 거부된다 — 결과를 기다리거나 철회 후 수정한다.',
     {
       appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
       productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
       locale: z.string().describe('로케일 (예: ko, en-US, ja, zh-Hant)'),
-      name: z.string().max(30).optional().describe('표시 이름 (30자 이하). 새 로케일 생성 시 필수'),
-      description: z.string().max(45).optional().describe('설명 (45자 이하). 생략하면 기존 값 유지'),
+      // 실제 상한은 Apple 이 리소스별로 강제한다(구독 name 35 / description 55 실측).
+      // 여기서 좁게 잡으면 정상 문구를 클라이언트가 먼저 거부한다 — 실제로 45로 잡아
+      // 55자짜리 정상 설명을 막았다. 오타 수준만 걸러내는 넉넉한 상한만 둔다.
+      name: z.string().max(200).optional().describe('표시 이름. 새 로케일 생성 시 필수 (구독 실측 상한 35자)'),
+      description: z.string().max(500).optional().describe('설명. 생략하면 기존 값 유지 (구독 실측 상한 55자)'),
     },
     async ({ appId, productId, productType, locale, name, description }) => {
       const creds = requireAppStoreCreds();
