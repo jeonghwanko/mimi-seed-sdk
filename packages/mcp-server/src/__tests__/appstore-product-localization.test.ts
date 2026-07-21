@@ -155,6 +155,51 @@ describe('upsertProductLocalization', () => {
     expect(body.data.attributes).not.toHaveProperty('description');
   });
 
+  // 실측: 구독 하나에 ko 가 2건 (APPROVED 확정판 + PREPARE_FOR_SUBMISSION 편집판).
+  // APPROVED 를 잡아 PATCH 하면 확정된 판을 건드린다.
+  it('같은 로케일이 여러 건이면 APPROVED 가 아닌 편집판을 고른다', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET') {
+        return jsonResponse({ data: [
+          { id: 'loc-approved', attributes: { locale: 'ko', name: '옛 이름', state: 'APPROVED' } },
+          { id: 'loc-draft', attributes: { locale: 'ko', name: '편집 중', state: 'PREPARE_FOR_SUBMISSION' } },
+        ] });
+      }
+      if (init?.method === 'PATCH') return jsonResponse({ data: { id: 'loc-draft' } });
+      throw new Error(`unexpected request: ${init?.method}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await upsertProductLocalization({
+      internalId: 'sub-1',
+      productType: 'subscription',
+      locale: 'ko',
+      name: '새 이름',
+    });
+
+    expect(result.id).toBe('loc-draft');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/loc-draft');
+  });
+
+  it('APPROVED 판만 있으면 그걸 PATCH 한다 (Apple 이 새 편집판을 만든다)', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET') {
+        return jsonResponse({ data: [
+          { id: 'loc-approved', attributes: { locale: 'ko', name: '옛 이름', state: 'APPROVED' } },
+        ] });
+      }
+      if (init?.method === 'PATCH') return jsonResponse({ data: { id: 'loc-approved' } });
+      throw new Error(`unexpected request: ${init?.method}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await upsertProductLocalization({
+      internalId: 'sub-1', productType: 'subscription', locale: 'ko', name: '새 이름',
+    });
+
+    expect(result).toMatchObject({ id: 'loc-approved', created: false });
+  });
+
   it('새 로케일인데 name 이 없으면 만들지 않는다', async () => {
     const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
       if (init?.method === 'GET') return jsonResponse({ data: [] });

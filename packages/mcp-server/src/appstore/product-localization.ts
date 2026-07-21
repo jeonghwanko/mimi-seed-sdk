@@ -62,6 +62,16 @@ function toLocalization(item: LocalizationPayload): ProductLocalization {
   };
 }
 
+/**
+ * 같은 로케일이 여러 건 올 수 있다 — 심사 통과한 APPROVED 판과 편집 중인
+ * PREPARE_FOR_SUBMISSION 판이 공존한다(실측: 구독 하나에 ko 가 2건).
+ * APPROVED 는 이미 확정된 판이라 그걸 잡아 고치면 엉뚱한 걸 건드린다.
+ * 편집 가능한 판이 있으면 그쪽을 고른다.
+ */
+function pickEditable(matches: ProductLocalization[]): ProductLocalization | undefined {
+  return matches.find((item) => item.state !== 'APPROVED') ?? matches[0];
+}
+
 /** 상품에 등록된 현지화 목록. */
 export async function listProductLocalizations(args: {
   internalId: string;
@@ -99,8 +109,10 @@ export async function upsertProductLocalization(args: {
 
   const resource = localizationResource(productType);
   const authHeaders = await authHeadersOrThrow();
-  const existing = (await listProductLocalizations({ internalId, productType }))
-    .find((item) => item.locale.toLowerCase() === locale.toLowerCase());
+  const existing = pickEditable(
+    (await listProductLocalizations({ internalId, productType }))
+      .filter((item) => item.locale.toLowerCase() === locale.toLowerCase()),
+  );
 
   if (existing) {
     // 넘긴 필드만 보낸다 — description 을 생략한 호출이 기존 설명을 지우면 안 된다.

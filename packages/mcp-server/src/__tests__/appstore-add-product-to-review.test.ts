@@ -132,6 +132,43 @@ describe('addProductToReviewSubmission', () => {
 
   // 담기만 하고 제출하면 안 된다 — 첫 소모성 IAP 는 앱 버전과 함께 나가야 하는데,
   // 여기서 submitted=true 를 눌러버리면 IAP 만 담긴 묶음이 그대로 제출된다.
+  // 실측: 앱 하나에 WAITING_FOR_REVIEW 묶음이 2개 떠 있는 상태가 정상적으로 존재한다.
+  // 거기에 담으면 이미 Apple 큐에 들어간 묶음을 건드리는 것이라, 조회 필터가
+  // READY_FOR_REVIEW 로 좁혀져 있어야 한다.
+  it('이미 제출된 묶음(WAITING_FOR_REVIEW)은 재사용하지 않는다', async () => {
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const value = String(url);
+      const method = init?.method ?? 'GET';
+      if (value.includes('/reviewSubmissions?') && method === 'GET') {
+        // 서버는 필터에 맞는 것만 준다 — READY_FOR_REVIEW 만 물었으면 빈 결과.
+        const askedOnlyDraft = value.includes('READY_FOR_REVIEW')
+          && !value.includes('WAITING_FOR_REVIEW');
+        return jsonResponse({ data: askedOnlyDraft ? [] : [{ id: 'sub-in-review' }] });
+      }
+      if (value.includes('/items?') && method === 'GET') return jsonResponse({ data: [] });
+      if (value.endsWith('/reviewSubmissions') && method === 'POST') {
+        return jsonResponse({ data: { id: 'sub-new' } }, 201);
+      }
+      if (value.endsWith('/reviewSubmissionItems') && method === 'POST') {
+        return jsonResponse({ data: { id: 'item-new' } }, 201);
+      }
+      throw new Error(`unexpected request: ${method} ${value}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await addProductToReviewSubmission({
+      appId: 'app-1',
+      internalId: 'iap-1',
+      productType: 'consumable',
+    });
+
+    expect(result.submissionId).toBe('sub-new');
+    expect(result.reusedSubmission).toBe(false);
+    const query = String(fetchMock.mock.calls[0][0]);
+    expect(decodeURIComponent(query)).toContain('filter[state]=READY_FOR_REVIEW');
+    expect(decodeURIComponent(query)).not.toContain('WAITING_FOR_REVIEW');
+  });
+
   it('제출(submitted=true)까지 하지는 않는다', async () => {
     const fetchMock = routes({ openSubmissionId: 'sub-1' });
     vi.stubGlobal('fetch', fetchMock);

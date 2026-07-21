@@ -828,6 +828,26 @@ function productReviewItemRelationship(productType: AppStoreProductType) {
   return { key: 'inAppPurchaseV2', type: 'inAppPurchases' };
 }
 
+/**
+ * **아직 제출 안 된** 묶음만 찾는다.
+ *
+ * findOpenReviewSubmission 을 그대로 쓰면 안 된다 — 그건 WAITING_FOR_REVIEW 까지
+ * 잡아오는데, 그건 이미 Apple 큐에 들어간 묶음이다. 거기에 항목을 밀어 넣으면
+ * 되든 안 되든 "추가됨" 이라고 보고하게 된다 (실측: 앱 하나에 WAITING_FOR_REVIEW
+ * 묶음이 2개 떠 있는 상태가 정상적으로 존재한다).
+ *
+ * 콘솔의 "제출 초안" 은 READY_FOR_REVIEW 로 보인다. 그게 우리가 담을 대상이다.
+ */
+async function findDraftReviewSubmission(appId: string, platform: string): Promise<string | null> {
+  const data = await apiGet('/reviewSubmissions', {
+    'filter[app]': appId,
+    'filter[platform]': platform,
+    'filter[state]': 'READY_FOR_REVIEW',
+    'limit': '1',
+  });
+  return data?.data?.[0]?.id ?? null;
+}
+
 export async function addProductToReviewSubmission(args: {
   appId: string;
   internalId: string;
@@ -838,7 +858,7 @@ export async function addProductToReviewSubmission(args: {
   const platform = args.platform ?? 'IOS';
   const relationship = productReviewItemRelationship(productType);
 
-  let submissionId = await findOpenReviewSubmission(appId, platform);
+  let submissionId = await findDraftReviewSubmission(appId, platform);
   const reusedSubmission = Boolean(submissionId);
   if (!submissionId) {
     const created = await apiPost('/reviewSubmissions', {
