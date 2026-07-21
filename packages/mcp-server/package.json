@@ -1,6 +1,6 @@
 {
   "name": "@yoonion/mimi-seed-mcp",
-  "version": "0.13.3",
+  "version": "0.13.4",
   "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Codex / Cursor / any MCP client.",
   "type": "module",
   "bin": {
@@ -61,7 +61,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@onesub/providers": "^0.2.0",
+    "@onesub/providers": "^0.4.0",
     "googleapis": "^171.4.0",
     "jose": "^5.10.0",
     "open": "^10.1.0",
