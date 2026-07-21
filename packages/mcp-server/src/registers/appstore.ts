@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as appstore from '../appstore/tools.js';
 import * as appstoreScreenshots from '../appstore/screenshots.js';
 import * as appstoreProductReview from '../appstore/product-review.js';
+import * as appstoreProductLocalization from '../appstore/product-localization.js';
 import {
   createAppleOneTimePurchase, createAppleSubscription,
   updateAppleProduct, deleteAppleProduct, listAppleProducts,
@@ -662,6 +663,78 @@ export function registerAppstoreTools(server: McpServer) {
             '✓ App Review 노트 수정 완료',
             `productId: ${productId}`,
             `internalId: ${result.internalId}`,
+            result.state ? `state: ${result.state}` : '',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_list_product_localizations',
+    'App Store IAP/구독 상품의 현지화(표시 이름·설명) 목록 조회. locale / name / description / state 반환.',
+    {
+      appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
+      productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
+      productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
+    },
+    async ({ appId, productId, productType }) => {
+      const creds = requireAppStoreCreds();
+      const products = await listAppleProducts({
+        appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
+      });
+      const product = products.find((item) => item.productId === productId && item.type === productType);
+      if (!product) {
+        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+      }
+
+      const localizations = await appstoreProductLocalization.listProductLocalizations({
+        internalId: product.internalId,
+        productType,
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(localizations, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'appstore_update_product_localization',
+    'App Store IAP/구독 상품의 현지화(표시 이름·설명)를 로케일 단위로 upsert — 있으면 수정, 없으면 생성. ' +
+    '현지화가 비면 상품이 MISSING_METADATA 에서 안 풀려 심사에 넣을 수 없다 (리뷰 노트·스크린샷과는 별개 리소스). ' +
+    'locale 은 App Store 표기(ko, en-US, ja, zh-Hant)를 쓴다. name 30자 / description 45자 제한.',
+    {
+      appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
+      productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
+      productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
+      locale: z.string().describe('로케일 (예: ko, en-US, ja, zh-Hant)'),
+      name: z.string().max(30).optional().describe('표시 이름 (30자 이하). 새 로케일 생성 시 필수'),
+      description: z.string().max(45).optional().describe('설명 (45자 이하). 생략하면 기존 값 유지'),
+    },
+    async ({ appId, productId, productType, locale, name, description }) => {
+      const creds = requireAppStoreCreds();
+      const products = await listAppleProducts({
+        appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
+      });
+      const product = products.find((item) => item.productId === productId && item.type === productType);
+      if (!product) {
+        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+      }
+
+      const result = await appstoreProductLocalization.upsertProductLocalization({
+        internalId: product.internalId,
+        productType,
+        locale,
+        name,
+        description,
+      });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            `✓ 현지화 ${result.created ? '생성' : '수정'} 완료`,
+            `productId: ${productId}`,
+            `locale: ${result.locale}`,
+            result.name ? `name: ${result.name}` : '',
+            result.description ? `description: ${result.description}` : '',
             result.state ? `state: ${result.state}` : '',
           ].filter(Boolean).join('\n'),
         }],
