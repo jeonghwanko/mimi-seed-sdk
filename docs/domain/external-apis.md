@@ -16,7 +16,7 @@
 | Google Play | Android Publisher API (releases, listings, images, products) | `googleapis` + `@onesub/providers` for IAP/subscriptions |
 | IAM | Cloud IAM (service accounts, keys, policy bindings) | `googleapis` |
 | BigQuery | BigQuery API | `googleapis` |
-| GA4 | GA4 Admin + Data APIs | `googleapis` |
+| GA4 | GA4 Admin v1beta (속성/스트림), Admin v1alpha (BigQueryLink) + Data v1beta APIs | `googleapis` |
 | Search Console | Search Console API | `googleapis` |
 | Google Ads | Google Ads reporting | `googleapis` / REST per `googleads_save_config` |
 | YouTube publishing | YouTube Data API v3 (upload, processing/status, privacy) | `googleapis` + local file streams |

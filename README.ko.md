@@ -391,7 +391,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
 | **Jenkins** (크리덴셜 + 잡) | 10 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` |
-| **GA4** | 6 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` |
+| **GA4** | 8 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_plan_bigquery_link` · `ga4_create_bigquery_link` · `ga4_run_report` |
 | **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |

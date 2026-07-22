@@ -12,6 +12,7 @@ import type { OAuth2Client } from 'google-auth-library';
  * (스코프 추가 후 기존 사용자는 1회 재로그인: `npx -y @yoonion/mimi-seed-mcp mimi-seed-auth`)
  */
 const admin = () => google.analyticsadmin('v1beta');
+const adminAlpha = () => google.analyticsadmin('v1alpha');
 const data = () => google.analyticsdata('v1beta');
 
 /** Admin API(analyticsadmin — property/data stream 생성·조회)가 요구하는 스코프. */
@@ -43,6 +44,12 @@ export function normalizeAccountName(accountId: string): string {
 export function normalizePropertyName(propertyId: string): string {
   const id = propertyId.trim();
   return id.startsWith('properties/') ? id : `properties/${id}`;
+}
+
+/** 'my-project' | 'projects/my-project' → 'projects/my-project' */
+export function normalizeCloudProjectName(projectId: string): string {
+  const id = projectId.trim();
+  return id.startsWith('projects/') ? id : `projects/${id}`;
 }
 
 /**
@@ -96,6 +103,49 @@ export function buildDataStreamBody(opts: {
         iosAppStreamData: { bundleId: opts.bundleId },
       };
   }
+}
+
+export interface BigQueryLinkOptions {
+  projectId: string;
+  datasetLocation: string;
+  dailyExportEnabled?: boolean;
+  streamingExportEnabled?: boolean;
+  freshDailyExportEnabled?: boolean;
+  includeAdvertisingId?: boolean;
+}
+
+/** BigQueryLink 생성 요청 본문 조립 (순수 함수 — 테스트 대상). */
+export function buildBigQueryLinkBody(opts: BigQueryLinkOptions) {
+  return {
+    project: normalizeCloudProjectName(opts.projectId),
+    datasetLocation: opts.datasetLocation.trim(),
+    dailyExportEnabled: opts.dailyExportEnabled ?? true,
+    streamingExportEnabled: opts.streamingExportEnabled ?? false,
+    freshDailyExportEnabled: opts.freshDailyExportEnabled ?? false,
+    includeAdvertisingId: opts.includeAdvertisingId ?? false,
+  };
+}
+
+export function flattenBigQueryLink(link: {
+  name?: string | null;
+  project?: string | null;
+  datasetLocation?: string | null;
+  createTime?: string | null;
+  dailyExportEnabled?: boolean | null;
+  streamingExportEnabled?: boolean | null;
+  freshDailyExportEnabled?: boolean | null;
+  includeAdvertisingId?: boolean | null;
+}) {
+  return {
+    name: link.name ?? null,
+    project: link.project ?? null,
+    datasetLocation: link.datasetLocation ?? null,
+    createTime: link.createTime ?? null,
+    dailyExportEnabled: link.dailyExportEnabled ?? false,
+    streamingExportEnabled: link.streamingExportEnabled ?? false,
+    freshDailyExportEnabled: link.freshDailyExportEnabled ?? false,
+    includeAdvertisingId: link.includeAdvertisingId ?? false,
+  };
 }
 
 // ─── 계정/속성 디스커버리 ───
@@ -160,6 +210,62 @@ export async function listDataStreams(auth: Ga4Auth, propertyId: string) {
     pageSize: 200,
   });
   return (res.data.dataStreams ?? []).map((d) => flattenDataStream(d));
+}
+
+// ─── BigQuery export 링크 ───
+
+/** GA4 property 에 연결된 BigQuery export 링크 목록. */
+export async function listBigQueryLinks(auth: Ga4Auth, propertyId: string) {
+  const res = await adminAlpha().properties.bigQueryLinks.list({
+    auth,
+    parent: normalizePropertyName(propertyId),
+    pageSize: 200,
+  });
+  return (res.data.bigqueryLinks ?? []).map((link) => flattenBigQueryLink(link));
+}
+
+/**
+ * 생성 전 계획. GA4 property 는 BigQuery 링크가 이미 있으면 중복 생성을 시도하지 않는다.
+ * 기존 링크가 있으면 대상 프로젝트가 같아도/달라도 원격 상태를 그대로 보여준다.
+ */
+export async function planBigQueryLink(
+  auth: Ga4Auth,
+  propertyId: string,
+  opts: BigQueryLinkOptions,
+) {
+  const property = normalizePropertyName(propertyId);
+  const requestBody = buildBigQueryLinkBody(opts);
+  const existingLinks = await listBigQueryLinks(auth, property);
+  return {
+    ready: existingLinks.length === 0,
+    action: existingLinks.length === 0 ? 'create' : 'no-op-existing-link',
+    property,
+    requestBody,
+    existingLinks,
+  };
+}
+
+/** 계획을 다시 검사한 뒤 BigQuery export 링크 생성. */
+export async function createBigQueryLink(
+  auth: Ga4Auth,
+  propertyId: string,
+  opts: BigQueryLinkOptions,
+) {
+  const plan = await planBigQueryLink(auth, propertyId, opts);
+  if (!plan.ready) {
+    return { created: false, ...plan };
+  }
+
+  const res = await adminAlpha().properties.bigQueryLinks.create({
+    auth,
+    parent: plan.property,
+    requestBody: plan.requestBody,
+  });
+  return {
+    created: true,
+    property: plan.property,
+    link: flattenBigQueryLink(res.data),
+  };
 }
 
 // ─── 리포트 (Data API) ───

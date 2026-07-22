@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeAccountName,
   normalizePropertyName,
+  normalizeCloudProjectName,
   buildDataStreamBody,
   flattenDataStream,
+  buildBigQueryLinkBody,
+  flattenBigQueryLink,
 } from '../ga4/tools.js';
 
 describe('GA4 path normalization', () => {
@@ -20,6 +23,57 @@ describe('GA4 path normalization', () => {
   it('공백을 trim 한다', () => {
     expect(normalizeAccountName('  789 ')).toBe('accounts/789');
     expect(normalizePropertyName(' 1011 ')).toBe('properties/1011');
+  });
+});
+
+describe('GA4 BigQuery link helpers', () => {
+  it('Cloud project 경로를 정규화한다', () => {
+    expect(normalizeCloudProjectName('sample-project')).toBe('projects/sample-project');
+    expect(normalizeCloudProjectName(' projects/12345 ')).toBe('projects/12345');
+  });
+
+  it('보수적인 기본값으로 생성 본문을 만든다', () => {
+    expect(
+      buildBigQueryLinkBody({ projectId: 'sample-project', datasetLocation: ' asia-northeast3 ' }),
+    ).toEqual({
+      project: 'projects/sample-project',
+      datasetLocation: 'asia-northeast3',
+      dailyExportEnabled: true,
+      streamingExportEnabled: false,
+      freshDailyExportEnabled: false,
+      includeAdvertisingId: false,
+    });
+  });
+
+  it('명시한 export 옵션을 유지한다', () => {
+    const body = buildBigQueryLinkBody({
+      projectId: '12345',
+      datasetLocation: 'US',
+      dailyExportEnabled: false,
+      streamingExportEnabled: true,
+      freshDailyExportEnabled: true,
+      includeAdvertisingId: true,
+    });
+    expect(body).toMatchObject({
+      project: 'projects/12345',
+      dailyExportEnabled: false,
+      streamingExportEnabled: true,
+      freshDailyExportEnabled: true,
+      includeAdvertisingId: true,
+    });
+  });
+
+  it('BigQuery link 응답의 누락 필드를 안전한 기본값으로 평탄화한다', () => {
+    expect(flattenBigQueryLink({ project: 'projects/12345' })).toEqual({
+      name: null,
+      project: 'projects/12345',
+      datasetLocation: null,
+      createTime: null,
+      dailyExportEnabled: false,
+      streamingExportEnabled: false,
+      freshDailyExportEnabled: false,
+      includeAdvertisingId: false,
+    });
   });
 });
 

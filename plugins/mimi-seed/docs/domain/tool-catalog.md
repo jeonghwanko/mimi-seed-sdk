@@ -1,4 +1,4 @@
-# Tool catalog — 183 tools across 19 domains
+# Tool catalog — 185 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -17,7 +17,7 @@
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
 | Jenkins (credentials + jobs) | `registers/jenkins.ts` | 10 |
-| GA4 | `registers/ga4.ts` | 6 |
+| GA4 | `registers/ga4.ts` | 8 |
 | Search Console | `registers/gsc.ts` | 6 |
 | Google Ads | `registers/googleads.ts` | 6 |
 | Facebook | `registers/facebook.ts` | 6 |
@@ -30,7 +30,7 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **183** |
+| **Total** | **19 modules** | **185** |
 
 ## Google Play — `registers/playstore.ts` (32) · impl `playstore/tools.ts`
 
@@ -84,7 +84,7 @@
 | AdMob (`admob.ts`) | `admob_list_accounts` · `admob_list_apps` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` · **W** `admob_create_app` · **W** `admob_create_ad_unit` |
 | IAM (`iam.ts`) | `iam_list_service_accounts` · `iam_list_keys` · **W** `iam_create_service_account` · **W** `iam_create_key` (sensitive — issues a private key) · **W** `iam_add_iam_policy_binding` |
 | BigQuery (`bigquery.ts`) | `bigquery_run_query` (can incur cost) · `bigquery_list_datasets` · `bigquery_list_tables` · `bigquery_get_table_schema` · `bigquery_auth_status` |
-| GA4 (`ga4.ts`) | `ga4_list_account_summaries` · `ga4_list_properties` · `ga4_list_data_streams` · `ga4_run_report` · **W** `ga4_create_property` · **W** `ga4_create_data_stream` |
+| GA4 (`ga4.ts`) | `ga4_list_account_summaries` · `ga4_list_properties` · `ga4_list_data_streams` · `ga4_run_report` · `ga4_plan_bigquery_link` · **W** `ga4_create_property` · **W** `ga4_create_data_stream` · **W** `ga4_create_bigquery_link` (confirm 필요, 기존 링크는 no-op) |
 | Search Console (`gsc.ts`) | `gsc_list_sites` · `gsc_list_sitemaps` · `gsc_get_sitemap` · `gsc_inspect_url` · `gsc_search_analytics` · **W** `gsc_submit_sitemap` |
 | Google Ads (`googleads.ts`) | `googleads_list_campaigns` · `googleads_get_campaign_report` · `googleads_get_uac_report` · `googleads_list_accessible_customers` · `googleads_config_status` · **W** `googleads_save_config` (local config) |
 | Facebook (`facebook.ts`) | `facebook_list_pages` · `facebook_get_page` · `facebook_current_config` · **W** `facebook_save_config` · **W** `facebook_post_photo` (public) · **W** `facebook_post_multi_photo` (public) |
