@@ -1,11 +1,11 @@
 import { google } from 'googleapis';
 import http from 'node:http';
-import open from 'open';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getMcpOAuthClient } from './constants.js';
 import { AuthError, classifyError, type AuthErrorPayload } from './errors.js';
+import { openPrivateBrowser } from './browser.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
 import { scopesForDomains, mergeScopeStrings, type AuthDomainId } from './scopes.js';
@@ -136,7 +136,7 @@ let activeAuthServer: http.Server | null = null;
 /**
  * OAuth 플로우 시작.
  * URL과 대기 Promise를 즉시 반환. localhost:9876 콜백 서버는 백그라운드로 실행.
- * 호출자가 URL을 사용자에게 전달하거나 `open()`을 직접 호출.
+ * 호출자가 URL을 사용자에게 전달하거나 private 브라우저를 직접 연다.
  * `wait` Promise: 토큰 저장 시 resolve, 타임아웃/에러 시 reject.
  * 재호출 시 기존 세션 자동 정리.
  *
@@ -160,7 +160,10 @@ export function startAuth(
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: requestedScopes,
-    prompt: 'consent',
+    // Private windows can still share cookies with an already-running private session.
+    // Force Google to show the account chooser so an unrelated signed-in account is
+    // never selected implicitly.
+    prompt: 'consent select_account',
     include_granted_scopes: true,
   });
 
@@ -280,7 +283,7 @@ export function startAuth(
 }
 
 /**
- * Interactive login — opens browser, waits for callback.
+ * Interactive login — opens a private browser window, waits for callback.
  * startAuth() 래퍼 — CLI에서 사용.
  */
 export async function login(
@@ -289,8 +292,8 @@ export async function login(
   options: { domains?: readonly AuthDomainId[] } = {},
 ): Promise<StoredTokens> {
   const { url, wait } = startAuth(clientId, clientSecret, options);
-  console.log('🔐 브라우저에서 Google 로그인 중...');
-  open(url);
+  console.log('🔐 시크릿 브라우저에서 Google 계정 선택 중...');
+  await openPrivateBrowser(url);
   return wait;
 }
 

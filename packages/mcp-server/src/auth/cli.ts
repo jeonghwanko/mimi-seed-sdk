@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
-import open from 'open';
 import {
   startAuth,
   getStoredTokens,
@@ -16,6 +15,7 @@ import {
   summarizeGrantedDomains,
   type AuthDomainId,
 } from './scopes.js';
+import { openPrivateBrowser } from './browser.js';
 import { resolveLang } from '../lib/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
@@ -79,7 +79,7 @@ const ko = {
   serverStart: '  🌐 OAuth 콜백 서버 시작: http://localhost:9876/callback',
   serverFail: '  ❌ 콜백 서버 시작 실패',
   pasteUrl: '  📋 아래 URL을 브라우저에 직접 붙여넣으세요:',
-  openingBrowser: '  🌐 기본 브라우저 자동 열기...',
+  openingBrowser: '  🌐 시크릿 브라우저 자동 열기...',
   openingHint: '     (실패 시 --no-browser 로 URL 직접 받기)',
   openFail: (msg: string) => `  ⚠️  브라우저 자동 열기 실패: ${msg}`,
   openManually: '  📋 직접 열어주세요:',
@@ -151,7 +151,7 @@ const en: typeof ko = {
   serverStart: '  🌐 Starting the OAuth callback server: http://localhost:9876/callback',
   serverFail: '  ❌ Failed to start the callback server',
   pasteUrl: '  📋 Paste this URL into your browser:',
-  openingBrowser: '  🌐 Opening your default browser...',
+  openingBrowser: '  🌐 Opening a private browser window...',
   openingHint: '     (if that fails, use --no-browser to get the URL)',
   openFail: (msg: string) => `  ⚠️  Could not open the browser: ${msg}`,
   openManually: '  📋 Please open it yourself:',
@@ -369,7 +369,7 @@ async function cmdLogin(): Promise<number> {
   } else {
     err(M.openingBrowser);
     try {
-      await open(url);
+      await openPrivateBrowser(url);
       err(M.openingHint);
     } catch (e) {
       err(M.openFail(e instanceof Error ? e.message : String(e)));
