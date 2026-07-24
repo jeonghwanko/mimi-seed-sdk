@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google } from '../lib/googleapis-lite.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';

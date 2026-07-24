@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client, JWT } from 'google-auth-library';
 
 /** BigQuery 호출에 쓰이는 인증 클라이언트 — 사용자 OAuth 또는 서비스 계정 JWT. */

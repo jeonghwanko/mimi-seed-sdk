@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
   subPatch: vi.fn(),
 }));
 
-vi.mock('googleapis', () => ({
+vi.mock('../lib/googleapis-lite.js', () => ({
   google: {
     androidpublisher: () => ({
       monetization: {

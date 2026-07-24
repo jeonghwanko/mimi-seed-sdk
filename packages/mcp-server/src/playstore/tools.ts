@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { JWT } from 'google-auth-library';
 import fs from 'node:fs';

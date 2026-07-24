@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { google, type youtube_v3 } from 'googleapis';
+import { google, type youtube_v3 } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { friendlyGoogleError } from '../lib/google-errors.js';
 import { validateVideo } from './render.js';
