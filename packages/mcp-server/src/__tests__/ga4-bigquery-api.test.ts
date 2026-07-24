@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
 }));
 
-vi.mock('googleapis', () => ({
+// ga4/tools.ts 는 googleapis 메타 패키지가 아니라 서브패스 로더(lib/googleapis-lite)를
+// import 한다 (187471d perf) — mock 대상도 그쪽이어야 가로채진다. 'googleapis' 를
+// mock 하면 진짜 클라이언트가 fake auth 로 돌다 "authClient.request is not a function".
+vi.mock('../lib/googleapis-lite.js', () => ({
   google: {
     analyticsadmin: vi.fn((version: string) => {
       if (version !== 'v1alpha') {

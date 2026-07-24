@@ -791,18 +791,20 @@ export function registerAppstoreTools(server: McpServer) {
 
   server.tool(
     'appstore_add_product_to_review',
-    'App Store IAP/구독을 심사 제출 묶음에 담는다 — App Store Connect 웹의 "심사에 추가" 버튼과 같다. ' +
-    '담기만 하고 제출하지는 않는다 (제출은 appstore_submit_for_review). ' +
-    '⚠️ 그 앱의 첫 소모성 IAP 는 앱 버전과 같은 묶음으로만 심사에 넣을 수 있다 — IAP 를 전부 담은 뒤 버전을 제출해야 한 번에 나간다. ' +
+    'App Store IAP/구독 상품을 **단독으로** 심사에 제출한다 — consumable/non_consumable 은 ' +
+    'POST /v1/inAppPurchaseSubmissions, subscription 은 POST /v1/subscriptionSubmissions. ' +
+    '⚠️ 호출 즉시 제출된다 ("묶음에 담기"가 아니다 — 그런 공개 API 는 존재하지 않는다. ' +
+    'reviewSubmissionItems 는 appStoreVersion 계열 관계만 받는다, 2026-07 실측). ' +
+    '이미 승인된 적 있는 상품의 변경분 제출용. **앱 첫 심사** 상품은 Apple 이 ' +
+    '"no pending version" 409 로 거부한다 — 그 경우 ASC 웹 버전 페이지의 ' +
+    '"앱 내 구입 및 구독" 섹션에서 담아 버전과 함께 제출해야 한다 (도구가 에러에 안내 첨부). ' +
     '상품 상태가 READY_TO_SUBMIT 이어야 한다 (MISSING_METADATA 면 appstore_update_product_localization 먼저).',
     {
       appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
       productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
-      platform: z.enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS']).default('IOS').optional()
-        .describe('플랫폼 (기본 IOS)'),
     },
-    async ({ appId, productId, productType, platform }) => {
+    async ({ appId, productId, productType }) => {
       const creds = requireAppStoreCreds();
       const products = await listAppleProducts({
         appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
@@ -813,22 +815,82 @@ export function registerAppstoreTools(server: McpServer) {
       }
 
       const result = await appstore.addProductToReviewSubmission({
-        appId,
         internalId: product.internalId,
         productType,
-        platform,
       });
       return {
         content: [{
           type: 'text',
           text: [
-            result.itemAttached ? '✓ 심사 묶음에 추가됨' : '이미 묶음에 들어 있음 (변경 없음)',
+            '✓ 상품 심사 제출 완료 (Apple 심사 대기)',
             `productId: ${productId}`,
-            `submissionId: ${result.submissionId}`,
-            `기존 묶음 재사용: ${result.reusedSubmission}`,
+            `endpoint: ${result.endpoint}`,
+            result.submissionId ? `submissionId: ${result.submissionId}` : '',
             '',
-            '제출은 아직 안 됐다. 담을 상품을 전부 담은 뒤 appstore_submit_for_review 로 버전과 함께 제출한다.',
-          ].join('\n'),
+            '앱 버전과는 별개의 단독 제출이다. 버전 제출은 appstore_submit_for_review.',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_list_review_submissions',
+    'App Store 심사 제출 묶음(reviewSubmissions) + 내부 항목 조회 — 읽기 전용. ' +
+    '각 묶음의 state(READY_FOR_REVIEW=초안 / WAITING_FOR_REVIEW=큐 / UNRESOLVED_ISSUES=거절 미해결 / COMPLETE) 와 ' +
+    '항목별 state·연결 리소스(appStoreVersion 이면 versionString 포함)를 보여준다. ' +
+    '재제출이 "appStoreVersions ... is not in valid state" 로 막힐 때 첫 번째로 볼 것 — ' +
+    '진범은 대개 UNRESOLVED_ISSUES 묶음이 버전을 REJECTED 항목으로 물고 있는 것이다 ' +
+    '(버전 자체는 PREPARE_FOR_SUBMISSION 으로 멀쩡해 보인다, 2026-07 실측). ' +
+    '해제는 appstore_remove_review_submission_item.',
+    {
+      appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
+      platform: z.enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS']).default('IOS').optional()
+        .describe('플랫폼 (기본 IOS)'),
+      limit: z.number().int().min(1).max(20).optional().describe('조회할 묶음 수 (기본 5, 최신순)'),
+    },
+    async ({ appId, platform, limit }) => {
+      const result = await appstore.listReviewSubmissions({ appId, platform, limit });
+      const lines: string[] = [`심사 제출 묶음 ${result.submissions.length}건 (${result.platform})`];
+      for (const sub of result.submissions) {
+        lines.push('');
+        lines.push(`● ${sub.id}`);
+        lines.push(`  state: ${sub.state ?? '?'}  submitted: ${sub.submittedDate ?? '(미제출)'}`);
+        if (sub.items.length === 0) {
+          lines.push('  items: (없음)');
+        }
+        for (const item of sub.items) {
+          const target = item.versionString
+            ? `${item.targetType} ${item.versionString} (${item.appVersionState ?? '?'})`
+            : `${item.targetType ?? '?'} ${item.targetId ?? ''}`;
+          lines.push(`  - item ${item.id}`);
+          lines.push(`    state: ${item.state ?? '?'} → ${target}`);
+        }
+      }
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    },
+  );
+
+  server.tool(
+    'appstore_remove_review_submission_item',
+    '심사 제출 묶음에서 항목을 제거한다 (removed=true PATCH) — ASC 웹 "재제출" 버튼이 내부적으로 하는 동작. ' +
+    '거절된 옛 묶음(UNRESOLVED_ISSUES)이 버전을 물고 있어 재제출이 ENTITY_STATE_INVALID 로 막힐 때 해제용. ' +
+    '항목이 풀리면 옛 묶음은 COMPLETE 로 정리된다. itemId 는 appstore_list_review_submissions 결과. ' +
+    '(appstore_submit_for_review 는 이 해제를 자동으로 시도한다 — 수동 개입이 필요할 때만 직접 호출.)',
+    {
+      itemId: z.string().describe('reviewSubmissionItem ID (appstore_list_review_submissions 결과)'),
+    },
+    async ({ itemId }) => {
+      const result = await appstore.removeReviewSubmissionItem(itemId);
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✓ 묶음에서 항목 제거됨',
+            `itemId: ${result.itemId}`,
+            result.state ? `state: ${result.state}` : '',
+            '항목이 버전이었다면 이제 다른 묶음에 붙일 수 있다 (appstore_submit_for_review).',
+          ].filter(Boolean).join('\n'),
         }],
       };
     },
@@ -917,6 +979,7 @@ export function registerAppstoreTools(server: McpServer) {
       '⚠️ 비가역 작업: 제출 후엔 Apple 심사가 시작되며, 메타데이터/스크린샷/빌드를 더 못 바꿈 (REJECTED/METADATA_REJECTED 시 다시 편집 가능).',
       '안전 가드: confirm 생략/false 시 dry-run preview 만 반환 (versionString·빌드·whatsNew 발췌). 실제 제출은 confirm: true 로 재호출.',
       '사전 조건: 버전이 PREPARE_FOR_SUBMISSION 또는 DEVELOPER_REJECTED 상태, 빌드 attached, 모든 필수 메타데이터 채워짐.',
+      '거절된 옛 묶음(UNRESOLVED_ISSUES)이 버전을 물고 있어 attach 가 막히면 자동으로 항목을 해제(removed=true)하고 재시도한다 — 진단은 appstore_list_review_submissions.',
       'appstore_check_submission_risks로 사전 점검 권장.',
     ].join(' '),
     {

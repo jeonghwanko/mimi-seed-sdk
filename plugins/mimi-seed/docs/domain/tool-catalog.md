@@ -1,4 +1,4 @@
-# Tool catalog — 185 tools across 19 domains
+# Tool catalog — 187 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,7 +11,7 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 37 |
+| App Store Connect | `registers/appstore.ts` | 39 |
 | Google Play | `registers/playstore.ts` | 32 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
@@ -30,7 +30,7 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **185** |
+| **Total** | **19 modules** | **187** |
 
 ## Google Play — `registers/playstore.ts` (32) · impl `playstore/tools.ts`
 
@@ -48,13 +48,13 @@
 - **D** `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (37) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (39) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
   `appstore_list_beta_groups` · `appstore_get_app_info` · `appstore_list_app_info_localizations` ·
   `appstore_list_reviews` · `appstore_list_products` · `appstore_list_product_localizations` ·
-  `appstore_plan_release`
+  `appstore_plan_release` · `appstore_list_review_submissions`
 - **W** `appstore_create_version` · `appstore_attach_build` · `appstore_attach_latest_build` ·
   `appstore_update_localization` · `appstore_upload_screenshot` · `appstore_update_whats_new` ·
   `appstore_update_review_notes` · `appstore_update_app_info_localization` · `appstore_create_app_info_localization` ·
@@ -63,8 +63,8 @@
   `appstore_update_product_review_note` · `appstore_update_product_localization` ·
   `appstore_add_product_to_review` ·
   `appstore_upload_product_review_screenshot`
-- **D** `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_delete_screenshot` ·
-  `appstore_delete_screenshot_set` · `appstore_delete_product`
+- **D** `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_remove_review_submission_item` ·
+  `appstore_delete_screenshot` · `appstore_delete_screenshot_set` · `appstore_delete_product`
 
 ## Firebase — `registers/firebase.ts` (20)
 

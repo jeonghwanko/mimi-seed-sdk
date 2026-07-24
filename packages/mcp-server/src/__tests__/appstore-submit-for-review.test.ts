@@ -107,11 +107,14 @@ describe('submitVersionForReview', () => {
   it('재사용하려던 묶음이 항목 추가를 거부하면 새 묶음을 만들어 재시도한다', async () => {
     let postAttempts = 0;
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
-      const value = String(url);
+      const value = decodeURIComponent(String(url));
       const method = init?.method ?? 'GET';
       if (value.includes('/appStoreVersions/') && method === 'GET') return versionMetaResponse();
       if (value.includes('/reviewSubmissions?') && method === 'GET') {
-        return jsonResponse({ data: [{ id: 'sub-stale' }] });
+        // 서버는 필터에 맞는 것만 준다 — 넓은(open) 필터에만 stale 묶음이 걸린다.
+        // UNRESOLVED_ISSUES 단독(해제 스캔)·READY_FOR_REVIEW 단독(초안 조회)엔 없음.
+        const broadFilter = value.includes('WAITING_FOR_REVIEW');
+        return jsonResponse({ data: broadFilter ? [{ id: 'sub-stale' }] : [] });
       }
       if (value.includes('/reviewSubmissions/sub-stale/items?') && method === 'GET') {
         return jsonResponse({ data: [] });
@@ -147,6 +150,76 @@ describe('submitVersionForReview', () => {
       recoveredFromStaleSubmission: true,
     });
     expect(postAttempts).toBe(2);
+  });
+
+  // 2026-07-24 실측 (PenguinRun 2.0.4 재제출): 새 묶음을 만들어도 attach 가
+  // "appStoreVersions ... is not in valid state" 로 거부됐다. 진범은 거절된 옛 묶음
+  // (UNRESOLVED_ISSUES)이 이 버전을 REJECTED 항목으로 물고 있던 것 — 그 항목을
+  // removed=true 로 풀어야만 attach 가 뚫린다.
+  it('옛 묶음(UNRESOLVED_ISSUES)이 버전을 물고 있으면 항목을 해제하고 재시도한다', async () => {
+    let postAttempts = 0;
+    let createAttempts = 0;
+    let releasedItemPatch: unknown = null;
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const value = decodeURIComponent(String(url));
+      const method = init?.method ?? 'GET';
+      if (value.includes('/appStoreVersions/') && method === 'GET') return versionMetaResponse();
+      if (value.includes('/reviewSubmissions?') && method === 'GET') {
+        // 열린 묶음 없음. 해제 스캔(UNRESOLVED_ISSUES 단독 필터)에만 옛 묶음이 걸린다.
+        const staleScan = value.includes('UNRESOLVED_ISSUES') && !value.includes('WAITING_FOR_REVIEW');
+        return jsonResponse({ data: staleScan ? [{ id: 'sub-old' }] : [] });
+      }
+      if (value.includes('/reviewSubmissions/sub-old/items?') && method === 'GET') {
+        return jsonResponse({
+          data: [{
+            id: 'item-old',
+            attributes: { state: 'REJECTED' },
+            relationships: { appStoreVersion: { data: { id: VERSION_ID } } },
+          }],
+        });
+      }
+      if (value.includes('/reviewSubmissionItems/item-old') && method === 'PATCH') {
+        releasedItemPatch = JSON.parse(String(init?.body));
+        return jsonResponse({ data: { attributes: { state: 'REMOVED', removed: true } } });
+      }
+      if (value.endsWith('/reviewSubmissionItems') && method === 'POST') {
+        postAttempts += 1;
+        if (postAttempts === 1) {
+          return new Response(JSON.stringify({
+            errors: [{
+              code: 'STATE_ERROR.ENTITY_STATE_INVALID',
+              detail: "appStoreVersions with id '888' is not in valid state.",
+            }],
+          }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+        }
+        return jsonResponse({ data: { id: 'item-2' } }, 201);
+      }
+      if (value.endsWith('/reviewSubmissions') && method === 'POST') {
+        createAttempts += 1;
+        return jsonResponse({ data: { id: `sub-fresh-${createAttempts}` } }, 201);
+      }
+      if (value.includes('/reviewSubmissions/sub-fresh-') && method === 'PATCH') {
+        return jsonResponse({ data: { attributes: { state: 'WAITING_FOR_REVIEW' } } });
+      }
+      throw new Error(`unexpected request: ${method} ${value}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await submitVersionForReview(VERSION_ID);
+
+    expect(result).toMatchObject({
+      itemAttached: true,
+      recoveredFromStaleSubmission: true,
+      state: 'WAITING_FOR_REVIEW',
+    });
+    expect(postAttempts).toBe(2);
+    expect(releasedItemPatch).toEqual({
+      data: {
+        type: 'reviewSubmissionItems',
+        id: 'item-old',
+        attributes: { removed: true },
+      },
+    });
   });
 
   it('항목 추가가 409 여도 STATE_ERROR 가 아니면 그대로 던진다 (다른 원인을 stale 로 오인하지 않는다)', async () => {

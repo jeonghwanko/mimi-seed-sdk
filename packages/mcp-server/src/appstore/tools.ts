@@ -808,12 +808,21 @@ export async function submitVersionForReview(versionId: string) {
         },
       });
     } catch (error) {
-      if (!reusedSubmission || !isItemAddRejected(error)) throw error;
-      // 재사용하려던 묶음이 실제로는 잠겨 있었다 — 새 묶음을 만들어 한 번만 재시도한다.
-      submissionId = await createReviewSubmission(appId, platform);
-      reusedSubmission = false;
+      if (!isItemAddRejected(error)) throw error;
+      // 2026-07-24 실측 (PenguinRun 2.0.4 재제출): 버전은 PREPARE_FOR_SUBMISSION 인데도
+      // attach 가 "appStoreVersions ... is not in valid state" 로 거부되는 케이스의 진범은
+      // 거절된 옛 묶음(UNRESOLVED_ISSUES)이 이 버전을 REJECTED 항목으로 물고 있는 것.
+      // 항목을 removed=true 로 풀면 옛 묶음이 COMPLETE 로 정리되고 attach 가 뚫린다.
+      const released = await releaseVersionFromStaleSubmissions(appId, platform, versionId);
+      if (!released && !reusedSubmission) throw error;
       recoveredFromStaleSubmission = true;
+      reusedSubmission = false;
       alreadyAttached = false;
+      // 항목 해제 뒤 Apple 이 READY_FOR_REVIEW 초안을 자동 생성하기도 한다 (실측) —
+      // 초안이 있는데 또 만들면 충돌하므로 재조회 후 없을 때만 생성한다.
+      submissionId =
+        (await findDraftReviewSubmission(appId, platform)) ??
+        (await createReviewSubmission(appId, platform));
       await apiPost('/reviewSubmissionItems', {
         data: {
           type: 'reviewSubmissionItems',
@@ -847,31 +856,81 @@ export async function submitVersionForReview(versionId: string) {
   };
 }
 
-// ─── IAP/구독을 심사 제출 묶음에 추가 ───
+// ─── IAP/구독 상품 심사 제출 ───
 //
-// App Store Connect 웹의 "심사에 추가" 버튼과 같은 동작이다. 제출하지는 않는다 —
-// 항목만 담고, 실제 제출은 submitVersionForReview 가 한다.
+// ⚠️ 2026-07-24 실측 (PenguinRun 첫 출시): reviewSubmissionItems 는 appStoreVersion 계열
+// 관계만 받는다. inAppPurchaseV2 / inAppPurchase / subscription 관계는 전부
+// ENTITY_ERROR.RELATIONSHIP.UNKNOWN 으로 거부된다 — 즉 App Store Connect 웹의
+// "버전과 함께 제출할 상품 담기" 는 공개 API 에 존재하지 않는다.
 //
-// 이게 왜 별도로 필요한가: 어떤 앱의 **첫 소모성 IAP** 는 앱 버전과 같은 묶음으로만
-// 심사에 넣을 수 있다. IAP 만 담긴 초안은 "심사에 제출할 수 없음" 으로 막힌다.
-// 그래서 순서가 중요하다 — IAP 를 전부 담은 뒤 버전을 제출해야 한 번에 나간다.
+// 공개 API 가 제공하는 것은 상품 **단독** 제출뿐이다:
+//   consumable / non_consumable → POST /v1/inAppPurchaseSubmissions (관계 inAppPurchaseV2)
+//   subscription                → POST /v1/subscriptionSubmissions  (관계 subscription)
+// 이 엔드포인트는 상품에 pending version 이 있어야 동작한다 — 한 번 승인된 뒤의 변경분
+// 제출용. 앱 **첫 심사** 에 상품을 끼워 넣는 것은 ASC 웹 버전 페이지에서만 가능하며,
+// 그 경우 Apple 이 409 "no pending version for submission" 을 반환한다 (실측 동일 문구).
 
-function productReviewItemRelationship(productType: AppStoreProductType) {
-  if (productType === 'subscription') {
-    return { key: 'subscription', type: 'subscriptions' };
+function isNoPendingVersionError(error: unknown): boolean {
+  const cause = (error as { cause?: { status?: number; parsedErrors?: Array<{ detail?: string }> } })?.cause;
+  if (cause?.status !== 409) return false;
+  return (cause.parsedErrors ?? []).some((e) =>
+    (e.detail ?? '').toLowerCase().includes('no pending version'),
+  );
+}
+
+export async function addProductToReviewSubmission(args: {
+  internalId: string;
+  productType: AppStoreProductType;
+}): Promise<{
+  internalId: string;
+  productType: AppStoreProductType;
+  endpoint: string;
+  submissionId?: string;
+}> {
+  const { internalId, productType } = args;
+  const isSubscription = productType === 'subscription';
+  const path = isSubscription ? '/subscriptionSubmissions' : '/inAppPurchaseSubmissions';
+  const body = isSubscription
+    ? {
+        data: {
+          type: 'subscriptionSubmissions',
+          relationships: { subscription: { data: { type: 'subscriptions', id: internalId } } },
+        },
+      }
+    : {
+        data: {
+          type: 'inAppPurchaseSubmissions',
+          relationships: { inAppPurchaseV2: { data: { type: 'inAppPurchases', id: internalId } } },
+        },
+      };
+
+  try {
+    const created = await apiPost(path, body);
+    return { internalId, productType, endpoint: path, submissionId: created?.data?.id };
+  } catch (error) {
+    if (!isNoPendingVersionError(error)) throw error;
+    const enriched = new Error(
+      [
+        `상품 ${internalId} (${productType}) 은 API 로 심사 제출할 수 없는 상태야 — Apple 응답: "no pending version for submission".`,
+        '',
+        '이건 보통 **앱 첫 심사** 케이스다. 한 번도 승인된 적 없는 상품은 공개 API 로 심사에 못 넣고,',
+        'App Store Connect 웹의 해당 버전 페이지 → "앱 내 구입 및 구독" 섹션에서 상품을 선택해',
+        '버전과 같은 묶음으로 제출해야 한다 (reviewSubmissionItems 는 상품 관계를 받지 않는다 — 2026-07 실측).',
+        '버전이 이미 심사 대기 중이면 appstore_cancel_review 로 내린 뒤 웹에서 담고 재제출한다.',
+        '이미 승인된 적 있는 상품이라면: 변경분(pending version)이 실제로 있는지 확인.',
+      ].join('\n'),
+    );
+    (enriched as Error & { cause?: unknown }).cause = (error as Error & { cause?: unknown }).cause;
+    throw enriched;
   }
-  return { key: 'inAppPurchaseV2', type: 'inAppPurchases' };
 }
 
 /**
  * **아직 제출 안 된** 묶음만 찾는다.
  *
  * findOpenReviewSubmission 을 그대로 쓰면 안 된다 — 그건 WAITING_FOR_REVIEW 까지
- * 잡아오는데, 그건 이미 Apple 큐에 들어간 묶음이다. 거기에 항목을 밀어 넣으면
- * 되든 안 되든 "추가됨" 이라고 보고하게 된다 (실측: 앱 하나에 WAITING_FOR_REVIEW
- * 묶음이 2개 떠 있는 상태가 정상적으로 존재한다).
- *
- * 콘솔의 "제출 초안" 은 READY_FOR_REVIEW 로 보인다. 그게 우리가 담을 대상이다.
+ * 잡아오는데, 그건 이미 Apple 큐에 들어간 묶음이다. 콘솔의 "제출 초안" 은
+ * READY_FOR_REVIEW 로 보인다. 그게 재사용 대상이다.
  */
 async function findDraftReviewSubmission(appId: string, platform: string): Promise<string | null> {
   const data = await apiGet('/reviewSubmissions', {
@@ -883,60 +942,133 @@ async function findDraftReviewSubmission(appId: string, platform: string): Promi
   return data?.data?.[0]?.id ?? null;
 }
 
-export async function addProductToReviewSubmission(args: {
-  appId: string;
-  internalId: string;
-  productType: AppStoreProductType;
-  platform?: string;
-}) {
-  const { appId, internalId, productType } = args;
-  const platform = args.platform ?? 'IOS';
-  const relationship = productReviewItemRelationship(productType);
+// ─── 심사 제출 묶음 조회 / 항목 해제 ───
+//
+// 2026-07-24 실측: 재제출이 "appStoreVersions ... is not in valid state" 로 막힐 때,
+// 버전 자체는 PREPARE_FOR_SUBMISSION 으로 멀쩡해 보여서 오진하기 쉽다. 진범은
+// 거절된 옛 묶음(UNRESOLVED_ISSUES)이 그 버전을 REJECTED 항목으로 물고 있는 것 —
+// 이 상태는 묶음 내부(items)를 봐야만 보인다. 그래서 조회/해제를 도구로 노출한다.
 
-  let submissionId = await findDraftReviewSubmission(appId, platform);
-  const reusedSubmission = Boolean(submissionId);
-  if (!submissionId) {
-    const created = await apiPost('/reviewSubmissions', {
-      data: {
-        type: 'reviewSubmissions',
-        attributes: { platform },
-        relationships: { app: { data: { type: 'apps', id: appId } } },
-      },
+export interface ReviewSubmissionSummary {
+  id: string;
+  state?: string;
+  submittedDate: string | null;
+  items: Array<{
+    id: string;
+    state?: string;
+    targetType?: string;
+    targetId?: string;
+    versionString?: string;
+    appVersionState?: string;
+  }>;
+}
+
+export async function listReviewSubmissions(args: {
+  appId: string;
+  platform?: string;
+  limit?: number;
+}): Promise<{ appId: string; platform: string; submissions: ReviewSubmissionSummary[] }> {
+  const platform = args.platform ?? 'IOS';
+  const limit = Math.min(Math.max(args.limit ?? 5, 1), 20);
+  const data = await apiGet('/reviewSubmissions', {
+    'filter[app]': args.appId,
+    'filter[platform]': platform,
+    'limit': String(limit),
+  });
+  const submissions = (data?.data ?? []) as Array<{
+    id: string;
+    attributes?: { state?: string; submittedDate?: string | null };
+  }>;
+
+  const result: ReviewSubmissionSummary[] = [];
+  for (const sub of submissions) {
+    const itemsData = await apiGet(`/reviewSubmissions/${sub.id}/items`, {
+      include: 'appStoreVersion',
+      'fields[appStoreVersions]': 'versionString,appVersionState',
+      limit: '50',
+    }).catch(() => null);
+    const included = new Map(
+      ((itemsData?.included ?? []) as Array<{
+        type: string;
+        id: string;
+        attributes?: { versionString?: string; appVersionState?: string };
+      }>).map((inc) => [`${inc.type}:${inc.id}`, inc]),
+    );
+    const items = ((itemsData?.data ?? []) as Array<{
+      id: string;
+      attributes?: { state?: string };
+      relationships?: Record<string, { data?: { type?: string; id?: string } | null }>;
+    }>).map((item) => {
+      const target = Object.entries(item.relationships ?? {}).find(
+        ([key, rel]) => key !== 'reviewSubmission' && rel?.data?.id,
+      )?.[1]?.data;
+      const inc = target?.type && target.id ? included.get(`${target.type}:${target.id}`) : undefined;
+      return {
+        id: item.id,
+        state: item.attributes?.state,
+        targetType: target?.type,
+        targetId: target?.id,
+        versionString: inc?.attributes?.versionString,
+        appVersionState: inc?.attributes?.appVersionState,
+      };
     });
-    submissionId = created?.data?.id;
-    if (!submissionId) {
-      throw new Error(`reviewSubmission 생성 응답에 id가 없어: ${JSON.stringify(created)}`);
+    result.push({
+      id: sub.id,
+      state: sub.attributes?.state,
+      submittedDate: sub.attributes?.submittedDate ?? null,
+      items,
+    });
+  }
+  return { appId: args.appId, platform, submissions: result };
+}
+
+/** 묶음에서 항목 제거 (removed=true PATCH). ASC 웹 "재제출" 이 내부적으로 하는 그 동작. */
+export async function removeReviewSubmissionItem(itemId: string): Promise<{
+  itemId: string;
+  state?: string;
+  removed: boolean;
+}> {
+  const patched = await apiPatch(`/reviewSubmissionItems/${encodeURIComponent(itemId)}`, {
+    data: { type: 'reviewSubmissionItems', id: itemId, attributes: { removed: true } },
+  });
+  return {
+    itemId,
+    state: patched?.data?.attributes?.state,
+    removed: patched?.data?.attributes?.removed ?? true,
+  };
+}
+
+/**
+ * 버전을 물고 있는 낡은 묶음(UNRESOLVED_ISSUES)에서 해당 버전 항목을 removed=true 로
+ * 풀어준다. 항목이 풀리면 Apple 이 옛 묶음을 COMPLETE 로 정리하고, 종종 새
+ * READY_FOR_REVIEW 초안을 자동 생성한다 (실측). 풀어준 항목 수를 반환.
+ */
+async function releaseVersionFromStaleSubmissions(
+  appId: string,
+  platform: string,
+  versionId: string,
+): Promise<number> {
+  const data = await apiGet('/reviewSubmissions', {
+    'filter[app]': appId,
+    'filter[platform]': platform,
+    'filter[state]': 'UNRESOLVED_ISSUES',
+    'limit': '5',
+  }).catch(() => null);
+  const stale = (data?.data ?? []) as Array<{ id: string }>;
+  let released = 0;
+  for (const sub of stale) {
+    const items = await apiGet(`/reviewSubmissions/${sub.id}/items`, { limit: '50' }).catch(() => null);
+    const rows = (items?.data ?? []) as Array<{
+      id: string;
+      relationships?: { appStoreVersion?: { data?: { id?: string } } };
+    }>;
+    for (const row of rows) {
+      if (row?.relationships?.appStoreVersion?.data?.id !== versionId) continue;
+      await removeReviewSubmissionItem(row.id);
+      released += 1;
     }
   }
-
-  // 같은 상품을 두 번 담으면 Apple 이 409 를 준다. 재시도가 안전하도록 먼저 확인한다.
-  const items = await apiGet(`/reviewSubmissions/${submissionId}/items`, { limit: '50' });
-  const rows = (items?.data ?? []) as Array<{ relationships?: Record<string, { data?: { id?: string } }> }>;
-  const alreadyAttached = rows.some(
-    (row) => row?.relationships?.[relationship.key]?.data?.id === internalId,
-  );
-
-  if (!alreadyAttached) {
-    await apiPost('/reviewSubmissionItems', {
-      data: {
-        type: 'reviewSubmissionItems',
-        relationships: {
-          reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
-          [relationship.key]: { data: { type: relationship.type, id: internalId } },
-        },
-      },
-    });
-  }
-
-  return {
-    submissionId,
-    appId,
-    platform,
-    internalId,
-    productType,
-    reusedSubmission,
-    itemAttached: !alreadyAttached,
-  };
+  return released;
 }
 
 // ─── 심사 철회 (Cancel Review) ───
