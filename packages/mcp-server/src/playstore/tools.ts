@@ -113,7 +113,12 @@ export async function withEdit<T>(
   try {
     const result = await fn(editId);
     if (commit) {
-      onCommit?.(await commitEdit(auth, packageName, editId));
+      // 반드시 먼저 커밋하고 나서 콜백에 넘긴다.
+      // onCommit?.(await commitEdit(...)) 로 쓰면 안 된다 — 옵셔널 호출은 수신자가
+      // nullish 일 때 인자 자체를 평가하지 않아서, onCommit 을 안 넘긴 호출자(대부분)에서
+      // 커밋이 통째로 사라진다. playstore-listing 테스트가 이걸 잡아냈다.
+      const info = await commitEdit(auth, packageName, editId);
+      onCommit?.(info);
     }
     return result;
   } finally {
