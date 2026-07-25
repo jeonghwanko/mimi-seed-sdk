@@ -243,6 +243,34 @@ export async function createVersion(input: CreateVersionInput) {
   };
 }
 
+/**
+ * 기존 버전 레코드의 versionString 을 바꾼다 (예: 2.0.5 → 2.0.6).
+ *
+ * 왜 필요한가: ASC 는 편집 가능한 버전이 이미 있으면 새 버전 생성을 거부한다
+ *   409 ENTITY_ERROR.RELATIONSHIP.INVALID "You cannot create a new version of the App in the current state"
+ * 그래서 거절/철회된 버전으로 다음 릴리스를 내보내려면 **같은 레코드의 이름을 올려야** 한다.
+ * 빌드는 CFBundleShortVersionString 이 일치하는 버전에만 붙으므로, 2.0.6 빌드를 올렸다면
+ * 버전 레코드도 2.0.6 이어야 attach 가 된다.
+ *
+ * 편집 가능한 상태(PREPARE_FOR_SUBMISSION / DEVELOPER_REJECTED / REJECTED 등)에서만 통한다.
+ */
+export async function updateVersionString(versionId: string, versionString: string) {
+  const patched = await apiPatch(`/appStoreVersions/${versionId}`, {
+    data: {
+      type: 'appStoreVersions',
+      id: versionId,
+      attributes: { versionString },
+    },
+  });
+  const attrs = patched?.data?.attributes ?? {};
+  return {
+    versionId,
+    versionString: attrs.versionString ?? versionString,
+    state: attrs.appStoreState ?? attrs.appVersionState,
+    platform: attrs.platform,
+  };
+}
+
 export async function attachBuildToVersion(versionId: string, buildId: string) {
   // /relationships/build 엔드포인트는 204 No Content 반환
   await apiPatch(`/appStoreVersions/${versionId}/relationships/build`, {
@@ -1067,6 +1095,48 @@ export async function removeReviewSubmissionItem(itemId: string): Promise<{
     itemId,
     state: patched?.data?.attributes?.state,
     removed: patched?.data?.attributes?.removed ?? true,
+  };
+}
+
+/**
+ * 이미 존재하는 묶음에 앱 버전을 항목으로 끼워 넣는다.
+ *
+ * 앱 첫 심사에서 반드시 필요하다. 웹에서 상품을 담으면 **상품만 든 묶음**이 새로 생기는데,
+ * 그대로 제출하면 Apple 이 막는다:
+ *   409 ENTITY_ERROR.RELATIONSHIP.REQUIRED
+ *   "must have an approved appStoreVersions ... or an appStoreVersions must be included
+ *    in this review submission"
+ * 즉 상품 묶음에는 앱 버전이 함께 있어야 한다. reviewSubmissionItems 는 상품 관계는
+ * 거부하지만 **appStoreVersion 관계는 받는다** — 그래서 버전만 이쪽으로 옮기면 된다.
+ *
+ * 버전이 다른 묶음에 이미 물려 있으면 그 묶음을 먼저 정리해야 한다:
+ *   - 미제출(READY_FOR_REVIEW) 묶음이면 appstore_remove_review_submission_item
+ *   - 제출된(WAITING_FOR_REVIEW) 묶음이면 항목 제거가 막히므로 appstore_cancel_review 로 묶음째 취소
+ */
+export async function addVersionToReviewSubmission(args: {
+  submissionId: string;
+  versionId: string;
+}): Promise<{ itemId?: string; submissionId: string; versionId: string; itemCount: number }> {
+  const { submissionId, versionId } = args;
+  const created = await apiPost('/reviewSubmissionItems', {
+    data: {
+      type: 'reviewSubmissionItems',
+      relationships: {
+        reviewSubmission: { data: { type: 'reviewSubmissions', id: submissionId } },
+        appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+      },
+    },
+  });
+
+  // 제출 전에 몇 개가 들어있는지 보여준다 — 첫 심사에서 "상품이 빠졌는지"를 눈으로 확인해야 한다.
+  const items = await apiGet(`/reviewSubmissions/${submissionId}/items`, { limit: '50' }).catch(
+    () => null,
+  );
+  return {
+    itemId: created?.data?.id,
+    submissionId,
+    versionId,
+    itemCount: (items?.data ?? []).length,
   };
 }
 

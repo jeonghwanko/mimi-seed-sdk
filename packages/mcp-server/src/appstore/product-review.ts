@@ -109,13 +109,42 @@ async function uploadChunks(buffer: Buffer, operations: UploadOperation[]): Prom
 }
 
 /**
+ * 상품에 이미 붙어 있는 심사 스크린샷 id 를 찾는다. 없으면 null.
+ *
+ * 조회 경로가 상품 종류마다 다르다 — 구독은 v1, IAP 는 **v2** 다.
+ * v1 으로 IAP 를 조회하면 스크린샷이 있어도 404 가 나서 "없음"으로 오독하기 쉽다
+ * (2026-07-25 실측: 404 를 믿고 업로드했다가 "Screenshot already exists" 409).
+ */
+async function findExistingReviewScreenshotId(
+  internalId: string,
+  productType: AppStoreProductType,
+  authHeaders: Record<string, string>,
+): Promise<string | null> {
+  const product = productResource(productType);
+  try {
+    const res = await apiRequest<{ data?: { id?: string } | null }>(
+      product.base,
+      `${product.path}/${internalId}/appStoreReviewScreenshot`,
+      authHeaders,
+      { method: 'GET' },
+    );
+    return res?.data?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 기존 IAP/구독 상품에 App Review 스크린샷을 reserve → upload → commit 한다.
- * App Store Connect API는 상품당 심사용 스크린샷 하나를 허용한다.
+ * App Store Connect API는 상품당 심사용 스크린샷 하나를 허용한다 —
+ * 이미 있으면 409 `MEDIA_ASSET_CREATION_NOT_ALLOWED: Screenshot already exists` 다.
+ * 갈아끼우려면 replace: true (기존 것을 지우고 올린다).
  */
 export async function uploadProductReviewScreenshot(args: {
   internalId: string;
   productType: AppStoreProductType;
   filePath: string;
+  replace?: boolean;
 }): Promise<{
   id: string;
   internalId: string;
@@ -124,8 +153,9 @@ export async function uploadProductReviewScreenshot(args: {
   fileSize: number;
   state?: string;
   verified: boolean;
+  replacedId?: string;
 }> {
-  const { internalId, productType, filePath } = args;
+  const { internalId, productType, filePath, replace = false } = args;
   if (!path.isAbsolute(filePath)) {
     throw new Error(`절대 경로가 필요해: ${filePath}`);
   }
@@ -145,6 +175,16 @@ export async function uploadProductReviewScreenshot(args: {
   const checksum = crypto.createHash('md5').update(buffer).digest('hex');
   const resource = reviewScreenshotResource(productType);
   const authHeaders = await authHeadersOrThrow();
+
+  // 상품당 1장이라 새로 올리려면 기존 것을 먼저 지워야 한다.
+  let replacedId: string | undefined;
+  if (replace) {
+    const existing = await findExistingReviewScreenshotId(internalId, productType, authHeaders);
+    if (existing) {
+      await apiRequest(V1_BASE, `${resource.path}/${existing}`, authHeaders, { method: 'DELETE' });
+      replacedId = existing;
+    }
+  }
 
   const reserved = await apiRequest<ReviewScreenshotResponse>(V1_BASE, resource.path, authHeaders, {
     method: 'POST',
@@ -207,5 +247,5 @@ export async function uploadProductReviewScreenshot(args: {
     // commit 성공 후 확인 GET만 실패하면 재업로드를 유도하지 않는다.
   }
 
-  return { id: screenshotId, internalId, productType, fileName, fileSize, state, verified };
+  return { id: screenshotId, internalId, productType, fileName, fileSize, state, verified, replacedId };
 }

@@ -750,14 +750,18 @@ export function registerAppstoreTools(server: McpServer) {
 
   server.tool(
     'appstore_upload_product_review_screenshot',
-    '기존 App Store IAP/구독 상품의 심사용 스크린샷을 reserve → upload → commit. 상품당 1장, 절대 파일 경로 필요.',
+    [
+      '기존 App Store IAP/구독 상품의 심사용 스크린샷을 reserve → upload → commit. 상품당 1장, 절대 파일 경로 필요.',
+      '이미 있으면 409 "Screenshot already exists" — 갈아끼우려면 replace: true (기존 것을 지우고 올린다).',
+    ].join(' '),
     {
       appId: z.string().describe('App Store 앱 ID (숫자형, appstore_list_apps 결과)'),
       productId: z.string().describe('상품 ID (appstore_list_products 결과)'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
       filePath: z.string().describe('업로드할 PNG/JPG의 절대 파일 경로'),
+      replace: z.boolean().optional().describe('이미 스크린샷이 있으면 지우고 새로 올린다 (기본 false)'),
     },
-    async ({ appId, productId, productType, filePath }) => {
+    async ({ appId, productId, productType, filePath, replace }) => {
       const creds = requireAppStoreCreds();
       const products = await listAppleProducts({
         appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
@@ -771,6 +775,7 @@ export function registerAppstoreTools(server: McpServer) {
         internalId: product.internalId,
         productType,
         filePath,
+        replace,
       });
       return {
         content: [{
@@ -780,6 +785,7 @@ export function registerAppstoreTools(server: McpServer) {
             `productId: ${productId}`,
             `internalId: ${result.internalId}`,
             `screenshotId: ${result.id}`,
+            result.replacedId ? `교체됨 (이전 screenshotId: ${result.replacedId})` : '',
             `file: ${result.fileName} (${result.fileSize} bytes)`,
             result.state ? `state: ${result.state}` : '',
             result.verified ? '✓ commit 후 조회 확인' : '⚠ commit은 성공했지만 후속 조회는 확인하지 못함',
@@ -905,6 +911,65 @@ export function registerAppstoreTools(server: McpServer) {
             `itemId: ${result.itemId}`,
             result.state ? `state: ${result.state}` : '',
             '항목이 버전이었다면 이제 다른 묶음에 붙일 수 있다 (appstore_submit_for_review).',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_add_version_to_review_submission',
+    '이미 존재하는 심사 묶음에 앱 버전을 항목으로 추가한다 (POST /reviewSubmissionItems). ' +
+    '⚠️ 앱 첫 심사 필수 절차 — 웹에서 IAP/구독을 담으면 "상품만 든 묶음"이 새로 생기는데, ' +
+    '그대로 제출하면 409 "an appStoreVersions must be included in this review submission" 로 막힌다. ' +
+    'reviewSubmissionItems 는 상품 관계는 거부하지만 appStoreVersion 관계는 받으므로, 버전을 이 묶음으로 옮기면 된다. ' +
+    '버전이 다른 묶음에 물려 있으면 먼저 풀 것: 미제출 묶음이면 appstore_remove_review_submission_item, ' +
+    '제출된 묶음이면 항목 제거가 막히므로 appstore_cancel_review 로 묶음째 취소. ' +
+    '추가 후 appstore_submit_for_review 로 제출하면 버전+상품이 한 묶음으로 나간다.',
+    {
+      submissionId: z.string().describe('대상 reviewSubmission ID (appstore_list_review_submissions 결과)'),
+      versionId: z.string().describe('추가할 App Store 버전 ID (appstore_list_versions 결과)'),
+    },
+    async ({ submissionId, versionId }) => {
+      const result = await appstore.addVersionToReviewSubmission({ submissionId, versionId });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✓ 묶음에 앱 버전 추가됨',
+            `submissionId: ${result.submissionId}`,
+            `versionId: ${result.versionId}`,
+            result.itemId ? `itemId: ${result.itemId}` : '',
+            `현재 묶음 항목 수: ${result.itemCount}개`,
+            '제출 전 항목 수를 확인할 것 — 첫 심사라면 상품들이 함께 들어 있어야 한다.',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_update_version_string',
+    '기존 App Store 버전 레코드의 versionString 을 변경 (예: 2.0.5 → 2.0.6). ' +
+    '⚠️ 편집 가능한 버전이 이미 있으면 appstore_create_version 이 409 "cannot create a new version in the current state" 로 막힌다 — ' +
+    '거절/철회된 버전으로 다음 릴리스를 내보내려면 새로 만들지 말고 이 도구로 **같은 레코드의 이름을 올린다**. ' +
+    '빌드는 CFBundleShortVersionString 이 같은 버전에만 붙으므로, 새 버전의 빌드를 attach 하려면 먼저 이걸 맞춰야 한다. ' +
+    'PREPARE_FOR_SUBMISSION / DEVELOPER_REJECTED 등 편집 가능 상태에서만 통한다.',
+    {
+      versionId: z.string().describe('App Store 버전 ID (appstore_list_versions 결과)'),
+      versionString: z.string().describe('새 버전 문자열 (예: "2.0.6")'),
+    },
+    async ({ versionId, versionString }) => {
+      const result = await appstore.updateVersionString(versionId, versionString);
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✓ 버전 문자열 변경 완료',
+            `versionId: ${result.versionId}`,
+            `versionString: ${result.versionString}`,
+            result.state ? `state: ${result.state}` : '',
+            '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_latest_build).',
           ].filter(Boolean).join('\n'),
         }],
       };
