@@ -59,9 +59,12 @@ const CODE_HINTS: Record<string, string> = {
   // 권한 부족 (API Key role 문제)
   FORBIDDEN_ERROR:
     'API Key 권한 부족 — App Store Connect > Users and Access 에서 키 role 확인.',
-  // submit 직후 cancel 시도 (큐 진입 후)
+  // 상태 전이 거부. cancel 은 WAITING_FOR_REVIEW 까지 되고, IN_REVIEW 이후만 막힌다.
+  // (예전 문구는 "큐 진입 후라 불가"였는데, 그건 cancel 이 submitted:false 를 보내
+  //  항상 실패하던 버그의 증상을 상태 탓으로 오해한 것이었다 — 2026-07-25 정정.)
   STATE_ERROR:
-    '현재 상태에서 허용되지 않는 작업. cancel_review 라면 큐 진입 후라서 불가 — 새 versionString 으로 우회.',
+    '현재 상태에서 허용되지 않는 작업. 제출된 묶음은 항목 제거(removed)가 막히니 '
+    + 'appstore_cancel_review 로 묶음째 취소하세요. IN_REVIEW 이후면 그마저도 불가 — 심사 결과를 기다립니다.',
   // JWT 거부 — 잘못된 자격증명
   NOT_AUTHORIZED:
     'API 키가 거부됐어요 — issuerId/keyId/.p8 조합 불일치 가능. appstore_verify_credentials 로 진단하고 mimi-seed auth appstore 로 재등록.',

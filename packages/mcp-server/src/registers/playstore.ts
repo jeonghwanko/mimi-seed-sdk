@@ -716,6 +716,8 @@ export function registerPlaystoreTools(server: McpServer) {
       'status="completed" + production 으로 전체 출시, status="inProgress" + userFraction 으로 단계 출시(예: 0.1 = 10%).',
       'target에 같은 versionCode가 이미 있으면 해당 항목을 교체. status="completed"면 target 활성 release를 통째로 새 것으로 대체.',
       '⚠️ status="completed"는 비가역에 가까움. playstore_check_submission_risks로 사전 점검 권장.',
+      'Play 가 자동 심사 전송을 거부하는 앱이면 changesNotSentForReview=true 로 자동 폴백해 커밋한다 — 이때 응답의 changesNotSentForReview=true 와 nextAction 을 사용자에게 전달할 것(콘솔에서 "심사를 위해 전송"을 눌러야 심사 시작).',
+      'source 트랙 노트가 버전 문자열뿐인 플레이스홀더면 warnings 로 알린다 — 그대로 승격하면 대상 트랙의 다국어 노트가 덮인다.',
     ].join(' '),
     {
       packageName: z.string().describe('패키지명 (예: gg.pryzm.coffee)'),

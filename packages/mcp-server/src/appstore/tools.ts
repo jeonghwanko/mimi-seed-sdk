@@ -697,9 +697,11 @@ async function isVersionAttached(submissionId: string, versionId: string): Promi
 /**
  * submit_for_review dry-run 프리뷰 — 비가역 제출 직전 사용자 확인용.
  *
- * 1.4.x 배포 사고 누적: submit 직후 cancel_review 가 큐 진입으로 막혀 새 versionString
- * bump 으로 우회해야 하는 케이스가 반복됨 (reference_appstore_cancel_review_window).
- * 호출자가 의도한 그 버전·빌드인지 미리 보여줘서 잘못된 versionId 제출 차단.
+ * 1.4.x 배포 사고 누적: submit 직후 되돌리지 못해 새 versionString bump 으로 우회해야
+ * 하는 케이스가 반복됨 (reference_appstore_cancel_review_window). 그 원인이던
+ * cancel_review 버그(submitted:false → 항상 409)는 2026-07-25 에 canceled:true 로 고쳤고,
+ * 이제 WAITING_FOR_REVIEW 까지는 되돌릴 수 있다. 그래도 IN_REVIEW 이후는 못 되돌리니
+ * 호출자가 의도한 그 버전·빌드인지 미리 보여줘서 잘못된 versionId 제출을 차단한다.
  */
 export async function buildSubmitForReviewPreview(versionId: string): Promise<{
   versionId: string;
@@ -913,10 +915,21 @@ export async function addProductToReviewSubmission(args: {
       [
         `상품 ${internalId} (${productType}) 은 API 로 심사 제출할 수 없는 상태야 — Apple 응답: "no pending version for submission".`,
         '',
-        '이건 보통 **앱 첫 심사** 케이스다. 한 번도 승인된 적 없는 상품은 공개 API 로 심사에 못 넣고,',
-        'App Store Connect 웹의 해당 버전 페이지 → "앱 내 구입 및 구독" 섹션에서 상품을 선택해',
-        '버전과 같은 묶음으로 제출해야 한다 (reviewSubmissionItems 는 상품 관계를 받지 않는다 — 2026-07 실측).',
-        '버전이 이미 심사 대기 중이면 appstore_cancel_review 로 내린 뒤 웹에서 담고 재제출한다.',
+        '**앱 첫 심사** 케이스다. 한 번도 승인된 적 없는 상품은 공개 API 로 심사에 못 넣는다.',
+        '앱 버전을 심사 대기로 만들어도 이 벽은 그대로다 (2026-07-25 재확인).',
+        '',
+        '실제로 통하는 순서 (PenguinRun 2.0.6 실측):',
+        '  1. appstore_submit_for_review 로 앱 버전을 먼저 제출한다.',
+        '     → 상품은 자동으로 안 딸려간다. 버전 1개짜리 묶음 A 가 생긴다. 이건 정상이다.',
+        '  2. 그래야 ASC 웹에 상품의 "심사 추가" UI 가 나타난다. 웹에서 상품을 담으면',
+        '     상품들만 든 **새 묶음 B** 가 READY_FOR_REVIEW(미제출)로 생성된다.',
+        '  3. B 를 그냥 제출하면 409: "an appStoreVersions must be included in this review submission".',
+        '     상품 묶음에는 앱 버전이 반드시 함께 있어야 한다.',
+        '  4. appstore_cancel_review 로 묶음 A 를 취소해 버전을 풀어준다.',
+        '  5. POST /reviewSubmissionItems 로 B 에 appStoreVersion 을 추가한다.',
+        '     (상품 관계는 거부되지만 **버전 관계는 받는다**.)',
+        '  6. B 를 submitted=true 로 PATCH → 버전+상품이 한 묶음으로 제출된다.',
+        '',
         '이미 승인된 적 있는 상품이라면: 변경분(pending version)이 실제로 있는지 확인.',
       ].join('\n'),
     );
@@ -960,6 +973,10 @@ export interface ReviewSubmissionSummary {
     targetId?: string;
     versionString?: string;
     appVersionState?: string;
+    /** IAP/구독/구독그룹 항목의 식별자 — productId 또는 referenceName. */
+    label?: string;
+    /** 대상 리소스 자체의 상태 (상품이면 READY_TO_SUBMIT / WAITING_FOR_REVIEW 등). */
+    targetState?: string;
   }>;
 }
 
@@ -982,16 +999,28 @@ export async function listReviewSubmissions(args: {
 
   const result: ReviewSubmissionSummary[] = [];
   for (const sub of submissions) {
+    // 버전만 include 하면 IAP·구독·구독그룹 항목이 전부 "?" 로 남아, 정작 중요한
+    // "이 묶음에 상품이 들어갔나"를 이 도구로 판별할 수 없었다 (2026-07-25 실측).
     const itemsData = await apiGet(`/reviewSubmissions/${sub.id}/items`, {
-      include: 'appStoreVersion',
+      include: 'appStoreVersion,inAppPurchaseV2,subscription,subscriptionGroup',
       'fields[appStoreVersions]': 'versionString,appVersionState',
+      'fields[inAppPurchases]': 'productId,name,state',
+      'fields[subscriptions]': 'productId,name,state',
+      'fields[subscriptionGroups]': 'referenceName',
       limit: '50',
     }).catch(() => null);
     const included = new Map(
       ((itemsData?.included ?? []) as Array<{
         type: string;
         id: string;
-        attributes?: { versionString?: string; appVersionState?: string };
+        attributes?: {
+          versionString?: string;
+          appVersionState?: string;
+          productId?: string;
+          name?: string;
+          referenceName?: string;
+          state?: string;
+        };
       }>).map((inc) => [`${inc.type}:${inc.id}`, inc]),
     );
     const items = ((itemsData?.data ?? []) as Array<{
@@ -1003,13 +1032,16 @@ export async function listReviewSubmissions(args: {
         ([key, rel]) => key !== 'reviewSubmission' && rel?.data?.id,
       )?.[1]?.data;
       const inc = target?.type && target.id ? included.get(`${target.type}:${target.id}`) : undefined;
+      const a = inc?.attributes;
       return {
         id: item.id,
         state: item.attributes?.state,
         targetType: target?.type,
         targetId: target?.id,
-        versionString: inc?.attributes?.versionString,
-        appVersionState: inc?.attributes?.appVersionState,
+        versionString: a?.versionString,
+        appVersionState: a?.appVersionState,
+        label: a?.productId ?? a?.referenceName ?? a?.name,
+        targetState: a?.state,
       };
     });
     result.push({
@@ -1074,7 +1106,7 @@ async function releaseVersionFromStaleSubmissions(
 // ─── 심사 철회 (Cancel Review) ───
 // WAITING_FOR_REVIEW 상태의 reviewSubmission에만 적용 가능.
 // IN_REVIEW 진입 후에는 Apple API가 거부함 (409).
-// submitted=false PATCH → version이 PREPARE_FOR_SUBMISSION으로 복귀.
+// PATCH attributes.canceled=true → state CANCELING → COMPLETE, version 은 편집 가능 상태로 복귀.
 
 export async function cancelVersionReview(versionId: string): Promise<{
   submissionId: string;
@@ -1105,16 +1137,22 @@ export async function cancelVersionReview(versionId: string): Promise<{
   const submissionId: string = submission.id;
   const previousState: string = submission.attributes?.state ?? 'WAITING_FOR_REVIEW';
 
-  // submitted=false → WAITING_FOR_REVIEW → READY_FOR_REVIEW (version은 PREPARE_FOR_SUBMISSION으로 복귀)
+  // 취소 속성은 canceled 다. submitted:false 는 Apple 이 거부한다:
+  //   409 ENTITY_ERROR.ATTRIBUTE.INVALID "submitted must be set to true if present"
+  // 예전 구현이 submitted:false 를 보내서 이 도구는 사실상 항상 실패했고, 그 탓에
+  // "큐 진입 후에는 웹에서만 취소 가능" 이라는 잘못된 통설이 굳어 있었다.
+  // 실제로는 WAITING_FOR_REVIEW 에서도 canceled:true 가 통한다 (2026-07-25 실측):
+  //   200 → state: CANCELING → (수십 초) → COMPLETE, 항목은 REMOVED, 버전은 편집 가능 복귀.
   const patched = await apiPatch(`/reviewSubmissions/${submissionId}`, {
     data: {
       type: 'reviewSubmissions',
       id: submissionId,
-      attributes: { submitted: false },
+      attributes: { canceled: true },
     },
   });
 
-  const newState: string = patched?.data?.attributes?.state ?? 'READY_FOR_REVIEW';
+  // CANCELING 은 비동기다 — 호출 직후엔 아직 COMPLETE 가 아니다.
+  const newState: string = patched?.data?.attributes?.state ?? 'CANCELING';
   return { submissionId, previousState, newState, versionId };
 }
 

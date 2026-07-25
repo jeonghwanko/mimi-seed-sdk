@@ -73,11 +73,39 @@ function dateToReportingDateTime(date: string, timeZone: string) {
   };
 }
 
+export interface EditCommitInfo {
+  /** true 면 커밋은 됐지만 심사 전송은 Play Console 에서 사람이 눌러야 한다. */
+  changesNotSentForReview: boolean;
+}
+
+// Play 는 앱/계정 상태에 따라 "커밋과 동시에 심사 전송"을 거부한다:
+//   Changes cannot be sent for review automatically.
+//   Please set the query parameter changesNotSentForReview to true.
+// 이 경우 그 파라미터를 붙여야만 커밋이 통과한다. 예전 구현은 파라미터를 노출하지도,
+// 폴백하지도 않아서 그런 앱에서는 promote/submit 계열이 **100% 실패**했다
+// (PenguinRun 2026-07-25 실측 — 결국 Android Publisher API 를 직접 쳐서 우회해야 했다).
+async function commitEdit(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+  editId: string,
+): Promise<EditCommitInfo> {
+  try {
+    await publisher().edits.commit({ auth, packageName, editId });
+    return { changesNotSentForReview: false };
+  } catch (err) {
+    const msg = String((err as { message?: string })?.message ?? err);
+    if (!/changesNotSentForReview/i.test(msg)) throw err;
+    await publisher().edits.commit({ auth, packageName, editId, changesNotSentForReview: true });
+    return { changesNotSentForReview: true };
+  }
+}
+
 export async function withEdit<T>(
   auth: OAuth2Client | JWT,
   packageName: string,
   fn: (editId: string) => Promise<T>,
   commit = false,
+  onCommit?: (info: EditCommitInfo) => void,
 ): Promise<T> {
   const res = await publisher().edits.insert({ auth, packageName });
   const editId = res.data.id;
@@ -85,7 +113,7 @@ export async function withEdit<T>(
   try {
     const result = await fn(editId);
     if (commit) {
-      await publisher().edits.commit({ auth, packageName, editId });
+      onCommit?.(await commitEdit(auth, packageName, editId));
     }
     return result;
   } finally {
@@ -584,7 +612,10 @@ export async function promoteRelease(
     throw new Error('status="inProgress"일 때 userFraction은 0과 1 사이 필수 (예: 0.1 → 10%).');
   }
 
-  return withEdit(
+  let commitInfo: EditCommitInfo = { changesNotSentForReview: false };
+  const warnings: string[] = [];
+
+  const out = await withEdit(
     auth,
     packageName,
     async (editId) => {
@@ -618,6 +649,25 @@ export async function promoteRelease(
       };
       if (status === 'inProgress' && userFraction != null) {
         (newRelease as { userFraction?: number }).userFraction = userFraction;
+      }
+
+      // 2-b. 릴리스 노트 회귀 가드.
+      //   CI 가 internal 에 올릴 때 "v2.0.6 (70)" 같은 플레이스홀더를 한 언어만 넣어두는 경우가 흔한데,
+      //   copyReleaseNotes 기본값(true)으로 production 에 승격하면 살아 있던 다국어 노트가
+      //   그 플레이스홀더로 통째 덮인다 (PenguinRun 2026-07-25 에 실제로 밟을 뻔한 함정).
+      //   막지는 않되(의도적일 수 있으므로) 반드시 눈에 띄게 알린다.
+      if (!releaseNotes && copyReleaseNotes) {
+        const copied = sourceRelease.releaseNotes ?? [];
+        const placeholder = copied.filter((n) =>
+          /^\s*v?\d+(\.\d+)*\s*(\(\d+\))?\s*$/.test(n.text ?? ''),
+        );
+        if (placeholder.length > 0) {
+          warnings.push(
+            `${fromTrack} 의 릴리스 노트가 버전 문자열뿐이라 플레이스홀더로 보인다 ` +
+            `(${placeholder.map((n) => `${n.language}="${n.text}"`).join(', ')}). ` +
+            `이대로 ${toTrack} 에 덮어쓰면 기존 노트가 사라진다 — releaseNotes 를 직접 넘기거나 copyReleaseNotes:false 를 고려할 것.`,
+          );
+        }
       }
 
       // 3. target 트랙 현재 상태 조회 후 merge
@@ -662,7 +712,22 @@ export async function promoteRelease(
       };
     },
     true,
+    (info) => { commitInfo = info; },
   );
+
+  if ((out.releaseNotesLanguages ?? []).length === 0) {
+    warnings.push(`${toTrack} 에 릴리스 노트 없이 승격됐다 — 스토어의 "새로운 기능"이 비어 보인다.`);
+  }
+
+  return {
+    ...out,
+    changesNotSentForReview: commitInfo.changesNotSentForReview,
+    // Play 가 자동 심사 전송을 거부한 경우, 사람이 콘솔에서 눌러야 실제 심사가 시작된다.
+    nextAction: commitInfo.changesNotSentForReview
+      ? 'Play Console 에서 "변경사항 검토 후 게시"(심사를 위해 전송)를 눌러야 심사가 시작된다.'
+      : undefined,
+    warnings: warnings.length ? warnings : undefined,
+  };
 }
 
 export async function listReviews(auth: OAuth2Client | JWT, packageName: string) {

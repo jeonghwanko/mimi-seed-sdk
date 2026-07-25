@@ -859,10 +859,25 @@ export function registerAppstoreTools(server: McpServer) {
         if (sub.items.length === 0) {
           lines.push('  items: (없음)');
         }
+        // 항목 종류별 요약. 상품이 몇 개 들어갔는지가 첫 심사에서 가장 중요한 정보다.
+        const kinds = new Map<string, number>();
+        for (const item of sub.items) {
+          const k = item.targetType ?? 'unknown';
+          kinds.set(k, (kinds.get(k) ?? 0) + 1);
+        }
+        lines.push(
+          `  항목 ${sub.items.length}개` +
+          (kinds.size ? ` — ${[...kinds].map(([k, n]) => `${k} ${n}`).join(', ')}` : ''),
+        );
+        if (sub.items.length === 0) {
+          lines.push('  items: (없음)');
+        }
         for (const item of sub.items) {
           const target = item.versionString
             ? `${item.targetType} ${item.versionString} (${item.appVersionState ?? '?'})`
-            : `${item.targetType ?? '?'} ${item.targetId ?? ''}`;
+            : item.label
+              ? `${item.targetType} ${item.label}${item.targetState ? ` (${item.targetState})` : ''}`
+              : `${item.targetType ?? '?'} ${item.targetId ?? ''}`;
           lines.push(`  - item ${item.id}`);
           lines.push(`    state: ${item.state ?? '?'} → ${target}`);
         }
@@ -1025,8 +1040,10 @@ export function registerAppstoreTools(server: McpServer) {
     'appstore_cancel_review',
     [
       'App Store 심사 제출을 철회 — WAITING_FOR_REVIEW 상태에서만 가능.',
-      'submitted=false PATCH → reviewSubmission이 READY_FOR_REVIEW로 복귀, 버전은 PREPARE_FOR_SUBMISSION 상태로 돌아가 메타데이터/빌드 수정 가능.',
+      'PATCH attributes.canceled=true → state 가 CANCELING 으로 바뀌고 수십 초 뒤 COMPLETE(항목 REMOVED), 버전은 편집 가능 상태로 복귀해 메타데이터/빌드 수정 가능.',
+      'CANCELING 은 비동기라 호출 직후엔 아직 COMPLETE 가 아니다 — 이어서 작업하려면 상태를 폴링할 것.',
       '⚠️ IN_REVIEW 이상이면 Apple API가 409로 거부함 — 이 경우 App Store Connect 웹에서 직접 처리하거나 심사 결과를 기다려야 함.',
+      '제출된 묶음에서 항목만 빼내는 것(removed)은 막히므로, 버전을 다른 묶음으로 옮기려면 이 도구로 묶음째 취소한다.',
       '철회 후 수정 완료 시 appstore_submit_for_review로 재제출 가능.',
     ].join(' '),
     {
