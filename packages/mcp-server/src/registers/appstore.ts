@@ -4,6 +4,7 @@ import * as appstore from '../appstore/tools.js';
 import * as appstoreScreenshots from '../appstore/screenshots.js';
 import * as appstoreProductReview from '../appstore/product-review.js';
 import * as appstoreProductLocalization from '../appstore/product-localization.js';
+import * as appstoreRelease from '../appstore/release.js';
 import {
   createAppleOneTimePurchase, createAppleSubscription,
   updateAppleProduct, deleteAppleProduct, listAppleProducts,
@@ -1125,6 +1126,183 @@ export function registerAppstoreTools(server: McpServer) {
             `  ${result.previousState} → ${result.newState}`,
             `  버전 ${result.versionId}이(가) PREPARE_FOR_SUBMISSION 상태로 복귀됨.`,
             `  메타데이터/빌드 수정 후 appstore_submit_for_review로 재제출 가능.`,
+          ].join('\n'),
+        }],
+      };
+    },
+  );
+
+  // ─── 심사 통과 이후: 출시 제어 ───
+  // 버전 생성 시 releaseType 을 정하는 것까지는 appstore_create_version 이 한다.
+  // 그 뒤 "지금 출시 / 출시 방식 변경 / 단계적 출시" 세 가지가 API 로 안 돼서 콘솔을 열어야 했다.
+
+  server.tool(
+    'appstore_release_status',
+    [
+      '버전의 출시 상태를 한 번에 읽는다 — 읽기 전용.',
+      'appStoreState(PENDING_DEVELOPER_RELEASE / READY_FOR_SALE …), releaseType(MANUAL / AFTER_APPROVAL / SCHEDULED),',
+      'earliestReleaseDate, 그리고 단계적 출시가 켜져 있으면 그 상태(ACTIVE/PAUSED/COMPLETE)와 현재 며칠째인지.',
+      '출시 관련 쓰기 도구를 부르기 전에 이걸로 먼저 확인할 것.',
+    ].join(' '),
+    {
+      versionId: z.string().describe('App Store 버전 ID (appstore_list_versions 결과)'),
+    },
+    async ({ versionId }) => {
+      const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
+      const lines = [
+        `버전 ${version.versionString ?? version.versionId}`,
+        `  상태: ${version.state ?? '알 수 없음'}${note ? ` — ${note}` : ''}`,
+        `  출시 방식: ${version.releaseType ?? '(미지정 — Apple 기본값)'}`,
+      ];
+      if (version.earliestReleaseDate) lines.push(`  예약 시각: ${version.earliestReleaseDate}`);
+      if (phased) {
+        lines.push(
+          `  단계적 출시: ${phased.state ?? '?'}` +
+            (phased.currentDayNumber ? ` (${phased.currentDayNumber}일째/7일)` : '') +
+            (phased.startDate ? ` · 시작 ${phased.startDate}` : ''),
+        );
+      } else {
+        lines.push('  단계적 출시: 꺼짐');
+      }
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    },
+  );
+
+  server.tool(
+    'appstore_release_version',
+    [
+      '심사를 통과해 개발자 출시 대기(PENDING_DEVELOPER_RELEASE) 중인 버전을 지금 출시한다 — POST /v1/appStoreVersionReleaseRequests.',
+      '콘솔의 "이 버전 출시" 버튼과 같은 동작.',
+      '⚠️ 비가역: 실행 즉시 App Store 에 공개된다. 되돌리려면 새 버전을 내거나 판매 중단해야 한다.',
+      '안전 가드: confirm 생략/false 면 현재 상태만 보여주는 dry-run.',
+      'releaseType=AFTER_APPROVAL 로 만든 버전은 승인 시 자동 출시되므로 이 도구가 필요 없다 — MANUAL 로 대기 중인 버전용이다.',
+    ].join(' '),
+    {
+      versionId: z.string().describe('App Store 버전 ID (appstore_list_versions 결과)'),
+      confirm: z.boolean().optional().describe('true 명시 시에만 실제 출시. 생략/false 면 dry-run.'),
+    },
+    async ({ versionId, confirm }) => {
+      if (!confirm) {
+        const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
+        const ready = version.state === 'PENDING_DEVELOPER_RELEASE';
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              '🛑 출시 dry-run — 아직 출시하지 않았다.',
+              `  버전: ${version.versionString ?? versionId}`,
+              `  상태: ${version.state ?? '알 수 없음'}${note ? ` — ${note}` : ''}`,
+              phased ? `  단계적 출시: ${phased.state ?? '?'}` : '  단계적 출시: 꺼짐',
+              '',
+              ready
+                ? '실제 출시하려면 confirm: true 로 다시 호출. 실행 즉시 공개된다.'
+                : '지금은 출시할 수 없는 상태다. PENDING_DEVELOPER_RELEASE 여야 한다.',
+            ].join('\n'),
+          }],
+        };
+      }
+      const after = await appstoreRelease.requestRelease(versionId);
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✅ 출시 요청 전송',
+            `  버전: ${after.versionString ?? versionId}`,
+            `  상태: ${after.state ?? '조회 실패'}`,
+            'App Store 반영에는 보통 수십 분~수 시간이 걸린다. appstore_release_status 로 확인.',
+          ].join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_update_release_type',
+    [
+      '이미 만들어진 버전의 출시 방식을 바꾼다 — PATCH /v1/appStoreVersions/{id}.',
+      'MANUAL(개발자가 직접 출시) / AFTER_APPROVAL(승인되면 자동 출시) / SCHEDULED(지정 시각 출시).',
+      'SCHEDULED 는 earliestReleaseDate(ISO 8601, 미래 시각)가 함께 필요하다.',
+      '편집 가능한 상태에서만 통한다 — 이미 READY_FOR_SALE 이면 바꿀 수 없다.',
+      'MANUAL 로 만들어 둔 버전을 "승인되면 알아서 나가게" 바꾸는 용도가 대부분이다.',
+    ].join(' '),
+    {
+      versionId: z.string().describe('App Store 버전 ID'),
+      releaseType: z
+        .enum(['MANUAL', 'AFTER_APPROVAL', 'SCHEDULED'])
+        .describe('출시 방식'),
+      earliestReleaseDate: z
+        .string()
+        .optional()
+        .describe('SCHEDULED 일 때 필수. ISO 8601 UTC (예: 2026-08-01T09:00:00Z)'),
+    },
+    async ({ versionId, releaseType, earliestReleaseDate }) => {
+      const after = await appstoreRelease.updateReleaseType({ versionId, releaseType, earliestReleaseDate });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✅ 출시 방식 변경',
+            `  버전: ${after.versionString ?? versionId}`,
+            `  출시 방식: ${after.releaseType ?? releaseType}`,
+            after.earliestReleaseDate ? `  예약 시각: ${after.earliestReleaseDate}` : '',
+            `  상태: ${after.state ?? '알 수 없음'}`,
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'appstore_phased_release',
+    [
+      'iOS 단계적 출시(7일 램프)를 제어한다 — appStoreVersionPhasedReleases.',
+      'action: status(조회) / enable(켜기·PAUSED면 재개) / pause(일시중지) / resume(재개) / complete(즉시 전체 공개) / disable(단계적 출시 제거).',
+      'Play 의 userFraction·halted 에 해당하는 iOS 쪽 장치다.',
+      '⚠️ complete 와 disable 은 남은 사용자 전체에게 즉시 공개되며 되돌릴 수 없다 — confirm: true 필요.',
+      'pause/resume/enable 은 되돌릴 수 있어 confirm 없이 실행된다.',
+    ].join(' '),
+    {
+      versionId: z.string().describe('App Store 버전 ID'),
+      action: z
+        .enum(['status', 'enable', 'pause', 'resume', 'complete', 'disable'])
+        .describe('수행할 동작'),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe('complete / disable 에만 필요. 생략/false 면 현재 상태만 반환하는 dry-run.'),
+    },
+    async ({ versionId, action, confirm }) => {
+      if (action === 'status' || ((action === 'complete' || action === 'disable') && !confirm)) {
+        const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
+        const header =
+          action === 'status'
+            ? '단계적 출시 상태'
+            : `🛑 ${action} dry-run — 아직 실행하지 않았다.`;
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              header,
+              `  버전: ${version.versionString ?? versionId} (${version.state ?? '?'}${note ? ` — ${note}` : ''})`,
+              phased
+                ? `  단계적 출시: ${phased.state ?? '?'}` +
+                  (phased.currentDayNumber ? ` (${phased.currentDayNumber}일째/7일)` : '')
+                : '  단계적 출시: 꺼짐',
+              action === 'status'
+                ? ''
+                : '실행하려면 confirm: true 로 다시 호출. 남은 사용자 전체에게 즉시 공개된다.',
+            ].filter(Boolean).join('\n'),
+          }],
+        };
+      }
+
+      const { phased } = await appstoreRelease.setPhasedRelease({ versionId, action });
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            `✅ 단계적 출시: ${action}`,
+            phased ? `  현재 상태: ${phased.state ?? '?'}` : '  단계적 출시 제거됨 (전체 공개)',
           ].join('\n'),
         }],
       };

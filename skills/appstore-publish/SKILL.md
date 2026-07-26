@@ -31,6 +31,12 @@ App Store Connect 는 Issuer ID · Key ID · `.p8` 파일 3개가 필요하고, 
 ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_update_version_string,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
 ```
 
+승인 이후 출시 제어까지 다룰 때 추가로:
+
+```
+ToolSearch(query="select:appstore_release_status,appstore_release_version,appstore_update_release_type,appstore_phased_release")
+```
+
 심사 묶음이나 인앱 상품까지 다룰 때 추가로:
 
 ```
@@ -63,6 +69,20 @@ ASC는 버전을 바로 제출하지 않고 **심사 제출 묶음(reviewSubmiss
 | 409 `cannot create a new version in the current state` | 편집 가능한 버전이 이미 있다 | 새로 만들지 말고 `appstore_update_version_string`으로 기존 레코드 이름을 올린다 |
 
 빌드는 `CFBundleShortVersionString`이 같은 버전에만 붙는다. 새 빌드를 attach하기 전에 버전 문자열을 맞춘다.
+
+## 승인 이후 출시
+
+버전 생성 때 `releaseType`을 `AFTER_APPROVAL`로 잡아두면 승인과 동시에 자동 출시되므로 아무 것도 할 게 없다.
+아래는 그렇게 안 해뒀거나, 출시 속도를 조절해야 할 때다. 손대기 전에 `appstore_release_status`로 현재
+상태(appStoreState · releaseType · 단계적 출시 진행도)를 먼저 읽는다.
+
+- `PENDING_DEVELOPER_RELEASE`로 대기 중 → `appstore_release_version` (**confirm 필요**, 즉시 공개·비가역)
+- `MANUAL`로 만들어 둔 걸 "승인되면 자동"으로 → `appstore_update_release_type`
+- 7일에 걸쳐 점진 출시 → `appstore_phased_release` (`enable` / `pause` / `resume`)
+- 남은 사용자에게 즉시 전체 공개 → `appstore_phased_release` `action=complete` (**confirm 필요**, 비가역)
+
+Play의 `userFraction`·`halted`에 대응하는 iOS 장치다. 두 스토어를 함께 내보낼 때 출시 속도를 맞추려면
+양쪽 다 조절해야 한다.
 
 ## 인앱 상품 심사 정보
 

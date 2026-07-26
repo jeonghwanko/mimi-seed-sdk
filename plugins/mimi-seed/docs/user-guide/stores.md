@@ -78,6 +78,7 @@ Continue with only the needed steps:
 - Reply to reviews
 - Manage in-app products, subscriptions, and product review information
 - Submit for review or cancel a submission
+- Release an approved version, change how it releases, or run a phased release (below)
 
 ### The review submission bundle — where resubmission actually gets stuck
 
@@ -97,6 +98,23 @@ Start with `appstore_list_review_submissions`. It shows each bundle's state — 
 
 A build attaches only to the version whose `CFBundleShortVersionString` matches, so fix the version string
 **before** attaching the new build.
+
+### After approval — releasing
+
+Setting `releaseType` when you create the version (`MANUAL` / `AFTER_APPROVAL` / `SCHEDULED`) covers most cases:
+`AFTER_APPROVAL` ships the moment Apple approves, with nothing left to do. The tools below cover what that
+setting cannot.
+
+| Situation | Tool |
+|---|---|
+| Read the version state, release type, and phased-release progress | `appstore_release_status` |
+| A version sits in `PENDING_DEVELOPER_RELEASE` and you want it live now | `appstore_release_version` (`confirm: true` — irreversible) |
+| You created the version as `MANUAL` and want it to ship on approval instead | `appstore_update_release_type` |
+| Roll out over Apple's 7-day ramp, pause it, resume it, or push it to everyone | `appstore_phased_release` |
+
+`appstore_phased_release` takes `status` / `enable` / `pause` / `resume` / `complete` / `disable`. Pause and
+resume are reversible; `complete` and `disable` release to every remaining user at once and require
+`confirm: true`. This is the iOS counterpart to Play's `userFraction` / `halted` staged rollout.
 
 ### App Store-specific risks
 

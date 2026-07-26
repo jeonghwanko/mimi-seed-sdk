@@ -77,6 +77,7 @@ appstore_list_apps
 - 리뷰 답변
 - 인앱 상품·구독과 상품 심사 정보
 - 심사 제출 또는 제출 취소
+- 승인된 버전 출시, 출시 방식 변경, 단계적 출시 제어 (아래)
 
 ### 심사 제출 묶음 — 재제출이 실제로 막히는 지점
 
@@ -94,6 +95,22 @@ App Store Connect는 버전을 바로 제출하지 않는다. **심사 제출 �
 | 409 `cannot create a new version in the current state` | 편집 가능한 버전 레코드가 이미 있다 | 새로 만들지 말고 `appstore_update_version_string`으로 기존 레코드 이름을 올린다(예: 2.0.5 → 2.0.6). `PREPARE_FOR_SUBMISSION` / `DEVELOPER_REJECTED` 같은 편집 가능 상태에서만 통한다 |
 
 빌드는 `CFBundleShortVersionString`이 같은 버전에만 붙으므로, 새 빌드를 연결하기 **전에** 버전 문자열을 맞춘다.
+
+### 승인 이후 — 출시하기
+
+버전을 만들 때 `releaseType`(`MANUAL` / `AFTER_APPROVAL` / `SCHEDULED`)을 정해두면 대부분 해결된다.
+`AFTER_APPROVAL`이면 Apple 승인 순간 자동으로 나가고 손댈 게 없다. 아래 도구는 그 설정으로 안 되는 것들이다.
+
+| 상황 | 도구 |
+|---|---|
+| 버전 상태·출시 방식·단계적 출시 진행도 확인 | `appstore_release_status` |
+| `PENDING_DEVELOPER_RELEASE`로 대기 중인 버전을 지금 출시 | `appstore_release_version` (`confirm: true` — 비가역) |
+| `MANUAL`로 만들어 둔 버전을 "승인되면 자동"으로 변경 | `appstore_update_release_type` |
+| 7일 램프로 단계적 출시, 일시중지·재개, 전체 공개 | `appstore_phased_release` |
+
+`appstore_phased_release`의 action은 `status` / `enable` / `pause` / `resume` / `complete` / `disable`이다.
+pause·resume은 되돌릴 수 있고, `complete`와 `disable`은 남은 사용자 전체에게 즉시 공개되므로 `confirm: true`가
+필요하다. Play의 `userFraction` / `halted` 단계적 출시에 대응하는 iOS 쪽 장치다.
 
 ### App Store에서 특히 조심할 것
 
