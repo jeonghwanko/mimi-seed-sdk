@@ -199,3 +199,20 @@ The same unknown-result rule applies to `youtube_upload_video`. The upload reque
 and can outlive the MCP client's timeout even though YouTube later finishes creating the video. Never automatically
 retry a timed-out upload. Check YouTube Studio for a matching recent title/file first; if the call returned a
 `videoId`, use `youtube_get_video_status` to reconcile processing and privacy state.
+
+## 18. A closed stdio transport is not an auth failure
+
+The local MCP process belongs to the client that spawned it. `mimi-seed restart` can terminate that process, but
+it cannot attach a replacement process to an already-running client thread. Claude Code can normally reconnect on
+the next tool call and exposes `/mcp`; Codex may keep the current thread's transport permanently closed. In Codex,
+start a new thread or reload the client, then call `mimi_seed_status` again.
+
+This distinction matters after source builds and plugin updates: the tool names or cached skills may still be
+visible even though the live stdio child is gone. A failure reported immediately as `Transport closed`, before a
+tool response, is transport state rather than evidence that Google OAuth, YouTube, or store credentials are
+invalid. Do not reauthenticate until a new client session can reach the status tool and reports an auth-specific
+error.
+
+Do not generalize that rule to a long-running write. If the transport closes during an upload, carousel publish,
+or another provider write, the outcome is unknown: the provider may have completed after the client detached.
+Inspect the target service for a matching result before retrying. This is the same reconciliation rule as §17.

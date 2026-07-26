@@ -26,11 +26,23 @@ const M = catalog(
     configLine: (cfg: string) => `  설정: ${cfg}`,
     markerLine: (marker: string) => `  식별자: ${marker}`,
     noProcess: '⚠ 실행 중인 프로세스를 찾지 못했습니다.',
-    noProcessHint:
+    codexNoProcessHint:
+      '  Codex의 stdio transport가 이미 닫혔습니다. 이 메시지만으로 인증 실패를 뜻하지 않으며, 이 CLI에서 현재 thread에 다시 붙일 수 없습니다.',
+    codexKilledHint:
+      '  현재 Codex thread는 종료한 stdio 서버에 다시 붙을 수 없습니다. 새 thread를 시작하거나 Codex를 다시 여세요.',
+    codexVerify: '  확인: 새 Codex thread에서 mimi_seed_status 호출',
+    claudeNoProcessHint:
       '  이미 종료됐거나, Claude Code가 아직 서버를 시작하지 않은 상태일 수 있습니다.',
+    claudeKilledHint: '  Claude Code가 다음 도구 호출 시 자동으로 재연결합니다.',
+    claudeVerify: '  연결 확인: Claude Code에서 /mcp 실행',
+    genericNoProcessHint:
+      '  stdio transport가 이미 닫혔을 수 있습니다. MCP 클라이언트를 다시 열어 연결하세요.',
+    genericKilledHint:
+      '  stdio 서버는 MCP 클라이언트가 소유합니다. 클라이언트를 다시 열어 연결하세요.',
+    genericVerify: '  연결 확인: 새 세션에서 mimi_seed_status 호출',
+    unknownWriteOutcome:
+      '  직전 호출이 업로드·게시 같은 쓰기였다면 결과가 불명일 수 있습니다. 대상 서비스에서 실제 반영 여부를 확인한 뒤 재시도하세요.',
     killed: (server: string, n: number) => `✓ ${server} 종료됨 (${n}개 프로세스)`,
-    killedHint: '  Claude Code가 다음 도구 호출 시 자동으로 재연결합니다.',
-    verify: '  연결 확인: Claude Code에서 /mcp 실행',
   },
   {
     killedPid: (pid: string) => `  PID ${pid} killed`,
@@ -47,11 +59,23 @@ const M = catalog(
     configLine: (cfg: string) => `  Config: ${cfg}`,
     markerLine: (marker: string) => `  Marker: ${marker}`,
     noProcess: '⚠ No running process found.',
-    noProcessHint:
+    codexNoProcessHint:
+      '  The Codex stdio transport is already closed. This message alone does not prove an auth failure, and this CLI cannot reattach the current thread.',
+    codexKilledHint:
+      '  The current Codex thread cannot reattach to the terminated stdio server. Start a new thread or reopen Codex.',
+    codexVerify: '  Verify: call mimi_seed_status in a new Codex thread',
+    claudeNoProcessHint:
       '  It may have already exited, or Claude Code may not have started the server yet.',
+    claudeKilledHint: '  Claude Code will reconnect automatically on the next tool call.',
+    claudeVerify: '  Verify the connection: run /mcp in Claude Code',
+    genericNoProcessHint:
+      '  The stdio transport may already be closed. Reopen the MCP client to reconnect.',
+    genericKilledHint:
+      '  The MCP client owns the stdio server. Reopen the client to reconnect.',
+    genericVerify: '  Verify: call mimi_seed_status in a new session',
+    unknownWriteOutcome:
+      '  If the previous call was a write such as an upload or publish, its outcome may be unknown. Check the target service before retrying.',
     killed: (server: string, n: number) => `✓ ${server} killed (${n} process(es))`,
-    killedHint: '  Claude Code will reconnect automatically on the next tool call.',
-    verify: '  Verify the connection: run /mcp in Claude Code',
   },
 );
 
@@ -64,6 +88,37 @@ function readJson(filePath: string): Record<string, unknown> {
 }
 
 type ServerMap = Record<string, Record<string, unknown>>;
+type McpClientKind = 'codex' | 'claude-code' | 'unknown';
+
+const BUILTIN_MIMI_SEED_SERVER: Record<string, unknown> = {
+  command: 'npx',
+  args: ['-y', '@yoonion/mimi-seed-mcp'],
+};
+
+function detectMcpClient(env: NodeJS.ProcessEnv = process.env): McpClientKind {
+  if (env.CODEX_THREAD_ID || env.CODEX_CI || env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE) return 'codex';
+  if (env.CLAUDECODE || env.CLAUDE_CODE || env.CLAUDE_CODE_ENTRYPOINT) return 'claude-code';
+  return 'unknown';
+}
+
+function recoveryMessages(client: McpClientKind, killed: boolean): { hint: string; verify: string } {
+  const m = M();
+  if (client === 'codex') {
+    return { hint: killed ? m.codexKilledHint : m.codexNoProcessHint, verify: m.codexVerify };
+  }
+  if (client === 'claude-code') {
+    return { hint: killed ? m.claudeKilledHint : m.claudeNoProcessHint, verify: m.claudeVerify };
+  }
+  return { hint: killed ? m.genericKilledHint : m.genericNoProcessHint, verify: m.genericVerify };
+}
+
+function resolveServerConfig(servers: ServerMap, serverName: string): Record<string, unknown> | undefined {
+  const configured = servers[serverName];
+  if (configured) return configured;
+  // Codex 플러그인은 자체 .mcp.json 을 로드하므로 현재 프로젝트나 ~/.claude.json 에
+  // 등록 흔적이 없을 수 있다. 기본 mimi-seed 이름에만 패키지 고유 식별자를 폴백한다.
+  return serverName === 'mimi-seed' ? BUILTIN_MIMI_SEED_SERVER : undefined;
+}
 
 /**
  * MCP 서버 등록은 **세 곳**에 흩어져 있다. 예전엔 첫 번째만 봤는데, 정작 이 저장소가
@@ -203,7 +258,7 @@ export async function cmdRestart(args: string[]): Promise<void> {
   log('');
 
   const { servers, sources } = collectServers();
-  const cfg = servers[serverName];
+  const cfg = resolveServerConfig(servers, serverName);
 
   if (!cfg) {
     const names = Object.keys(servers);
@@ -230,16 +285,20 @@ export async function cmdRestart(args: string[]): Promise<void> {
 
   log(kleur.dim(M().markerLine(marker)));
   const { killed } = killByMarkers(markers);
+  const recovery = recoveryMessages(detectMcpClient(), killed > 0);
 
   if (killed === 0) {
     log(kleur.yellow(M().noProcess));
-    log(kleur.dim(M().noProcessHint));
+    log(kleur.dim(recovery.hint));
+    log(kleur.yellow(M().unknownWriteOutcome));
   } else {
     log('');
     log(kleur.green(M().killed(serverName, killed)));
-    log(kleur.dim(M().killedHint));
+    log(kleur.dim(recovery.hint));
   }
 
   log('');
-  log(kleur.cyan(M().verify));
+  log(kleur.cyan(recovery.verify));
 }
+
+export const __testing = { detectMcpClient, recoveryMessages, resolveServerConfig };

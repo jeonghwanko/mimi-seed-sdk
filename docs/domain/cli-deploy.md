@@ -24,7 +24,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `review` | `review.ts` | AI review-reply draft → optional Play post |
 | `deploy` | `deploy.ts` | full pipeline: CI build → check → notes → apply |
 | `mcp` | `mcp-config.ts` | print / write Claude Code & Codex MCP registration |
-| `restart` | `mcp-restart.ts` | restart a registered MCP server process |
+| `restart` | `mcp-restart.ts` | terminate a registered local stdio process, then print client-specific recovery. It falls back to the package marker for Codex plugin-only installs. Claude Code may reconnect on the next call; a closed Codex transport requires a new thread/client reload because the CLI cannot reattach the current thread |
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 
 Per-command options are the SSOT in the `usage.<command>` entries of the `catalog(ko, en)` block in

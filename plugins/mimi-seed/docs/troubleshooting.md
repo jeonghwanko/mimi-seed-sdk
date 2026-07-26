@@ -26,6 +26,17 @@ loaded yet. Tell Claude: *"load the mimi-seed tools with ToolSearch first."* See
 `npx` caches. New skills with an old server is the classic split. Follow the `mimi-seed-update` skill rather
 than reinstalling in a loop.
 
+**A tool call fails with `Transport closed`.**
+If this appears immediately on every call, the client's local stdio child is gone or detached. The message alone
+does **not** mean your Google, YouTube, or store credentials are invalid. `mimi-seed restart mimi-seed` now reports
+the client-specific recovery path, including Codex plugin-only installs. Claude Code can normally reconnect on the
+next call (`/mcp` shows the state), but Codex cannot reattach the current thread after its transport closes — start
+a new thread or reopen Codex, then call `mimi_seed_status`. Do not reauthenticate unless that new session returns
+an auth-specific error.
+
+If it closes during an upload, publish, or other write, the outcome is **unknown**. Check the target service for a
+matching result before retrying; otherwise you may create a duplicate.
+
 **Node version errors.**
 Node 20+ is required, for both the CLI and the MCP server. `.nvmrc` is the source of truth — `nvm use`.
 
