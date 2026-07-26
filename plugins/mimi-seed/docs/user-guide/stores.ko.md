@@ -78,12 +78,30 @@ appstore_list_apps
 - 인앱 상품·구독과 상품 심사 정보
 - 심사 제출 또는 제출 취소
 
+### 심사 제출 묶음 — 재제출이 실제로 막히는 지점
+
+App Store Connect는 버전을 바로 제출하지 않는다. **심사 제출 묶음(reviewSubmission)** 을 제출하며, 그 안에
+버전·인앱 상품 등 함께 심사받을 항목이 들어간다. "재제출이 안 된다"의 대부분은 버전 문제가 아니라 묶음
+문제다. 버전 자체는 `PREPARE_FOR_SUBMISSION`으로 멀쩡해 보이는데 옛 묶음이 그 버전을 물고 있는 상태다.
+
+`appstore_list_review_submissions`부터 본다. 묶음별 state — `READY_FOR_REVIEW`(초안) ·
+`WAITING_FOR_REVIEW`(큐) · `UNRESOLVED_ISSUES`(거절 미해결) · `COMPLETE` — 와 묶음 안 항목을 보여준다.
+
+| 마주치는 오류 | 진짜 원인 | 해결 |
+|---|---|---|
+| 재제출 시 `appStoreVersions ... is not in valid state` | 거절된 `UNRESOLVED_ISSUES` 묶음이 아직 버전을 물고 있다 | `appstore_remove_review_submission_item`으로 항목을 푼다. 풀리면 옛 묶음은 `COMPLETE`로 정리된다. `appstore_submit_for_review`가 이미 자동으로 시도하므로, 그게 안 될 때만 직접 호출한다 |
+| 409 `an appStoreVersions must be included in this review submission` | 웹 콘솔에서 IAP를 담아 **상품만 든 묶음**이 새로 생겼다 | `appstore_add_version_to_review_submission`으로 버전을 그 묶음에 넣는다. 버전이 다른 묶음에 물려 있으면 먼저 푼다 — 미제출 묶음이면 `appstore_remove_review_submission_item`, 제출된 묶음이면 항목 제거가 막히므로 `appstore_cancel_review`로 묶음째 취소 |
+| 409 `cannot create a new version in the current state` | 편집 가능한 버전 레코드가 이미 있다 | 새로 만들지 말고 `appstore_update_version_string`으로 기존 레코드 이름을 올린다(예: 2.0.5 → 2.0.6). `PREPARE_FOR_SUBMISSION` / `DEVELOPER_REJECTED` 같은 편집 가능 상태에서만 통한다 |
+
+빌드는 `CFBundleShortVersionString`이 같은 버전에만 붙으므로, 새 빌드를 연결하기 **전에** 버전 문자열을 맞춘다.
+
 ### App Store에서 특히 조심할 것
 
 - Mimi Seed는 빌드 바이너리를 생성하거나 App Store Connect에 처음 업로드하지 않는다. CI/Xcode 업로드가 먼저다.
 - 빌드가 `PROCESSING`이면 연결하지 말고 처리가 끝날 때까지 기다린다.
 - 심사 제출은 버전·빌드·메타데이터·수출 규정 등 콘솔 필수 상태에 영향을 받는다.
 - 스크린샷 set 삭제와 심사 취소는 현재 상태를 읽고 명시적으로 확인한다.
+- 제출된 묶음을 취소하면 항목 하나가 아니라 묶음 전체가 심사에서 빠진다.
 
 ## 요청 예시
 

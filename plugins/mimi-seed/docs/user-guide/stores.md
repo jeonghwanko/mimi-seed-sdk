@@ -79,12 +79,32 @@ Continue with only the needed steps:
 - Manage in-app products, subscriptions, and product review information
 - Submit for review or cancel a submission
 
+### The review submission bundle — where resubmission actually gets stuck
+
+App Store Connect does not submit a version directly. It submits a **review submission**: a bundle whose items
+are the version, the in-app purchases, and anything else going to review together. Most "I can't resubmit"
+situations are a bundle problem, not a version problem — the version can look perfectly fine in
+`PREPARE_FOR_SUBMISSION` while an old bundle still holds it.
+
+Start with `appstore_list_review_submissions`. It shows each bundle's state — `READY_FOR_REVIEW` (draft),
+`WAITING_FOR_REVIEW` (queued), `UNRESOLVED_ISSUES` (rejected, unresolved), `COMPLETE` — and every item inside it.
+
+| What you hit | What is actually wrong | Fix |
+|---|---|---|
+| `appStoreVersions ... is not in valid state` on resubmit | A rejected `UNRESOLVED_ISSUES` bundle still holds your version | Release the item with `appstore_remove_review_submission_item`; the old bundle then settles to `COMPLETE`. `appstore_submit_for_review` already tries this — intervene manually only when it can't |
+| 409 `an appStoreVersions must be included in this review submission` | Adding IAPs in the web console created a **products-only** bundle | Move the version into that bundle with `appstore_add_version_to_review_submission`. If the version is held elsewhere, free it first: `appstore_remove_review_submission_item` for an unsubmitted bundle, `appstore_cancel_review` for a submitted one (items can't be removed from a submitted bundle) |
+| 409 `cannot create a new version in the current state` | An editable version record already exists | Don't create another — rename the existing record with `appstore_update_version_string` (e.g. 2.0.5 → 2.0.6). Only works in editable states such as `PREPARE_FOR_SUBMISSION` / `DEVELOPER_REJECTED` |
+
+A build attaches only to the version whose `CFBundleShortVersionString` matches, so fix the version string
+**before** attaching the new build.
+
 ### App Store-specific risks
 
 - Mimi Seed does not create the binary or perform its first upload to App Store Connect. CI/Xcode must upload it.
 - Do not attach a build while it is still `PROCESSING`.
 - Submission depends on version, build, metadata, export-compliance, and other required Console state.
 - Re-read current state and explicitly confirm screenshot-set deletion or review cancellation.
+- Cancelling a submitted bundle takes the whole bundle out of review, not just one item.
 
 ## Prompt examples
 

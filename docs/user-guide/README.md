@@ -26,6 +26,7 @@ launch**. Start with the outcome you want instead of memorizing tool names.
 | Deploy Android or iOS end to end | [End-to-end deploy](deploy.md) |
 | Operate Play Store or App Store directly | [Store operations](stores.md) |
 | Operate Firebase, AdMob, GA4, or BigQuery | [Cloud and analytics](cloud-operations.md) |
+| Produce a video and publish it to YouTube | [Video production](video.md) |
 | Post to Facebook, Instagram, or Threads | [Social publishing](social.md) |
 | Use Claude Code, Codex, and team automation safely | [Teams, security, and automation](team-security.md) |
 

@@ -26,9 +26,17 @@ const USER_GUIDE_PAIRS = [
   ['docs/user-guide/deploy.md', 'docs/user-guide/deploy.ko.md'],
   ['docs/user-guide/stores.md', 'docs/user-guide/stores.ko.md'],
   ['docs/user-guide/cloud-operations.md', 'docs/user-guide/cloud-operations.ko.md'],
+  ['docs/user-guide/video.md', 'docs/user-guide/video.ko.md'],
   ['docs/user-guide/social.md', 'docs/user-guide/social.ko.md'],
   ['docs/user-guide/team-security.md', 'docs/user-guide/team-security.ko.md'],
 ] as const;
+
+/** 인덱스로 짚으면 가이드를 하나 끼워 넣을 때마다 엉뚱한 문서를 검사하게 된다 — 파일명으로 찾는다. */
+const guidePair = (name: string) => {
+  const pair = USER_GUIDE_PAIRS.find(([en]) => en.endsWith(`/${name}.md`));
+  if (!pair) throw new Error(`USER_GUIDE_PAIRS 에 ${name} 없음`);
+  return pair;
+};
 
 /** 온톨로지(docs/domain/*)와 에이전트 컨텍스트 파일. Claude Code 는 CLAUDE.md, Codex 는 AGENTS.md 를
  *  읽고 두 파일 모두 여기로 라우팅하므로, 링크가 깨지면 두 클라이언트가 같이 길을 잃는다. */
@@ -90,7 +98,7 @@ describe('온보딩 문서 ↔ 코드', () => {
   });
 
   it('Codex 원격 설정 문서가 PAT 평문 대신 환경변수 계약을 안내한다', () => {
-    for (const f of USER_GUIDE_PAIRS[9]) {
+    for (const f of guidePair('team-security')) {
       const doc = read(f);
       expect(doc).toContain('mcp_servers.mimi-seed-remote');
       expect(doc).toContain('bearer_token_env_var = "MIMI_SEED_TOKEN"');
