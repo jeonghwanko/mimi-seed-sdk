@@ -40,6 +40,7 @@ ToolSearch(query="select:<tool>[,<tool>...]")
    - Play 스토어 출시/승격/리스팅 → `playstore-publish` 스킬
    - App Store 메타데이터/스크린샷/TestFlight → `appstore-publish` 스킬
    - CI 빌드→점검→노트→적용 풀 파이프라인 → `deploy` 스킬
+   - story 기반 영상/쇼츠 제작·YouTube 게시 → `video-create-publish` 스킬
    - Firebase/AdMob/IAM/BigQuery → 해당 도메인 도구 직접
 3. 스토어 **쓰기 전** `*_check_submission_risks` 또는 `*_plan_release`로 블로커를 먼저 점검하고 사용자에게 체크리스트로 보고.
 4. 적용 후 결과·실패 지점을 요약.

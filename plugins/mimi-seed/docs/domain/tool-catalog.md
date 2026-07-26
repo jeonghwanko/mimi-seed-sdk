@@ -1,4 +1,4 @@
-# Tool catalog — 187 tools across 19 domains
+# Tool catalog — 189 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,7 +11,7 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 39 |
+| App Store Connect | `registers/appstore.ts` | 41 |
 | Google Play | `registers/playstore.ts` | 32 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
@@ -30,7 +30,7 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **187** |
+| **Total** | **19 modules** | **189** |
 
 ## Google Play — `registers/playstore.ts` (32) · impl `playstore/tools.ts`
 
@@ -48,7 +48,7 @@
 - **D** `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (39) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (41) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
@@ -63,6 +63,7 @@
   `appstore_update_product_review_note` · `appstore_update_product_localization` ·
   `appstore_add_product_to_review` ·
   `appstore_upload_product_review_screenshot`
+- **U** `appstore_update_version_string` · `appstore_add_version_to_review_submission`
 - **D** `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_remove_review_submission_item` ·
   `appstore_delete_screenshot` · `appstore_delete_screenshot_set` · `appstore_delete_product`
 
