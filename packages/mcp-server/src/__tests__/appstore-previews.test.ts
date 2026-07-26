@@ -149,6 +149,26 @@ describe('미리보기 업로드', () => {
     expect(calls).toHaveLength(0);
   });
 
+  // 회귀: fs.readSync 의 bytesRead 를 버리면 Buffer.alloc 의 0 패딩이 영상 데이터로 올라간다.
+  // PUT 은 성공하고 체크섬 불일치가 한참 뒤 인코딩 실패로 나타나 추적이 어렵다.
+  it('파일이 operation 이 요구하는 것보다 짧으면 업로드를 멈춘다', async () => {
+    // 15 바이트인데 operations 는 30 바이트를 요구한다 (업로드 도중 파일이 바뀐 상황).
+    fs.writeFileSync(videoPath, Buffer.alloc(15, 7));
+    stubFetch([
+      { match: /appPreviewSets/, json: { data: [{ id: 's', attributes: { previewType: 'IPHONE_67' }, relationships: {} }], included: [] } },
+      { match: /\/appPreviews$/, method: 'POST', json: RESERVE },
+      { match: /upload\.apple/, method: 'PUT', json: {} },
+    ]);
+
+    await expect(
+      previews.uploadPreview({ localizationId: 'l', previewType: 'IPHONE_67', filePath: videoPath }),
+    ).rejects.toThrow(/크기가 어긋났다|바이트/);
+
+    // 두 번째 조각(20~30)은 읽히지 않으므로 PUT 은 최대 한 번, 커밋은 없다
+    expect(calls.filter((c) => c.method === 'PUT').length).toBeLessThanOrEqual(1);
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
   it('uploadOperations 가 비면 커밋하지 않고 멈춘다', async () => {
     stubFetch([
       { match: /appPreviewSets/, json: { data: [{ id: 's', attributes: { previewType: 'IPHONE_67' }, relationships: {} }], included: [] } },
