@@ -27,6 +27,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page or account access tokens for social post tools (written `0600`) | each domain's `*_save_config` |
 | `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads credentials. One file can hold all three; `.mimi-seed.json.socialProfiles` selects each platform independently | `facebook_save_config` / `instagram_save_config` / `threads_save_config`, or `mimi-seed auth <platform> --profile <id>` |
+| `tiktok-business.json` | TikTok API for Business app secret + one-day access token + one-year refresh token (written `0600`) | `mimi-seed-tiktok-business-auth` / `mimi-seed auth tiktok` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
 | `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
@@ -43,6 +44,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
 | **Meta social posting** | Long-lived Page/account tokens with a saved expiry estimate; `mimi-seed setup` reconnects expired/expiring tokens | `facebook/`, `instagram/`, `threads/` |
+| **TikTok Business Organic API** | Short-term access token renewed from a refresh token five minutes before expiry | `tiktok-business/auth.ts` |
 
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
   `playstore_list_service_accounts` shows the mapping. Resolution: look up
@@ -89,6 +91,7 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth   # ASC API key → appsto
 npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth  # Play service account
 npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth   # BigQuery auth
 npx -y @yoonion/mimi-seed-mcp mimi-seed-social-auth     # Facebook / Instagram / Threads
+npx -y @yoonion/mimi-seed-mcp mimi-seed-tiktok-business-auth # TikTok Business Organic API
 ```
 
 The CLI also wraps Google login as `mimi-seed auth login` (`cli/src/auth.ts`). The MCP resource

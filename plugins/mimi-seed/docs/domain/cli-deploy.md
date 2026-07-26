@@ -16,7 +16,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
 | `lang` | `lang.ts` | CLI output language (`ko` / `en`) → `~/.mimi-seed/settings.json`. `setup` asks on first run; `MIMI_SEED_LANG` overrides |
 | `status` | `index.ts` (`cmdStatus`) | show connection + `list_apps` via the remote MCP |
-| `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads`; `meta` opens the combined social setup — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
+| `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` / `tiktok`; `meta` opens the combined Meta setup — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
 | `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI) |
 | `check` | `check.ts` | pre-release readiness (`--fail-on-blocker` for CI) |
@@ -59,12 +59,12 @@ and `review.ts`'s sentiment-matching keywords (translating those would break the
 
 `cli/src/credentials.ts` is the **SSOT for what credentials exist**. `doctor`, `auth status --all`, and `setup`
 all iterate it; previously `doctor` and `auth` each hand-maintained a 4-row list and neither could see Jenkins,
-CI, Google Ads, Facebook, Instagram, or Threads at all. Each `CredSpec` carries its `detect()` (pure fs/env, no network),
+CI, Google Ads, Facebook, Instagram, Threads, or TikTok Business at all. Each `CredSpec` carries its `detect()` (pure fs/env, no network),
 `fix` command, `obtain` steps (the out-of-band vendor-console knowledge), and a `docsAnchor` into
 [`../credentials.md`](../credentials.md).
 
 **Who writes a credential file is a hard rule: exactly one owner per credential.** The CLI does not write
-`jenkins.json` / `google-ads.json` / `facebook.json` / `instagram.json` / `threads.json` — it shells out to the mcp-server bins,
+`jenkins.json` / `google-ads.json` / `facebook.json` / `instagram.json` / `threads.json` / `tiktok-business.json` — it shells out to the mcp-server bins,
 because the *validation* (probe the server, call the API, refuse to save a bad token) lives there. Duplicating a
 writer across the two packages is what produced the Jenkins dual-config bug ([[pitfalls]]). The one exception is
 `ci.json`, which the CLI both writes and reads at deploy time.

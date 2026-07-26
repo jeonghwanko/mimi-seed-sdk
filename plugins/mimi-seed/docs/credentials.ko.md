@@ -33,7 +33,7 @@ mimi-seed setup
 | 빌드 트리거 | [GitHub / GitLab](#ci-github-gitlab) *또는* [Jenkins](#jenkins) |
 | Crashlytics / 애널리틱스 export 조회 | [Google OAuth](#google-oauth), OAuth 가 자꾸 막히면 [BigQuery SA](#bigquery) |
 | 광고 캠페인 리포트 | [Google Ads](#google-ads) |
-| 출시 공지 게시 | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) |
+| 출시 공지 게시 | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI 릴리스 노트 / 리뷰 답변 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(선택 — 없어도 동작한다)* |
 | story 기반 영상 리서치·제작 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + 실제로 쓸 공급자의 [영상 API 키](#video-api-keys) |
 | 호스팅 대시보드 / 원격 MCP | [Mimi Seed 계정](#cloud-pat) |
@@ -300,6 +300,29 @@ Instagram 토큰은 여기서 안 통한다.
 이미지 게시는 Meta 가 미디어를 처리할 때까지 몇 초 대기한 뒤 발행된다.
 
 **확인:** `threads_get_account`.
+
+---
+
+<a id="tiktok-business"></a>
+
+## TikTok Business
+
+**열리는 것:** `tiktok_business_*` — TikTok API for Business Organic API로 owned Business Account의 공개
+영상을 사전 점검·게시하고, 처리 상태와 로컬 중복 방지 감사 로그를 관리한다.
+
+**발급받기:** TikTok for Business Developer Portal에서 앱을 만들고 Organic API 승인을 받은 뒤
+**TikTok Accounts > Business Content > Video Publish** 권한과 TikTok account-holder redirect URL을 설정한다.
+owned 계정을 승인하고 10분 안에 callback URL의 일회용 `auth_code`를 복사한다.
+
+**마법사에 넣을 것:** `mimi-seed auth tiktok`을 실행한다. 코드로 1일 access token과 1년 refresh token을
+교환하고 `/business/get/`으로 계정을 검증한 뒤 `~/.mimi-seed/tiktok-business.json`에 `0600`으로 저장한다.
+access token은 만료 5분 전에 자동 갱신되며 refresh token이 만료·철회되면 새 코드가 필요하다.
+
+**게시 제약:** Organic API는 로컬 파일 스트림 대신 `video_url`을 받는다. HTTPS이고 앱에서 검증한 도메인의
+URL이어야 하며, 3xx 리디렉션 없이 영상에 직접 응답하고 TikTok이 가져가는 동안 유효해야 한다(30분 권장).
+Mimi Seed는 ffprobe 규격 검사와 SHA-256 중복 차단을 위해 동일 원본의 로컬 절대경로도 요구한다.
+
+**확인:** `tiktok_business_auth_status`, 이어서 `tiktok_business_get_account`.
 
 ---
 

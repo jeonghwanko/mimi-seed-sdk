@@ -216,3 +216,17 @@ error.
 Do not generalize that rule to a long-running write. If the transport closes during an upload, carousel publish,
 or another provider write, the outcome is unknown: the provider may have completed after the client detached.
 Inspect the target service for a matching result before retrying. This is the same reconciliation rule as §17.
+
+## 19. TikTok Organic API publishes URLs, not local streams
+
+`/business/video/publish/` does not accept the local MP4 that `video_render` produced. It makes TikTok fetch a
+verified HTTPS `video_url`; signed URLs must remain live long enough for that fetch and audit records must strip
+their query strings. The URL must return the video directly: TikTok does not follow a 3xx redirect. Mimi Seed
+therefore takes both inputs: the local source for ffprobe + SHA-256 validation, and the verified remote URL for
+the provider request. Never silently treat the local path as uploaded media.
+
+The publish response may be pending and a POST transport failure is an unknown outcome. The local audit record
+blocks the same account + content hash while its state is pending, published, or unknown. Do not add an
+`allowDuplicate` escape hatch to an unattended path; reconcile the provider status first. Deduplication must
+keep the atomic reservation in addition to the audit lookup, otherwise two workers can both pass a check before
+either has written its audit record.

@@ -1,7 +1,7 @@
 {
   "name": "mimi-seed",
   "version": "0.15.5",
-  "description": "Firebase, AdMob, Google Play, App Store Connect와 스토리 기반 영상·YouTube 게시를 Codex에서 관리하는 MCP 도구·스킬 번들.",
+  "description": "Firebase, AdMob, Google Play, App Store Connect와 스토리 기반 영상·YouTube·TikTok Business 게시를 Codex에서 관리하는 MCP 도구·스킬 번들.",
   "author": {
     "name": "yoonion",
     "url": "https://mimi-seed.pryzm.gg"
@@ -17,6 +17,7 @@
     "google-play",
     "app-store",
     "youtube",
+    "tiktok-business",
     "video",
     "release-automation"
   ],
@@ -24,8 +25,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Mimi Seed",
-    "shortDescription": "앱 출시와 YouTube 영상 제작을 Codex에서 관리합니다.",
-    "longDescription": "Mimi Seed는 Firebase, AdMob, Google Play, App Store Connect와 영상 제작 도구를 MCP로 연결해 앱 출시 점검, 릴리스 노트, 리뷰 답변, 스크린샷, 스토리 기반 영상 렌더와 YouTube 게시를 Codex 안에서 처리하게 해줍니다.",
+    "shortDescription": "앱 출시와 YouTube·TikTok 영상 게시를 Codex에서 관리합니다.",
+    "longDescription": "Mimi Seed는 Firebase, AdMob, Google Play, App Store Connect와 영상 제작 도구를 MCP로 연결해 앱 출시 점검, 릴리스 노트, 리뷰 답변, 스크린샷, 스토리 기반 영상 렌더와 YouTube·TikTok Business 게시를 Codex 안에서 처리하게 해줍니다.",
     "developerName": "yoonion",
     "category": "Developer Tools",
     "capabilities": [
@@ -38,7 +39,8 @@
       "내 앱 출시 준비 상태 확인해줘.",
       "최근 커밋으로 릴리스 노트 작성해줘.",
       "App Store 스크린샷 업로드 도와줘.",
-      "세로 쇼츠를 만들고 검수한 뒤 YouTube에 올려줘."
+      "세로 쇼츠를 만들고 검수한 뒤 YouTube에 올려줘.",
+      "TikTok Business 계정에 올릴 영상을 검수하고 게시 계획을 만들어줘."
     ],
     "brandColor": "#34D399"
   }

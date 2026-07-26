@@ -17,6 +17,8 @@ import { loadConfig as loadGoogleAdsConfig } from '../googleads/config.js';
 import { loadFacebookConfig } from '../facebook/config.js';
 import { loadInstagramConfig } from '../instagram/config.js';
 import { loadThreadsConfig } from '../threads/config.js';
+import { loadTikTokBusinessConfig } from '../tiktok-business/config.js';
+import { tokenFreshness as tiktokTokenFreshness } from '../tiktok-business/auth.js';
 import { metaTokenFreshness } from '../lib/meta-auth.js';
 import { readPackageRootText } from '../lib/package-root.js';
 import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
@@ -135,7 +137,7 @@ export function registerAuthTools(server: McpServer) {
     'mimi_seed_status',
     [
       '⭐ 새 세션을 시작하거나 "뭐가 연결됐지?" 라는 질문엔 이 도구를 먼저 호출하세요.',
-      '전체 서비스(Google OAuth / Play SA / App Store / Jenkins / CI / Google Ads / Facebook / Instagram / Threads / BigQuery)',
+      '전체 서비스(Google OAuth / Play SA / App Store / Jenkins / CI / Google Ads / Facebook / Instagram / Threads / TikTok Business / BigQuery)',
       '설정 상태를 한 번에 스캔해 ✅ / ❌ 트래픽 라이트 리포트와 번호 매긴 다음 단계를 반환합니다.',
       '미설정 서비스마다 어떤 도구를 호출하면 되는지 구체적으로 알려줍니다.',
     ].join(' '),
@@ -233,7 +235,20 @@ export function registerAuthTools(server: McpServer) {
         `mimi-seed auth threads${threadsTarget.profile ? ` --profile ${threadsTarget.profile}` : ''}`,
       ));
 
-      // 10. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
+      // 10. TikTok Business — 네트워크 없이 refresh token 만료 상태까지 판정.
+      const tiktok = loadTikTokBusinessConfig();
+      const tiktokFreshness = tiktokTokenFreshness(tiktok);
+      if (!tiktok) {
+        lines.push('❌ TikTok Business    — 미설정 → mimi-seed auth tiktok  (선택)');
+      } else if (tiktokFreshness.state === 'refresh_expired') {
+        lines.push(`❌ TikTok Business    — refresh token 만료 (${tiktok.openId}) → mimi-seed auth tiktok`);
+      } else if (tiktokFreshness.state === 'access_expired') {
+        lines.push(`⚠️  TikTok Business    — 연결됨, 다음 호출에서 access token 자동 갱신 (${tiktok.openId})`);
+      } else {
+        lines.push(`✅ TikTok Business    — Organic API 연결됨 (${tiktok.openId})`);
+      }
+
+      // 11. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
       // 이전엔 SA 파일만 검사해 OAuth fallback 이 살아있어도 ❌ 로 오표기했다.
       const bqAuth = resolveBigQueryAuth();
       if (bqAuth?.source === 'service-account') {

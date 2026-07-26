@@ -22,6 +22,7 @@
 | YouTube publishing | YouTube Data API v3 (upload, processing/status, privacy) | `googleapis` + local file streams |
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |
 | Facebook / Instagram / Threads | Meta Graph APIs | `fetch`; shared expiry/error recovery in `lib/meta-auth.ts` |
+| TikTok Business | API for Business v1.3 Organic API (`/tt_user/*`, `/business/*`) | `fetchWithTimeout`; short-term token refresh + POST unknown-outcome audit |
 | AI tools | Anthropic Messages API | `@anthropic-ai/sdk` (needs `ANTHROPIC_API_KEY`) |
 | Video production | Anthropic storyboard + YouTube Data API + Pexels API + OpenAI Image API + local FFmpeg/ffprobe | `@anthropic-ai/sdk` + `fetch` + `child_process` |
 
@@ -113,6 +114,13 @@ When testing a failure path, use `withoutBackoff()` from `__tests__/helpers.ts` 
 and a shared `Response` has its body consumed by the first attempt.
 
 `googleapis`-based domains don't use this — they go through the Google client, which carries its own timeouts.
+
+TikTok Organic publishing follows the POST side of this table. `/business/video/publish/` receives a verified
+HTTPS `video_url`; a network failure or timeout may occur after TikTok accepted it. `tiktok-business/api.ts`
+marks that outcome unknown, while `posting.ts` atomically reserves the account + content hash before the POST
+and writes a local audit record. The reservation prevents concurrent workers from publishing the same video and
+remains in place for pending, published, or unknown outcomes. Reconcile through
+`tiktok_business_get_publish_status` or the owned account before retrying.
 
 ## Security note (public repo)
 

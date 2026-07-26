@@ -38,6 +38,7 @@ ${kleur.bold("빌드 / 마케팅:")}
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook 페이지
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
   ${kleur.cyan("mimi-seed auth threads")}    Threads
+  ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
   ${kleur.dim("  Instagram/Threads: --profile <id>로 특정 소셜 프로필 저장/갱신")}
 
 ${kleur.bold("전체 상태:")}
@@ -77,6 +78,7 @@ ${kleur.bold("Build / marketing:")}
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook Page
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
   ${kleur.cyan("mimi-seed auth threads")}    Threads
+  ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
   ${kleur.dim("  Instagram/Threads: use --profile <id> to save or refresh a named social profile")}
 
 ${kleur.bold("Everything at a glance:")}
@@ -155,6 +157,7 @@ export async function cmdAuth(args: string[]): Promise<void> {
   if (sub === "facebook") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["facebook", ...rest]));
   if (sub === "instagram") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["instagram", ...rest]));
   if (sub === "threads") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["threads", ...rest]));
+  if (sub === "tiktok") return void exitWith(await runMcpBin("mimi-seed-tiktok-business-auth", rest));
 
   // CI(ci.json)는 CLI 가 직접 소유하는 유일한 자격증명 — setup 마법사의 항목 하나만 돌린다.
   if (sub === "ci") {

@@ -34,4 +34,9 @@ describe('cmdAuth social routes', () => {
       ['instagram', '--profile', 'weather-app'],
     );
   });
+
+  it('tiktok은 전용 Business OAuth 설정 진입점을 연다', async () => {
+    await cmdAuth(['tiktok']);
+    expect(runMcpBin).toHaveBeenCalledWith('mimi-seed-tiktok-business-auth', []);
+  });
 });

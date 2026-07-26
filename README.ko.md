@@ -385,7 +385,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ---
 
-## 도구 목록 (Local MCP · 150+ 개 · 19개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 20개 영역)
 
 > 아래 도구는 **Local MCP** — 로컬 Google OAuth — 로 동작합니다. Remote MCP는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -404,6 +404,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
 | **Threads** | 6 | `threads_post` · `threads_post_carousel` · `threads_refresh_token` |
+| **TikTok Business** | 7 | `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
 | **점검 / 위험** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android 서명** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |

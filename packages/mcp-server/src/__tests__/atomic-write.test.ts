@@ -101,6 +101,7 @@ describe('자격증명 writer 가드', () => {
     'googleads/config.ts',
     'jenkins/config.ts',
     'social/profile-store.ts',
+    'tiktok-business/config.ts',
   ];
 
   /** 자격증명 파일을 직접 쓰면 안 되는 모듈 — writer 를 거치는지만 본다. */

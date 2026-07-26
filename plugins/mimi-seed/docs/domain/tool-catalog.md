@@ -1,4 +1,4 @@
-# Tool catalog — 214 tools across 19 domains
+# Tool catalog — 221 tools across 20 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -24,13 +24,14 @@
 | Google Cloud IAM | `registers/iam.ts` | 5 |
 | BigQuery | `registers/bigquery.ts` | 5 |
 | Threads | `registers/threads.ts` | 6 |
+| TikTok Business | `registers/tiktok.ts` | 7 |
 | Instagram | `registers/instagram.ts` | 4 |
 | Checks | `registers/checks.ts` | 4 |
 | Auth | `registers/auth.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **214** |
+| **Total** | **20 modules** | **221** |
 
 ## Google Play — `registers/playstore.ts` (37) · impl `playstore/tools.ts`
 
@@ -137,6 +138,15 @@
   `video_build_timeline` · `video_render` (local FFmpeg job, preview then confirm)
 - YouTube results are permanently marked `reference-only`; only assets with recorded provenance and
   `allowedForRendering=true` can enter a timeline.
+
+## TikTok Business — `registers/tiktok.ts` (7) · impl `tiktok-business/*.ts`
+
+- Read: `tiktok_business_auth_status` · `tiktok_business_get_account` ·
+  `tiktok_business_get_video_settings` · `tiktok_business_list_publish_audits`
+- **W** `tiktok_business_plan_video_post` (local validation plan + SHA-256 dedup record) ·
+  `tiktok_business_get_publish_status` (provider read + local audit update)
+- **W** `tiktok_business_publish_video` (owned Business Account에 공개 게시 — 명시 확인 필수,
+  원자적 중복 예약, POST 결과 불명 시 자동 재시도 금지)
 
 ## Quirks worth knowing (tool name ≠ register file)
 

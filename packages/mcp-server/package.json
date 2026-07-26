@@ -12,6 +12,7 @@
     "mimi-seed-jenkins-auth": "dist/jenkins/setup-cli.js",
     "mimi-seed-googleads-auth": "dist/googleads/setup-cli.js",
     "mimi-seed-social-auth": "dist/social/setup-cli.js",
+    "mimi-seed-tiktok-business-auth": "dist/tiktok-business/setup-cli.js",
     "mimi-seed-firebase": "dist/firebase/cli.js",
     "mimi-seed-admob": "dist/admob/cli.js",
     "mimi-seed-ga4": "dist/ga4/cli.js"

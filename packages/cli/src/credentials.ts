@@ -35,6 +35,7 @@ export type CredId =
   | "facebook"
   | "instagram"
   | "threads"
+  | "tiktok"
   | "anthropic";
 
 /**
@@ -583,6 +584,48 @@ export const CREDENTIALS: readonly CredSpec[] = [
     },
     docsAnchor: "threads",
     detect: (home, startDir) => detectProjectSocialToken(home, startDir, "threads"),
+  },
+  {
+    id: "tiktok",
+    label: {
+      ko: "TikTok Business",
+      en: "TikTok Business",
+    },
+    requirement: "optional",
+    group: "marketing",
+    file: "~/.mimi-seed/tiktok-business.json",
+    fix: "mimi-seed auth tiktok",
+    setup: { kind: "mcp-bin", bin: "mimi-seed-tiktok-business-auth" },
+    obtain: {
+      ko: [
+        "TikTok for Business Developer 앱을 만들고 Organic API 접근 승인을 받는다.",
+        "TikTok Accounts > Business Content > Video Publish 권한과 account holder redirect URL을 설정한다.",
+        "owned Business Account를 승인한 callback URL의 auth_code를 연결 마법사에 입력한다.",
+      ],
+      en: [
+        "Create a TikTok for Business developer app and obtain Organic API approval.",
+        "Enable TikTok Accounts > Business Content > Video Publish and configure the account-holder redirect URL.",
+        "Authorize the owned Business Account, then paste the callback auth_code into the setup wizard.",
+      ],
+    },
+    docsAnchor: "tiktok-business",
+    detect: (home) => {
+      const cfg = readJson<{ openId?: string; accessTokenExpiresAt?: string; refreshTokenExpiresAt?: string }>(
+        home,
+        "tiktok-business.json",
+      );
+      if (!cfg?.openId || !cfg.refreshTokenExpiresAt) return { present: false };
+      const refreshRemaining = Date.parse(cfg.refreshTokenExpiresAt) - Date.now();
+      if (!Number.isFinite(refreshRemaining) || refreshRemaining <= 0) {
+        return { present: true, detail: cfg.openId, freshness: "expired", daysRemaining: 0 };
+      }
+      const accessRemaining = cfg.accessTokenExpiresAt ? Date.parse(cfg.accessTokenExpiresAt) - Date.now() : NaN;
+      const daysRemaining = Math.max(1, Math.ceil(refreshRemaining / 86_400_000));
+      if (Number.isFinite(accessRemaining) && accessRemaining <= 0) {
+        return { present: true, detail: `${cfg.openId} (access token 자동 갱신 예정)`, freshness: "fresh", daysRemaining };
+      }
+      return { present: true, detail: cfg.openId, freshness: "fresh", daysRemaining };
+    },
   },
   {
     id: "anthropic",

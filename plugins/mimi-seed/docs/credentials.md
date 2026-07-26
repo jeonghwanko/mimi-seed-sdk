@@ -33,7 +33,7 @@ Most people need two or three of these. Find your goal, connect only what it lis
 | Trigger builds | [GitHub / GitLab](#ci-github-gitlab) *or* [Jenkins](#jenkins) |
 | Query Crashlytics / analytics exports | [Google OAuth](#google-oauth), or [BigQuery SA](#bigquery) if OAuth keeps getting blocked |
 | Report on ad campaigns | [Google Ads](#google-ads) |
-| Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) |
+| Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI-written release notes / review replies | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(optional — it degrades gracefully)* |
 | Research and produce a story-based video | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + [video API keys](#video-api-keys) for only the providers you use |
 | Use the hosted dashboard / remote MCP | [Mimi Seed account](#cloud-pat) |
@@ -306,6 +306,30 @@ Notes that bite: image/carousel URLs must be **public** (Graph API can't take lo
 at **500 characters**, and image posts wait for Meta to process the media before publishing (a few seconds).
 
 **Verify:** ask for `threads_get_account`.
+
+---
+
+<a id="tiktok-business"></a>
+
+## TikTok Business
+
+**Unlocks:** `tiktok_business_*` — preflight and publish a public video to an owned Business Account through
+TikTok API for Business Organic API, then reconcile status and keep a local deduplication audit.
+
+**Get it:** create an app in TikTok for Business Developer Portal, obtain Organic API approval, enable
+**TikTok Accounts > Business Content > Video Publish**, and configure the TikTok account-holder redirect URL.
+Authorize the owned account and copy the single-use `auth_code` from the callback URL within 10 minutes.
+
+**Give it to the wizard:** run `mimi-seed auth tiktok`. It exchanges the code for a one-day access token plus a
+one-year refresh token, verifies `/business/get/`, and writes `~/.mimi-seed/tiktok-business.json` as `0600`.
+Access tokens refresh automatically five minutes before expiry; an expired/revoked refresh token needs a new code.
+
+**Posting constraint:** Organic API accepts a `video_url`, not a local upload stream. The URL must be HTTPS,
+belong to a domain verified for the app, return the video directly without a 3xx redirect, and remain available
+while TikTok fetches it (30 minutes recommended).
+Mimi Seed still requires the matching local source file for ffprobe validation and SHA-256 duplicate blocking.
+
+**Verify:** ask for `tiktok_business_auth_status`, then `tiktok_business_get_account`.
 
 ---
 

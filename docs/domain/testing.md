@@ -82,7 +82,7 @@ The gate belongs before the tests, not inside the publish.
 
 Everything else is ordinary unit coverage, named after what it protects — `appstore-*`, `playstore-*`,
 `firebase-tools`, `ga4-*`, `googleads`, `gsc-tools`, `admob-tools`, `jenkins-jobs`, `ci-github` / `ci-gitlab`,
-`instagram-api` / `threads-api` / `meta-auth`, `video-tools`, `youtube-publish`, `remote-sync`,
+`instagram-api` / `threads-api` / `meta-auth`, `tiktok-business`, `video-tools`, `youtube-publish`, `remote-sync`,
 `auth-*`, `helpers-auth`, `google-errors`, `text-validators` on the server side; `deploy-args`, `ci-providers`,
 `mcp-config`, `jenkins-config`, `release-manifest`, `auth`, `ask`, `i18n` on the CLI side.
 

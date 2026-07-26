@@ -28,6 +28,7 @@ export const MCP_BINS = [
   "mimi-seed-jenkins-auth",
   "mimi-seed-googleads-auth",
   "mimi-seed-social-auth",
+  "mimi-seed-tiktok-business-auth",
   "mimi-seed-firebase",
   "mimi-seed-admob",
   "mimi-seed-ga4",

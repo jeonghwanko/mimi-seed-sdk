@@ -58,6 +58,7 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth     # BigQuery
 npx -y @yoonion/mimi-seed-mcp mimi-seed-jenkins-auth      # Jenkins (저장 전 서버 프로브)
 npx -y @yoonion/mimi-seed-mcp mimi-seed-googleads-auth    # Google Ads (저장 전 실제 호출로 검증)
 npx -y @yoonion/mimi-seed-mcp mimi-seed-social-auth       # Facebook / Instagram / Threads
+npx -y @yoonion/mimi-seed-mcp mimi-seed-tiktok-business-auth # TikTok Business Organic API
 ```
 
 각 자격증명을 **어디서 어떻게 발급받는지**는 [`docs/credentials.md`](../../docs/credentials.md) 참고.
@@ -74,7 +75,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (150+ 개 · 19개 영역)
+## 제공 도구 (150+ 개 · 20개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
@@ -91,6 +92,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |
 | BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
 | Threads | 6 | `threads_post` / `threads_post_carousel` / `threads_refresh_token` |
+| TikTok Business | 7 | `tiktok_business_plan_video_post` / `tiktok_business_publish_video` / `tiktok_business_get_publish_status` |
 | 점검 / 위험 | 4 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `screenshot_validate` / `release_status` |
 | Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |

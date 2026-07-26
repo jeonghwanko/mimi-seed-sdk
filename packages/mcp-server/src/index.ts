@@ -19,6 +19,7 @@ const SUBCOMMANDS: Record<string, () => Promise<unknown>> = {
   'mimi-seed-jenkins-auth': () => import('./jenkins/setup-cli.js'),
   'mimi-seed-googleads-auth': () => import('./googleads/setup-cli.js'),
   'mimi-seed-social-auth': () => import('./social/setup-cli.js'),
+  'mimi-seed-tiktok-business-auth': () => import('./tiktok-business/setup-cli.js'),
   'mimi-seed-firebase': () => import('./firebase/cli.js'),
   'mimi-seed-admob': () => import('./admob/cli.js'),
   'mimi-seed-ga4': () => import('./ga4/cli.js'),
