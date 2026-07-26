@@ -132,6 +132,8 @@ describe('postMultiPhoto', () => {
       api.postMultiPhoto(cfg, ['https://cdn.test/1.jpg', 'https://cdn.test/2.jpg'], 'x'),
     ).rejects.toThrow(/bad image/);
 
+    // 업로드 두 건이 실제로 시도됐는지 먼저 확인한다 — 아니면 "피드 없음"은 공허하다.
+    expect(fetchMock.mock.calls.length, '업로드가 시작조차 안 됐다').toBe(2);
     const feedPosted = fetchMock.mock.calls.some((c) => String(c[0]).includes('/feed'));
     expect(feedPosted, '사진 하나가 실패했는데 피드 게시가 나갔다').toBe(false);
   });

@@ -91,13 +91,20 @@ not retrying, so the rule splits on what a repeat request can do:
 |---|---|---|
 | **429** | retry | **retry** — the rate limiter rejects *before* handling, so no duplicate is created |
 | 5xx · 408 · 425 | retry | **no** — the server may have already applied it; a repeat creates a second version / product / review submission |
-| network error or timeout (no response) | retry | **no** — you cannot know whether the request arrived |
+| fast network error (ECONNRESET, DNS) | retry | **no** — you cannot know whether the request arrived |
+| **timeout** | **no** | **no** — see the budget below |
 | any other 4xx | no | no |
 
 `Retry-After` (seconds or HTTP-date) wins over the exponential backoff, both clamped to 20s — a longer wait is
 indistinguishable from the hang the timeout exists to prevent. Bodies that cannot be replayed (streams) disable
 retry, because re-sending a consumed stream silently posts an empty request. Chunked uploads are `PUT`, so they
 get the retry that matters most: a transient blip mid-upload no longer strands a half-uploaded asset.
+
+**Total time budget = `timeoutMs + 30s`, and a timeout is never retried.** This is not a detail — v0.15.0
+shipped without it and turned the transfer ceiling from 10 minutes into 30 (600s × 3 attempts), which is exactly
+the hang this module exists to prevent. Retrying is cheap when the failure comes back fast (429/5xx) and
+ruinous when the failure *is* "we already waited the whole budget". The last attempt's timeout is shrunk to
+whatever budget remains, so the ceiling holds even against a server that answers slowly every time.
 
 When testing a failure path, use `withoutBackoff()` from `__tests__/helpers.ts` and give the mock a **factory**
 (`mockImplementation(() => res)`, not `mockResolvedValue(res)`) — retries receive a fresh response each attempt,

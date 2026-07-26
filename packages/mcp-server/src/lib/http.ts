@@ -34,6 +34,18 @@ const BASE_BACKOFF_MS = 500;
 const MAX_BACKOFF_MS = 20_000;
 
 /**
+ * 재시도가 **추가로** 쓸 수 있는 총 시간.
+ *
+ * 재시도 도입 전의 상한은 timeoutMs 하나였다(전송은 600초). 시도마다 그 상한을 새로
+ * 주면 총 30분까지 늘어나서, 이 모듈이 존재하는 이유("도구 호출이 매달리면 안 된다")를
+ * 재시도가 되살린다. 그래서 총 예산 = timeoutMs + 이 값으로 못박는다.
+ */
+const RETRY_WINDOW_MS = 30_000;
+
+/** 예산이 거의 소진돼도 최소한 이만큼은 준다 — 0초 타임아웃으로 즉시 죽는 것을 막는다. */
+const MIN_ATTEMPT_MS = 1_000;
+
+/**
  * 메서드가 재요청해도 안전한가(RFC 9110 idempotent).
  *
  * POST 는 여기 없다. 5xx 나 네트워크 오류는 **서버가 이미 처리했는지 알 수 없는**
@@ -109,8 +121,12 @@ function backoffFor(attempt: number): number {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** 백오프가 총 예산을 넘기지 않게 자른다. */
+const cappedWait = (wait: number, deadline: number) =>
+  Math.max(0, Math.min(wait, deadline - Date.now()));
+
 export interface FetchOptions {
-  /** 한 **시도당** 상한 (총 상한이 아니다). */
+  /** 한 **시도당** 상한. 총 소요 시간의 상한은 아래 RETRY_WINDOW_MS 를 더한 값이다. */
   timeoutMs?: number;
   /** 총 시도 횟수. 1 이면 재시도하지 않는다. */
   maxAttempts?: number;
@@ -122,8 +138,9 @@ export interface FetchOptions {
  * 재시도 정책:
  *  - **429** 는 메서드와 무관하게 재시도한다. 레이트 리미터는 요청을 처리하기 전에
  *    거절하므로 POST 라도 중복 생성이 일어나지 않는다.
- *  - **5xx / 네트워크 오류 / 타임아웃** 은 idempotent 메서드에서만 재시도한다.
+ *  - **5xx / 빠른 네트워크 오류**(ECONNRESET·DNS 등)는 idempotent 메서드에서만.
  *    POST 는 서버가 이미 처리했는지 알 수 없어 재요청이 중복 생성을 만든다.
+ *  - **타임아웃은 재시도하지 않는다.** 아래 시간 예산 참고.
  *  - `Retry-After` 가 있으면 그 값을 쓰고, 없으면 지수 백오프 + 지터.
  *  - 재전송 불가능한 본문(스트림)이면 재시도하지 않는다.
  *
@@ -142,48 +159,50 @@ export async function fetchWithTimeout(
 
   const method = (init.method ?? 'GET').toUpperCase();
   const callerSignal = init.signal != null;
-  const retryable = !callerSignal && isReplayableBody(init.body);
-  const maxAttempts = retryable ? (opts.maxAttempts ?? HTTP_MAX_ATTEMPTS) : 1;
+  const replayable = !callerSignal && isReplayableBody(init.body);
+  const maxAttempts = replayable ? (opts.maxAttempts ?? HTTP_MAX_ATTEMPTS) : 1;
   const idempotent = IDEMPOTENT_METHODS.has(method);
 
-  let lastError: unknown;
+  // 총 시간 예산. 재시도가 없던 시절의 상한(timeoutMs)에 재시도 창만 더한 값으로
+  // 고정한다 — 이게 없으면 전송용 600초 × 3회 = 30분이 되어, 이 모듈이 애초에
+  // 막으려던 "도구 호출이 매달림"을 재시도가 되살린다.
+  const deadline = Date.now() + timeoutMs + (maxAttempts > 1 ? RETRY_WINDOW_MS : 0);
+  /** 남은 예산 안에서 다음 시도를 시작해도 되는가. */
+  const hasBudget = (next: number) => next < maxAttempts && Date.now() < deadline;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const isLast = attempt === maxAttempts - 1;
-    const signal = init.signal ?? AbortSignal.timeout(timeoutMs);
+  for (let attempt = 0; ; attempt += 1) {
+    // 마지막 시도가 예산을 넘겨 달리지 않도록, 남은 시간으로 잘라준다.
+    const attemptTimeout = Math.min(timeoutMs, Math.max(deadline - Date.now(), MIN_ATTEMPT_MS));
+    const signal = init.signal ?? AbortSignal.timeout(attemptTimeout);
 
     let response: Response;
     try {
       response = await fetch(input, { ...init, signal });
     } catch (error) {
-      lastError = error;
-      // 응답 전 실패는 서버가 요청을 받았는지 알 수 없다 → idempotent 에서만 재시도.
-      if (isLast || !idempotent) {
-        if (isTimeoutAbort(error)) {
-          throw new Error(
-            `${endpointLabel(input)} 요청이 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않아 중단했습니다. ` +
-              '네트워크 상태를 확인하고 다시 시도하세요.',
-            { cause: error },
-          );
-        }
-        throw error;
+      // 타임아웃은 재시도하지 않는다. 이미 예산을 통째로 쓴 실패이고, 같은 상한으로
+      // 두 번 더 기다려도 얻는 게 없다 — 총 소요 시간만 배로 늘린다.
+      if (isTimeoutAbort(error)) {
+        throw new Error(
+          `${endpointLabel(input)} 요청이 ${Math.round(attemptTimeout / 1000)}초 안에 끝나지 않아 중단했습니다. ` +
+            '네트워크 상태를 확인하고 다시 시도하세요.',
+          { cause: error },
+        );
       }
-      await sleep(backoffFor(attempt));
+
+      // 응답 전 실패는 서버가 요청을 받았는지 알 수 없다 → idempotent 에서만 재시도.
+      if (!idempotent || !hasBudget(attempt + 1)) throw error;
+      await sleep(cappedWait(backoffFor(attempt), deadline));
       continue;
     }
 
-    if (response.ok || isLast || !TRANSIENT_STATUS.has(response.status)) return response;
-
+    if (response.ok || !TRANSIENT_STATUS.has(response.status)) return response;
     // 429 는 처리 전 거절이므로 POST 도 안전하다. 그 외 일시적 오류는 idempotent 만.
     if (response.status !== 429 && !idempotent) return response;
+    if (!hasBudget(attempt + 1)) return response;
 
     const wait = parseRetryAfter(response.headers.get('retry-after'), Date.now()) ?? backoffFor(attempt);
     // 재시도할 응답의 본문은 읽지 않고 버린다 — 소켓을 붙잡고 있지 않도록.
     await response.body?.cancel().catch(() => undefined);
-    await sleep(wait);
+    await sleep(cappedWait(wait, deadline));
   }
-
-  // 도달 불가 — 마지막 시도(isLast)는 반드시 반환하거나 throw 한다. 그래도 unknown 을
-  // 그대로 던지지 않고 Error 로 감싼다: 호출부의 `instanceof Error` 분기가 전부 무너진다.
-  throw new Error(`${endpointLabel(input)} 요청 실패`, { cause: lastError });
 }

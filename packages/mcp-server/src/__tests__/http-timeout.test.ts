@@ -217,6 +217,77 @@ describe('fetchWithTimeout 재시도', () => {
   });
 });
 
+/**
+ * 총 시간 예산. v0.15.0 에서 재시도를 넣으면서 **이 모듈의 존재 이유를 스스로 훼손했다** —
+ * 시도마다 새 timeoutMs 를 주는 바람에 전송용 600초 × 3회 = 30분이 됐다. 재시도 전 상한이
+ * 10분이었으니 명백한 회귀였다. 아래가 그 회귀를 다시 못 들어오게 막는다.
+ */
+describe('fetchWithTimeout 시간 예산', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    const guarded = promise.then(
+      (v) => ({ ok: true as const, v }),
+      (e) => ({ ok: false as const, e }),
+    );
+    await vi.runAllTimersAsync();
+    const r = await guarded;
+    if (r.ok) return r.v;
+    throw r.e;
+  }
+
+  it('타임아웃은 재시도하지 않는다 (예산을 통째로 쓴 실패다)', async () => {
+    const fetchMock = vi.fn(() => Promise.reject(new DOMException('t', 'TimeoutError')));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(settle(fetchWithTimeout('https://example.test/a'))).rejects.toThrow(/끝나지 않아/);
+    expect(fetchMock, '타임아웃을 재시도하면 총 소요 시간이 배로 늘어난다').toHaveBeenCalledTimes(1);
+  });
+
+  it('전송용 상한에서도 타임아웃 재시도로 30분이 되지 않는다', async () => {
+    const fetchMock = vi.fn(() => Promise.reject(new DOMException('t', 'TimeoutError')));
+    vi.stubGlobal('fetch', fetchMock);
+    const started = Date.now();
+
+    await expect(
+      settle(fetchWithTimeout('https://upload.test/a', { method: 'PUT', body: 'x' }, HTTP_TRANSFER_TIMEOUT_MS)),
+    ).rejects.toThrow();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(Date.now() - started).toBeLessThanOrEqual(HTTP_TRANSFER_TIMEOUT_MS + 30_000);
+  });
+
+  it('Retry-After 가 길어도 총 예산을 넘겨 재시도하지 않는다', async () => {
+    // 매번 20초를 요구하는 429. maxAttempts 를 크게 줘도 예산이 먼저 끝나야 한다.
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('busy', {
+      status: 429,
+      headers: { 'retry-after': '20' },
+    })));
+    vi.stubGlobal('fetch', fetchMock);
+    const started = Date.now();
+
+    const r = await settle(
+      fetchWithTimeout('https://example.test/a', {}, { timeoutMs: 1_000, maxAttempts: 50 }),
+    );
+
+    expect(r.status).toBe(429);
+    expect(fetchMock.mock.calls.length, '예산 무시하고 50회를 다 돌았다').toBeLessThan(10);
+    // 총 예산 = timeoutMs(1s) + RETRY_WINDOW(30s). 마지막 시도 몫으로 약간의 여유를 둔다.
+    expect(Date.now() - started).toBeLessThanOrEqual(1_000 + 30_000 + 1_000);
+  });
+
+  it('재시도가 없으면(maxAttempts=1) 예산도 늘어나지 않는다', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('ok')));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await settle(fetchWithTimeout('https://example.test/a', {}, { maxAttempts: 1 }));
+
+    const signal = (fetchMock.mock.calls[0][1] as RequestInit).signal as AbortSignal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
 describe('parseRetryAfter', () => {
   const now = Date.parse('2026-07-26T12:00:00Z');
 

@@ -126,6 +126,8 @@ describe('uploadScreenshot', () => {
       /청크 업로드 실패 \(offset=10, length=20\)/,
     );
 
+    // "PATCH 가 없다"만 보면 아무 요청도 없었을 때도 통과한다 — 청크가 실제로 나갔는지 함께 본다.
+    expect(chunkCalls().length, '청크 업로드가 시작조차 안 됐다').toBe(2);
     const patched = fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'PATCH');
     expect(patched, 'commit(PATCH)이 나갔다 — 실패한 업로드를 완료로 표시했다').toBe(false);
   });
@@ -155,6 +157,7 @@ describe('uploadScreenshot', () => {
 
     await uploadScreenshot('loc-1', 'APP_IPHONE_67', filePath);
 
+    expect(chunkCalls().length, '업로드가 진행되지 않았다').toBe(1);
     const createdSet = fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/appScreenshotSets'));
     expect(createdSet, '기존 셋이 있는데 새로 만들었다').toBe(false);
     const reserve = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/appScreenshots'))!;
