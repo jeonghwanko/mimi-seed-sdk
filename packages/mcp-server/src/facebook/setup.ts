@@ -5,6 +5,8 @@
 
 import { saveFacebookConfig } from './config.js';
 import * as api from './api.js';
+import { fetchWithTimeout } from '../lib/http.js';
+import type { SocialConfigOptions } from '../social/profile-store.js';
 
 export interface ConnectResult {
   ok: boolean;
@@ -17,6 +19,7 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 export async function connectFacebook(
   pageAccessToken: string,
   pageId?: string,
+  options: SocialConfigOptions = {},
 ): Promise<ConnectResult> {
   let resolvedPageId = pageId;
 
@@ -25,7 +28,7 @@ export async function connectFacebook(
       const pages = await api.listAccessiblePages(pageAccessToken);
       if (pages.length === 0) {
         // 이미 Page Access Token 인 경우 — /me 가 곧 페이지다.
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://graph.facebook.com/v21.0/me?fields=id,name&access_token=${pageAccessToken}`,
         );
         const data = (await res.json()) as {
@@ -51,12 +54,15 @@ export async function connectFacebook(
 
   try {
     const page = await api.getPage({ pageAccessToken, pageId: resolvedPageId });
-    saveFacebookConfig({
-      pageAccessToken,
-      pageId: resolvedPageId,
-      pageName: page.name,
-      expiresAt: new Date(Date.now() + SIXTY_DAYS_MS).toISOString(),
-    });
+    saveFacebookConfig(
+      {
+        pageAccessToken,
+        pageId: resolvedPageId,
+        pageName: page.name,
+        expiresAt: new Date(Date.now() + SIXTY_DAYS_MS).toISOString(),
+      },
+      options,
+    );
     return {
       ok: true,
       text: [

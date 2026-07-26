@@ -14,7 +14,7 @@ npm test                                   # root: plugin:check → mcp-server s
 
 # While working — inside the package you changed
 npm run build && npm test                  # packages/mcp-server (tsc) or packages/cli (tsup)
-npx tsc --noEmit                           # packages/cli only: tsup does not type-check
+npm run typecheck                          # packages/cli only (tsup does not type-check) — its `npm test` runs this first
 
 # One file / one case (vitest, run from the package directory)
 npx vitest run src/__tests__/docs-drift.test.ts
@@ -44,9 +44,29 @@ before changing any assertion.
 | `cli/…/i18n-coverage.test.ts` | no user-facing Hangul literal outside a `ko` catalog | hardcode a Korean string the compiler can't see | move it into `catalog(ko, en)` |
 | `cli/…/credentials.test.ts` | the credential registry's `detect`/`plan` logic, **and** every `mcp-bin` it names exists in the mcp-server `bin` map | reference a bin you didn't publish | add the `bin` + `SUBCOMMANDS` entry |
 | `cli/…/setup.test.ts` | the wizard never spawns a stdin-blocking setup bin in a non-interactive environment | make setup prompt or spawn unconditionally | gate on TTY / `--non-interactive` |
+| `mcp-server/…/http-timeout.test.ts` | every outbound HTTP call goes through `lib/http.ts` — **no raw `fetch(` anywhere in `src/`** except that file | add a provider client with a bare `fetch` (a hung socket then blocks a stdio tool call forever, uncancellable) | call `fetchWithTimeout` ([[external-apis]]) |
+| `mcp-server/…/atomic-write.test.ts` | credential writers use `lib/atomic-write.ts`, never raw `writeFileSync`, and the module list stays complete | write a credential file directly (a torn write leaves truncated JSON that readers swallow as "logged out") | call `writeCredentialJson` / `writeCredentialFile` ([[auth-credentials]]) |
+| `mcp-server/…/public-repo-hygiene.test.ts` | no private project / Jenkins job / GA4 property / service-account identifier in `packages/*/src`, `docs/`, `skills/` | put a real name in a `describe()` string, a default value, or an example — tool descriptions ship to every MCP client | use the placeholder vocabulary (`com.example.app`, `my-app`, `analytics_123456789`) |
+| `mcp-server/…/manifest-schema-parity.test.ts` | the `.mimi-seed.json` contract is identical in both hand-duplicated readers (filename, both unions, interface fields, profile-id pattern, shared exports) | change the schema in one package only | mirror it in the other reader ([[cli-deploy]]) |
+| `mcp-server/…/ai-model-parity.test.ts` | one Claude model constant per package, both equal, no literals left anywhere | hard-code a model id, or bump only one package | edit `ai/client.ts` `AI_MODEL` and `cli/src/ai-model.ts` `CLI_AI_MODEL` together |
 
 The compiler is a guard too: `catalog<T>(ko, en: NoInfer<T>)` makes a **missing English key a build error**, and
-ESM/NodeNext makes a missing `.js` import specifier fail the published build ([[pitfalls]] §11).
+ESM/NodeNext makes a missing `.js` import specifier fail the published build ([[pitfalls]] §11). For the CLI the
+compiler only counts if you *run* it — `tsup` strips types without checking them, so `packages/cli`'s `npm test`
+runs `tsc --noEmit` first.
+
+### Where each guard actually runs in CI
+
+`.github/workflows/ci.yml` has two jobs, and the split matters:
+
+| Job | Runs | Why separate |
+|---|---|---|
+| `repo-guards` | root `npm run plugin:check` on the `.nvmrc` version | the package jobs set `working-directory: packages/<pkg>` and therefore **never execute a root script**. No package suite covers `plugins/mimi-seed/` drift, so without this job the `plugin:sync` rule is enforced by nothing. |
+| `build-test` (matrix: `cli`/`mcp-server` × node 20/22) | `npm run build && npm test` | node **20** is the declared floor (`.nvmrc`, both `engines`); testing only 22 means nobody ever ran the floor. Publish is pinned to `matrix.node == 22` so two jobs never race the same package onto npm. |
+
+`build-test` has `needs: repo-guards` on purpose. mcp-server's `prepublishOnly` re-checks the agent-guide sync,
+so a drifted commit that reaches the publish step fails **mid-release** — after `cli` may already be on npm.
+The gate belongs before the tests, not inside the publish.
 
 ## Behavior tests (the rest)
 

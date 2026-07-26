@@ -122,7 +122,7 @@ export function registerJenkinsTools(server: McpServer) {
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
-      id: z.string().describe('Credential ID (예: speakmoney-android-key-password)'),
+      id: z.string().describe('Credential ID (예: my-app-android-key-password)'),
       secret: z.string().describe('저장할 비밀값'),
       description: z.string().optional().describe('설명 (선택)'),
     },
@@ -148,7 +148,7 @@ export function registerJenkinsTools(server: McpServer) {
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
-      id: z.string().describe('Credential ID (예: speakmoney-android-keystore)'),
+      id: z.string().describe('Credential ID (예: my-app-android-keystore)'),
       keystore_base64: z.string().describe('keystore 파일 내용을 base64로 인코딩한 값'),
       file_name: z.string().default('keystore.jks').describe('파일명 (기본: keystore.jks)'),
       description: z.string().optional().describe('설명 (선택)'),
@@ -196,7 +196,7 @@ export function registerJenkinsTools(server: McpServer) {
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
-      folder: z.string().optional().describe('폴더 경로 (예: vir-game). 생략하면 루트'),
+      folder: z.string().optional().describe('폴더 경로 (예: team-folder). 생략하면 루트'),
     },
     async ({ folder }) => {
       const cfg = requireJenkinsConfig();
@@ -223,7 +223,7 @@ export function registerJenkinsTools(server: McpServer) {
       '폴더 안의 잡은 "folder/job" 형태로 경로를 넘깁니다.',
     ].join(' '),
     {
-      job: z.string().describe('잡 경로 (예: penguinrun, vir-game/client)'),
+      job: z.string().describe('잡 경로 (예: my-app, team-folder/my-app)'),
     },
     async ({ job }) => {
       const cfg = requireJenkinsConfig();
@@ -242,7 +242,7 @@ export function registerJenkinsTools(server: McpServer) {
       'config_xml 은 Pipeline job 이면 flow-definition 루트 엘리먼트를 갖는 XML 전문입니다.',
     ].join(' '),
     {
-      job: z.string().describe('잡 경로 (예: penguinrun, vir-game/client)'),
+      job: z.string().describe('잡 경로 (예: my-app, team-folder/my-app)'),
       config_xml: z.string().describe('잡 정의 config.xml 전문'),
       overwrite: z.boolean().default(false).describe('이미 존재하면 덮어쓸지 여부 (기본 false)'),
     },
@@ -274,7 +274,7 @@ export function registerJenkinsTools(server: McpServer) {
       '기존 설정이 사라지므로 jenkins_get_job_config 로 먼저 백업하는 것을 권장합니다.',
     ].join(' '),
     {
-      job: z.string().describe('잡 경로 (예: penguinrun, vir-game/client)'),
+      job: z.string().describe('잡 경로 (예: my-app, team-folder/my-app)'),
       config_xml: z.string().describe('교체할 config.xml 전문'),
     },
     async ({ job, config_xml }) => {

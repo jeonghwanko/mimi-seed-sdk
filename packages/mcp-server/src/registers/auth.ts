@@ -91,7 +91,7 @@ const MANIFEST_FIX: Record<ManifestServiceId, (svc: ManifestService) => string> 
 // 어느 서버인지 판별할 수 있도록 status 첫 줄에 자기소개를 넣는다.
 const { version: PKG_VERSION } = JSON.parse(readPackageRootText('package.json')) as { version: string };
 
-/** 서비스별 식별자를 한 줄 detail 로 (예: "ads-coffee / analytics_530080532"). */
+/** 서비스별 식별자를 한 줄 detail 로 (예: "my-app-analytics / analytics_123456789"). */
 function manifestServiceDetail(id: ManifestServiceId, svc: ManifestService): string {
   const parts: string[] = [];
   if (id === 'bigquery') {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadInstagramConfig, saveInstagramConfig } from '../instagram/config.js';
 import { loadThreadsConfig, saveThreadsConfig } from '../threads/config.js';
+import { loadFacebookConfig, saveFacebookConfig } from '../facebook/config.js';
 import { resolveSocialConfigTarget } from '../social/profile-store.js';
 
 let root: string;
@@ -40,6 +41,30 @@ describe('social profile config', () => {
     });
     expect(loadInstagramConfig(options)?.userId).toBe('ig-1');
     expect(loadThreadsConfig(options)?.userId).toBe('th-1');
+  });
+
+  // Facebook 은 오랫동안 이 스토어 밖에 혼자 남아 있었다 — 독자 config 에 경로 하드코딩,
+  // 프로필 미지원. 이관 후에는 나머지 둘과 정확히 같게 동작해야 한다.
+  it('Facebook 도 같은 프로필 파일에 나란히 들어간다', () => {
+    const options = { profile: 'weather-app', homeDir, startDir: projectDir };
+    saveInstagramConfig({ accessToken: 'IGAA_TEST', userId: 'ig-1' }, options);
+    saveFacebookConfig({ pageAccessToken: 'EAA_TEST', pageId: 'fb-1', pageName: 'Weather' }, options);
+
+    const filePath = path.join(homeDir, '.mimi-seed', 'social-profiles', 'weather-app.json');
+    const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    expect(Object.keys(saved).sort()).toEqual(['facebook', 'instagram']);
+    expect(loadFacebookConfig(options)?.pageId).toBe('fb-1');
+    // 다른 프로필로 읽으면 안 보여야 한다.
+    expect(loadFacebookConfig({ profile: 'other-app', homeDir, startDir: projectDir })).toBeNull();
+  });
+
+  it('Facebook 도 매핑이 없으면 기존 facebook.json 경로를 그대로 쓴다 (하위 호환)', () => {
+    const options = { homeDir, startDir: projectDir };
+    saveFacebookConfig({ pageAccessToken: 'EAA_LEGACY', pageId: 'fb-legacy' }, options);
+
+    expect(resolveSocialConfigTarget('facebook', options).profile).toBeNull();
+    expect(fs.existsSync(path.join(homeDir, '.mimi-seed', 'facebook.json'))).toBe(true);
+    expect(loadFacebookConfig(options)?.pageAccessToken).toBe('EAA_LEGACY');
   });
 
   it('프로젝트 매니페스트에서 플랫폼별로 서로 다른 프로필을 선택한다', () => {

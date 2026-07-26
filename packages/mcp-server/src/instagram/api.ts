@@ -1,5 +1,6 @@
 import type { InstagramConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 // 두 가지 Meta API:
 //   IGAA... = Instagram API with Instagram Login (2024 신규) — graph.instagram.com
@@ -29,7 +30,7 @@ async function igFetch<T>(
     body = new URLSearchParams(params).toString();
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithTimeout(url.toString(), {
     method,
     body,
     headers: method === 'POST' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : undefined,

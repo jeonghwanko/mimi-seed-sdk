@@ -125,7 +125,7 @@ async function confirmReconnect(label: string, detail: string): Promise<boolean>
   return answer.toLowerCase() === 'y';
 }
 
-async function setupFacebook(): Promise<boolean> {
+async function setupFacebook(profile?: string): Promise<boolean> {
   console.log('');
   console.log(M.fbHeader);
   const existing = loadFacebookConfig();
@@ -140,6 +140,10 @@ async function setupFacebook(): Promise<boolean> {
   console.log(M.fbNote);
   console.log('');
 
+  const options = { profile };
+  const target = resolveSocialConfigTarget('facebook', options);
+  if (target.profile) console.log(M.profile(target.profile));
+
   const token = await ask(M.fbAskToken);
   if (!token) {
     console.log(M.skipped);
@@ -148,7 +152,7 @@ async function setupFacebook(): Promise<boolean> {
   let pageId = await ask(M.fbAskPageId);
 
   console.log(M.verifying);
-  let result = await connectFacebook(token, pageId || undefined);
+  let result = await connectFacebook(token, pageId || undefined, options);
 
   // 토큰이 여러 페이지에 닿으면 connectFacebook 은 목록만 주고 저장하지 않는다.
   // 다시 실행하라고 내보내지 말고, 여기서 바로 골라 받는다.
@@ -161,7 +165,7 @@ async function setupFacebook(): Promise<boolean> {
       return true;
     }
     console.log(M.verifying);
-    result = await connectFacebook(token, pageId);
+    result = await connectFacebook(token, pageId, options);
   }
 
   console.log('');
@@ -273,29 +277,29 @@ async function main() {
 
   let ok = true;
   if (target === 'facebook' || target === 'fb') {
-    ok = await setupFacebook();
+    ok = await setupFacebook(profile);
   } else if (target === 'instagram' || target === 'ig') {
     ok = await setupInstagram(profile);
   } else if (target === 'threads' || target === 'th') {
     ok = await setupThreads(profile);
   } else if (target === 'all' || target === 'meta') {
-    const fb = await setupFacebook();
+    const fb = await setupFacebook(profile);
     const ig = await setupInstagram(profile);
     const th = await setupThreads(profile);
     ok = fb && ig && th;
   } else {
     const which = await ask(M.which);
     const c = which.toLowerCase();
-    if (c === 'f') ok = await setupFacebook();
+    if (c === 'f') ok = await setupFacebook(profile);
     else if (c === 'i') ok = await setupInstagram(profile);
     else if (c === 't') ok = await setupThreads(profile);
     else if (c === 'b') {
       // 기존 b=Facebook+Instagram 동작을 유지한다.
-      const fb = await setupFacebook();
+      const fb = await setupFacebook(profile);
       const ig = await setupInstagram(profile);
       ok = fb && ig;
     } else if (c === 'a') {
-      const fb = await setupFacebook();
+      const fb = await setupFacebook(profile);
       const ig = await setupInstagram(profile);
       const th = await setupThreads(profile);
       ok = fb && ig && th;

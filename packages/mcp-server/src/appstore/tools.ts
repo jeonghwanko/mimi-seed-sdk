@@ -1,6 +1,7 @@
 import { getAuthHeaders, getAppStoreCredentials, generateToken } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
 import type { AppStoreProductType } from './http.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 /**
  * App Store Connect API v1 래퍼
@@ -28,7 +29,7 @@ export async function apiGet(path: string, params?: Record<string, string>) {
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), { headers });
+  const res = await fetchWithTimeout(url.toString(), { headers });
   if (!res.ok) {
     const body = await res.text();
     throw friendlyAppStoreError(res.status, body);
@@ -72,7 +73,7 @@ export async function verifyAppStoreCredentials(): Promise<AppStoreVerifyResult>
   }
   let res: Response;
   try {
-    res = await fetch(`${BASE}/apps?limit=1`, { headers: { Authorization: `Bearer ${token}` } });
+    res = await fetchWithTimeout(`${BASE}/apps?limit=1`, { headers: { Authorization: `Bearer ${token}` } });
   } catch (e) {
     return { ok: false, stage: 'api', message: `App Store API 연결 실패: ${(e as Error).message}` };
   }
@@ -114,7 +115,7 @@ async function apiPatch(path: string, body: unknown) {
     ].join('\n')
   );
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetchWithTimeout(`${BASE}${path}`, {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -139,7 +140,7 @@ async function apiPost(path: string, body: unknown) {
     ].join('\n')
   );
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetchWithTimeout(`${BASE}${path}`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -839,7 +840,7 @@ export async function submitVersionForReview(versionId: string) {
       });
     } catch (error) {
       if (!isItemAddRejected(error)) throw error;
-      // 2026-07-24 실측 (PenguinRun 2.0.4 재제출): 버전은 PREPARE_FOR_SUBMISSION 인데도
+      // 2026-07-24 실측 (실앱 2.0.4 재제출): 버전은 PREPARE_FOR_SUBMISSION 인데도
       // attach 가 "appStoreVersions ... is not in valid state" 로 거부되는 케이스의 진범은
       // 거절된 옛 묶음(UNRESOLVED_ISSUES)이 이 버전을 REJECTED 항목으로 물고 있는 것.
       // 항목을 removed=true 로 풀면 옛 묶음이 COMPLETE 로 정리되고 attach 가 뚫린다.
@@ -888,7 +889,7 @@ export async function submitVersionForReview(versionId: string) {
 
 // ─── IAP/구독 상품 심사 제출 ───
 //
-// ⚠️ 2026-07-24 실측 (PenguinRun 첫 출시): reviewSubmissionItems 는 appStoreVersion 계열
+// ⚠️ 2026-07-24 실측 (실앱 첫 출시): reviewSubmissionItems 는 appStoreVersion 계열
 // 관계만 받는다. inAppPurchaseV2 / inAppPurchase / subscription 관계는 전부
 // ENTITY_ERROR.RELATIONSHIP.UNKNOWN 으로 거부된다 — 즉 App Store Connect 웹의
 // "버전과 함께 제출할 상품 담기" 는 공개 API 에 존재하지 않는다.
@@ -946,7 +947,7 @@ export async function addProductToReviewSubmission(args: {
         '**앱 첫 심사** 케이스다. 한 번도 승인된 적 없는 상품은 공개 API 로 심사에 못 넣는다.',
         '앱 버전을 심사 대기로 만들어도 이 벽은 그대로다 (2026-07-25 재확인).',
         '',
-        '실제로 통하는 순서 (PenguinRun 2.0.6 실측):',
+        '실제로 통하는 순서 (실앱 2.0.6 실측):',
         '  1. appstore_submit_for_review 로 앱 버전을 먼저 제출한다.',
         '     → 상품은 자동으로 안 딸려간다. 버전 1개짜리 묶음 A 가 생긴다. 이건 정상이다.',
         '  2. 그래야 ASC 웹에 상품의 "심사 추가" UI 가 나타난다. 웹에서 상품을 담으면',
@@ -1239,7 +1240,7 @@ async function apiPostV2(path: string, body: unknown) {
   if (!headers) {
     throw new Error('App Store Connect 인증 필요 — npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
   }
-  const res = await fetch(`${IAP_V2_BASE}${path}`, {
+  const res = await fetchWithTimeout(`${IAP_V2_BASE}${path}`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

@@ -114,9 +114,9 @@ every credential, which also tells them where to obtain each token
 `mimi-seed auth meta` opens the combined social setup entry point when the user wants to review or reconnect
 all three Meta platforms in one pass.
 
-Instagram and Threads can use named local profiles. Save one with
-`mimi-seed auth instagram --profile <id>` or `mimi-seed auth threads --profile <id>`, then select it per project
-with `.mimi-seed.json` → `socialProfiles.instagram` / `socialProfiles.threads`. MCP tools also accept an explicit
+All three Meta platforms can use named local profiles. Save one with
+`mimi-seed auth facebook|instagram|threads --profile <id>`, then select it per project with `.mimi-seed.json` →
+`socialProfiles.facebook` / `.instagram` / `.threads`. MCP tools also accept an explicit
 `profile`; explicit input wins over the project mapping.
 
 Each `mimi-seed auth <cred>` wraps the matching `npx -y @yoonion/mimi-seed-mcp mimi-seed-*-auth` binary, so
@@ -145,7 +145,7 @@ Credentials live under `~/.mimi-seed/` (legacy `~/.preseed/` is still read):
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection |
 | `google-ads.json` | Google Ads developer token + customer id |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page / account tokens for social post tools |
-| `social-profiles/<profile>.json` | Named Instagram/Threads tokens selected by the current project's `.mimi-seed.json` |
+| `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads tokens selected by the current project's `.mimi-seed.json` |
 
 Notes that matter in practice:
 

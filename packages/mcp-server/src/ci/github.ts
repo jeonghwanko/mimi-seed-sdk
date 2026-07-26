@@ -1,4 +1,5 @@
 import type { CiConfig, NormalizedBuild } from './config.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 function base(cfg: CiConfig) {
   // GitHub Enterprise: host = https://github.example.com → API base = https://github.example.com/api/v3
@@ -16,7 +17,7 @@ function headers(token: string): Record<string, string> {
 }
 
 async function ghFetch(cfg: CiConfig, endpoint: string, options?: RequestInit) {
-  const res = await fetch(`${base(cfg)}${endpoint}`, {
+  const res = await fetchWithTimeout(`${base(cfg)}${endpoint}`, {
     ...options,
     headers: { ...headers(cfg.token), ...(options?.headers as Record<string, string> ?? {}) },
   });

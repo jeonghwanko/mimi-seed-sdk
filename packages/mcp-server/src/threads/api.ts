@@ -1,5 +1,6 @@
 import type { ThreadsConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 // Threads Graph API. Instagram 과 달리 base 가 하나뿐이라 토큰 prefix 분기가 없다.
 //   graph.threads.net/v1.0
@@ -28,7 +29,7 @@ async function thFetch<T>(
     body = new URLSearchParams(params).toString();
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithTimeout(url.toString(), {
     method,
     body,
     headers: method === 'POST' ? { 'Content-Type': 'application/x-www-form-urlencoded' } : undefined,
@@ -90,7 +91,7 @@ export async function refreshAccessToken(accessToken: string): Promise<Refreshed
   const url = new URL(`${AUTH_BASE}/refresh_access_token`);
   url.searchParams.set('grant_type', 'th_refresh_token');
   url.searchParams.set('access_token', accessToken);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   const text = await res.text();
   if (!res.ok) {
     let message = text;

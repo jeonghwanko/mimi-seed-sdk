@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../lib/http.js';
+
 const WEB_BASE =
   process.env.MIMI_SEED_WEB_BASE ?? 'https://mimi-seed.pryzm.gg';
 
@@ -28,9 +30,7 @@ export async function getMcpOAuthClient(): Promise<{
 
   let res: Response;
   try {
-    res = await fetch(`${WEB_BASE}/api/mcp-auth-config`, {
-      signal: AbortSignal.timeout(10_000),
-    });
+    res = await fetchWithTimeout(`${WEB_BASE}/api/mcp-auth-config`, {}, 10_000);
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
     throw new Error(`mcp-auth-config fetch failed (${WEB_BASE} 접속 불가: ${detail})`);

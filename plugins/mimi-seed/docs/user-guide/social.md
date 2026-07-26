@@ -33,12 +33,13 @@ npx mimi-seed auth threads
 For multiple accounts, save named profiles and map them per project:
 
 ```bash
+npx mimi-seed auth facebook --profile my-app
 npx mimi-seed auth instagram --profile my-app
 npx mimi-seed auth threads --profile my-app
 ```
 
 ```json
-{ "socialProfiles": { "instagram": "my-app", "threads": "my-app" } }
+{ "socialProfiles": { "facebook": "my-app", "instagram": "my-app", "threads": "my-app" } }
 ```
 
 Put the JSON in the project's `.mimi-seed.json`. The mapping is automatic; an explicit MCP `profile` argument

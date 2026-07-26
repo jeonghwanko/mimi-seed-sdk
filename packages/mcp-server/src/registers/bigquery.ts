@@ -63,7 +63,7 @@ export function registerBigqueryTools(server: McpServer) {
     'BigQuery SQL 쿼리 실행 (SELECT). GA4 analytics_* 테이블 분석에 사용. ' +
       '서비스 계정(권장) 또는 사용자 OAuth 로 인증.',
     {
-      projectId: z.string().describe('GCP 프로젝트 ID (예: ads-coffee)'),
+      projectId: z.string().describe('GCP 프로젝트 ID (예: my-app-analytics)'),
       query: z.string().describe('실행할 StandardSQL 쿼리'),
       maxResults: z.number().optional().describe('최대 행 수 (기본 1000)'),
     },
@@ -100,7 +100,7 @@ export function registerBigqueryTools(server: McpServer) {
     'BigQuery 데이터셋의 테이블 목록 조회',
     {
       projectId: z.string().describe('GCP 프로젝트 ID'),
-      datasetId: z.string().describe('데이터셋 ID (예: analytics_530080532)'),
+      datasetId: z.string().describe('데이터셋 ID (예: analytics_123456789)'),
     },
     async ({ projectId, datasetId }) => {
       const auth = requireBigQueryAuth();

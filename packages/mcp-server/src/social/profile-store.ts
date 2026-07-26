@@ -7,6 +7,7 @@ import {
   manifestSocialProfile,
   type SocialPlatform,
 } from '../lib/project-manifest.js';
+import { writeCredentialJson } from '../lib/atomic-write.js';
 
 export interface SocialConfigOptions {
   /** 명시하면 프로젝트 매니페스트 매핑보다 우선한다. */
@@ -77,8 +78,6 @@ export function saveSocialPlatformConfig<T extends object>(
   options: SocialConfigOptions = {},
 ): SocialConfigTarget {
   const target = resolveSocialConfigTarget(platform, options);
-  const dir = path.dirname(target.filePath);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   let value: T | SocialProfileDocument = config;
   if (target.profile) {
@@ -100,8 +99,7 @@ export function saveSocialPlatformConfig<T extends object>(
     value = { ...existing, [platform]: config };
   }
 
-  fs.writeFileSync(target.filePath, JSON.stringify(value, null, 2), { mode: 0o600 });
-  if (process.platform !== 'win32') fs.chmodSync(target.filePath, 0o600);
+  writeCredentialJson(target.filePath, value);
   return target;
 }
 

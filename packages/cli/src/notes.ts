@@ -5,6 +5,7 @@ import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
+import { CLI_AI_MODEL } from "./ai-model.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 // LLM 프롬프트도 여기 있다 — 사람이 읽는 결과물(릴리즈 노트)의 언어를 정하기 때문.
@@ -131,7 +132,7 @@ async function generateWithClaude(commitsText: string, locales: string[]): Promi
   const localeList = locales.map((l) => M().localeHint(l)).join(",\n    ");
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: CLI_AI_MODEL,
     max_tokens: 1500,
     system: M().system,
     messages: [{

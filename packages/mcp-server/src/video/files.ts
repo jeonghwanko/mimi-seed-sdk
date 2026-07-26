@@ -1,22 +1,9 @@
-import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-export function writeJsonAtomic(filePath: string, value: unknown): void {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-    renameSync(tempPath, filePath);
-  } catch (error) {
-    try {
-      unlinkSync(tempPath);
-    } catch {
-      // The temp file may not have been created or may already have been renamed.
-    }
-    throw error;
-  }
-}
+// 구현은 lib/atomic-write.ts 로 승격됐다 — 같은 원자성 보장이 자격증명 writer 에도 필요했는데
+// video/ 안에 갇혀 있어서 아무도 쓰지 못하고 있었다. video 쪽 호출부를 위해 이름만 재수출한다.
+export { writeJsonAtomic } from '../lib/atomic-write.js';
 
 export function readJson(filePath: string, maxBytes = 20 * 1024 * 1024): unknown {
   try {

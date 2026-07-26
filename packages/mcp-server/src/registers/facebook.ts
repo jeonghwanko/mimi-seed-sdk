@@ -4,23 +4,30 @@ import { loadFacebookConfig, requireFacebookConfig } from '../facebook/config.js
 import { connectFacebook } from '../facebook/setup.js';
 import * as api from '../facebook/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
+import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
 
 export function registerFacebookTools(server: McpServer) {
+  const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
+    '저장/사용할 소셜 프로필 ID. 생략 시 .mimi-seed.json의 socialProfiles.facebook, 없으면 기존 기본 설정',
+  );
+
   server.tool(
     'facebook_save_config',
     [
       'Facebook 페이지 액세스 토큰을 ~/.mimi-seed/facebook.json (mode 0600)에 저장합니다.',
       'pageAccessToken: Graph API Explorer 또는 /me/accounts로 발급한 Page Access Token (EAA...).',
       'pageId 미입력 시 토큰으로 자동 조회 (/me → id 필드).',
+      'profile 지정 시 ~/.mimi-seed/social-profiles/<profile>.json에 저장합니다.',
       '저장 직후 페이지 정보를 조회해 토큰 유효성도 자동 검증.',
     ].join(' '),
     {
       pageAccessToken: z.string().describe('Facebook Page Access Token (EAA..., long-lived 권장)'),
       pageId: z.string().optional().describe('Facebook Page ID (생략 시 토큰에서 자동 조회)'),
+      profile: profileSchema,
     },
-    async ({ pageAccessToken, pageId }) => {
+    async ({ pageAccessToken, pageId, profile }) => {
       // 구현은 facebook/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
-      const result = await connectFacebook(pageAccessToken, pageId);
+      const result = await connectFacebook(pageAccessToken, pageId, { profile });
       return { content: [{ type: 'text', text: result.text }] };
     },
   );
@@ -56,9 +63,9 @@ export function registerFacebookTools(server: McpServer) {
   server.tool(
     'facebook_get_page',
     'Facebook 페이지 정보 조회 + 저장된 토큰 유효성 검증.',
-    {},
-    async () => {
-      const cfg = requireFacebookConfig();
+    { profile: profileSchema },
+    async ({ profile }) => {
+      const cfg = requireFacebookConfig({ profile });
       const page = await api.getPage(cfg);
       return {
         content: [{
@@ -84,9 +91,10 @@ export function registerFacebookTools(server: McpServer) {
     {
       imageUrl: z.string().url().describe('이미지의 public URL (HTTPS 권장)'),
       caption: z.string().describe('게시글 본문'),
+      profile: profileSchema,
     },
-    async ({ imageUrl, caption }) => {
-      const cfg = requireFacebookConfig();
+    async ({ imageUrl, caption, profile }) => {
+      const cfg = requireFacebookConfig({ profile });
       const result = await api.postPhoto(cfg, imageUrl, caption);
       return {
         content: [{
@@ -111,9 +119,10 @@ export function registerFacebookTools(server: McpServer) {
     {
       imageUrls: z.array(z.string().url()).min(2).max(10).describe('이미지 URL 배열 (2~10장)'),
       caption: z.string().describe('게시글 본문'),
+      profile: profileSchema,
     },
-    async ({ imageUrls, caption }) => {
-      const cfg = requireFacebookConfig();
+    async ({ imageUrls, caption, profile }) => {
+      const cfg = requireFacebookConfig({ profile });
       const result = await api.postMultiPhoto(cfg, imageUrls, caption);
       return {
         content: [{
@@ -132,9 +141,9 @@ export function registerFacebookTools(server: McpServer) {
   server.tool(
     'facebook_current_config',
     '현재 저장된 Facebook 페이지 설정을 확인합니다.',
-    {},
-    async () => {
-      const cfg = loadFacebookConfig();
+    { profile: profileSchema },
+    async ({ profile }) => {
+      const cfg = loadFacebookConfig({ profile });
       if (!cfg) {
         return {
           content: [{ type: 'text', text: '저장된 Facebook 설정 없음. facebook_save_config로 등록하세요.' }],

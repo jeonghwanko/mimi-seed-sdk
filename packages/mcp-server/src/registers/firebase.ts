@@ -63,7 +63,7 @@ export function registerFirebaseTools(server: McpServer) {
       projectId: z
         .string()
         .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, '소문자로 시작, 소문자/숫자/하이픈 6-30자 (끝에 하이픈 불가)')
-        .describe('새로 만들 GCP/Firebase 프로젝트 ID (예: pryzm-penguinrun)'),
+        .describe('새로 만들 GCP/Firebase 프로젝트 ID (예: my-app-prod)'),
       displayName: z.string().describe('프로젝트 표시 이름'),
       parent: z
         .string()

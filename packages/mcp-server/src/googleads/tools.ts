@@ -1,5 +1,6 @@
 import type { OAuth2Client } from 'google-auth-library';
 import type { GoogleAdsConfig } from './config.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 // Google Ads API는 ~13개월 주기로 sunset (항상 최신 3개 major만 유지).
 // v24 = 2026-06 기준 현행 major. 새 major 출시 시 갱신 필요.
@@ -48,7 +49,7 @@ async function search(
     const body: Record<string, unknown> = { query, pageSize: 1000 };
     if (pageToken) body.pageToken = pageToken;
 
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: buildHeaders(accessToken, cfg),
       body: JSON.stringify(body),
@@ -85,7 +86,7 @@ function microsToCurrency(micros: string | number | undefined): number {
 export async function listAccessibleCustomers(auth: OAuth2Client, cfg: GoogleAdsConfig) {
   const accessToken = await getAccessToken(auth);
   const url = `${BASE}/customers:listAccessibleCustomers`;
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'GET',
     headers: buildHeaders(accessToken, cfg),
   });

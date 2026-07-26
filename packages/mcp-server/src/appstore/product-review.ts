@@ -5,6 +5,7 @@ import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow } from './http.js';
 
 export type { AppStoreProductType } from './http.js';
 import type { AppStoreProductType } from './http.js';
+import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 
 interface UploadOperation {
   method: string;
@@ -93,11 +94,11 @@ async function uploadChunks(buffer: Buffer, operations: UploadOperation[]): Prom
     const chunk = buffer.subarray(operation.offset, operation.offset + operation.length);
     const headers: Record<string, string> = {};
     for (const header of operation.requestHeaders) headers[header.name] = header.value;
-    const response = await fetch(operation.url, {
-      method: operation.method,
-      headers,
-      body: new Uint8Array(chunk),
-    });
+    const response = await fetchWithTimeout(
+      operation.url,
+      { method: operation.method, headers, body: new Uint8Array(chunk) },
+      HTTP_TRANSFER_TIMEOUT_MS,
+    );
     if (!response.ok) {
       const body = await response.text();
       throw new Error(

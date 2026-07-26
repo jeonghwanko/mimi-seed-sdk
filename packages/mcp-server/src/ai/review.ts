@@ -1,4 +1,4 @@
-import { requireApiKey, parseJsonResponse, LOCALE_NAMES } from './client.js';
+import { requireApiKey, parseJsonResponse, LOCALE_NAMES, AI_MODEL } from './client.js';
 
 export interface ReviewReplyResult {
   suggested: string;
@@ -46,7 +46,7 @@ export async function generateReviewReply(opts: {
   const langName = LOCALE_NAMES[language] ?? language;
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: AI_MODEL,
     max_tokens: 500,
     system: `앱 개발자를 대신해 스토어 리뷰에 답변하는 전문가입니다. ${langName}로 150자 이내로 답변하세요. ${TONE_GUIDES[tone] ?? TONE_GUIDES.friendly} 개발자 이름: ${developerName ?? '개발팀'}`,
     messages: [{

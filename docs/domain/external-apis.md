@@ -67,6 +67,23 @@ fine — the cause is app state / policy / an operation-specific restriction. `f
 **raw Google reason** instead of implying a missing grant. Do not "fix" it by changing permissions. Full
 write-up in [[pitfalls]] and [`../agent-guide.md`](../agent-guide.md) §6.
 
+## Every outbound call goes through `lib/http.ts`
+
+Node's `fetch` has **no default response timeout**. Over stdio that is not a slow call, it is a dead session:
+the tool never returns and the MCP client has no way to cancel it. So there is exactly one entry point —
+`fetchWithTimeout(input, init?, timeoutMs?)` — and `http-timeout.test.ts` rejects a raw `fetch(` anywhere in
+`src/` outside that file.
+
+- `HTTP_TIMEOUT_MS` (60s) — the default; JSON/metadata calls.
+- `HTTP_TRANSFER_TIMEOUT_MS` (10m) — byte transfers. The signal stays armed while the body streams, so a 60s
+  cap would sever a large screenshot/preview upload or stock-asset download mid-flight. Pass it explicitly.
+
+A caller-supplied `init.signal` wins (the wrapper never overrides someone else's cancellation). Timeouts are
+re-thrown as an actionable message carrying `host + pathname` only — **never the query string**, because Meta
+Graph calls put `access_token=` there and an error string ends up in agent transcripts and logs.
+
+`googleapis`-based domains don't use this — they go through the Google client, which carries its own timeouts.
+
 ## Security note (public repo)
 
 Error messages may include provider reasons — make sure they never echo **credential values, tokens, `.p8`

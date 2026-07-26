@@ -33,7 +33,7 @@ function section(title: string) {
   process.stdout.write("\n" + kleur.dim(`── ${title} ──\n`));
 }
 
-/** 매니페스트 서비스별 식별자 한 줄 (예: "ads-coffee / analytics_530080532"). */
+/** 매니페스트 서비스별 식별자 한 줄 (예: "my-app-analytics / analytics_123456789"). */
 function manifestDetail(id: ManifestServiceId, svc: ManifestService): string {
   const parts: string[] = [];
   if (id === "bigquery") {

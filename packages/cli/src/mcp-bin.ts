@@ -12,15 +12,28 @@ import { resolveLang } from "./settings.js";
 
 export const MCP_PKG = "@yoonion/mimi-seed-mcp";
 
-/** setup 계열 bin 이름 — mcp-server package.json 의 "bin" 과 일치해야 한다 (테스트로 강제). */
-export type McpBin =
-  | "mimi-seed-auth"
-  | "mimi-seed-appstore-auth"
-  | "mimi-seed-playstore-auth"
-  | "mimi-seed-bigquery-auth"
-  | "mimi-seed-jenkins-auth"
-  | "mimi-seed-googleads-auth"
-  | "mimi-seed-social-auth";
+/**
+ * CLI 가 셸아웃하는 mcp-server bin 전체 — mcp-server package.json 의 "bin" 과 일치해야 한다
+ * (`credentials.test.ts` 가 이 목록 전체를 강제한다).
+ *
+ * setup 계열뿐 아니라 클라우드 sub-CLI(firebase/admob/ga4)도 여기 있어야 한다. 예전엔
+ * 후자가 cloud.ts 의 **별도 사본** runMcpBin 을 썼는데, 그 사본에는 PATH 우선 탐색도
+ * MIMI_SEED_LANG 전달도 없어서 이 파일이 고쳤던 버그 두 개가 그 경로에서만 되살아나 있었다.
+ */
+export const MCP_BINS = [
+  "mimi-seed-auth",
+  "mimi-seed-appstore-auth",
+  "mimi-seed-playstore-auth",
+  "mimi-seed-bigquery-auth",
+  "mimi-seed-jenkins-auth",
+  "mimi-seed-googleads-auth",
+  "mimi-seed-social-auth",
+  "mimi-seed-firebase",
+  "mimi-seed-admob",
+  "mimi-seed-ga4",
+] as const;
+
+export type McpBin = (typeof MCP_BINS)[number];
 
 /**
  * bin 이 PATH 에 이미 있는가 (전역 설치 또는 `npm link` 한 개발 클론).

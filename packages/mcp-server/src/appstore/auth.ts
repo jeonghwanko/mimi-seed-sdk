@@ -2,6 +2,7 @@ import { SignJWT, importPKCS8 } from 'jose';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { writeCredentialJson } from '../lib/atomic-write.js';
 
 // Primary location under ~/.mimi-seed. Legacy ~/.preseed read as fallback
 // during the rebrand window so existing App Store Connect sessions don't
@@ -30,9 +31,7 @@ export function getAppStoreCredentials(): AppStoreCredentials | null {
 }
 
 export function saveAppStoreCredentials(creds: AppStoreCredentials) {
-  const dir = path.dirname(CONFIG_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  writeCredentialJson(CONFIG_PATH, creds);
 }
 
 function normalizePrivateKey(raw: string): string {

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { writeCredentialJson } from '../lib/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'google-ads.json');
@@ -11,23 +12,18 @@ export interface GoogleAdsConfig {
   loginCustomerId?: string; // MCC 계정 사용 시
 }
 
-function ensureDir() {
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-}
-
 /** 하이픈 제거 (API는 숫자만 허용) */
 export function normalizeCustomerId(id: string): string {
   return id.replace(/-/g, '');
 }
 
 export function saveConfig(cfg: GoogleAdsConfig): void {
-  ensureDir();
   const normalized: GoogleAdsConfig = {
     ...cfg,
     customerId: normalizeCustomerId(cfg.customerId),
     loginCustomerId: cfg.loginCustomerId ? normalizeCustomerId(cfg.loginCustomerId) : undefined,
   };
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(normalized, null, 2), { mode: 0o600 });
+  writeCredentialJson(CONFIG_PATH, normalized);
 }
 
 export function loadConfig(): GoogleAdsConfig | null {

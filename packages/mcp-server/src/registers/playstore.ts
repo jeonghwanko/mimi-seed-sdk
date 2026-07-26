@@ -59,10 +59,10 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_update_details',
     'Google Play 앱 세부정보(개발자 연락처·기본 언어) 수정 — 연락처 이메일/전화/웹사이트, 기본 언어. 스토어 리스팅(제목·설명)과는 별개이며, 넘긴 필드만 부분 갱신(edits.details.patch). ⚠️ Console 에서 같은 앱을 편집·미게시 중이면 충돌할 수 있음.',
     {
-      packageName: z.string().describe('패키지명 (예: gg.pryzm.penguinrun)'),
+      packageName: z.string().describe('패키지명 (예: com.example.app)'),
       contactEmail: z.string().optional().describe('개발자 연락처 이메일 (스토어 등록정보에 공개)'),
       contactPhone: z.string().optional().describe('개발자 연락처 전화번호 (선택)'),
-      contactWebsite: z.string().optional().describe('개발자 웹사이트 URL (예: https://penguin.pryzm.gg)'),
+      contactWebsite: z.string().optional().describe('개발자 웹사이트 URL (예: https://example.com)'),
       defaultLanguage: z.string().optional().describe('기본 언어 코드 (예: ko-KR, en-US)'),
     },
     async ({ packageName, contactEmail, contactPhone, contactWebsite, defaultLanguage }) => {
@@ -122,7 +122,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_get_statistics',
     'Google Play Developer Reporting API / Android vitals 통계 조회. ANR/Crash/Error count를 기간·버전·기기·국가 등으로 분해해 확인',
     {
-      packageName: z.string().describe('패키지명 (예: gg.pryzm.coffee)'),
+      packageName: z.string().describe('패키지명 (예: com.example.app)'),
       metricSet: z.enum(['anrRate', 'crashRate', 'errorCount'])
         .default('anrRate')
         .describe('조회할 Vitals metric set. 기본: anrRate'),
@@ -234,7 +234,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_update_release_notes',
     "Google Play 트랙 릴리스의 '최근 변경사항'(releaseNotes) 업데이트. versionCode로 타겟 릴리스 지정. 다른 언어/release는 보존. 이미 라이브(completed) 상태도 noteOnly 편집 가능",
     {
-      packageName: z.string().describe('패키지명 (예: gg.pryzm.coffee)'),
+      packageName: z.string().describe('패키지명 (예: com.example.app)'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('릴리스 트랙'),
       versionCode: z.string().describe('대상 versionCode (문자열, 예: "40")'),
       language: z.string().describe('언어 코드 (예: ko-KR, en-US)'),
@@ -563,7 +563,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '먼저 playstore_verify_service_account 로 권한 확인 후 등록을 권장.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: gg.pryzm.weather)'),
+      packageName: z.string().describe('Android 패키지명 (예: com.example.app)'),
       serviceAccountJson: z.string().describe('서비스 계정 JSON 전체 내용 (문자열)'),
       skipVerify: z.boolean().optional().describe('true면 사전 검증 건너뜀 (기본 false: 등록 전 verifyServiceAccountJson 실행)'),
     },
@@ -670,7 +670,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'playstore_submit_release 등)를 호출하세요. submit_release(status=completed)는 비가역이므로 반드시 명시 동의 필요.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: gg.pryzm.coffee)'),
+      packageName: z.string().describe('Android 패키지명 (예: com.example.app)'),
       versionCode: z.string().optional().describe('확인할 versionCode. 미지정 시 트랙 최신 release 검사'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).optional().describe('대상 트랙 (기본: production)'),
       language: z.string().optional().describe('점검할 리스팅 언어 (기본: ko-KR)'),
@@ -697,7 +697,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'playstore_check_submission_risks로 사전 점검 권장.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명 (예: gg.pryzm.coffee)'),
+      packageName: z.string().describe('패키지명 (예: com.example.app)'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('릴리스 트랙'),
       versionCode: z.string().describe('대상 versionCode (문자열)'),
       status: z.enum(['draft', 'inProgress', 'completed', 'halted']).optional().describe('새 status (기본: completed)'),
@@ -722,7 +722,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'source 트랙 노트가 버전 문자열뿐인 플레이스홀더면 warnings 로 알린다 — 그대로 승격하면 대상 트랙의 다국어 노트가 덮인다.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명 (예: gg.pryzm.coffee)'),
+      packageName: z.string().describe('패키지명 (예: com.example.app)'),
       fromTrack: z.enum(['production', 'beta', 'alpha', 'internal']).describe('출처 트랙 (예: internal)'),
       toTrack: z.enum(['production', 'beta', 'alpha', 'internal']).describe('대상 트랙 (예: production)'),
       versionCode: z.string().describe('promote할 versionCode (문자열)'),
@@ -904,7 +904,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '이미 같은 accountId의 SA가 존재하면 키만 새로 발급하고 등록합니다.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: gg.pryzm.speakmoney)'),
+      packageName: z.string().describe('Android 패키지명 (예: com.example.app)'),
       projectId: z.string().describe('Google Cloud 프로젝트 ID (예: my-project-123). Firebase 콘솔 → 프로젝트 설정에서 확인.'),
       accountId: z
         .string()

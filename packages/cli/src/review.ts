@@ -4,6 +4,7 @@ import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
+import { CLI_AI_MODEL } from "./ai-model.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 // 톤/감정 **키**(friendly, bug_report, ...)는 --tone 값이자 detectSentiment 의 반환값이라 번역하지 않는다.
@@ -182,7 +183,7 @@ async function generateReply(opts: ReviewArgs & { text: string }): Promise<strin
   const langName = localeNames[opts.language] ?? opts.language;
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: CLI_AI_MODEL,
     max_tokens: 500,
     system: m.system(langName, toneGuide, opts.developerName ?? m.defaultDeveloper),
     messages: [{

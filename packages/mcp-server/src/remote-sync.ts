@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getAppStoreCredentials, type AppStoreCredentials } from './appstore/auth.js';
+import { fetchWithTimeout } from './lib/http.js';
 import {
   getServiceAccountJson,
   listRegisteredServiceAccounts,
@@ -56,7 +57,7 @@ async function callRemote(
 ): Promise<{ text: string; isError: boolean }> {
   let response: Response;
   try {
-    response = await fetch(config.endpoint, {
+    response = await fetchWithTimeout(config.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -69,8 +70,7 @@ async function callRemote(
         method: 'tools/call',
         params: { name: tool, arguments: args },
       }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    }, 30_000);
   } catch {
     return { text: '원격 MCP 네트워크 연결 실패', isError: true };
   }

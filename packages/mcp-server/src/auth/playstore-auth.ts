@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { PLAY_DEVELOPER_REPORTING_SCOPE } from './scopes.js';
+import { writeCredentialFile } from '../lib/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const SA_DIR = path.join(CONFIG_DIR, 'play-service-accounts');
@@ -39,8 +40,7 @@ export function getServiceAccountJson(packageName?: string): string | null {
  * 레거시 호환 — 단일 SA 저장 (default).
  */
 export function saveServiceAccountJson(json: string): void {
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(LEGACY_SA_PATH, json, { mode: 0o600 });
+  writeCredentialFile(LEGACY_SA_PATH, json);
 }
 
 /**
@@ -48,9 +48,7 @@ export function saveServiceAccountJson(json: string): void {
  * ~/.mimi-seed/play-service-accounts/{packageName}.json
  */
 export function saveServiceAccountJsonForPackage(packageName: string, json: string): void {
-  if (!fs.existsSync(SA_DIR)) fs.mkdirSync(SA_DIR, { recursive: true });
-  const filePath = path.join(SA_DIR, `${packageName}.json`);
-  fs.writeFileSync(filePath, json, { mode: 0o600 });
+  writeCredentialFile(path.join(SA_DIR, `${packageName}.json`), json);
 }
 
 /**

@@ -2,6 +2,7 @@ import { getAuthHeaders } from './auth.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 
 /**
  * App Store Connect API — Screenshot upload
@@ -43,7 +44,7 @@ async function authHeadersOrThrow(): Promise<Record<string, string>> {
 async function req<T = any>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
   const headers = await authHeadersOrThrow();
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${BASE}${pathOrUrl}`;
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     ...init,
     headers: { ...headers, ...(init.headers ?? {}) },
   });
@@ -115,11 +116,11 @@ async function uploadChunks(filePath: string, ops: UploadOperation[]): Promise<v
     const slice = buf.subarray(op.offset, op.offset + op.length);
     const headers: Record<string, string> = {};
     for (const h of op.requestHeaders) headers[h.name] = h.value;
-    const res = await fetch(op.url, {
-      method: op.method,
-      headers,
-      body: slice,
-    });
+    const res = await fetchWithTimeout(
+      op.url,
+      { method: op.method, headers, body: slice },
+      HTTP_TRANSFER_TIMEOUT_MS,
+    );
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`청크 업로드 실패 (offset=${op.offset}, length=${op.length}): ${res.status} ${text}`);

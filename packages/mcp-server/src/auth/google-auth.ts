@@ -9,6 +9,7 @@ import { openPrivateBrowser } from './browser.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
 import { scopesForDomains, mergeScopeStrings, type AuthDomainId } from './scopes.js';
+import { writeCredentialJson } from '../lib/atomic-write.js';
 
 export type { AuthDomainId } from './scopes.js';
 
@@ -34,12 +35,6 @@ export interface StoredTokens {
   scope?: string;
 }
 
-function ensureDir() {
-  if (!fs.existsSync(TOKEN_DIR)) {
-    fs.mkdirSync(TOKEN_DIR, { recursive: true });
-  }
-}
-
 export function getStoredCredentials(): { clientId: string; clientSecret: string } | null {
   if (!fs.existsSync(CREDENTIALS_PATH)) return null;
   try {
@@ -51,8 +46,7 @@ export function getStoredCredentials(): { clientId: string; clientSecret: string
 }
 
 export function saveCredentials(clientId: string, clientSecret: string) {
-  ensureDir();
-  fs.writeFileSync(CREDENTIALS_PATH, JSON.stringify({ clientId, clientSecret }, null, 2), { mode: 0o600 });
+  writeCredentialJson(CREDENTIALS_PATH, { clientId, clientSecret });
 }
 
 export function getStoredTokens(): StoredTokens | null {
@@ -90,9 +84,10 @@ export function getTokensLastRefreshMs(): number | null {
   }
 }
 
+// 원자적 교체가 특히 중요한 지점 — 이 함수는 access_token 만료 5분 전마다 다시 불리고,
+// MCP 서버 인스턴스 여러 개와 CLI 가 같은 tokens.json 을 동시에 노린다.
 function saveTokens(tokens: StoredTokens) {
-  ensureDir();
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  writeCredentialJson(TOKEN_PATH, tokens);
 }
 
 export function createOAuth2Client(clientId: string, clientSecret: string) {

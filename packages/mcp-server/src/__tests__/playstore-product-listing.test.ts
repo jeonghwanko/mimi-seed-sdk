@@ -49,7 +49,7 @@ describe('updateOneTimeProductListings', () => {
       ] },
     });
 
-    const result = await updateOneTimeProductListings(auth, 'gg.pryzm.weather', 'scroll.10', [
+    const result = await updateOneTimeProductListings(auth, 'com.example.app', 'scroll.10', [
       { languageCode: 'ja-JP', title: '輝く巻物 10個', description: '手紙をあと10通' },
     ]);
 

@@ -1,4 +1,4 @@
-import { requireApiKey, parseJsonResponse, LOCALE_NAMES } from './client.js';
+import { requireApiKey, parseJsonResponse, LOCALE_NAMES, AI_MODEL } from './client.js';
 
 export interface CommitEntry {
   hash?: string;
@@ -61,7 +61,7 @@ ${commitsText}
 각 tone의 "text" 필드에 실제 릴리즈 노트 내용을 채워주세요.`;
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: AI_MODEL,
     max_tokens: maxTokens,
     system: '앱 스토어 릴리즈 노트 전문 카피라이터입니다. 커밋 내역을 사용자 친화적인 언어로 변환합니다. 항상 유효한 JSON으로만 응답하세요.',
     messages: [{ role: 'user', content: prompt }],

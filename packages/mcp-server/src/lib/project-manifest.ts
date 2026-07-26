@@ -13,7 +13,7 @@ import path from 'node:path';
 export const MANIFEST_FILENAME = '.mimi-seed.json';
 export const SOCIAL_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-export type SocialPlatform = 'instagram' | 'threads';
+export type SocialPlatform = 'instagram' | 'threads' | 'facebook';
 
 /** 매니페스트가 인지하는 서비스 id. status 매칭 로직이 이 키를 기준으로 동작한다. */
 export type ManifestServiceId =

@@ -1,5 +1,6 @@
 import type { JenkinsConfig } from './config.js';
 import { authHeaders, getCrumb } from './http.js';
+import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 
 export interface JenkinsCredentialSummary {
   id: string;
@@ -21,14 +22,14 @@ function credentialBase(url: string, id: string): string {
 }
 
 async function credentialExists(cfg: JenkinsConfig, id: string): Promise<boolean> {
-  const res = await fetch(`${credentialBase(cfg.url, id)}/api/json`, {
+  const res = await fetchWithTimeout(`${credentialBase(cfg.url, id)}/api/json`, {
     headers: authHeaders(cfg),
   });
   return res.ok;
 }
 
 export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCredentialSummary[]> {
-  const res = await fetch(`${storeBase(cfg.url)}/api/json?depth=1`, {
+  const res = await fetchWithTimeout(`${storeBase(cfg.url)}/api/json?depth=1`, {
     headers: authHeaders(cfg),
   });
   if (!res.ok) throw new Error(`Jenkins credentials 조회 실패 (${res.status})`);
@@ -64,7 +65,7 @@ export async function upsertSecretText(
     : `${storeBase(cfg.url)}/createCredentials`;
   const crumb = await getCrumb(cfg);
 
-  const res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: {
       ...authHeaders(cfg),
@@ -113,14 +114,18 @@ export async function upsertSecretFile(
   const crumb = await getCrumb(cfg);
 
   // Content-Type 은 fetch 가 multipart boundary 와 함께 자동 설정 — 수동 지정 금지
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(cfg),
-      ...crumb,
+  const res = await fetchWithTimeout(
+    endpoint,
+    {
+      method: 'POST',
+      headers: {
+        ...authHeaders(cfg),
+        ...crumb,
+      },
+      body: form,
     },
-    body: form,
-  });
+    HTTP_TRANSFER_TIMEOUT_MS,
+  );
   if (!res.ok && res.status !== 302) {
     throw new Error(`Jenkins secret file credential ${exists ? 'update' : 'create'} 실패 (${res.status})`);
   }
@@ -129,7 +134,7 @@ export async function upsertSecretFile(
 
 export async function deleteCredential(cfg: JenkinsConfig, id: string): Promise<void> {
   const crumb = await getCrumb(cfg);
-  const res = await fetch(`${credentialBase(cfg.url, id)}/doDelete`, {
+  const res = await fetchWithTimeout(`${credentialBase(cfg.url, id)}/doDelete`, {
     method: 'POST',
     headers: {
       ...authHeaders(cfg),

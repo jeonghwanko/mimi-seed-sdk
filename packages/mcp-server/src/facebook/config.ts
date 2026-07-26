@@ -1,45 +1,40 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-
-const CONFIG_PATH = path.join(os.homedir(), '.mimi-seed', 'facebook.json');
+import {
+  loadSocialPlatformConfig,
+  resolveSocialConfigTarget,
+  saveSocialPlatformConfig,
+  type SocialConfigOptions,
+} from '../social/profile-store.js';
 
 export interface FacebookConfig {
   pageAccessToken: string;
   pageId: string;
-  pageName?: string;
-  expiresAt?: string;
+  pageName?: string;      // 표시용 (save 시 자동 채움)
+  expiresAt?: string;     // ISO 8601 — long-lived token 만료일 (issuedAt + 60d)
 }
 
-export function loadFacebookConfig(): FacebookConfig | null {
-  try {
-    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Partial<FacebookConfig>;
-    if (typeof cfg.pageAccessToken !== 'string' || !cfg.pageAccessToken ||
-        typeof cfg.pageId !== 'string' || !cfg.pageId) return null;
-    return cfg as FacebookConfig;
-  } catch {
-    return null;
-  }
+export function loadFacebookConfig(options: SocialConfigOptions = {}): FacebookConfig | null {
+  const cfg = loadSocialPlatformConfig<Partial<FacebookConfig>>('facebook', options);
+  if (typeof cfg?.pageAccessToken !== 'string' || !cfg.pageAccessToken ||
+      typeof cfg.pageId !== 'string' || !cfg.pageId) return null;
+  return cfg as FacebookConfig;
 }
 
-export function saveFacebookConfig(cfg: FacebookConfig): void {
-  const dir = path.dirname(CONFIG_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  }
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
-  if (process.platform !== 'win32') {
-    fs.chmodSync(CONFIG_PATH, 0o600);
-  }
+export function saveFacebookConfig(
+  cfg: FacebookConfig,
+  options: SocialConfigOptions = {},
+): void {
+  saveSocialPlatformConfig('facebook', cfg, options);
 }
 
-export function requireFacebookConfig(): FacebookConfig {
-  const cfg = loadFacebookConfig();
+export function requireFacebookConfig(options: SocialConfigOptions = {}): FacebookConfig {
+  const cfg = loadFacebookConfig(options);
   if (!cfg) {
+    const target = resolveSocialConfigTarget('facebook', options);
+    const profileHint = target.profile ? `, profile="${target.profile}"` : '';
     throw new Error(
       'Facebook 설정이 없습니다.\n' +
       'facebook_save_config 도구로 먼저 설정해주세요.\n' +
-      '예: facebook_save_config(pageAccessToken="EAA...", pageId="...")',
+      `예: facebook_save_config(pageAccessToken="EAA...", pageId="..."${profileHint})`,
     );
   }
   return cfg;

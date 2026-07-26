@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getAuthHeaders } from './auth.js';
+import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 
 const BASE = 'https://api.appstoreconnect.apple.com/v1';
 
@@ -37,7 +38,7 @@ async function req<T = any>(pathOrUrl: string, init: RequestInit = {}): Promise<
     );
   }
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${BASE}${pathOrUrl}`;
-  const res = await fetch(url, { ...init, headers: { ...headers, ...(init.headers ?? {}) } });
+  const res = await fetchWithTimeout(url, { ...init, headers: { ...headers, ...(init.headers ?? {}) } });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`App Store API ${res.status} ${init.method ?? 'GET'} ${pathOrUrl}: ${body}`);
@@ -130,7 +131,11 @@ async function uploadChunks(absPath: string, ops: UploadOperation[]): Promise<vo
       }
       const headers: Record<string, string> = {};
       for (const h of op.requestHeaders ?? []) headers[h.name] = h.value;
-      const res = await fetch(op.url, { method: op.method ?? 'PUT', headers, body: chunk });
+      const res = await fetchWithTimeout(
+        op.url,
+        { method: op.method ?? 'PUT', headers, body: chunk },
+        HTTP_TRANSFER_TIMEOUT_MS,
+      );
       if (!res.ok) {
         throw new Error(`미리보기 업로드 실패 (offset ${op.offset}): ${res.status} ${await res.text()}`);
       }

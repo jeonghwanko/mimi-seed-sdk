@@ -83,7 +83,7 @@ export interface EditCommitInfo {
 //   Please set the query parameter changesNotSentForReview to true.
 // 이 경우 그 파라미터를 붙여야만 커밋이 통과한다. 예전 구현은 파라미터를 노출하지도,
 // 폴백하지도 않아서 그런 앱에서는 promote/submit 계열이 **100% 실패**했다
-// (PenguinRun 2026-07-25 실측 — 결국 Android Publisher API 를 직접 쳐서 우회해야 했다).
+// (실앱 2026-07-25 실측 — 결국 Android Publisher API 를 직접 쳐서 우회해야 했다).
 async function commitEdit(
   auth: OAuth2Client | JWT,
   packageName: string,
@@ -659,7 +659,7 @@ export async function promoteRelease(
       // 2-b. 릴리스 노트 회귀 가드.
       //   CI 가 internal 에 올릴 때 "v2.0.6 (70)" 같은 플레이스홀더를 한 언어만 넣어두는 경우가 흔한데,
       //   copyReleaseNotes 기본값(true)으로 production 에 승격하면 살아 있던 다국어 노트가
-      //   그 플레이스홀더로 통째 덮인다 (PenguinRun 2026-07-25 에 실제로 밟을 뻔한 함정).
+      //   그 플레이스홀더로 통째 덮인다 (실앱 2026-07-25 에 실제로 밟을 뻔한 함정).
       //   막지는 않되(의도적일 수 있으므로) 반드시 눈에 띄게 알린다.
       if (!releaseNotes && copyReleaseNotes) {
         const copied = sourceRelease.releaseNotes ?? [];

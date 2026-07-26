@@ -32,12 +32,13 @@ npx mimi-seed auth threads
 여러 계정은 이름 있는 프로필로 저장하고 프로젝트별로 매핑한다.
 
 ```bash
+npx mimi-seed auth facebook --profile my-app
 npx mimi-seed auth instagram --profile my-app
 npx mimi-seed auth threads --profile my-app
 ```
 
 ```json
-{ "socialProfiles": { "instagram": "my-app", "threads": "my-app" } }
+{ "socialProfiles": { "facebook": "my-app", "instagram": "my-app", "threads": "my-app" } }
 ```
 
 위 JSON을 프로젝트의 `.mimi-seed.json`에 넣는다. 매핑은 자동 적용되며 MCP 도구의 명시적 `profile`

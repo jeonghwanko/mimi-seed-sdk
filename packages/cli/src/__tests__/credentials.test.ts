@@ -11,6 +11,7 @@ import {
   missingRequired,
   planSetup,
 } from '../credentials.js';
+import { MCP_BINS } from '../mcp-bin.js';
 
 // 픽스처 홈 — detect 는 순수 fs 검사라 임시 디렉토리로 완전히 통제된다.
 let home: string;
@@ -283,18 +284,27 @@ describe('레지스트리 불변식', () => {
     }
   });
 
-  // 이 테스트가 두 패키지 사이의 계약이다: 마법사가 부르는 bin 이 실제로 발행돼 있어야 한다.
+  // 이 테스트가 두 패키지 사이의 계약이다: CLI 가 부르는 bin 이 실제로 발행돼 있어야 한다.
+  //
+  // 예전엔 자격증명 마법사가 쓰는 bin 만 검사해서, cloud.ts 가 부르던 firebase/admob/ga4 는
+  // 계약 밖에 있었다. 이제 McpBin 유니언(MCP_BINS) 전체를 확인한다.
   it('모든 mcp-bin 이 mcp-server 의 package.json bin 에 실재한다', () => {
     const pkg = JSON.parse(
       readFileSync(new URL('../../../mcp-server/package.json', import.meta.url), 'utf8'),
     ) as { bin: Record<string, string> };
     const published = new Set(Object.keys(pkg.bin));
 
+    expect(MCP_BINS.length).toBeGreaterThan(0);
+    const orphan = MCP_BINS.filter((b) => !published.has(b));
+    expect(orphan, `mcp-server 에 없는 bin: ${orphan.join(', ')}`).toEqual([]);
+  });
+
+  it('자격증명 레지스트리가 부르는 bin 은 모두 McpBin 유니언 안에 있다', () => {
     const used = CREDENTIALS.filter((c) => c.setup.kind === 'mcp-bin').map(
       (c) => (c.setup as { bin: string }).bin,
     );
     expect(used.length).toBeGreaterThan(0);
-    const orphan = used.filter((b) => !published.has(b));
-    expect(orphan, `mcp-server 에 없는 bin: ${orphan.join(', ')}`).toEqual([]);
+    const untyped = used.filter((b) => !(MCP_BINS as readonly string[]).includes(b));
+    expect(untyped, `McpBin 유니언에 없는 bin: ${untyped.join(', ')}`).toEqual([]);
   });
 });

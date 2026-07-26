@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getAuthenticatedClient } from './google-auth.js';
+import { writeCredentialFile } from '../lib/atomic-write.js';
 
 // BigQuery 전용 서비스 계정 키 저장 위치.
 // 서비스 계정 인증은 Google Workspace 의 재인증(reauth) 정책에서 면제되므로,
@@ -49,8 +50,7 @@ export function saveBigQueryServiceAccountJson(json: string): ServiceAccountKey 
       '서비스 계정 키 형식이 아닙니다 (type="service_account", client_email, private_key 필요).',
     );
   }
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(BQ_SA_PATH, json, { mode: 0o600 });
+  writeCredentialFile(BQ_SA_PATH, json);
   return parsed;
 }
 

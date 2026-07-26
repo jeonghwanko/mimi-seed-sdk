@@ -12,6 +12,20 @@ import { upsertSecretText, upsertSecretFile } from '../jenkins/credentials.js';
 
 const SA_DIR = join(homedir(), '.mimi-seed', 'play-service-accounts');
 
+/**
+ * Jenkins credential id 접두사를 패키지명/앱 이름에서 만든다.
+ *
+ * 예전엔 한 사설 앱 이름이 이 안내문과 `credential_id` 기본값에 **하드코딩**돼 있었다.
+ * 그래서 어떤 앱을 셋업하든 남의 앱 이름이 붙은 credential 을 만들라고 안내했고,
+ * 기본값을 그대로 쓰면 모든 사용자의 SA 가 같은 이름 하나로 덮였다.
+ *   com.example.myapp -> "myapp"
+ */
+function credentialPrefix(nameOrPackage: string): string {
+  const last = nameOrPackage.split('.').pop() ?? nameOrPackage;
+  const slug = last.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'app';
+}
+
 export function registerAndroidTools(server: McpServer) {
   // ── 0. 설정 마법사 ─────────────────────────────────────────────────────────
   server.tool(
@@ -23,10 +37,11 @@ export function registerAndroidTools(server: McpServer) {
       '"Jenkins에 keystore 등록해줘", "Android 빌드 설정 해줘", "서명 키 설정" 요청 시 이 도구를 먼저 호출하세요.',
     ].join(' '),
     {
-      package_name: z.string().describe('Android 패키지명 (예: gg.pryzm.speakmoney)'),
+      package_name: z.string().describe('Android 패키지명 (예: com.example.app)'),
       project_id: z.string().optional().describe('GCP 프로젝트 ID (SA 생성 시 필요, 선택)'),
     },
     async ({ package_name, project_id }) => {
+      const prefix = credentialPrefix(package_name);
       const jenkinsCfg = loadJenkinsConfig();
       const saJson = getServiceAccountJson(package_name);
 
@@ -79,12 +94,12 @@ export function registerAndroidTools(server: McpServer) {
               '  5. Play Store SA JSON 파일 (없으면 setup_playstore_connection으로 생성)',
               '',
               '── 등록 순서 ─────────────────────────────────────',
-              '  1. jenkins_upload_keystore(id="speakmoney-android-keystore", keystore_base64=..., file_name="upload.jks")',
-              '  2. jenkins_create_credential(id="speakmoney-android-store-password", secret=...)',
-              '  3. jenkins_create_credential(id="speakmoney-android-key-alias", secret=...)',
-              '  4. jenkins_create_credential(id="speakmoney-android-key-password", secret=...)',
-              '  5. jenkins_upload_playstore_sa(package_name="gg.pryzm.speakmoney", credential_id="speakmoney-app-key")',
-              '     └ SA JSON이 없으면 먼저: setup_playstore_connection(packageName="gg.pryzm.speakmoney", projectId="...")',
+              `  1. jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_base64=..., file_name="upload.jks")`,
+              `  2. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
+              `  3. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
+              `  4. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
+              `  5. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-app-key")`,
+              `     └ SA JSON이 없으면 먼저: setup_playstore_connection(packageName="${package_name}", projectId="...")`,
             ].join('\n'),
           }],
         };
@@ -107,17 +122,17 @@ export function registerAndroidTools(server: McpServer) {
             '── 신규 앱 설정 순서 ─────────────────────────────',
             jenkinsCfg ? '' : '  0. jenkins_status → jenkins_save_config (Jenkins 먼저 설정)',
             keytoolOk
-              ? '  1. android_generate_keystore(app_name="SpeakMoney") → keystore + 비밀번호 자동 생성'
+              ? `  1. android_generate_keystore(app_name="${prefix}") → keystore + 비밀번호 자동 생성`
               : '  1. ⚠️  수동 keystore 생성 후 base64로 인코딩해서 제공 (keytool -genkeypair ...)',
-            '  2. jenkins_upload_keystore(id="speakmoney-android-keystore", keystore_base64=..., file_name="upload.jks")',
-            '  3. jenkins_create_credential(id="speakmoney-android-store-password", secret=...)',
-            '  4. jenkins_create_credential(id="speakmoney-android-key-alias", secret=...)',
-            '  5. jenkins_create_credential(id="speakmoney-android-key-password", secret=...)',
+            `  2. jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_base64=..., file_name="upload.jks")`,
+            `  3. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
+            `  4. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
+            `  5. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
             project_id
               ? `  6. setup_playstore_connection(packageName="${package_name}", projectId="${project_id}")`
               : `  6. setup_playstore_connection(packageName="${package_name}", projectId="<GCP 프로젝트 ID>")`,
             '     └ GCP 프로젝트 ID를 모르면 사용자에게 확인하세요.',
-            `  7. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="speakmoney-app-key")`,
+            `  7. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-app-key")`,
             '  8. Play Console에서 서비스 계정 초대 (수동, 1회)',
             '     → Play Console → 사용자 및 권한 → SA 이메일 → 릴리즈 관리자 권한 부여',
             '  9. 첫 AAB 빌드 후 Play Console에 내부 테스트용으로 수동 업로드 (신규 앱 첫 번째만)',
@@ -138,11 +153,12 @@ export function registerAndroidTools(server: McpServer) {
       '비밀번호는 이 응답에서만 확인 가능하니 반드시 Jenkins에 즉시 등록하세요.',
     ].join(' '),
     {
-      app_name: z.string().describe('앱 이름 — keystore dname CN에 사용 (예: SpeakMoney)'),
-      org: z.string().optional().default('Supervlabs').describe('조직명 (기본: Supervlabs)'),
+      app_name: z.string().describe('앱 이름 — keystore dname CN에 사용 (예: MyApp)'),
+      org: z.string().optional().describe('조직명 — dname O (생략 시 app_name)'),
       country: z.string().optional().default('KR').describe('국가 코드 (기본: KR)'),
     },
     async ({ app_name, org, country }) => {
+      const prefix = credentialPrefix(app_name);
       if (!isKeytoolAvailable()) {
         return {
           content: [{
@@ -181,13 +197,13 @@ export function registerAndroidTools(server: McpServer) {
             '',
             '── 다음 단계 — 아래 순서대로 호출하세요 ──────────',
             `  jenkins_upload_keystore(`,
-            `    id="speakmoney-android-keystore",`,
+            `    id="${prefix}-android-keystore",`,
             `    keystore_base64="${ks.keystoreBase64.slice(0, 20)}...",`,
             `    file_name="upload.jks"`,
             `  )`,
-            `  jenkins_create_credential(id="speakmoney-android-store-password", secret="${ks.storePassword}")`,
-            `  jenkins_create_credential(id="speakmoney-android-key-alias",       secret="${ks.keyAlias}")`,
-            `  jenkins_create_credential(id="speakmoney-android-key-password",    secret="${ks.keyPassword}")`,
+            `  jenkins_create_credential(id="${prefix}-android-store-password", secret="${ks.storePassword}")`,
+            `  jenkins_create_credential(id="${prefix}-android-key-alias",       secret="${ks.keyAlias}")`,
+            `  jenkins_create_credential(id="${prefix}-android-key-password",    secret="${ks.keyPassword}")`,
             '',
             '⚠️  keystoreBase64 전체 값은 아래 별도 블록으로 제공합니다.',
             `KEYSTORE_BASE64=${ks.keystoreBase64}`,
@@ -207,10 +223,13 @@ export function registerAndroidTools(server: McpServer) {
       'setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요.',
     ].join(' '),
     {
-      package_name: z.string().describe('Android 패키지명 (예: gg.pryzm.speakmoney)'),
-      credential_id: z.string().default('speakmoney-app-key').describe('Jenkins Credential ID (기본: speakmoney-app-key)'),
+      package_name: z.string().describe('Android 패키지명 (예: com.example.app)'),
+      // 기본값을 하드코딩 문자열에서 패키지명 파생으로 바꿨다 — 예전 기본값은 한 사설 앱
+      // 이름이었고, 여러 앱을 쓰는 사용자는 모든 SA 가 그 이름 하나로 덮였다.
+      credential_id: z.string().optional().describe('Jenkins Credential ID (생략 시 "<앱>-app-key")'),
     },
-    async ({ package_name, credential_id }) => {
+    async ({ package_name, credential_id: credentialIdInput }) => {
+      const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-app-key`;
       const saPath = join(SA_DIR, `${package_name}.json`);
       if (!existsSync(saPath)) {
         return {

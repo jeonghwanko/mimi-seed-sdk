@@ -86,7 +86,7 @@ export function registerChecksTools(server: McpServer) {
     {
       version: z.string().describe('조회할 버전명 (예: "1.4.9"). App Store versionString + Play release.name 매칭에 사용.'),
       appId: z.string().optional().describe('App Store appId (appstore_list_apps 결과). 없으면 App Store 영역 skip.'),
-      packageName: z.string().optional().describe('Play 패키지명 (예: gg.pryzm.coffee). 없으면 Play 영역 skip.'),
+      packageName: z.string().optional().describe('Play 패키지명 (예: com.example.app). 없으면 Play 영역 skip.'),
     },
     async ({ version, appId, packageName }) => {
       if (!appId && !packageName) {

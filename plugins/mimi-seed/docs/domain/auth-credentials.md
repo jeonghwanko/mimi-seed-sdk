@@ -26,7 +26,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `bigquery-service-account.json` | BigQuery SA — exempt from Workspace reauth (`invalid_rapt`); OAuth is the fallback | `mimi-seed-bigquery-auth` |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page or account access tokens for social post tools (written `0600`) | each domain's `*_save_config` |
-| `social-profiles/<profile>.json` | Named Instagram/Threads credentials. A file can contain both platforms; `.mimi-seed.json.socialProfiles` selects each platform independently | `instagram_save_config` / `threads_save_config` or `mimi-seed auth <platform> --profile <id>` |
+| `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads credentials. One file can hold all three; `.mimi-seed.json.socialProfiles` selects each platform independently | `facebook_save_config` / `instagram_save_config` / `threads_save_config`, or `mimi-seed auth <platform> --profile <id>` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
 | `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
@@ -48,7 +48,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
   `playstore_list_service_accounts` shows the mapping. Resolution: look up
   `play-service-accounts/<packageName>.json` first, else fall back to `play-service-account.json`.
 - **Project social-profile mapping wins over the legacy default.** If `.mimi-seed.json` declares
-  `socialProfiles.instagram` or `.threads`, tools resolve only that profile and do not silently fall back to a
+  `socialProfiles.facebook`, `.instagram`, or `.threads`, tools resolve only that profile and do not silently fall back to a
   different default account. An explicit MCP `profile` argument wins over the project mapping.
 - The Play SA's **GCP project must have the Android Publisher API enabled**, or every `playstore_*` call returns
   `403` (this is *not* a permissions gap — see [[external-apis]] and [[pitfalls]]).
@@ -114,6 +114,13 @@ second call with `confirm=true`.
 
 - ✅ Resolve credentials through the existing helpers (`ensureFreshAccessToken`, the Play SA resolver, the ASC
   JWT minter). Don't re-read `~/.mimi-seed/*.json` ad hoc in a new tool.
+- ✅ **Write** through `lib/atomic-write.ts` (`writeCredentialJson` for objects, `writeCredentialFile` for an
+  already-serialized key). It writes a temp file, chmods it `0600`, then `rename(2)`s — so a reader sees the old
+  content or the new one, never a half-written file, and the file is never briefly world-readable. `writeFileSync`
+  truncates first: interrupt it (or let two processes overlap) and you get truncated JSON, which every reader in
+  this codebase swallows as `null` — the user just sees an unexplained "not authenticated". That matters most for
+  `tokens.json`, rewritten on every refresh (5-minute margin) by however many server instances and CLIs are
+  running. `atomic-write.test.ts` enforces this and keeps the writer list complete.
 - ✅ Surface the **raw provider reason** on `401`/`403` via the friendly-error layer ([[external-apis]]).
 - ❌ Never log, echo, return, or embed a token / key / `.p8` / SA JSON — not in tool output, not in error
   messages, not in tests. Tests use placeholder fixtures only.

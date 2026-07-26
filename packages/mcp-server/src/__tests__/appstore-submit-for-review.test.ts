@@ -152,7 +152,7 @@ describe('submitVersionForReview', () => {
     expect(postAttempts).toBe(2);
   });
 
-  // 2026-07-24 실측 (PenguinRun 2.0.4 재제출): 새 묶음을 만들어도 attach 가
+  // 2026-07-24 실측 (실앱 2.0.4 재제출): 새 묶음을 만들어도 attach 가
   // "appStoreVersions ... is not in valid state" 로 거부됐다. 진범은 거절된 옛 묶음
   // (UNRESOLVED_ISSUES)이 이 버전을 REJECTED 항목으로 물고 있던 것 — 그 항목을
   // removed=true 로 풀어야만 attach 가 뚫린다.

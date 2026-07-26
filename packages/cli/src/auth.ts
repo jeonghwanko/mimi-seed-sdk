@@ -150,7 +150,9 @@ export async function cmdAuth(args: string[]): Promise<void> {
   if (sub === "jenkins") return void exitWith(await runMcpBin("mimi-seed-jenkins-auth", rest));
   if (sub === "googleads") return void exitWith(await runMcpBin("mimi-seed-googleads-auth", rest));
   if (sub === "meta") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["all", ...rest]));
-  if (sub === "facebook") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["facebook"]));
+  // rest 를 넘겨야 --profile 이 전달된다. 예전엔 Facebook 만 프로필을 지원하지 않아 여기서
+  // 인자를 버렸다 — 세 플랫폼이 같은 프로필 스토어를 쓰는 지금은 셋 다 동일하게 넘긴다.
+  if (sub === "facebook") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["facebook", ...rest]));
   if (sub === "instagram") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["instagram", ...rest]));
   if (sub === "threads") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["threads", ...rest]));
 

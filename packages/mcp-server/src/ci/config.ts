@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { writeCredentialJson } from '../lib/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CI_CONFIG_PATH = path.join(CONFIG_DIR, 'ci.json');
@@ -24,10 +25,7 @@ export function loadCiConfig(): CiConfig | null {
 }
 
 export function saveCiConfig(config: CiConfig): void {
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  }
-  fs.writeFileSync(CI_CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+  writeCredentialJson(CI_CONFIG_PATH, config);
 }
 
 export function requireCiConfig(): CiConfig {

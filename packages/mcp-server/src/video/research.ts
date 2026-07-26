@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { parseJsonResponse, requireApiKey } from '../ai/client.js';
+import { parseJsonResponse, requireApiKey, AI_MODEL } from '../ai/client.js';
 import { readJson, writeJsonAtomic } from './files.js';
 import { loadProject, sha256File } from './project.js';
 
@@ -79,7 +79,7 @@ export async function synthesizeResearch(input: SynthesizeResearchInput): Promis
   const data = JSON.stringify({ youtube, pexels, observations }).slice(0, 120_000);
   const client = requireApiKey();
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: AI_MODEL,
     max_tokens: 3500,
     system: [
       '당신은 영상 레퍼런스 리서치 분석가입니다.',

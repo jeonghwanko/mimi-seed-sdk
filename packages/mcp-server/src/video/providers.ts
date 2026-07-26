@@ -14,6 +14,7 @@ import path from 'node:path';
 import { writeJsonAtomic } from './files.js';
 import { loadProject, registerAsset } from './project.js';
 import type { VideoAsset } from './types.js';
+import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -22,7 +23,7 @@ function requireEnv(name: string): string {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await fetchWithTimeout(url, init);
   const text = await response.text();
   let body: unknown;
   try {
@@ -260,7 +261,8 @@ function validatePexelsUrl(value: string): URL {
 async function fetchPexelsMedia(value: string): Promise<Response> {
   let current = validatePexelsUrl(value);
   for (let redirects = 0; redirects <= 3; redirects += 1) {
-    const response = await fetch(current, { redirect: 'manual' });
+    // 스트리밍 다운로드 — signal 은 body 를 다 읽을 때까지 살아 있으므로 전송용 상한을 쓴다.
+    const response = await fetchWithTimeout(current, { redirect: 'manual' }, HTTP_TRANSFER_TIMEOUT_MS);
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get('location');
     if (!location) throw new Error('Pexels 리디렉션 응답에 Location 헤더가 없습니다.');

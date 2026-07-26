@@ -1,5 +1,6 @@
 import type { FacebookConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 const BASE = 'https://graph.facebook.com/v21.0';
 
@@ -18,7 +19,7 @@ export interface PostResult {
 
 async function fbPost(pageAccessToken: string, endpoint: string, params: Record<string, string>): Promise<Record<string, unknown>> {
   const body = new URLSearchParams({ ...params, access_token: pageAccessToken });
-  const res = await fetch(`${BASE}${endpoint}`, {
+  const res = await fetchWithTimeout(`${BASE}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
@@ -39,7 +40,7 @@ async function fbPost(pageAccessToken: string, endpoint: string, params: Record<
 
 async function fbGet(pageAccessToken: string, endpoint: string, params: Record<string, string> = {}): Promise<Record<string, unknown>> {
   const qs = new URLSearchParams({ ...params, access_token: pageAccessToken });
-  const res = await fetch(`${BASE}${endpoint}?${qs}`);
+  const res = await fetchWithTimeout(`${BASE}${endpoint}?${qs}`);
   const text = await res.text();
   let json: Record<string, unknown>;
   try {
@@ -124,7 +125,7 @@ export async function listAccessiblePages(userAccessToken: string): Promise<Face
     fields: 'id,name,category',
     access_token: userAccessToken,
   });
-  const res = await fetch(`${BASE}/me/accounts?${qs}`);
+  const res = await fetchWithTimeout(`${BASE}/me/accounts?${qs}`);
   const json = await res.json() as { data?: FacebookPage[]; error?: { message: string; code: number } };
   if (json.error) {
     throw metaApiError(

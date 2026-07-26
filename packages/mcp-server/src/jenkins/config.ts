@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { writeCredentialJson } from '../lib/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const JENKINS_CONFIG_PATH = path.join(CONFIG_DIR, 'jenkins.json');
@@ -32,12 +33,9 @@ export function loadJenkinsConfig(): JenkinsConfig | null {
  * jenkins.json 으로 갈라졌던 것과 같은 종류의 사고다. undefined 인 필드는 건드리지 않는다.
  */
 export function saveJenkinsConfig(config: Partial<JenkinsConfig> & Pick<JenkinsConfig, 'url' | 'username' | 'token'>): void {
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  }
   const existing = loadJenkinsConfig() ?? {};
   const merged = { ...existing, ...stripUndefined(config) };
-  fs.writeFileSync(JENKINS_CONFIG_PATH, JSON.stringify(merged, null, 2), { mode: 0o600 });
+  writeCredentialJson(JENKINS_CONFIG_PATH, merged);
 }
 
 function stripUndefined<T extends object>(o: T): Partial<T> {

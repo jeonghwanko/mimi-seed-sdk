@@ -1,4 +1,5 @@
 import type { JenkinsConfig } from './config.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 export function basicAuth(username: string, token: string): string {
   return 'Basic ' + Buffer.from(`${username}:${token}`).toString('base64');
@@ -18,7 +19,7 @@ export function authHeaders(cfg: JenkinsConfig): Record<string, string> {
  */
 export async function getCrumb(cfg: JenkinsConfig): Promise<Record<string, string>> {
   try {
-    const res = await fetch(`${baseUrl(cfg)}/crumbIssuer/api/json`, {
+    const res = await fetchWithTimeout(`${baseUrl(cfg)}/crumbIssuer/api/json`, {
       headers: authHeaders(cfg),
     });
     if (!res.ok) return {};
@@ -34,8 +35,8 @@ export async function getCrumb(cfg: JenkinsConfig): Promise<Record<string, strin
 
 /**
  * 잡 경로를 Jenkins URL 로 바꾼다. 폴더는 `/` 로 구분한다.
- *   "penguinrun"        -> <base>/job/penguinrun
- *   "vir-game/client"   -> <base>/job/vir-game/job/client
+ *   "my-app"              -> <base>/job/my-app
+ *   "team-folder/my-app"  -> <base>/job/team-folder/job/my-app
  */
 export function jobUrl(cfg: JenkinsConfig, jobPath: string): string {
   const segments = jobPath.split('/').filter(Boolean);

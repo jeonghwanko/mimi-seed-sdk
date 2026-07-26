@@ -7,7 +7,7 @@ import path from "node:path";
 
 export const MANIFEST_FILENAME = ".mimi-seed.json";
 
-export type SocialPlatform = "instagram" | "threads";
+export type SocialPlatform = "instagram" | "threads" | "facebook";
 
 export type ManifestServiceId =
   | "oauth"

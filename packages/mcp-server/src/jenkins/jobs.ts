@@ -1,5 +1,6 @@
 import type { JenkinsConfig } from './config.js';
 import { authHeaders, baseUrl, createItemUrl, getCrumb, jenkinsError, jobUrl } from './http.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 export interface JenkinsJobSummary {
   name: string;
@@ -14,7 +15,7 @@ export interface JenkinsJobSummary {
  */
 export async function listJobs(cfg: JenkinsConfig, folder?: string): Promise<JenkinsJobSummary[]> {
   const root = folder ? jobUrl(cfg, folder) : baseUrl(cfg);
-  const res = await fetch(`${root}/api/json?tree=jobs[name,url,color]`, {
+  const res = await fetchWithTimeout(`${root}/api/json?tree=jobs[name,url,color]`, {
     headers: authHeaders(cfg),
   });
   if (!res.ok) throw await jenkinsError('Jenkins 잡 목록 조회 실패', res);
@@ -27,7 +28,7 @@ export async function listJobs(cfg: JenkinsConfig, folder?: string): Promise<Jen
  * 생성 분기를 타므로, 그 경우는 원인을 드러내며 throw 한다.
  */
 export async function jobExists(cfg: JenkinsConfig, jobPath: string): Promise<boolean> {
-  const res = await fetch(`${jobUrl(cfg, jobPath)}/api/json?tree=name`, {
+  const res = await fetchWithTimeout(`${jobUrl(cfg, jobPath)}/api/json?tree=name`, {
     headers: authHeaders(cfg),
   });
   if (res.ok) return true;
@@ -37,7 +38,7 @@ export async function jobExists(cfg: JenkinsConfig, jobPath: string): Promise<bo
 
 /** 잡의 config.xml 원문. 백업하거나 수정 전 현재 상태를 확인할 때 쓴다. */
 export async function getJobConfig(cfg: JenkinsConfig, jobPath: string): Promise<string> {
-  const res = await fetch(`${jobUrl(cfg, jobPath)}/config.xml`, {
+  const res = await fetchWithTimeout(`${jobUrl(cfg, jobPath)}/config.xml`, {
     headers: authHeaders(cfg),
   });
   if (!res.ok) throw await jenkinsError(`Jenkins 잡 config 조회 실패: ${jobPath}`, res);
@@ -54,7 +55,7 @@ export async function createJob(
   configXml: string,
 ): Promise<void> {
   const crumb = await getCrumb(cfg);
-  const res = await fetch(createItemUrl(cfg, jobPath), {
+  const res = await fetchWithTimeout(createItemUrl(cfg, jobPath), {
     method: 'POST',
     headers: {
       ...authHeaders(cfg),
@@ -73,7 +74,7 @@ export async function updateJob(
   configXml: string,
 ): Promise<void> {
   const crumb = await getCrumb(cfg);
-  const res = await fetch(`${jobUrl(cfg, jobPath)}/config.xml`, {
+  const res = await fetchWithTimeout(`${jobUrl(cfg, jobPath)}/config.xml`, {
     method: 'POST',
     headers: {
       ...authHeaders(cfg),

@@ -12,8 +12,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 루트 가드 — 패키지 잡은 working-directory 가 packages/<pkg> 라 루트 스크립트를
+  # 절대 실행하지 않는다. plugins/mimi-seed(Codex 배포본) 드리프트를 잡는 테스트는
+  # 어느 패키지 스위트에도 없으므로, 이 잡이 없으면 CLAUDE.md 규칙 #8(`plugin:sync`
+  # 후 재생성본 커밋)은 순전히 사람 손에만 의존한다.
+  #
+  # build-test 가 이 잡에 needs 로 매달려 있다 — 드리프트난 커밋이 publish 까지 가면
+  # mcp-server 의 prepublishOnly 가 publish **도중** 터져서 cli 만 npm 에 올라간
+  # 반쪽 릴리즈가 된다. 게이트는 테스트 앞에 있어야 한다.
+  repo-guards:
+    name: repo guards (agent-guide · codex plugin · versions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # 루트 package.json 은 의존성이 없고 scripts/*.mjs 는 node 빌트인만 쓴다 → install 불필요.
+      # .nvmrc(하한선)로 돌려 스크립트 자체도 최저 지원 버전에서 검증한다.
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - run: npm run plugin:check
+
   build-test:
     name: ${{ matrix.package }} (node ${{ matrix.node }})
+    needs: repo-guards
     runs-on: ubuntu-latest
     permissions:
       contents: write   # GitHub Release + 태그 생성
@@ -22,7 +45,9 @@ jobs:
       fail-fast: false
       matrix:
         package: [cli, mcp-server]
-        node: [22]
+        # 하한선(.nvmrc = engines.node = 20)과 상용 버전 양쪽. 20 을 빼면
+        # "engines 는 >=20 인데 아무도 20 에서 돌려본 적 없음" 상태가 된다.
+        node: [20, 22]
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
@@ -52,8 +77,10 @@ jobs:
       # main 푸시에서 package.json version 이 npm 에 아직 없으면 자동 publish.
       # 버전이 그대로면 skip (idempotent) — 수동 `npm version patch` 후 푸시만 하면 배포됨.
       # NPM_TOKEN secret 미설정 시 안전하게 skip (실패 아님).
+      # matrix.node 를 늘렸으므로 publish 는 한 버전에서만 — 안 그러면 같은 패키지를
+      # 두 잡이 동시에 올려 409 packument 경합(2026-07-09 실사고)을 스스로 재현한다.
       - name: Publish if version is new
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node == 22
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

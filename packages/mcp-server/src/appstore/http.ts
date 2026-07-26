@@ -1,5 +1,6 @@
 import { getAuthHeaders } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 export const V1_BASE = 'https://api.appstoreconnect.apple.com/v1';
 export const V2_BASE = 'https://api.appstoreconnect.apple.com/v2';
@@ -27,7 +28,7 @@ export async function apiRequest<T>(
   authHeaders: Record<string, string>,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${base}${resourcePath}`, {
+  const response = await fetchWithTimeout(`${base}${resourcePath}`, {
     ...init,
     headers: { ...authHeaders, ...(init.headers ?? {}) },
   });
