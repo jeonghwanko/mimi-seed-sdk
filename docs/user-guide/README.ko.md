@@ -27,7 +27,7 @@
 | Play Store·App Store 개별 작업 | [스토어 운영](stores.ko.md) |
 | Firebase·AdMob·GA4·BigQuery 운영 | [클라우드와 분석](cloud-operations.ko.md) |
 | 영상 제작 후 YouTube 게시 | [영상 제작](video.ko.md) |
-| Facebook·Instagram·Threads 게시 | [소셜 게시](social.ko.md) |
+| Facebook·Instagram·Threads·TikTok 게시 | [소셜 게시](social.ko.md) |
 | Claude Code·Codex와 팀에서 사용 | [팀·보안·자동화](team-security.ko.md) |
 
 ## 세 가지 사용 표면

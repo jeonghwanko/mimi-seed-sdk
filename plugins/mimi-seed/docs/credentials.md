@@ -331,6 +331,9 @@ Mimi Seed still requires the matching local source file for ffprobe validation a
 
 **Verify:** ask for `tiktok_business_auth_status`, then `tiktok_business_get_account`.
 
+For the complete app review, permission, Redirect URI, one-time `auth_code`, and video URL-property workflow,
+follow [Set up TikTok Business Organic API](tiktok-business-setup.md).
+
 ---
 
 <a id="cloud-pat"></a>

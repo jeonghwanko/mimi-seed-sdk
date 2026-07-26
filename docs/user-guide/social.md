@@ -1,8 +1,7 @@
 # Social Publishing
 
-Mimi Seed can publish release announcements and images to Facebook Pages, Instagram professional/creator
-accounts, and Threads accounts. They are all Meta platforms, but they do not share identical account or token
-requirements.
+Mimi Seed can publish release announcements and media to Facebook Pages, Instagram professional/creator
+accounts, Threads accounts, and TikTok Business Accounts. Their account and token requirements differ.
 
 ## Supported surface
 
@@ -11,6 +10,7 @@ requirements.
 | Facebook | One Page photo, multi-photo with 2–10 images | Not personal-profile posting |
 | Instagram | One image, carousel with 2–10 images | Business/creator account; no Reels, video, or Stories |
 | Threads | Text, one image, carousel with 2–20 images | 500-character text; separate token from Instagram |
+| TikTok Business | Public video from a verified URL | Owned Business Account; not a direct local-file upload |
 
 Every image post requires a **public HTTPS URL** that Meta can fetch. Local paths, intranet URLs, authenticated
 URLs, and expired signed URLs do not work.
@@ -28,6 +28,7 @@ Or connect only what you use:
 npx mimi-seed auth facebook
 npx mimi-seed auth instagram
 npx mimi-seed auth threads
+npx mimi-seed auth tiktok
 ```
 
 For multiple accounts, save named profiles and map them per project:
@@ -46,6 +47,8 @@ Put the JSON in the project's `.mimi-seed.json`. The mapping is automatic; an ex
 overrides it. With no mapping, the existing default account files continue to work.
 
 See the [credential reference](../credentials.md#facebook) for token and account-type requirements.
+TikTok requires a separate app review and callback; complete the
+[TikTok Business setup guide](../tiktok-business-setup.md) first.
 
 ## 2. Verify the target before posting
 

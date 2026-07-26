@@ -27,7 +27,7 @@ launch**. Start with the outcome you want instead of memorizing tool names.
 | Operate Play Store or App Store directly | [Store operations](stores.md) |
 | Operate Firebase, AdMob, GA4, or BigQuery | [Cloud and analytics](cloud-operations.md) |
 | Produce a video and publish it to YouTube | [Video production](video.md) |
-| Post to Facebook, Instagram, or Threads | [Social publishing](social.md) |
+| Post to Facebook, Instagram, Threads, or TikTok | [Social publishing](social.md) |
 | Use Claude Code, Codex, and team automation safely | [Teams, security, and automation](team-security.md) |
 
 ## Three surfaces

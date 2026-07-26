@@ -324,6 +324,9 @@ Mimi Seed는 ffprobe 규격 검사와 SHA-256 중복 차단을 위해 동일 원
 
 **확인:** `tiktok_business_auth_status`, 이어서 `tiktok_business_get_account`.
 
+포털 앱 생성, 권한 신청, Redirect URI, 일회용 `auth_code`, 영상 URL property까지의 전체 절차는
+[TikTok Business 설정 가이드](tiktok-business-setup.ko.md)를 따른다.
+
 ---
 
 <a id="cloud-pat"></a>

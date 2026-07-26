@@ -1,7 +1,7 @@
 # 소셜 게시
 
-Mimi Seed는 Facebook 페이지, Instagram 프로/크리에이터 계정, Threads 계정에 출시 공지와 이미지를 게시할 수 있다.
-세 플랫폼은 모두 Meta 계열이지만 계정과 토큰 요구사항이 같지 않다.
+Mimi Seed는 Facebook 페이지, Instagram 프로/크리에이터 계정, Threads 계정, TikTok Business Account에
+출시 공지와 미디어를 게시할 수 있다. 플랫폼마다 계정과 토큰 요구사항이 다르다.
 
 ## 지원 범위
 
@@ -10,6 +10,7 @@ Mimi Seed는 Facebook 페이지, Instagram 프로/크리에이터 계정, Thread
 | Facebook | 페이지 사진 1장, 멀티포토 2~10장 | 개인 프로필 게시 아님 |
 | Instagram | 이미지 1장, 캐러셀 2~10장 | 비즈니스/크리에이터 계정. 릴스·동영상·스토리 없음 |
 | Threads | 텍스트, 이미지 1장, 캐러셀 2~20장 | 텍스트 500자, Instagram과 별도 토큰 |
+| TikTok Business | 검증된 URL의 공개 영상 | owned Business Account, 로컬 파일 직접 업로드 아님 |
 
 모든 이미지 게시에는 Meta 서버가 읽을 수 있는 **public HTTPS URL**이 필요하다. 로컬 경로, 사내망 URL,
 로그인이 필요한 URL, 만료된 signed URL은 사용할 수 없다.
@@ -27,6 +28,7 @@ npx mimi-seed auth status --all
 npx mimi-seed auth facebook
 npx mimi-seed auth instagram
 npx mimi-seed auth threads
+npx mimi-seed auth tiktok
 ```
 
 여러 계정은 이름 있는 프로필로 저장하고 프로젝트별로 매핑한다.
@@ -45,6 +47,8 @@ npx mimi-seed auth threads --profile my-app
 인자가 있으면 그것이 우선한다. 매핑이 없으면 기존 기본 계정 파일을 계속 사용한다.
 
 토큰 발급과 계정 유형은 [계정 연결 레퍼런스](../credentials.ko.md#facebook)를 참고한다.
+TikTok은 별도의 앱 심사와 콜백이 필요하므로 [TikTok Business 설정 가이드](../tiktok-business-setup.ko.md)를
+먼저 완료한다.
 
 ## 2. 게시 전 계정 확인
 
