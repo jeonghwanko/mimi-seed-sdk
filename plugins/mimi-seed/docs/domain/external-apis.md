@@ -95,8 +95,10 @@ not retrying, so the rule splits on what a repeat request can do:
 | **timeout** | **no** | **no** — see the budget below |
 | any other 4xx | no | no |
 
-`Retry-After` (seconds or HTTP-date) wins over the exponential backoff, both clamped to 20s — a longer wait is
-indistinguishable from the hang the timeout exists to prevent. Bodies that cannot be replayed (streams) disable
+`Retry-After` (seconds or HTTP-date) wins over the exponential backoff, clamped to 20s at the top and **250ms
+at the bottom**. The floor matters: `Retry-After: 0` is legal, and obeying it literally means firing the next
+request with no delay at a server that just said it is rate-limiting you — and a zero wait advances no wall
+clock, so the total budget below stops holding. Bodies that cannot be replayed (streams) disable
 retry, because re-sending a consumed stream silently posts an empty request. Chunked uploads are `PUT`, so they
 get the retry that matters most: a transient blip mid-upload no longer strands a half-uploaded asset.
 

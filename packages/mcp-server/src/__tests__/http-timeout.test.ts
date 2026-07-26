@@ -277,6 +277,38 @@ describe('fetchWithTimeout 시간 예산', () => {
     expect(Date.now() - started).toBeLessThanOrEqual(1_000 + 30_000 + 1_000);
   });
 
+
+  it('Retry-After: 0 이어도 지연 없이 연타하지 않는다', async () => {
+    // 0 을 그대로 따르면 "속도 제한 중"이라고 답한 서버에 연타를 넣게 되고, 대기가 0이면
+    // 벽시계가 안 흘러 총 예산 검사도 무력해진다 (실측: maxAttempts 를 크게 주면 1000회).
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('busy', {
+      status: 429,
+      headers: { 'retry-after': '0' },
+    })));
+    vi.stubGlobal('fetch', fetchMock);
+    const started = Date.now();
+
+    await settle(fetchWithTimeout('https://example.test/a'));
+
+    expect(fetchMock).toHaveBeenCalledTimes(HTTP_MAX_ATTEMPTS);
+    expect(Date.now() - started, '재시도 사이에 대기가 전혀 없었다').toBeGreaterThan(0);
+  });
+
+  it('maxAttempts 를 비정상적으로 크게 줘도 총 예산이 상한을 잡는다', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('busy', {
+      status: 429,
+      headers: { 'retry-after': '0' },
+    })));
+    vi.stubGlobal('fetch', fetchMock);
+    const started = Date.now();
+
+    await settle(fetchWithTimeout('https://example.test/a', {}, { timeoutMs: 1_000, maxAttempts: 1_000 }));
+
+    // 횟수가 아니라 **시간**이 상한이다 — timeoutMs(1s) + RETRY_WINDOW(30s).
+    expect(Date.now() - started).toBeLessThanOrEqual(1_000 + 30_000 + 1_000);
+    expect(fetchMock.mock.calls.length).toBeLessThan(1_000);
+  });
+
   it('재시도가 없으면(maxAttempts=1) 예산도 늘어나지 않는다', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response('ok')));
     vi.stubGlobal('fetch', fetchMock);

@@ -46,6 +46,15 @@ const RETRY_WINDOW_MS = 30_000;
 const MIN_ATTEMPT_MS = 1_000;
 
 /**
+ * 재시도 사이 최소 간격.
+ *
+ * `Retry-After: 0`(또는 이미 지난 HTTP-date)은 합법이지만 그대로 따르면 **지연 없이**
+ * 재요청하게 된다 — 방금 "속도 제한 중"이라고 답한 서버에 연타를 넣는 꼴이고, 대기가
+ * 0이면 벽시계가 흐르지 않아 총 예산 검사도 무력해진다.
+ */
+const MIN_RETRY_DELAY_MS = 250;
+
+/**
  * 메서드가 재요청해도 안전한가(RFC 9110 idempotent).
  *
  * POST 는 여기 없다. 5xx 나 네트워크 오류는 **서버가 이미 처리했는지 알 수 없는**
@@ -200,7 +209,10 @@ export async function fetchWithTimeout(
     if (response.status !== 429 && !idempotent) return response;
     if (!hasBudget(attempt + 1)) return response;
 
-    const wait = parseRetryAfter(response.headers.get('retry-after'), Date.now()) ?? backoffFor(attempt);
+    const wait = Math.max(
+      parseRetryAfter(response.headers.get('retry-after'), Date.now()) ?? backoffFor(attempt),
+      MIN_RETRY_DELAY_MS,
+    );
     // 재시도할 응답의 본문은 읽지 않고 버린다 — 소켓을 붙잡고 있지 않도록.
     await response.body?.cancel().catch(() => undefined);
     await sleep(cappedWait(wait, deadline));
