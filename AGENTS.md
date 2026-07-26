@@ -79,8 +79,9 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
 - Do not repeat parameters already defined by a tool schema, or flags already defined by the `usage.<command>`
   entries in `packages/cli/src/index.ts`; link to the owning source instead.
 - Never put release version numbers in domain docs. The root `package.json` and version scripts own them.
-- Use “150+” in prose. Exact MCP tool counts belong only in `tool-manifest.json` and
-  `docs/domain/tool-catalog.md`.
+- Use “150+” in prose and name domains rather than counting them. Exact tool **and domain** counts belong only
+  in `tool-manifest.json`, `docs/domain/tool-catalog.md`, and the README count columns — `docs-drift.test.ts`
+  rejects a hard-coded count in any other contributor or agent-facing document.
 - Keep English and `.ko` onboarding documents structurally equivalent when changing user-facing guidance.
 - Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, or `LICENSE` require `npm run plugin:sync`.
   Commit the resulting `plugins/mimi-seed/` update; do not hand-edit it.

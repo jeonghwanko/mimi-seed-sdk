@@ -28,7 +28,13 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 Google Play 도구로 스토�
 
 호출 전 schema 로드:
 ```
-ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release")
+ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release")
+```
+
+인앱 상품·리뷰·통계까지 다룰 때 추가로:
+
+```
+ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,playstore_list_subscriptions,playstore_create_onetime_product,playstore_create_subscription,playstore_update_product,playstore_update_product_listing,playstore_update_subscription_listing,playstore_update_product_state,playstore_list_reviews,playstore_reply_review,playstore_get_statistics,generate_review_reply")
 ```
 
 ## 실행 흐름
@@ -42,6 +48,23 @@ ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_updat
 4. 출시/승격은 **사용자 승인 후**:
    - 같은 트랙 출시: `playstore_submit_release`
    - 트랙 간 승격: `playstore_promote_release` (fromTrack→toTrack, versionCode)
+
+## 인앱 상품 · 구독
+
+`playstore_list_products`(일회성+구독 통합) 또는 `playstore_list_inapp_products` / `playstore_list_subscriptions`로
+현재 상태를 먼저 읽는다. 생성은 `playstore_create_onetime_product` / `playstore_create_subscription`, 가격·설정
+변경은 `playstore_update_product`, 상품/구독 등록정보는 `playstore_update_product_listing` /
+`playstore_update_subscription_listing`이다.
+
+- 활성화는 `playstore_update_product_state`(DRAFT ↔ 활성)로 하며, **활성 상품은 사용자에게 즉시 노출**되므로
+  명시 승인 후에만 바꾼다.
+- 상품 ID는 출시 후 재사용·변경이 사실상 불가능하다. 만들기 전에 ID 규칙을 사용자에게 확인한다.
+
+## 리뷰 · 통계
+
+`playstore_list_reviews`로 미답변 리뷰를 모으고, 초안은 `generate_review_reply`(`ANTHROPIC_API_KEY` 필요)로
+만든 뒤 **사용자 확인을 거쳐** `playstore_reply_review`로 게시한다. 답변은 공개되고 수정 이력이 남는다.
+설치·평점 추이는 `playstore_get_statistics`로 읽는다.
 
 ## 안전 규칙
 

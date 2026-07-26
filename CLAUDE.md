@@ -1,7 +1,7 @@
 # Mimi Seed SDK — contributor context
 
 Public developer tooling for app launch ops: a CLI (`mimi-seed`, `packages/cli`) + a local stdio MCP server
-(`@yoonion/mimi-seed-mcp`, `packages/mcp-server`) exposing 150+ tools across 19 domains (exact inventory:
+(`@yoonion/mimi-seed-mcp`, `packages/mcp-server`) exposing 150+ tools across the domains below (exact inventory:
 `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase, AdMob, IAM,
 BigQuery, GA4, Search Console, Google Ads, CI, Jenkins, Facebook, Instagram, Threads, Android signing, video
 production (incl. YouTube publishing), AI, Auth, Checks. It drives Google/Apple APIs directly with local
@@ -40,8 +40,9 @@ index below is imported automatically; the linked docs are **not**, so `Read` th
 5. **ESM conventions**: `.ts` sources import with `.js` specifiers; tools are `snake_case`, files `kebab-case`,
    domain folders lowercase.
 6. **User-facing CLI text goes through `catalog(ko, en)`** — a bare Korean literal fails `i18n-coverage.test.ts`.
-7. **Don't hard-code tool counts in prose** — write "150+". Exact counts live only in `tool-manifest.json`,
-   `docs/domain/tool-catalog.md`, and the README count columns (all test-enforced).
+7. **Don't hard-code tool or domain counts in prose** — write "150+" and name the domains instead of counting
+   them. Exact counts live only in `tool-manifest.json`, `docs/domain/tool-catalog.md`, and the README count
+   columns (all test-enforced); a guard rejects them anywhere else.
 8. **Editing `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`** → `npm run plugin:sync`, then
    commit the regenerated `plugins/mimi-seed/`. Never hand-edit that folder.
 9. **Version numbers** belong to the root `package.json` (`npm run version:set`) — never write one into a doc.

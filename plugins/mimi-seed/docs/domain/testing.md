@@ -70,7 +70,9 @@ Conventions worth copying when you add one:
 
 - The credential file map in [[auth-credentials]] and the command table in [[cli-deploy]] — hand-synced.
 - The skill list and count in [[skills-plugins]].
-- Prose tool counts elsewhere: write **"150+"**, never a number. Exact counts belong only to
-  `tool-manifest.json`, [[tool-catalog]], and the README count columns (the last two are test-enforced).
+- ~~Prose tool counts~~ — now enforced: `docs-drift.test.ts` rejects a hard-coded `<n> domains` / `<n> tools` /
+  `<n>개 영역` in `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, the agent guide, `docs/domain/*`, and every
+  `SKILL.md`. Write **"150+"** or name the domains; exact counts belong only to `tool-manifest.json`,
+  [[tool-catalog]], and the README count columns.
 - Vendor click-paths in `docs/credentials.md` — Apple, Google, and Meta reorganize their consoles on their own
   schedule.

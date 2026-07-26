@@ -16,7 +16,7 @@ and which actions are irreversible.
 
 ## 0. The one thing that trips every agent: deferred tools
 
-Mimi Seed exposes **150+ MCP tools** across 19 domains (full inventory:
+Mimi Seed exposes **150+ MCP tools** across every store, cloud, CI, social, and video domain (full inventory:
 [`docs/domain/tool-catalog.md`](domain/tool-catalog.md)). Harnesses that lazy-load large tool catalogs —
 **Claude Code most notably** — register these tools as **deferred**: the tool *names*
 are visible (in a system reminder), but the **input schemas are not loaded**. If you

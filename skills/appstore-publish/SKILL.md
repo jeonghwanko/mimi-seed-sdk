@@ -28,7 +28,13 @@ App Store Connect 는 Issuer ID · Key ID · `.p8` 파일 3개가 필요하고, 
 호출 전 schema 로드:
 
 ```
-ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
+ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_update_version_string,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
+```
+
+심사 묶음이나 인앱 상품까지 다룰 때 추가로:
+
+```
+ToolSearch(query="select:appstore_list_review_submissions,appstore_add_version_to_review_submission,appstore_remove_review_submission_item,appstore_cancel_review,appstore_list_products,appstore_update_product_review_note,appstore_upload_product_review_screenshot,appstore_add_product_to_review")
 ```
 
 ## 실행 흐름
@@ -42,12 +48,36 @@ ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_crea
 7. 스크린샷 교체 요청이 있으면 기존 screenshot set을 삭제한 뒤 매니페스트 순서대로 업로드한다.
 8. 적용 결과와 실패 지점을 요약한다.
 
+## 심사 제출 묶음 — 제출·재제출이 막힐 때
+
+ASC는 버전을 바로 제출하지 않고 **심사 제출 묶음(reviewSubmission)** 을 제출한다. 묶음 항목으로 버전과
+인앱 상품이 함께 들어간다. "제출이 안 된다"의 대부분은 버전이 아니라 묶음 문제이고, 이때 버전 자체는
+`PREPARE_FOR_SUBMISSION`으로 멀쩡해 보인다. 막히면 추측하지 말고 `appstore_list_review_submissions`부터
+읽는다 — 묶음 state(`READY_FOR_REVIEW` 초안 / `WAITING_FOR_REVIEW` 큐 / `UNRESOLVED_ISSUES` 거절 미해결 /
+`COMPLETE`)와 항목이 보인다.
+
+| 오류 | 원인 | 대응 |
+| --- | --- | --- |
+| `appStoreVersions ... is not in valid state` | 거절된 `UNRESOLVED_ISSUES` 묶음이 버전을 물고 있다 | `appstore_remove_review_submission_item`으로 항목을 푼다 (`appstore_submit_for_review`가 자동 시도하므로, 실패했을 때만 직접) |
+| 409 `an appStoreVersions must be included in this review submission` | 웹에서 IAP를 담아 상품만 든 묶음이 생겼다 | `appstore_add_version_to_review_submission`으로 버전을 그 묶음에 넣는다. 버전이 다른 묶음에 물려 있으면 먼저 푼다 — 미제출이면 항목 제거, 제출된 묶음이면 `appstore_cancel_review` |
+| 409 `cannot create a new version in the current state` | 편집 가능한 버전이 이미 있다 | 새로 만들지 말고 `appstore_update_version_string`으로 기존 레코드 이름을 올린다 |
+
+빌드는 `CFBundleShortVersionString`이 같은 버전에만 붙는다. 새 빌드를 attach하기 전에 버전 문자열을 맞춘다.
+
+## 인앱 상품 심사 정보
+
+앱 첫 심사에는 IAP도 함께 들어간다. `appstore_list_products`로 상태를 읽고, 심사 노트는
+`appstore_update_product_review_note`, 심사용 스크린샷은 `appstore_upload_product_review_screenshot`(절대경로),
+묶음 편입은 `appstore_add_product_to_review`로 처리한다. 상품 자체를 만들거나 지우는 작업은 요청받았을 때만 한다.
+
 ## 안전 규칙
 
 - 스토어 쓰기 작업 전에는 반드시 사용자 승인을 받는다.
 - 기존 스크린샷 셋 삭제는 되돌릴 수 없으므로 삭제 수량과 업로드 수량을 먼저 알린다.
 - 파일 경로는 절대경로로 넘긴다. 이미지 바이트를 대화 컨텍스트에 싣지 않는다.
-- 실제 Submit for Review는 사용자가 App Store Connect에서 직접 수행한다.
+- `appstore_submit_for_review`와 `appstore_cancel_review`는 **같은 턴의 명시 승인**이 있을 때만 호출한다.
+  제출 전에는 `appstore_check_submission_risks` 결과를 체크리스트로 먼저 보고한다. 취소는 항목 하나가 아니라
+  묶음 전체를 심사에서 빼므로 영향 범위를 알린 뒤 실행한다.
 
 ## displayType 참고
 

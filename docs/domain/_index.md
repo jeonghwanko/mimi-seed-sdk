@@ -12,7 +12,7 @@
 
 - Public developer tooling for app launch ops: a **CLI** (`mimi-seed`) + a **local stdio MCP server**
   (`@yoonion/mimi-seed-mcp`) in a two-package monorepo under `packages/`.
-- The MCP server registers **150+ tools** across **19 domain modules** (exact inventory:
+- The MCP server registers **150+ tools** across the domain modules under `src/registers/` (exact inventory:
   `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase,
   AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins credentials,
   Facebook, Instagram, Threads, Android signing, video production (incl. YouTube publishing), AI, Auth, and
@@ -112,7 +112,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | Fact | SSOT (code) | Mirrored in | Enforced by |
 |---|---|---|---|
 | Tool names & inventory | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) | ✅ `tool-manifest.test.ts` (manifest ↔ live server) + `docs-drift.test.ts` (manifest ↔ catalog) |
-| Exact tool counts | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) + the README count columns **only** | ✅ `docs-drift.test.ts`; the "prose elsewhere says 150+, never a number" rule is ⚠️ manual convention |
+| Exact tool **and domain** counts | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) + the README count columns **only** | ✅ `docs-drift.test.ts` — it also rejects a hard-coded `<n> domains` / `<n> tools` / `<n>개 영역` anywhere else in the contributor and agent docs, so prose must say "150+" or name the domains |
 | Domain counts in the READMEs | `tool-manifest.json` | `README.md`, `README.ko.md`, `packages/mcp-server/README.md` | ✅ `docs-drift.test.ts` — each row is matched to its domain by the tool names it lists, so every language/copy is covered |
 | Credential files & roles | `src/*/config.ts`, `src/auth/*` | [auth-credentials.md](auth-credentials.md) | ⚠️ manual |
 | CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |

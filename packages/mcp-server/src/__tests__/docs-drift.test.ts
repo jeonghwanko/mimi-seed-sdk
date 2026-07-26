@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { readToolManifest } from '../lib/package-root.js';
 
 // tool-manifest.json 은 등록 도구의 SSOT 이고, docs/domain/tool-catalog.md 는
@@ -88,6 +88,36 @@ describe('docs/agent-guide.md `select:` 배치 ↔ tool-manifest.json', () => {
     const known = new Set(registered);
     const ghosts = [...batched].filter((t) => !known.has(t));
     expect(ghosts, `등록되지 않은 이름이 배치에 있습니다: ${ghosts.join(', ')}`).toEqual([]);
+  });
+});
+
+// "산문에는 150+ 라고만 쓴다"는 규칙은 그동안 수동 관례였고, 실제로 도메인 수(19)가 네 곳에 박혀
+// 도메인을 하나 추가하면 조용히 낡는 상태였다. 개수를 적어도 되는 곳은 manifest / tool-catalog /
+// README 카운트 열(모두 테스트 강제)뿐이고, 나머지 기여자·에이전트 문서에서는 여기서 막는다.
+describe('산문에 박힌 도구·도메인 개수', () => {
+  const PROSE_DOCS = [
+    'CLAUDE.md',
+    'AGENTS.md',
+    'CONTRIBUTING.md',
+    'docs/agent-guide.md',
+    'packages/cli/AGENTS.md',
+    'packages/mcp-server/AGENTS.md',
+    ...readdirSync(new URL('../../../../docs/domain', import.meta.url))
+      .filter((f) => f.endsWith('.md') && f !== 'tool-catalog.md') // 카탈로그는 개수의 SSOT 미러
+      .map((f) => `docs/domain/${f}`),
+    ...readdirSync(new URL('../../../../skills', import.meta.url)).map((d) => `skills/${d}/SKILL.md`),
+  ];
+
+  // "19 domains" · "19개 영역" · "37 tools" · "32개 도구". "150+" 는 허용된 floor 표기라 제외한다.
+  const COUNT_PATTERN = /(\d+)(?!\+)\s*(?:domains?|개\s*영역|tools\b|개\s*도구)/g;
+
+  it.each(PROSE_DOCS)('%s 에 정확한 개수가 없다 (150+ 만 허용)', (rel) => {
+    const body = readFileSync(new URL(`../../../../${rel}`, import.meta.url), 'utf8');
+    const hits = [...body.matchAll(COUNT_PATTERN)].map((m) => m[0].trim());
+    expect(
+      hits,
+      `${rel}: 개수를 산문에 박지 마세요 — "150+" 로 쓰거나 도메인을 나열하세요 (${hits.join(' · ')})`,
+    ).toEqual([]);
   });
 });
 
