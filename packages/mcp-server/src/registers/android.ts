@@ -8,7 +8,7 @@ import { getServiceAccountJson } from '../auth/playstore-auth.js';
 import { getAppDetails } from '../playstore/tools.js';
 import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
-import { upsertSecretText, upsertSecretFile } from '../jenkins/credentials.js';
+import { upsertSecretFile } from '../jenkins/credentials.js';
 
 const SA_DIR = join(homedir(), '.mimi-seed', 'play-service-accounts');
 

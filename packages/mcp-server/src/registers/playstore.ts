@@ -18,6 +18,7 @@ import { PLAY_DEVELOPER_REPORTING_SCOPE } from '../auth/scopes.js';
 import * as iam from '../iam/tools.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 
 // 모든 playstore tools 호출을 친절 에러로 감싸는 프록시 — 403(권한)/404/edit 충돌/
 // invalid_grant 를 raw dump 대신 구체적 복구 안내로 변환. args[1] 이 packageName 규약.
@@ -27,7 +28,7 @@ const playstore: typeof playstoreRaw = new Proxy(playstoreRaw, {
     const orig = Reflect.get(target, prop, receiver);
     if (typeof orig !== 'function') return orig;
     return (...args: unknown[]) => {
-      const pkg = typeof args[1] === 'string' ? (args[1] as string) : undefined;
+      const pkg = typeof args[1] === 'string' ? (args[1]) : undefined;
       try {
         const out = (orig as (...a: unknown[]) => unknown)(...args);
         if (out && typeof (out as { then?: unknown }).then === 'function') {
@@ -51,7 +52,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const details = await playstore.getAppDetails(auth, packageName);
-      return { content: [{ type: 'text', text: JSON.stringify(details, null, 2) }] };
+      return jsonResult(details);
     },
   );
 
@@ -70,7 +71,7 @@ export function registerPlaystoreTools(server: McpServer) {
       const result = await playstore.updateAppDetails(auth, packageName, {
         contactEmail, contactPhone, contactWebsite, defaultLanguage,
       });
-      return { content: [{ type: 'text', text: `수정 완료:\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`수정 완료:\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -84,7 +85,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, language }) => {
       const auth = requirePlayStoreAuth(packageName);
       const listing = await playstore.getListing(auth, packageName, language);
-      return { content: [{ type: 'text', text: JSON.stringify(listing, null, 2) }] };
+      return jsonResult(listing);
     },
   );
 
@@ -103,7 +104,7 @@ export function registerPlaystoreTools(server: McpServer) {
       const result = await playstore.updateListing(auth, packageName, language, {
         title, shortDescription, fullDescription,
       });
-      return { content: [{ type: 'text', text: `수정 완료:\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`수정 완료:\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -114,7 +115,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const tracks = await playstore.listTracks(auth, packageName);
-      return { content: [{ type: 'text', text: JSON.stringify(tracks, null, 2) }] };
+      return jsonResult(tracks);
     },
   );
 
@@ -164,7 +165,7 @@ export function registerPlaystoreTools(server: McpServer) {
       // 요구한다. 미보유면 generic 403 대신 "--domains playstore 재로그인" 안내가 나간다.
       const auth = requirePlayStoreAuth(args.packageName, PLAY_DEVELOPER_REPORTING_SCOPE);
       const result = await playstore.getStatistics(auth, args.packageName, args);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 
@@ -179,7 +180,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, language, imageType }) => {
       const auth = requirePlayStoreAuth(packageName);
       const images = await playstore.listImages(auth, packageName, language, imageType);
-      return { content: [{ type: 'text', text: JSON.stringify(images, null, 2) }] };
+      return jsonResult(images);
     },
   );
 
@@ -195,7 +196,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, language, imageType, filePath }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.uploadImage(auth, packageName, language, imageType, filePath);
-      return { content: [{ type: 'text', text: `✅ 업로드 완료\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ 업로드 완료\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -210,7 +211,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, language, imageType }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.deleteAllImages(auth, packageName, language, imageType);
-      return { content: [{ type: 'text', text: `✅ 전체 삭제\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ 전체 삭제\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -226,7 +227,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, language, imageType, filePaths }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.replaceImages(auth, packageName, language, imageType, filePaths);
-      return { content: [{ type: 'text', text: `✅ ${result.count}장 교체 완료\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ ${result.count}장 교체 완료\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -254,7 +255,7 @@ export function registerPlaystoreTools(server: McpServer) {
       }
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.updateReleaseNotes(auth, packageName, track, versionCode, language, text);
-      return { content: [{ type: 'text', text: `✅ ${packageName} ${track} v${versionCode} ${language} 노트 반영\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ ${packageName} ${track} v${versionCode} ${language} 노트 반영\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -310,12 +311,7 @@ export function registerPlaystoreTools(server: McpServer) {
         }
       }
 
-      return {
-        content: [{
-          type: 'text',
-          text: `${lines.join('\n')}\n\n${JSON.stringify(allResults, null, 2)}`,
-        }],
-      };
+      return textResult(`${lines.join('\n')}\n\n${JSON.stringify(allResults, null, 2)}`);
     },
   );
 
@@ -326,7 +322,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const reviews = await playstore.listReviews(auth, packageName);
-      return { content: [{ type: 'text', text: JSON.stringify(reviews, null, 2) }] };
+      return jsonResult(reviews);
     },
   );
 
@@ -341,7 +337,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, reviewId, replyText }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.replyToReview(auth, packageName, reviewId, replyText);
-      return { content: [{ type: 'text', text: `답변 완료:\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`답변 완료:\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -352,7 +348,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const products = await playstore.listInAppProducts(auth, packageName);
-      return { content: [{ type: 'text', text: JSON.stringify(products, null, 2) }] };
+      return jsonResult(products);
     },
   );
 
@@ -363,7 +359,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const subs = await playstore.listSubscriptions(auth, packageName);
-      return { content: [{ type: 'text', text: JSON.stringify(subs, null, 2) }] };
+      return jsonResult(subs);
     },
   );
 
@@ -408,7 +404,7 @@ export function registerPlaystoreTools(server: McpServer) {
         serviceAccountKey: json,
       });
       if (!result.success) {
-        return { content: [{ type: 'text', text: `❌ 상품 생성 실패: ${result.error}` }] };
+        return textResult(`❌ 상품 생성 실패: ${result.error}`);
       }
       return {
         content: [{
@@ -467,7 +463,7 @@ export function registerPlaystoreTools(server: McpServer) {
         serviceAccountKey: json,
       });
       if (!result.success) {
-        return { content: [{ type: 'text', text: `❌ 구독 생성 실패: ${result.error}` }] };
+        return textResult(`❌ 구독 생성 실패: ${result.error}`);
       }
       return {
         content: [{
@@ -551,7 +547,7 @@ export function registerPlaystoreTools(server: McpServer) {
           lines.push('원인: Play Developer API 호출 중 예외. 네트워크 또는 Google 쪽 문제일 수 있음.');
         }
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -584,14 +580,14 @@ export function registerPlaystoreTools(server: McpServer) {
           };
         }
       }
-      let clientEmail = '';
-      let projectId = '';
+      let clientEmail: string;
+      let projectId: string;
       try {
-        const parsed = JSON.parse(serviceAccountJson);
+        const parsed = JSON.parse(serviceAccountJson) as { client_email?: string; project_id?: string };
         clientEmail = parsed.client_email ?? '';
         projectId = parsed.project_id ?? '';
       } catch {
-        return { content: [{ type: 'text', text: '❌ JSON 파싱 실패 — 서비스 계정 JSON 형식이 올바르지 않음.' }] };
+        return textResult('❌ JSON 파싱 실패 — 서비스 계정 JSON 형식이 올바르지 않음.');
       }
       saveServiceAccountJsonForPackage(packageName, serviceAccountJson);
       return {
@@ -637,7 +633,7 @@ export function registerPlaystoreTools(server: McpServer) {
           lines.push(`- \`${item.packageName}\` → \`${item.clientEmail ?? '(parse error)'}\` (project: \`${item.projectId ?? 'unknown'}\`)`);
         }
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -705,7 +701,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName, track, versionCode, status }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.submitRelease(auth, packageName, track, versionCode, status);
-      return { content: [{ type: 'text', text: `✅ ${packageName} ${track} v${versionCode}: ${result.previousStatus} → ${result.newStatus}\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ ${packageName} ${track} v${versionCode}: ${result.previousStatus} → ${result.newStatus}\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -745,7 +741,7 @@ export function registerPlaystoreTools(server: McpServer) {
         releaseNotes,
       });
       const summary = `✅ ${packageName} ${fromTrack} → ${toTrack} v${versionCode} (status: ${result.newStatus}${result.userFraction != null ? `, userFraction: ${result.userFraction}` : ''})`;
-      return { content: [{ type: 'text', text: `${summary}\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`${summary}\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -758,7 +754,7 @@ export function registerPlaystoreTools(server: McpServer) {
     async ({ packageName }) => {
       const json = requireServiceAccountJson(packageName);
       const products = await listGoogleProducts({ packageName, serviceAccountKey: json });
-      return { content: [{ type: 'text', text: JSON.stringify(products, null, 2) }] };
+      return jsonResult(products);
     },
   );
 
@@ -844,12 +840,7 @@ export function registerPlaystoreTools(server: McpServer) {
       const states = result.states.length
         ? result.states.map((s) => `${s.purchaseOptionId}: ${s.state}`).join(', ')
         : '(응답에 상태 없음 — playstore_list_inapp_products 로 확인)';
-      return {
-        content: [{
-          type: 'text',
-          text: `✓ ${productId} / ${purchaseOptionId} ${action}\n${states}`,
-        }],
-      };
+      return textResult(`✓ ${productId} / ${purchaseOptionId} ${action}\n${states}`);
     },
   );
 
@@ -869,9 +860,9 @@ export function registerPlaystoreTools(server: McpServer) {
         packageName, productId, productType, name, serviceAccountKey: json,
       });
       if (!result.success) {
-        return { content: [{ type: 'text', text: `❌ 수정 실패: ${result.error}` }] };
+        return textResult(`❌ 수정 실패: ${result.error}`);
       }
-      return { content: [{ type: 'text', text: `✓ 수정 완료 (변경 필드: ${result.updated.join(', ') || 'none'})` }] };
+      return textResult(`✓ 수정 완료 (변경 필드: ${result.updated.join(', ') || 'none'})`);
     },
   );
 
@@ -889,9 +880,9 @@ export function registerPlaystoreTools(server: McpServer) {
         packageName, productId, productType, serviceAccountKey: json,
       });
       if (!result.success) {
-        return { content: [{ type: 'text', text: `❌ 삭제 실패: ${result.error}` }] };
+        return textResult(`❌ 삭제 실패: ${result.error}`);
       }
-      return { content: [{ type: 'text', text: `✓ ${productId} 삭제 완료` }] };
+      return textResult(`✓ ${productId} 삭제 완료`);
     },
   );
 
@@ -1001,7 +992,7 @@ export function registerPlaystoreTools(server: McpServer) {
           }],
         };
       }
-      const auth = await requirePlayStoreAuth(packageName);
+      const auth = requirePlayStoreAuth(packageName);
       const r = await playstore.uploadDataSafety(auth, packageName, content);
       return {
         content: [{
@@ -1031,9 +1022,9 @@ export function registerPlaystoreTools(server: McpServer) {
       versionCode: z.string().optional().describe('특정 버전 코드로 필터'),
     },
     async ({ packageName, versionCode }) => {
-      const auth = await requirePlayStoreAuth(packageName);
+      const auth = requirePlayStoreAuth(packageName);
       const rows = await playstore.listRecoveryActions(auth, packageName, versionCode);
-      if (rows.length === 0) return { content: [{ type: 'text', text: '복구 액션 없음.' }] };
+      if (rows.length === 0) return textResult('복구 액션 없음.');
       return {
         content: [{
           type: 'text',
@@ -1097,7 +1088,7 @@ export function registerPlaystoreTools(server: McpServer) {
           }],
         };
       }
-      const auth = await requirePlayStoreAuth(packageName);
+      const auth = requirePlayStoreAuth(packageName);
       const r = await playstore.createRecoveryAction(auth, packageName, targeting);
       return {
         content: [{
@@ -1127,16 +1118,11 @@ export function registerPlaystoreTools(server: McpServer) {
     },
     async ({ packageName, appRecoveryId, confirm }) => {
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: `🛑 dry-run — 복구 액션 ${appRecoveryId} 를 배포할 참이다. 대상 사용자에게 원격 업데이트가 나간다. confirm: true 로 다시 호출.`,
-          }],
-        };
+        return textResult(`🛑 dry-run — 복구 액션 ${appRecoveryId} 를 배포할 참이다. 대상 사용자에게 원격 업데이트가 나간다. confirm: true 로 다시 호출.`);
       }
-      const auth = await requirePlayStoreAuth(packageName);
+      const auth = requirePlayStoreAuth(packageName);
       const r = await playstore.deployRecoveryAction(auth, packageName, appRecoveryId);
-      return { content: [{ type: 'text', text: `✅ 복구 액션 배포 — ${r.appRecoveryId}` }] };
+      return textResult(`✅ 복구 액션 배포 — ${r.appRecoveryId}`);
     },
   );
 
@@ -1154,16 +1140,11 @@ export function registerPlaystoreTools(server: McpServer) {
     },
     async ({ packageName, appRecoveryId, confirm }) => {
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: `🛑 dry-run — 복구 액션 ${appRecoveryId} 를 취소할 참이다. 이미 적용된 기기는 되돌아가지 않는다. confirm: true 로 다시 호출.`,
-          }],
-        };
+        return textResult(`🛑 dry-run — 복구 액션 ${appRecoveryId} 를 취소할 참이다. 이미 적용된 기기는 되돌아가지 않는다. confirm: true 로 다시 호출.`);
       }
-      const auth = await requirePlayStoreAuth(packageName);
+      const auth = requirePlayStoreAuth(packageName);
       const r = await playstore.cancelRecoveryAction(auth, packageName, appRecoveryId);
-      return { content: [{ type: 'text', text: `✅ 복구 액션 취소 — ${r.appRecoveryId}` }] };
+      return textResult(`✅ 복구 액션 취소 — ${r.appRecoveryId}`);
     },
   );
 }

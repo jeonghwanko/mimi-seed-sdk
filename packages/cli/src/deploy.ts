@@ -440,7 +440,7 @@ async function runGitProviderBuild(
   cfg: CiProviderConfig,
   args: DeployArgs,
 ): Promise<number> {
-  let runUrl = "";
+  let runUrl: string;
   let runId: number;
 
   if (cfg.provider === "github") {

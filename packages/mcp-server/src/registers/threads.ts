@@ -6,6 +6,7 @@ import * as api from '../threads/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
+import { textResult } from '../lib/mcp-response.js';
 
 export function registerThreadsTools(server: McpServer) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
@@ -31,7 +32,7 @@ export function registerThreadsTools(server: McpServer) {
     async ({ accessToken, userId, assumeIssuedNow, profile }) => {
       // 구현은 threads/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
       const result = await connectThreads(accessToken, userId, assumeIssuedNow, { profile });
-      return { content: [{ type: 'text', text: result.text }] };
+      return textResult(result.text);
     },
   );
 
@@ -139,12 +140,7 @@ export function registerThreadsTools(server: McpServer) {
       const target = resolveSocialConfigTarget('threads', options);
       const cfg = loadThreadsConfig(options);
       if (!cfg) {
-        return {
-          content: [{
-            type: 'text',
-            text: `❌ Threads ${socialTargetLabel(target)} 미설정 → threads_save_config 또는 mimi-seed auth threads`,
-          }],
-        };
+        return textResult(`❌ Threads ${socialTargetLabel(target)} 미설정 → threads_save_config 또는 mimi-seed auth threads`);
       }
       return {
         content: [{

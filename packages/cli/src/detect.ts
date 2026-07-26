@@ -120,7 +120,7 @@ export async function detectHints(cwd: string): Promise<AppHint[]> {
       /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/,
     );
     if (m?.[1]) {
-      let bid = m[1];
+      const bid = m[1];
       if (bid.includes("$(PRODUCT_BUNDLE_IDENTIFIER)")) continue; // 변수 참조는 pbxproj에서 해결
       if (!hints.some((h) => h.bundleId === bid)) {
         hints.push({ bundleId: bid, source: [path.relative(cwd, f)] });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireCiConfig, saveCiConfig } from '../ci/config.js';
 import * as github from '../ci/github.js';
 import * as gitlab from '../ci/gitlab.js';
+import { textResult } from '../lib/mcp-response.js';
 
 export function registerCiTools(server: McpServer) {
   server.tool(
@@ -52,12 +53,7 @@ export function registerCiTools(server: McpServer) {
       const result = cfg.provider === 'github'
         ? await github.listWorkflows(cfg)
         : await gitlab.listWorkflows(cfg);
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        }],
-      };
+      return textResult(JSON.stringify(result, null, 2));
     },
   );
 
@@ -86,12 +82,7 @@ export function registerCiTools(server: McpServer) {
       }
 
       if (!result) {
-        return {
-          content: [{
-            type: 'text',
-            text: '✅ 빌드 트리거 완료. run_id 조회 불가 — 잠시 후 ci_list_recent_builds로 확인하세요.',
-          }],
-        };
+        return textResult('✅ 빌드 트리거 완료. run_id 조회 불가 — 잠시 후 ci_list_recent_builds로 확인하세요.');
       }
 
       return {
@@ -161,7 +152,7 @@ export function registerCiTools(server: McpServer) {
         : await gitlab.listRecentBuilds(cfg, ref, limit);
 
       if (builds.length === 0) {
-        return { content: [{ type: 'text', text: '최근 빌드 없음.' }] };
+        return textResult('최근 빌드 없음.');
       }
 
       const statusEmoji: Record<string, string> = {
@@ -181,12 +172,7 @@ export function registerCiTools(server: McpServer) {
         return parts.join(' ');
       });
 
-      return {
-        content: [{
-          type: 'text',
-          text: `최근 빌드 ${builds.length}개:\n\n${lines.join('\n')}`,
-        }],
-      };
+      return textResult(`최근 빌드 ${builds.length}개:\n\n${lines.join('\n')}`);
     },
   );
 
@@ -203,12 +189,7 @@ export function registerCiTools(server: McpServer) {
       } else {
         await gitlab.cancelBuild(cfg, run_id);
       }
-      return {
-        content: [{
-          type: 'text',
-          text: `⛔ 빌드 #${run_id} 취소 요청 완료.\nci_get_build_status(run_id="${run_id}") 로 상태를 확인하세요.`,
-        }],
-      };
+      return textResult(`⛔ 빌드 #${run_id} 취소 요청 완료.\nci_get_build_status(run_id="${run_id}") 로 상태를 확인하세요.`);
     },
   );
 }

@@ -61,7 +61,8 @@ async function getConfig(projectId: string, appId: string, platform: string) {
   throw new CliUsageError('--platform 은 android | ios | web 중 하나여야 합니다.');
 }
 
-runDomainCli({
+// runDomainCli 는 내부에서 모든 예외를 잡고 항상 process.exit 한다.
+void runDomainCli({
   binName: 'mimi-seed-firebase',
   argv: process.argv.slice(2),
   help: HELP,

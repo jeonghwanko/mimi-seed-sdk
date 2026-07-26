@@ -28,6 +28,7 @@ import {
   type ManifestServiceId,
   type ManifestService,
 } from '../lib/project-manifest.js';
+import { textResult } from '../lib/mcp-response.js';
 
 /**
  * tokens.json mtime → "Nd Hh ago" 형식 문자열 + 재인증 권고.
@@ -300,7 +301,7 @@ export function registerAuthTools(server: McpServer) {
         lines.push(...reqLines);
       }
 
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -330,12 +331,7 @@ export function registerAuthTools(server: McpServer) {
         ({ clientId, clientSecret } = await getMcpOAuthClient());
       } catch (e) {
         const p = classifyError(e, { phase: 'login' });
-        return {
-          content: [{
-            type: 'text',
-            text: `❌ [${p.code}] ${p.message}${p.hint ? `\n→ ${p.hint}` : ''}`,
-          }],
-        };
+        return textResult(`❌ [${p.code}] ${p.message}${p.hint ? `\n→ ${p.hint}` : ''}`);
       }
       const { url, wait } = startAuth(clientId, clientSecret, { domains });
       // fire-and-forget — 토큰은 콜백 서버가 자동 저장
@@ -407,21 +403,11 @@ export function registerAuthTools(server: McpServer) {
           };
         case 'fresh': {
           const min = Math.round(r.msUntilExpiry / 60000);
-          return {
-            content: [{
-              type: 'text',
-              text: `✅ 인증 유효 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`,
-            }],
-          };
+          return textResult(`✅ 인증 유효 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`);
         }
         case 'refreshed': {
           const min = Math.round(r.msUntilExpiry / 60000);
-          return {
-            content: [{
-              type: 'text',
-              text: `✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`,
-            }],
-          };
+          return textResult(`✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`);
         }
         case 'expired_refresh_failed':
           return {

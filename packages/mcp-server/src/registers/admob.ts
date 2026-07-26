@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as admob from '../admob/tools.js';
 import { requireAuth } from '../helpers.js';
+import { jsonResult } from '../lib/mcp-response.js';
 
 export function registerAdmobTools(server: McpServer) {
   server.tool(
@@ -11,7 +12,7 @@ export function registerAdmobTools(server: McpServer) {
     async () => {
       const auth = await requireAuth();
       const accounts = await admob.listAccounts(auth);
-      return { content: [{ type: 'text', text: JSON.stringify(accounts, null, 2) }] };
+      return jsonResult(accounts);
     },
   );
 
@@ -22,7 +23,7 @@ export function registerAdmobTools(server: McpServer) {
     async ({ accountId }) => {
       const auth = await requireAuth();
       const apps = await admob.listApps(auth, accountId);
-      return { content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }] };
+      return jsonResult(apps);
     },
   );
 
@@ -33,7 +34,7 @@ export function registerAdmobTools(server: McpServer) {
     async ({ accountId }) => {
       const auth = await requireAuth();
       const units = await admob.listAdUnits(auth, accountId);
-      return { content: [{ type: 'text', text: JSON.stringify(units, null, 2) }] };
+      return jsonResult(units);
     },
   );
 
@@ -44,7 +45,7 @@ export function registerAdmobTools(server: McpServer) {
     async ({ accountId }) => {
       const auth = await requireAuth();
       const report = await admob.getTodayEarnings(auth, accountId);
-      return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
+      return jsonResult(report);
     },
   );
 
@@ -67,7 +68,7 @@ export function registerAdmobTools(server: McpServer) {
         { year: startYear, month: startMonth, day: startDay },
         { year: endYear, month: endMonth, day: endDay },
       );
-      return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
+      return jsonResult(report);
     },
   );
 
@@ -84,7 +85,7 @@ export function registerAdmobTools(server: McpServer) {
       const auth = await requireAuth();
       try {
         const result = await admob.createApp(auth, accountId, platform, displayName, appStoreId);
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        return jsonResult(result);
       } catch (err: any) {
         if (err.code === 403) {
           return {
@@ -120,7 +121,7 @@ export function registerAdmobTools(server: McpServer) {
       const auth = await requireAuth();
       try {
         const result = await admob.createAdUnit(auth, accountId, appId, displayName, adFormat);
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        return jsonResult(result);
       } catch (err: any) {
         if (err.code === 403) {
           return {

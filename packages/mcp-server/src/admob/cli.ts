@@ -30,7 +30,8 @@ const HELP = `
 
 const AD_FORMATS = ['BANNER', 'INTERSTITIAL', 'REWARDED', 'REWARDED_INTERSTITIAL', 'APP_OPEN', 'NATIVE'];
 
-runDomainCli({
+// runDomainCli 는 내부에서 모든 예외를 잡고 항상 process.exit 한다.
+void runDomainCli({
   binName: 'mimi-seed-admob',
   argv: process.argv.slice(2),
   help: HELP,

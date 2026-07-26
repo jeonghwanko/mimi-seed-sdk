@@ -773,7 +773,7 @@ export async function listInAppProducts(auth: OAuth2Client | JWT, packageName: s
     auth,
     packageName,
     pageSize: 100,
-  } as any);
+  });
   return (res.data.oneTimeProducts ?? []).map((p: any) => ({
     productId: p.productId,
     listings: p.listings,
@@ -869,7 +869,7 @@ export async function updateOneTimeProductListings(
 ) {
   const current = await publisher().monetization.onetimeproducts.get({
     auth, packageName, productId,
-  } as any);
+  });
   const { merged, created, updated } = mergeListings(
     ((current.data as any)?.listings ?? []) as StoredListing[],
     listings,
@@ -882,7 +882,7 @@ export async function updateOneTimeProductListings(
     updateMask: 'listings',
     'regionsVersion.version': REGIONS_VERSION,
     requestBody: { listings: merged },
-  } as any);
+  });
   return {
     productId,
     created,
@@ -899,7 +899,7 @@ export async function updateSubscriptionListings(
 ) {
   const current = await publisher().monetization.subscriptions.get({
     auth, packageName, productId,
-  } as any);
+  });
   const { merged, created, updated } = mergeListings(
     ((current.data as any)?.listings ?? []) as StoredListing[],
     listings,
@@ -912,7 +912,7 @@ export async function updateSubscriptionListings(
     updateMask: 'listings',
     'regionsVersion.version': REGIONS_VERSION,
     requestBody: { listings: merged },
-  } as any);
+  });
   return {
     productId,
     created,
@@ -943,7 +943,7 @@ export async function updatePurchaseOptionState(
     requestBody: {
       requests: [{ [key]: { packageName, productId, purchaseOptionId } }],
     },
-  } as any);
+  });
   const products = ((res.data as any)?.oneTimeProducts ?? []) as Array<{
     productId?: string;
     purchaseOptions?: Array<{ purchaseOptionId?: string; state?: string }>;

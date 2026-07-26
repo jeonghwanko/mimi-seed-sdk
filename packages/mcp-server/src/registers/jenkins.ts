@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
 import * as jobs from '../jenkins/jobs.js';
+import { textResult } from '../lib/mcp-response.js';
 
 export function registerJenkinsTools(server: McpServer) {
   // ── 0. 상태 확인 (항상 첫 번째로 호출) ─────────────────────────────────────
@@ -100,15 +101,10 @@ export function registerJenkinsTools(server: McpServer) {
       const cfg = requireJenkinsConfig();
       const list = await creds.listCredentials(cfg);
       if (list.length === 0) {
-        return { content: [{ type: 'text', text: '등록된 Jenkins credential 없음.' }] };
+        return textResult('등록된 Jenkins credential 없음.');
       }
       const lines = list.map((c) => `• ${c.id}  [${c.typeName}]  ${c.displayName}`);
-      return {
-        content: [{
-          type: 'text',
-          text: `Jenkins credentials (${list.length}개):\n\n${lines.join('\n')}`,
-        }],
-      };
+      return textResult(`Jenkins credentials (${list.length}개):\n\n${lines.join('\n')}`);
     },
   );
 
@@ -129,12 +125,7 @@ export function registerJenkinsTools(server: McpServer) {
     async ({ id, secret, description }) => {
       const cfg = requireJenkinsConfig();
       const result = await creds.upsertSecretText(cfg, id, secret, description ?? '');
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ Jenkins credential ${result}: \`${id}\``,
-        }],
-      };
+      return textResult(`✅ Jenkins credential ${result}: \`${id}\``);
     },
   );
 
@@ -156,12 +147,7 @@ export function registerJenkinsTools(server: McpServer) {
     async ({ id, keystore_base64, file_name, description }) => {
       const cfg = requireJenkinsConfig();
       const result = await creds.upsertSecretFile(cfg, id, keystore_base64, file_name, description ?? '');
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`,
-        }],
-      };
+      return textResult(`✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`);
     },
   );
 
@@ -178,12 +164,7 @@ export function registerJenkinsTools(server: McpServer) {
     async ({ id }) => {
       const cfg = requireJenkinsConfig();
       await creds.deleteCredential(cfg, id);
-      return {
-        content: [{
-          type: 'text',
-          text: `🗑 Jenkins credential 삭제 완료: \`${id}\``,
-        }],
-      };
+      return textResult(`🗑 Jenkins credential 삭제 완료: \`${id}\``);
     },
   );
 
@@ -202,15 +183,10 @@ export function registerJenkinsTools(server: McpServer) {
       const cfg = requireJenkinsConfig();
       const list = await jobs.listJobs(cfg, folder);
       if (list.length === 0) {
-        return { content: [{ type: 'text', text: '잡 없음.' }] };
+        return textResult('잡 없음.');
       }
       const lines = list.map((j) => `• ${j.name}${j.color ? `  [${j.color}]` : '  [folder]'}`);
-      return {
-        content: [{
-          type: 'text',
-          text: `Jenkins jobs (${list.length}개):\n\n${lines.join('\n')}`,
-        }],
-      };
+      return textResult(`Jenkins jobs (${list.length}개):\n\n${lines.join('\n')}`);
     },
   );
 
@@ -228,7 +204,7 @@ export function registerJenkinsTools(server: McpServer) {
     async ({ job }) => {
       const cfg = requireJenkinsConfig();
       const xml = await jobs.getJobConfig(cfg, job);
-      return { content: [{ type: 'text', text: xml }] };
+      return textResult(xml);
     },
   );
 
@@ -250,18 +226,13 @@ export function registerJenkinsTools(server: McpServer) {
       const cfg = requireJenkinsConfig();
       if (overwrite) {
         const result = await jobs.upsertJob(cfg, job, config_xml);
-        return { content: [{ type: 'text', text: `✅ Jenkins 잡 ${result}: \`${job}\`` }] };
+        return textResult(`✅ Jenkins 잡 ${result}: \`${job}\``);
       }
       if (await jobs.jobExists(cfg, job)) {
-        return {
-          content: [{
-            type: 'text',
-            text: `⚠️ 잡 \`${job}\` 이(가) 이미 존재합니다. jenkins_update_job 을 쓰거나 overwrite=true 로 다시 호출하세요.`,
-          }],
-        };
+        return textResult(`⚠️ 잡 \`${job}\` 이(가) 이미 존재합니다. jenkins_update_job 을 쓰거나 overwrite=true 로 다시 호출하세요.`);
       }
       await jobs.createJob(cfg, job, config_xml);
-      return { content: [{ type: 'text', text: `✅ Jenkins 잡 created: \`${job}\`` }] };
+      return textResult(`✅ Jenkins 잡 created: \`${job}\``);
     },
   );
 
@@ -280,7 +251,7 @@ export function registerJenkinsTools(server: McpServer) {
     async ({ job, config_xml }) => {
       const cfg = requireJenkinsConfig();
       await jobs.updateJob(cfg, job, config_xml);
-      return { content: [{ type: 'text', text: `✅ Jenkins 잡 updated: \`${job}\`` }] };
+      return textResult(`✅ Jenkins 잡 updated: \`${job}\``);
     },
   );
 }

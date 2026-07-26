@@ -15,6 +15,7 @@ npm test                                   # root: plugin:check → mcp-server s
 # While working — inside the package you changed
 npm run build && npm test                  # packages/mcp-server (tsc) or packages/cli (tsup)
 npm run typecheck                          # packages/cli only (tsup does not type-check) — its `npm test` runs this first
+npm run lint                               # eslint, correctness rules only — both packages' `npm test` run this
 
 # One file / one case (vitest, run from the package directory)
 npx vitest run src/__tests__/docs-drift.test.ts
@@ -49,11 +50,19 @@ before changing any assertion.
 | `mcp-server/…/public-repo-hygiene.test.ts` | no private project / Jenkins job / GA4 property / service-account identifier in `packages/*/src`, `docs/`, `skills/` | put a real name in a `describe()` string, a default value, or an example — tool descriptions ship to every MCP client | use the placeholder vocabulary (`com.example.app`, `my-app`, `analytics_123456789`) |
 | `mcp-server/…/manifest-schema-parity.test.ts` | the `.mimi-seed.json` contract is identical in both hand-duplicated readers (filename, both unions, interface fields, profile-id pattern, shared exports) | change the schema in one package only | mirror it in the other reader ([[cli-deploy]]) |
 | `mcp-server/…/ai-model-parity.test.ts` | one Claude model constant per package, both equal, no literals left anywhere | hard-code a model id, or bump only one package | edit `ai/client.ts` `AI_MODEL` and `cli/src/ai-model.ts` `CLI_AI_MODEL` together |
+| `mcp-server/…/ai-parity.test.ts` | the language-independent contract shared by the duplicated AI generators: sentiment keywords, tone/sentiment key sets, `max_tokens` | change a classifier keyword or token budget in one package only — the same review then gets a different tone, or one path truncates | mirror it ([[architecture]] on why the duplication is deliberate) |
 
 The compiler is a guard too: `catalog<T>(ko, en: NoInfer<T>)` makes a **missing English key a build error**, and
 ESM/NodeNext makes a missing `.js` import specifier fail the published build ([[pitfalls]] §11). For the CLI the
 compiler only counts if you *run* it — `tsup` strips types without checking them, so `packages/cli`'s `npm test`
 runs `tsc --noEmit` first.
+
+ESLint is the third static gate, wired into both packages' `npm test`. It carries **no formatting rules on
+purpose**: reformatting 27k lines would rewrite every file in one commit and destroy `git blame`, and in this
+repo the comments carry the "why" and the incident dates, so blame is a real asset. The type-aware rules
+(`no-floating-promises`, `await-thenable`, `no-misused-promises`) are the point — this codebase is almost all
+async, and a missing `await` looks like success. They lint through `tsconfig.lint.json`, not the build config:
+the latter excludes `src/__tests__`, which had left the test files with **no type checking at all**.
 
 ### Where each guard actually runs in CI
 

@@ -50,11 +50,11 @@ function koBlockRanges(code: string): Array<[number, number]> {
 
   // i18n.ts / 파일별 카탈로그: `const ko = {`
   for (const m of code.matchAll(/const ko(?::\s*[\w<>.\s]+)?\s*=\s*\{/g)) {
-    starts.push(m.index! + m[0].length - 1);
+    starts.push(m.index + m[0].length - 1);
   }
   // 파일별 카탈로그: `catalog(` 의 첫 인자 = ko
   for (const m of code.matchAll(/catalog\(\s*\{/g)) {
-    starts.push(m.index! + m[0].length - 1);
+    starts.push(m.index + m[0].length - 1);
   }
   // credentials.ts: localized 필드 `ko: [` / `ko: "..."` 는 아래 별도 처리
 
@@ -77,7 +77,7 @@ const HANGUL = /[가-힣]/;
 function hangulLiterals(code: string): Array<{ index: number; text: string }> {
   const found: Array<{ index: number; text: string }> = [];
   for (const m of code.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/gs)) {
-    if (HANGUL.test(m[0])) found.push({ index: m.index!, text: m[0] });
+    if (HANGUL.test(m[0])) found.push({ index: m.index, text: m[0] });
   }
   return found;
 }

@@ -76,7 +76,9 @@ export async function awaitHandshake(
     server.close();
     reject(new Error(M().timeout(timeoutMs / 1000)));
   }, timeoutMs);
-  promise.finally(() => clearTimeout(timer));
+  // 파생 체인은 여기서 끝난다 — catch 를 안 달면 타임아웃 reject 가 호출자 쪽 처리와
+  // 별개로 unhandled rejection 으로 샌다 (원본 promise 는 호출자가 처리한다).
+  void promise.finally(() => clearTimeout(timer)).catch(() => {});
 
   return { port, promise };
 }

@@ -80,7 +80,12 @@ describe('.mimi-seed.json 스키마 — 두 패키지 리더 계약', () => {
   it('CLI 가 export 하는 이름은 모두 mcp-server 에도 있다', () => {
     // 반대 방향은 허용한다 — mcp-server 는 SOCIAL_PROFILE_ID_PATTERN 처럼 서버 전용
     // export 를 더 가질 수 있다. 금지하는 건 CLI 에만 있는 계약이다.
-    const missing = exportedNames(CLI).filter((name) => !exportedNames(MCP).includes(name));
+    const cli = exportedNames(CLI);
+    const mcp = exportedNames(MCP);
+    expect(cli.length, 'CLI 리더의 export 를 하나도 못 읽었다 — 파서가 깨졌다').toBeGreaterThan(3);
+    expect(mcp.length, 'mcp-server 리더의 export 를 하나도 못 읽었다').toBeGreaterThan(3);
+
+    const missing = cli.filter((name) => !mcp.includes(name));
     expect(
       missing,
       `mcp-server 리더에 없는 CLI export — 두 리더가 갈라졌습니다: ${missing.join(', ')}`,

@@ -133,7 +133,9 @@ async function generateWithClaude(commitsText: string, locales: string[]): Promi
 
   const response = await client.messages.create({
     model: CLI_AI_MODEL,
-    max_tokens: 1500,
+    // mcp-server 의 generateReleaseNotes 기본값과 같아야 한다 — 낮으면 다국어 JSON 이
+    // CLI 경로에서만 잘린다. ai-parity.test.ts 가 두 값의 일치를 강제한다.
+    max_tokens: 2000,
     system: M().system,
     messages: [{
       role: "user",

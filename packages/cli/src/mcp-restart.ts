@@ -80,7 +80,7 @@ function killByMarker(marker: string): { killed: number } {
   if (isWin) {
     // PowerShell로 CommandLine에 marker를 포함한 모든 PID 조회
     const escaped = marker.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    let pids: string[] = [];
+    let pids: string[];
     try {
       const out = execSync(
         `powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*${escaped}*' } | Select-Object -ExpandProperty ProcessId"`,

@@ -26,7 +26,7 @@ import { resolveLang, type Lang } from "./settings.js";
  * `en` 은 `ko` 와 같은 타입이어야 하므로, 키를 빠뜨리면 **컴파일이 깨진다**.
  */
 export function catalog<T extends object>(ko: T, en: NoInfer<T>): () => T {
-  return () => (resolveLang() === "en" ? (en as T) : ko);
+  return () => (resolveLang() === "en" ? (en) : ko);
 }
 
 const ko = {

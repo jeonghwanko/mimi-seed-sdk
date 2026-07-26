@@ -1,0 +1,5 @@
+{
+  "//": "린트 전용 — 빌드 tsconfig 는 noEmit 이라 그대로 쓸 수 있지만, mcp-server 와 파일 이름을 맞춰 두 패키지의 린트 진입점을 같게 한다.",
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*"]
+}

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as bigquery from '../bigquery/tools.js';
 import { requireBigQueryAuth, resolveBigQueryAuth, type BigQueryAuth } from '../auth/bigquery-auth.js';
+import { jsonResult } from '../lib/mcp-response.js';
 
 /**
  * BigQuery 에러를 사람이 읽을 수 있게 가공.
@@ -71,7 +72,7 @@ export function registerBigqueryTools(server: McpServer) {
       const auth = requireBigQueryAuth();
       try {
         const result = await bigquery.runQuery(auth.client, projectId, query, maxResults ?? 1000);
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        return jsonResult(result);
       } catch (e) {
         return errResult(describeBqError(e, auth, projectId));
       }
@@ -88,7 +89,7 @@ export function registerBigqueryTools(server: McpServer) {
       const auth = requireBigQueryAuth();
       try {
         const datasets = await bigquery.listDatasets(auth.client, projectId);
-        return { content: [{ type: 'text', text: JSON.stringify(datasets, null, 2) }] };
+        return jsonResult(datasets);
       } catch (e) {
         return errResult(describeBqError(e, auth, projectId));
       }
@@ -106,7 +107,7 @@ export function registerBigqueryTools(server: McpServer) {
       const auth = requireBigQueryAuth();
       try {
         const tables = await bigquery.listTables(auth.client, projectId, datasetId);
-        return { content: [{ type: 'text', text: JSON.stringify(tables, null, 2) }] };
+        return jsonResult(tables);
       } catch (e) {
         return errResult(describeBqError(e, auth, projectId));
       }
@@ -125,7 +126,7 @@ export function registerBigqueryTools(server: McpServer) {
       const auth = requireBigQueryAuth();
       try {
         const schema = await bigquery.getTableSchema(auth.client, projectId, datasetId, tableId);
-        return { content: [{ type: 'text', text: JSON.stringify(schema, null, 2) }] };
+        return jsonResult(schema);
       } catch (e) {
         return errResult(describeBqError(e, auth, projectId));
       }

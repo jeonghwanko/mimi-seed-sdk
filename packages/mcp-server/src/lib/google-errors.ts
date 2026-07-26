@@ -39,7 +39,10 @@ export function googleErrorDetail(e: unknown): string | undefined {
   };
   const apiErr = any.response?.data?.error;
   const parts: string[] = [];
-  if (apiErr?.message) parts.push(String(apiErr.message));
+  // Google 이 message 에 객체를 넣어 보내는 경우가 있다 — String() 이면 '[object Object]'.
+  if (apiErr?.message) {
+    parts.push(typeof apiErr.message === 'string' ? apiErr.message : JSON.stringify(apiErr.message));
+  }
   const reasons = apiErr?.errors ?? any.errors;
   if (Array.isArray(reasons)) {
     for (const r of reasons) {

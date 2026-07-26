@@ -43,16 +43,20 @@ describe('AI 모델 id', () => {
       path.join(repoRoot, 'packages/mcp-server/src/ai/client.ts'),
     ]);
 
+    const scanned: string[] = [];
     const offenders: string[] = [];
     for (const root of ['packages/cli/src', 'packages/mcp-server/src']) {
-      for (const file of sourceFiles(path.join(repoRoot, root))) {
-        if (allowed.has(file)) continue;
-        readFileSync(file, 'utf8')
-          .split('\n')
-          .forEach((line, i) => {
-            if (line.includes(AI_MODEL)) offenders.push(`${path.relative(repoRoot, file)}:${i + 1}`);
-          });
-      }
+      scanned.push(...sourceFiles(path.join(repoRoot, root)));
+    }
+    expect(scanned.length, '소스 스캔이 비었다 — 가드가 무력화됐다').toBeGreaterThan(50);
+
+    for (const file of scanned) {
+      if (allowed.has(file)) continue;
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          if (line.includes(AI_MODEL)) offenders.push(`${path.relative(repoRoot, file)}:${i + 1}`);
+        });
     }
 
     expect(

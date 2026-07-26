@@ -21,11 +21,20 @@ const glCfg: CiProviderConfig = {
   repo: 'app',
 };
 
-let fetchMock: ReturnType<typeof vi.fn>;
+// 인자 없는 vi.fn() 은 반환형이 void 로 추론돼, Promise 를 돌려주는 구현을 넣으면
+// no-misused-promises 가 정당하게 걸린다. fetch 시그니처로 타입을 준다.
+let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
+
+/** mock 된 fetch 호출의 요청 본문. init.body 는 BodyInit 유니온이라 좁혀서 읽는다. */
+function requestBody(call: Parameters<typeof fetch>): unknown {
+  const body = call[1]?.body;
+  if (typeof body !== 'string') throw new Error('요청 본문이 문자열이 아닙니다.');
+  return JSON.parse(body);
+}
 
 beforeEach(() => {
-  fetchMock = vi.fn();
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  fetchMock = vi.fn<typeof fetch>();
+  globalThis.fetch = fetchMock;
 });
 
 afterEach(() => {
@@ -103,7 +112,7 @@ describe('ghTriggerWorkflow', () => {
       .mockResolvedValueOnce(noContent())
       .mockResolvedValueOnce(jsonResp({ workflow_runs: [] }));
     await ghTriggerWorkflow(ghCfg, 'deploy.yml', 'release', { ENV: 'prod' });
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const body = requestBody(fetchMock.mock.calls[0]);
     expect(body).toEqual({ ref: 'release', inputs: { ENV: 'prod' } });
   });
 
@@ -143,7 +152,7 @@ describe('ghPollRun', () => {
 
   it('returns timeout when run never completes within timeoutMs', async () => {
     // Response is single-read; use a factory so each fetch gets a fresh body
-    fetchMock.mockImplementation(async () => jsonResp({ status: 'in_progress', conclusion: null }));
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResp({ status: 'in_progress', conclusion: null })));
     const result = await ghPollRun(ghCfg, 1, undefined, 50, 10);
     expect(result).toBe('timeout');
   });
@@ -210,7 +219,7 @@ describe('glTriggerPipeline', () => {
   it('encodes variables in GitLab body format', async () => {
     fetchMock.mockResolvedValueOnce(jsonResp({ id: 1, web_url: 'x' }));
     await glTriggerPipeline(glCfg, 'main', { A: '1', B: '2' });
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const body = requestBody(fetchMock.mock.calls[0]) as { variables: unknown };
     expect(body.variables).toEqual([
       { key: 'A', value: '1' },
       { key: 'B', value: '2' },

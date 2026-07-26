@@ -88,11 +88,12 @@ export function saveSocialPlatformConfig<T extends object>(
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           throw new Error('객체 형식이 아닙니다.');
         }
-        existing = parsed as SocialProfileDocument;
+        existing = parsed;
       } catch (error) {
         throw new Error(
           `기존 소셜 프로필 파일을 읽을 수 없어 덮어쓰지 않았습니다: ${target.filePath} ` +
           `(${error instanceof Error ? error.message : String(error)})`,
+          { cause: error },
         );
       }
     }

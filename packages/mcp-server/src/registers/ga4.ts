@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as ga4Raw from '../ga4/tools.js';
 import { requireAuth } from '../helpers.js';
 import { friendlyGoogleError } from '../lib/google-errors.js';
+import { jsonResult } from '../lib/mcp-response.js';
 
 // firebase register 와 동일한 프록시 — raw GaxiosError(SERVICE_DISABLED / 403 /
 // ACCESS_TOKEN_SCOPE_INSUFFICIENT)를 "다음에 뭘 할지" 메시지로 변환. 특히 GA4 는
@@ -37,7 +38,7 @@ export function registerGa4Tools(server: McpServer) {
     async () => {
       const auth = await requireAuth(ga4Raw.GA4_SCOPE);
       const summaries = await ga4.listAccountSummaries(auth);
-      return { content: [{ type: 'text', text: JSON.stringify(summaries, null, 2) }] };
+      return jsonResult(summaries);
     },
   );
 
@@ -48,7 +49,7 @@ export function registerGa4Tools(server: McpServer) {
     async ({ accountId }) => {
       const auth = await requireAuth(ga4Raw.GA4_SCOPE);
       const properties = await ga4.listProperties(auth, accountId);
-      return { content: [{ type: 'text', text: JSON.stringify(properties, null, 2) }] };
+      return jsonResult(properties);
     },
   );
 
@@ -64,7 +65,7 @@ export function registerGa4Tools(server: McpServer) {
     async ({ accountId, displayName, timeZone, currencyCode }) => {
       const auth = await requireAuth(ga4Raw.GA4_SCOPE);
       const property = await ga4.createProperty(auth, { accountId, displayName, timeZone, currencyCode });
-      return { content: [{ type: 'text', text: JSON.stringify(property, null, 2) }] };
+      return jsonResult(property);
     },
   );
 
@@ -88,7 +89,7 @@ export function registerGa4Tools(server: McpServer) {
         packageName,
         bundleId,
       });
-      return { content: [{ type: 'text', text: JSON.stringify(stream, null, 2) }] };
+      return jsonResult(stream);
     },
   );
 
@@ -99,7 +100,7 @@ export function registerGa4Tools(server: McpServer) {
     async ({ propertyId }) => {
       const auth = await requireAuth(ga4Raw.GA4_SCOPE);
       const streams = await ga4.listDataStreams(auth, propertyId);
-      return { content: [{ type: 'text', text: JSON.stringify(streams, null, 2) }] };
+      return jsonResult(streams);
     },
   );
 
@@ -127,7 +128,7 @@ export function registerGa4Tools(server: McpServer) {
         freshDailyExportEnabled,
         includeAdvertisingId,
       });
-      return { content: [{ type: 'text', text: JSON.stringify(plan, null, 2) }] };
+      return jsonResult(plan);
     },
   );
 
@@ -151,7 +152,7 @@ export function registerGa4Tools(server: McpServer) {
       const result = confirm
         ? await ga4.createBigQueryLink(auth, propertyId, opts)
         : { preview: true, ...(await ga4.planBigQueryLink(auth, propertyId, opts)) };
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 
@@ -174,7 +175,7 @@ export function registerGa4Tools(server: McpServer) {
         dimensions: dimensions ? dimensions.split(',').map((d) => d.trim()).filter(Boolean) : undefined,
         metrics: metrics ? metrics.split(',').map((m) => m.trim()).filter(Boolean) : undefined,
       });
-      return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
+      return jsonResult(report);
     },
   );
 }

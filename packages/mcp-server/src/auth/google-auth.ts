@@ -22,10 +22,6 @@ const TOKEN_PATH = path.join(TOKEN_DIR, 'tokens.json');
 const LEGACY_TOKEN_PATH = path.join(LEGACY_TOKEN_DIR, 'tokens.json');
 const CREDENTIALS_PATH = path.join(TOKEN_DIR, 'credentials.json');
 
-// Default OAuth client for development — users should replace with their own
-const DEFAULT_CLIENT_ID = ''; // Will be set during auth setup
-const DEFAULT_CLIENT_SECRET = '';
-
 export interface StoredTokens {
   access_token: string;
   refresh_token: string;
@@ -164,6 +160,9 @@ export function startAuth(
 
   const wait = new Promise<StoredTokens>((resolve, reject) => {
     const rejectAuth = (e: unknown) => reject(new AuthError(classifyError(e, { phase: 'login' })));
+    // 핸들러 전체가 try/catch 로 감싸여 있고 모든 경로가 응답 후 rejectAuth 로 끝난다 —
+    // createServer 가 void 를 기대하지만 여기서 새어 나갈 rejection 은 없다.
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     const server = http.createServer(async (req, res) => {
       try {
         const url = new URL(req.url!, `http://localhost:9876`);

@@ -1,10 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { loadInstagramConfig, requireInstagramConfig } from '../instagram/config.js';
+import { requireInstagramConfig } from '../instagram/config.js';
 import { connectInstagram } from '../instagram/setup.js';
 import * as api from '../instagram/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
+import { textResult } from '../lib/mcp-response.js';
 
 export function registerInstagramTools(server: McpServer) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
@@ -31,7 +32,7 @@ export function registerInstagramTools(server: McpServer) {
     async ({ accessToken, userId, assumeIssuedNow, profile }) => {
       // 구현은 instagram/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
       const result = await connectInstagram(accessToken, userId, assumeIssuedNow, { profile });
-      return { content: [{ type: 'text', text: result.text }] };
+      return textResult(result.text);
     },
   );
 

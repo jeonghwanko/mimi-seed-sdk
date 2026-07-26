@@ -106,7 +106,7 @@ export async function writeCodexMcpConfig(cfg: MimiSeedConfig): Promise<string> 
   const configPath = path.join(configDir, "config.toml");
   await fs.mkdir(configDir, { recursive: true });
 
-  let current = "";
+  let current: string;
   try {
     current = await fs.readFile(configPath, "utf8");
   } catch {

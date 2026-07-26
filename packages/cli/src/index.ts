@@ -9,7 +9,6 @@ import { detectHints, hasAnyProjectSignal } from "./detect.js";
 import { awaitHandshake } from "./handshake.js";
 import { mcpCall } from "./mcp-client.js";
 import {
-  readConfig,
   writeConfig,
   deleteConfig,
   getEffectiveConfig,

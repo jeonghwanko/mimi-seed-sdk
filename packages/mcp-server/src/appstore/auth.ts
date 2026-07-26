@@ -56,6 +56,7 @@ export async function generateToken(creds: AppStoreCredentials): Promise<string>
   } catch (err) {
     throw new Error(
       `App Store 개인 키 파싱 실패 — ~/.mimi-seed/appstore.json의 privateKey 형식 확인 필요.\n원인: ${(err as Error).message}`,
+      { cause: err },
     );
   }
   // Subtract 60s from iat to tolerate local clock running slightly ahead of Apple servers.

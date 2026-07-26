@@ -5,6 +5,7 @@ import { connectFacebook } from '../facebook/setup.js';
 import * as api from '../facebook/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
+import { textResult } from '../lib/mcp-response.js';
 
 export function registerFacebookTools(server: McpServer) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
@@ -28,7 +29,7 @@ export function registerFacebookTools(server: McpServer) {
     async ({ pageAccessToken, pageId, profile }) => {
       // 구현은 facebook/setup.ts 에 있다 — mimi-seed-social-auth CLI 와 공유한다.
       const result = await connectFacebook(pageAccessToken, pageId, { profile });
-      return { content: [{ type: 'text', text: result.text }] };
+      return textResult(result.text);
     },
   );
 
@@ -41,12 +42,7 @@ export function registerFacebookTools(server: McpServer) {
     async ({ userAccessToken }) => {
       const pages = await api.listAccessiblePages(userAccessToken);
       if (pages.length === 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: '접근 가능한 페이지가 없습니다. pages_show_list 권한이 있는 토큰인지 확인하세요.',
-          }],
-        };
+        return textResult('접근 가능한 페이지가 없습니다. pages_show_list 권한이 있는 토큰인지 확인하세요.');
       }
       return {
         content: [{

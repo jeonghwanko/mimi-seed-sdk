@@ -33,7 +33,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     const message = typeof body === 'object' && body !== null && 'error' in body
-      ? JSON.stringify((body as { error: unknown }).error)
+      ? JSON.stringify((body).error)
       : String(body).slice(0, 500);
     throw new Error(`외부 API 요청 실패 (${response.status}): ${message}`);
   }
@@ -59,6 +59,8 @@ export interface YouTubeReference {
 }
 
 function sanitizeExternalText(value: string | undefined, maxLength: number): string {
+  // 제어문자 제거가 이 함수의 목적이다 — 정규식에 들어 있는 게 정상.
+  // eslint-disable-next-line no-control-regex
   return (value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').slice(0, maxLength);
 }
 

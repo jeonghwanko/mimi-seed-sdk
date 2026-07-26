@@ -19,7 +19,7 @@ function headers(token: string): Record<string, string> {
 async function ghFetch(cfg: CiConfig, endpoint: string, options?: RequestInit) {
   const res = await fetchWithTimeout(`${base(cfg)}${endpoint}`, {
     ...options,
-    headers: { ...headers(cfg.token), ...(options?.headers as Record<string, string> ?? {}) },
+    headers: { ...headers(cfg.token), ...(options?.headers ?? {}) },
   });
   if (res.status === 204) return null;
   const body = await res.text();

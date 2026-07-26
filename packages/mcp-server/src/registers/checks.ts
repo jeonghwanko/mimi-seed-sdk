@@ -5,6 +5,7 @@ import { validateAppStoreScreenshots, validatePlayStoreScreenshots, formatValida
 import { requireAuth, requirePlayStoreAuth } from '../helpers.js';
 import * as appstore from '../appstore/tools.js';
 import * as playstore from '../playstore/tools.js';
+import { jsonResult } from '../lib/mcp-response.js';
 
 export function registerChecksTools(server: McpServer) {
   server.tool(
@@ -165,7 +166,7 @@ export function registerChecksTools(server: McpServer) {
       }
 
       const result = { version, appStore: appStoreSection, playStore: playStoreSection };
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 }

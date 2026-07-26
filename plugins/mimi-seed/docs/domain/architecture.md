@@ -54,8 +54,22 @@ mcp-server/src/server.ts   buildServer(version)   ← the single assembly point
   there is no separate schema file.
 - Business logic lives in sibling folders (`playstore/tools.ts`, `appstore/tools.ts`, …), not in the register
   file. The register file is the thin "surface"; `tools.ts` is the "engine".
+- Responses go through `lib/mcp-response.ts`: `jsonResult(value)` for structured output, `textResult(str | lines)`
+  for prose. Don't hand-write `{ content: [{ type: 'text', … }] }` — that wrapper was repeated 250 times and made
+  it impossible to see at a glance whether a register file was actually thin. The helpers deliberately stop at
+  joining: whether to keep blank lines or drop them with `.filter(Boolean)` is the call site's meaning, so that
+  stays visible where it is written.
 - Errors are translated to human-friendly messages before returning — see the friendly-error layer in
   [[external-apis]].
+
+### Deliberately duplicated across the two packages
+
+The packages never import each other, so a few contracts are hand-mirrored. Three are pure duplication kept in
+step by a guard ([[testing]]): the `.mimi-seed.json` reader, the Claude model id, and the AI generators'
+language-independent contract. The AI generators are **not** merge candidates — the CLI runs its prompt text
+through `catalog(ko, en)` so an English CLI user gets English tone guidance, and the two release-note
+generators return different JSON shapes (`tones[]` vs flat keys). Merging would delete working behavior; the
+guard locks only what must not diverge (classifier keywords, tone/sentiment keys, `max_tokens`).
 
 To **add a tool**: implement it in `<domain>/tools.ts`, register it in `registers/<domain>.ts`, and keep the
 manifest + docs in sync — the ordered checklist is [[recipes]] §1, the guards are [[testing]].

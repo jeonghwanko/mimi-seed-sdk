@@ -1,0 +1,9 @@
+{
+  "//": "린트/타입체크 전용 — 빌드 tsconfig 는 dist 에 테스트를 넣지 않으려고 src/__tests__ 를 exclude 한다. 그 결과 테스트는 지금까지 어떤 타입 검사도 받지 않았다(vitest 는 타입을 보지 않는다). 이 설정이 그 공백을 메운다.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*"],
+  "exclude": []
+}

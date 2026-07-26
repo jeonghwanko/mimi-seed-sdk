@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as iam from '../iam/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
+import { jsonResult } from '../lib/mcp-response.js';
 
 export function registerIamTools(server: McpServer) {
   server.tool(
@@ -14,7 +15,7 @@ export function registerIamTools(server: McpServer) {
     async ({ projectId }) => {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const accounts = await iam.listServiceAccounts(auth, projectId);
-      return { content: [{ type: 'text', text: JSON.stringify(accounts, null, 2) }] };
+      return jsonResult(accounts);
     },
   );
 
@@ -62,7 +63,7 @@ export function registerIamTools(server: McpServer) {
     async ({ serviceAccount }) => {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const keys = await iam.listServiceAccountKeys(auth, serviceAccount);
-      return { content: [{ type: 'text', text: JSON.stringify(keys, null, 2) }] };
+      return jsonResult(keys);
     },
   );
 

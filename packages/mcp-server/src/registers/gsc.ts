@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { requireAuth } from '../helpers.js';
 import * as gsc from '../gsc/tools.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 
 const SITE_URL_DESC =
   "Search Console 속성 식별자. 도메인 속성은 'sc-domain:example.com', URL 접두어 속성은 'https://example.com/' 형식.";
@@ -14,7 +15,7 @@ export function registerGscTools(server: McpServer) {
     async () => {
       const auth = await requireAuth();
       const sites = await gsc.listSites(auth);
-      return { content: [{ type: 'text', text: JSON.stringify(sites, null, 2) }] };
+      return jsonResult(sites);
     },
   );
 
@@ -28,7 +29,7 @@ export function registerGscTools(server: McpServer) {
     async ({ siteUrl, sitemapIndex }) => {
       const auth = await requireAuth();
       const sitemaps = await gsc.listSitemaps(auth, siteUrl, sitemapIndex);
-      return { content: [{ type: 'text', text: JSON.stringify(sitemaps, null, 2) }] };
+      return jsonResult(sitemaps);
     },
   );
 
@@ -42,7 +43,7 @@ export function registerGscTools(server: McpServer) {
     async ({ siteUrl, feedpath }) => {
       const auth = await requireAuth();
       const sitemap = await gsc.getSitemap(auth, siteUrl, feedpath);
-      return { content: [{ type: 'text', text: JSON.stringify(sitemap, null, 2) }] };
+      return jsonResult(sitemap);
     },
   );
 
@@ -56,12 +57,7 @@ export function registerGscTools(server: McpServer) {
     async ({ siteUrl, feedpath }) => {
       const auth = await requireAuth();
       const result = await gsc.submitSitemap(auth, siteUrl, feedpath);
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ 사이트맵 제출 완료.\n  ${result.submitted}\n\n반영까지 수 분~수 시간 걸려. gsc_list_sitemaps 로 lastDownloaded 갱신을 확인해.`,
-        }],
-      };
+      return textResult(`✅ 사이트맵 제출 완료.\n  ${result.submitted}\n\n반영까지 수 분~수 시간 걸려. gsc_list_sitemaps 로 lastDownloaded 갱신을 확인해.`);
     },
   );
 
@@ -76,7 +72,7 @@ export function registerGscTools(server: McpServer) {
     async ({ siteUrl, inspectionUrl, languageCode }) => {
       const auth = await requireAuth();
       const result = await gsc.inspectUrl(auth, siteUrl, inspectionUrl, languageCode ?? 'en-US');
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 

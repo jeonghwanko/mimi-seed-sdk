@@ -48,7 +48,7 @@ function fmtState(s: StepState): string {
 
 function risksToSteps(risks: SubmissionRisk[], toolHint: string): PlanStep[] {
   return risks.map((r) => ({
-    state: 'blocked' as StepState,
+    state: 'blocked',
     title: `[${r.code}] ${r.title}`,
     detail: r.detail + (r.fixUrl ? `  → ${r.fixUrl}` : ''),
     tool: r.level === 'blocker' ? toolHint : undefined,
@@ -103,13 +103,13 @@ export async function buildPlayStoreReleasePlan(opts: {
   let trackInfo: { hasTargetVersion: boolean; latestVersionCode?: string; releaseStatus?: string } = {
     hasTargetVersion: false,
   };
-  let listingPresent = false;
   try {
     await withEdit(auth, packageName, async (editId) => {
-      const [tracks, listing] = await Promise.all([
-        publisher().edits.tracks.list({ auth, packageName, editId }).catch(() => null),
-        publisher().edits.listings.get({ auth, packageName, editId, language }).catch(() => null),
-      ]);
+      // 리스팅 존재 여부는 checkPlayStoreRisks 가 따로 본다. 예전엔 여기서도 한 번 더
+      // 받아 listingPresent 에 담았지만 그 값을 읽는 곳이 없어 edit 세션마다 낭비였다.
+      const tracks = await publisher()
+        .edits.tracks.list({ auth, packageName, editId })
+        .catch(() => null);
       const targetTrack = tracks?.data?.tracks?.find((t) => t.track === track);
       const release = targetTrack?.releases?.[0];
       const codes = release?.versionCodes ?? [];
@@ -118,7 +118,6 @@ export async function buildPlayStoreReleasePlan(opts: {
         latestVersionCode: codes[codes.length - 1],
         releaseStatus: release?.status ?? undefined,
       };
-      listingPresent = !!listing?.data?.title;
       return null;
     });
     steps.push({ state: 'done', title: 'Google Play 인증 + 트랙 조회 성공' });

@@ -96,8 +96,12 @@ describe('raw fetch 금지 가드', () => {
   }
 
   it('lib/http.ts 를 빼면 src 어디에도 raw fetch( 호출이 없다', () => {
+    const files = sourceFiles(srcRoot);
+    // 스캔이 0건이면 이 가드는 "위반 없음"이 아니라 "아무것도 안 봤음"이다.
+    expect(files.length, '소스 스캔이 비었다 — 가드가 무력화됐다').toBeGreaterThan(50);
+
     const offenders: string[] = [];
-    for (const file of sourceFiles(srcRoot)) {
+    for (const file of files) {
       if (file === path.join(srcRoot, 'lib', 'http.ts')) continue;
       readFileSync(file, 'utf8')
         .split('\n')

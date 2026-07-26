@@ -15,6 +15,13 @@ import {
 import { requireAppStoreCreds } from '../helpers.js';
 import { buildAppStoreReleasePlan } from '../checks/plan.js';
 import { validateAppStoreWhatsNew, formatIssuesForUser } from '../lib/text-validators.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
+
+/** ASC 속성값을 한 줄로. 객체가 오면 String() 이 '[object Object]' 를 뱉으므로 JSON 으로. */
+function stringifyAttr(value: unknown): string {
+  if (value == null) return '';
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
 
 export function registerAppstoreTools(server: McpServer) {
   server.tool(
@@ -23,7 +30,7 @@ export function registerAppstoreTools(server: McpServer) {
     {},
     async () => {
       const apps = await appstore.listApps();
-      return { content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }] };
+      return jsonResult(apps);
     },
   );
 
@@ -64,7 +71,7 @@ export function registerAppstoreTools(server: McpServer) {
     { appId: z.string().describe('앱 ID (숫자)') },
     async ({ appId }) => {
       const app = await appstore.getApp(appId);
-      return { content: [{ type: 'text', text: JSON.stringify(app, null, 2) }] };
+      return jsonResult(app);
     },
   );
 
@@ -74,7 +81,7 @@ export function registerAppstoreTools(server: McpServer) {
     { appId: z.string().describe('앱 ID') },
     async ({ appId }) => {
       const versions = await appstore.listVersions(appId);
-      return { content: [{ type: 'text', text: JSON.stringify(versions, null, 2) }] };
+      return jsonResult(versions);
     },
   );
 
@@ -184,7 +191,7 @@ export function registerAppstoreTools(server: McpServer) {
     { versionId: z.string().describe('버전 ID') },
     async ({ versionId }) => {
       const localizations = await appstore.getVersionLocalizations(versionId);
-      return { content: [{ type: 'text', text: JSON.stringify(localizations, null, 2) }] };
+      return jsonResult(localizations);
     },
   );
 
@@ -221,7 +228,7 @@ export function registerAppstoreTools(server: McpServer) {
         }
       }
       const result = await appstore.updateVersionLocalization(localizationId, cleaned);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 
@@ -231,7 +238,7 @@ export function registerAppstoreTools(server: McpServer) {
     { localizationId: z.string().describe('로컬라이제이션 ID (appstore_get_metadata 결과의 id)') },
     async ({ localizationId }) => {
       const sets = await appstoreScreenshots.listScreenshotSets(localizationId);
-      return { content: [{ type: 'text', text: JSON.stringify(sets, null, 2) }] };
+      return jsonResult(sets);
     },
   );
 
@@ -254,12 +261,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ localizationId, displayType, filePath }) => {
       const result = await appstoreScreenshots.uploadScreenshot(localizationId, displayType, filePath);
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ 스크린샷 업로드 완료 (${displayType})\n\n${JSON.stringify(result, null, 2)}`,
-        }],
-      };
+      return textResult(`✅ 스크린샷 업로드 완료 (${displayType})\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -269,7 +271,7 @@ export function registerAppstoreTools(server: McpServer) {
     { screenshotId: z.string().describe('스크린샷 ID (appstore_list_screenshots 결과)') },
     async ({ screenshotId }) => {
       const result = await appstoreScreenshots.deleteScreenshot(screenshotId);
-      return { content: [{ type: 'text', text: `✅ 스크린샷 삭제됨\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ 스크린샷 삭제됨\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -279,7 +281,7 @@ export function registerAppstoreTools(server: McpServer) {
     { setId: z.string().describe('스크린샷 셋 ID (appstore_list_screenshots 결과)') },
     async ({ setId }) => {
       const result = await appstoreScreenshots.deleteScreenshotSet(setId);
-      return { content: [{ type: 'text', text: `✅ 셋 삭제됨\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ 셋 삭제됨\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -304,7 +306,7 @@ export function registerAppstoreTools(server: McpServer) {
         };
       }
       const result = await appstore.updateVersionWhatsNew(versionId, locale, { whatsNew });
-      return { content: [{ type: 'text', text: `✅ ${locale} 로캘의 What's New가 업데이트됐어.\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ ${locale} 로캘의 What's New가 업데이트됐어.\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -319,12 +321,7 @@ export function registerAppstoreTools(server: McpServer) {
       const result = await appstore.updateReviewNotes(versionId, notes);
       const action = result.created ? 'created' : 'updated';
       const summary = `✅ 리뷰어 노트 ${result.created ? '신규 등록' : '수정'} 완료 (reviewDetailId: ${result.reviewDetailId})`;
-      return {
-        content: [{
-          type: 'text',
-          text: `${summary}\n\n${JSON.stringify({ ok: true, action, ...result }, null, 2)}`,
-        }],
-      };
+      return textResult(`${summary}\n\n${JSON.stringify({ ok: true, action, ...result }, null, 2)}`);
     },
   );
 
@@ -337,20 +334,10 @@ export function registerAppstoreTools(server: McpServer) {
     async ({ versionId }) => {
       const result = await appstore.getReviewNotes(versionId);
       if (!result.reviewDetailId) {
-        return {
-          content: [{
-            type: 'text',
-            text: `이 버전에는 아직 리뷰어 노트가 없어. appstore_update_review_notes로 등록해줘.\n\n${JSON.stringify({ ok: true, exists: false }, null, 2)}`,
-          }],
-        };
+        return textResult(`이 버전에는 아직 리뷰어 노트가 없어. appstore_update_review_notes로 등록해줘.\n\n${JSON.stringify({ ok: true, exists: false }, null, 2)}`);
       }
       const summary = `reviewDetailId: ${result.reviewDetailId}\ncontactEmail: ${result.contactEmail ?? '(없음)'}\n\n노트:\n${result.notes ?? '(비어있음)'}`;
-      return {
-        content: [{
-          type: 'text',
-          text: `${summary}\n\n${JSON.stringify({ ok: true, exists: true, ...result }, null, 2)}`,
-        }],
-      };
+      return textResult(`${summary}\n\n${JSON.stringify({ ok: true, exists: true, ...result }, null, 2)}`);
     },
   );
 
@@ -360,7 +347,7 @@ export function registerAppstoreTools(server: McpServer) {
     { appId: z.string().describe('앱 ID') },
     async ({ appId }) => {
       const builds = await appstore.listBuilds(appId);
-      return { content: [{ type: 'text', text: JSON.stringify(builds, null, 2) }] };
+      return jsonResult(builds);
     },
   );
 
@@ -370,7 +357,7 @@ export function registerAppstoreTools(server: McpServer) {
     { appId: z.string().describe('앱 ID') },
     async ({ appId }) => {
       const groups = await appstore.listBetaGroups(appId);
-      return { content: [{ type: 'text', text: JSON.stringify(groups, null, 2) }] };
+      return jsonResult(groups);
     },
   );
 
@@ -380,7 +367,7 @@ export function registerAppstoreTools(server: McpServer) {
     { appId: z.string().describe('앱 ID') },
     async ({ appId }) => {
       const info = await appstore.getAppInfo(appId);
-      return { content: [{ type: 'text', text: JSON.stringify(info, null, 2) }] };
+      return jsonResult(info);
     },
   );
 
@@ -398,7 +385,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ appId, locale }) => {
       const result = await appstore.listAppInfoLocalizations(appId, locale);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 
@@ -419,7 +406,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ localizationId, ...fields }) => {
       const result = await appstore.updateAppInfoLocalization(localizationId, fields);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 
@@ -442,7 +429,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ appId, locale, ...fields }) => {
       const result = await appstore.createAppInfoLocalization(appId, locale, fields);
-      return { content: [{ type: 'text', text: `✅ ${locale} 로컬라이제이션이 생성됐어.\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ ${locale} 로컬라이제이션이 생성됐어.\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -461,7 +448,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ appId, limit, territory, rating }) => {
       const reviews = await appstore.listCustomerReviews(appId, { limit, territory, rating });
-      return { content: [{ type: 'text', text: JSON.stringify(reviews, null, 2) }] };
+      return jsonResult(reviews);
     },
   );
 
@@ -479,7 +466,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ reviewId, responseBody }) => {
       const result = await appstore.createReviewResponse(reviewId, responseBody);
-      return { content: [{ type: 'text', text: `✅ 리뷰 ${reviewId}에 답변 등록됐어.\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ 리뷰 ${reviewId}에 답변 등록됐어.\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -533,7 +520,7 @@ export function registerAppstoreTools(server: McpServer) {
           : result.errorType === 'PRICE_NOT_FOUND'
             ? `\n가장 가까운 가격: ${JSON.stringify(result.priceNearest)}`
             : '';
-        return { content: [{ type: 'text', text: `❌ IAP 생성 실패: ${result.error}${hint}` }] };
+        return textResult(`❌ IAP 생성 실패: ${result.error}${hint}`);
       }
       return {
         content: [{
@@ -600,7 +587,7 @@ export function registerAppstoreTools(server: McpServer) {
           : result.errorType === 'PRICE_NOT_FOUND'
             ? `\n가장 가까운 가격: ${JSON.stringify(result.priceNearest)}`
             : '';
-        return { content: [{ type: 'text', text: `❌ 구독 생성 실패: ${result.error}${hint}` }] };
+        return textResult(`❌ 구독 생성 실패: ${result.error}${hint}`);
       }
       return {
         content: [{
@@ -632,7 +619,7 @@ export function registerAppstoreTools(server: McpServer) {
       const products = await listAppleProducts({
         appId, keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
       });
-      return { content: [{ type: 'text', text: JSON.stringify(products, null, 2) }] };
+      return jsonResult(products);
     },
   );
 
@@ -652,7 +639,7 @@ export function registerAppstoreTools(server: McpServer) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
       }
 
       const result = await appstoreProductReview.updateProductReviewNote({
@@ -689,14 +676,14 @@ export function registerAppstoreTools(server: McpServer) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
       }
 
       const localizations = await appstoreProductLocalization.listProductLocalizations({
         internalId: product.internalId,
         productType,
       });
-      return { content: [{ type: 'text', text: JSON.stringify(localizations, null, 2) }] };
+      return jsonResult(localizations);
     },
   );
 
@@ -726,7 +713,7 @@ export function registerAppstoreTools(server: McpServer) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
       }
 
       const result = await appstoreProductLocalization.upsertProductLocalization({
@@ -772,7 +759,7 @@ export function registerAppstoreTools(server: McpServer) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
       }
 
       const result = await appstoreProductReview.uploadProductReviewScreenshot({
@@ -821,7 +808,7 @@ export function registerAppstoreTools(server: McpServer) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return { content: [{ type: 'text', text: `상품을 찾을 수 없음: ${productId} (${productType})` }] };
+        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
       }
 
       const result = await appstore.addProductToReviewSubmission({
@@ -892,7 +879,7 @@ export function registerAppstoreTools(server: McpServer) {
           lines.push(`    state: ${item.state ?? '?'} → ${target}`);
         }
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -1001,9 +988,9 @@ export function registerAppstoreTools(server: McpServer) {
         keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
       });
       if (!result.success) {
-        return { content: [{ type: 'text', text: `❌ 수정 실패: ${result.error}` }] };
+        return textResult(`❌ 수정 실패: ${result.error}`);
       }
-      return { content: [{ type: 'text', text: `✓ 수정 완료 (변경 필드: ${result.updated.join(', ') || 'none'})` }] };
+      return textResult(`✓ 수정 완료 (변경 필드: ${result.updated.join(', ') || 'none'})`);
     },
   );
 
@@ -1029,9 +1016,9 @@ export function registerAppstoreTools(server: McpServer) {
         const hint = result.errorType === 'CANNOT_DELETE'
           ? '\n승인된 상품은 API 삭제 불가 — App Store Connect → 상품 → "Remove from sale"'
           : '';
-        return { content: [{ type: 'text', text: `❌ 삭제 실패: ${result.error}${hint}` }] };
+        return textResult(`❌ 삭제 실패: ${result.error}${hint}`);
       }
-      return { content: [{ type: 'text', text: `✓ ${productId} 삭제 완료` }] };
+      return textResult(`✓ ${productId} 삭제 완료`);
     },
   );
 
@@ -1098,10 +1085,10 @@ export function registerAppstoreTools(server: McpServer) {
         lines.push('');
         lines.push('실제 제출하려면 같은 versionId 로 `confirm: true` 옵션을 추가해 재호출하세요.');
         lines.push('⚠️ 제출 후엔 cancel_review 가 큐 진입(WAITING_FOR_REVIEW) 시점에 막힐 수 있어요 (실측: 1.4.2→3, 1.4.5→6).');
-        return { content: [{ type: 'text', text: lines.join('\n') }] };
+        return textResult(lines.join('\n'));
       }
       const result = await appstore.submitVersionForReview(versionId);
-      return { content: [{ type: 'text', text: `✅ 버전 ${versionId} 심사 제출 완료 (state: ${result.state}). App Store Connect에서 진행 상태 확인 가능.\n\n${JSON.stringify(result, null, 2)}` }] };
+      return textResult(`✅ 버전 ${versionId} 심사 제출 완료 (state: ${result.state}). App Store Connect에서 진행 상태 확인 가능.\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -1167,7 +1154,7 @@ export function registerAppstoreTools(server: McpServer) {
       } else {
         lines.push('  단계적 출시: 꺼짐');
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -1391,7 +1378,7 @@ export function registerAppstoreTools(server: McpServer) {
     async ({ appId, ...declaration }) => {
       const { declarationId, declaration: after } = await appstoreDeclarations.updateAgeRating({
         appId,
-        declaration: declaration as Record<string, string | boolean | undefined>,
+        declaration: declaration,
       });
       const changed = Object.keys(declaration).filter(
         (k) => (declaration as Record<string, unknown>)[k] !== undefined,
@@ -1471,7 +1458,7 @@ export function registerAppstoreTools(server: McpServer) {
           );
         }
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -1569,7 +1556,7 @@ export function registerAppstoreTools(server: McpServer) {
       if (s.testInfoLocales) {
         lines.push(`  테스트 정보 로케일: ${s.testInfoLocales.length ? s.testInfoLocales.join(', ') : '❌ 없음'}`);
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -1599,7 +1586,7 @@ export function registerAppstoreTools(server: McpServer) {
           type: 'text',
           // 비밀번호는 값을 되읽어 출력하지 않는다 — 채워졌는지만 알린다.
           text: [`✅ 베타 심사 정보 갱신 (${r.id})`, ...changed.map((k) =>
-            k === 'demoAccountPassword' ? '  demoAccountPassword: (설정됨)' : `  ${k}: ${String(r.attributes[k] ?? '')}`,
+            k === 'demoAccountPassword' ? '  demoAccountPassword: (설정됨)' : `  ${k}: ${stringifyAttr(r.attributes[k])}`,
           )].join('\n'),
         }],
       };
@@ -1623,12 +1610,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ appId, locale, ...fields }) => {
       const r = await testflight.upsertBetaTestInfo({ appId, locale, fields });
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ 테스트 정보 ${r.created ? '생성' : '수정'} — ${r.locale} (${r.id})`,
-        }],
-      };
+      return textResult(`✅ 테스트 정보 ${r.created ? '생성' : '수정'} — ${r.locale} (${r.id})`);
     },
   );
 
@@ -1646,12 +1628,7 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ buildId, locale, whatsNew }) => {
       const r = await testflight.upsertWhatsToTest({ buildId, locale, whatsNew });
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ What to Test ${r.created ? '생성' : '수정'} — ${r.locale} (${r.id})`,
-        }],
-      };
+      return textResult(`✅ What to Test ${r.created ? '생성' : '수정'} — ${r.locale} (${r.id})`);
     },
   );
 
@@ -1739,12 +1716,7 @@ export function registerAppstoreTools(server: McpServer) {
         };
       }
       const r = await testflight.setBetaGroupBuild({ groupId, buildId, action });
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ 그룹 ${r.groupId} ${r.action === 'add' ? '에 빌드 추가' : '에서 빌드 제거'} — ${r.buildId}`,
-        }],
-      };
+      return textResult(`✅ 그룹 ${r.groupId} ${r.action === 'add' ? '에 빌드 추가' : '에서 빌드 제거'} — ${r.buildId}`);
     },
   );
 
@@ -1810,15 +1782,10 @@ export function registerAppstoreTools(server: McpServer) {
     },
     async ({ buildId, confirm }) => {
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: `🛑 dry-run — 빌드 ${buildId} 의 테스터 전원에게 알림을 보낼 참이다. confirm: true 로 다시 호출.`,
-          }],
-        };
+        return textResult(`🛑 dry-run — 빌드 ${buildId} 의 테스터 전원에게 알림을 보낼 참이다. confirm: true 로 다시 호출.`);
       }
       const r = await testflight.notifyBetaTesters(buildId);
-      return { content: [{ type: 'text', text: `✅ 알림 발송 (${r.notificationId})` }] };
+      return textResult(`✅ 알림 발송 (${r.notificationId})`);
     },
   );
 
@@ -1846,7 +1813,7 @@ export function registerAppstoreTools(server: McpServer) {
     async ({ localizationId }) => {
       const sets = await previews.listPreviewSets(localizationId);
       if (sets.length === 0) {
-        return { content: [{ type: 'text', text: '미리보기 세트 없음.' }] };
+        return textResult('미리보기 세트 없음.');
       }
       const lines: string[] = [];
       for (const s of sets) {
@@ -1859,7 +1826,7 @@ export function registerAppstoreTools(server: McpServer) {
           );
         }
       }
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return textResult(lines.join('\n'));
     },
   );
 
@@ -1926,7 +1893,7 @@ export function registerAppstoreTools(server: McpServer) {
       const r = previewId
         ? await previews.deletePreview(previewId)
         : await previews.deletePreviewSet(setId as string);
-      return { content: [{ type: 'text', text: `✅ 삭제 완료 — ${r.id}` }] };
+      return textResult(`✅ 삭제 완료 — ${r.id}`);
     },
   );
 }

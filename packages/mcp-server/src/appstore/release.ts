@@ -81,7 +81,7 @@ async function getPhasedRelease(versionId: string): Promise<PhasedReleaseSummary
       `/appStoreVersions/${versionId}/appStoreVersionPhasedRelease`,
     );
     if (!data.data) return null;
-    const a = (data.data.attributes ?? {}) as Record<string, unknown>;
+    const a = (data.data.attributes ?? {});
     return {
       id: data.data.id,
       state: a.phasedReleaseState as PhasedReleaseState | undefined,

@@ -34,7 +34,8 @@ const HELP = `
      npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
 `;
 
-runDomainCli({
+// runDomainCli 는 내부에서 모든 예외를 잡고 항상 process.exit 한다.
+void runDomainCli({
   binName: 'mimi-seed-ga4',
   argv: process.argv.slice(2),
   help: HELP,

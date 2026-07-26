@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../helpers.js';
 import { saveConfig, loadConfig, requireConfig } from '../googleads/config.js';
 import * as googleads from '../googleads/tools.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 
 export function registerGoogleAdsTools(server: McpServer) {
   server.tool(
@@ -41,12 +42,7 @@ export function registerGoogleAdsTools(server: McpServer) {
       const auth = await requireAuth();
       const cfg = requireConfig();
       const campaigns = await googleads.listCampaigns(auth, cfg);
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(campaigns, null, 2),
-        }],
-      };
+      return textResult(JSON.stringify(campaigns, null, 2));
     },
   );
 
@@ -127,7 +123,7 @@ export function registerGoogleAdsTools(server: McpServer) {
       const auth = await requireAuth();
       const cfg = requireConfig();
       const result = await googleads.listAccessibleCustomers(auth, cfg);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return jsonResult(result);
     },
   );
 
@@ -138,12 +134,7 @@ export function registerGoogleAdsTools(server: McpServer) {
     async () => {
       const cfg = loadConfig();
       if (!cfg) {
-        return {
-          content: [{
-            type: 'text',
-            text: '❌ Google Ads 설정 없음. googleads_save_config 로 먼저 설정해.',
-          }],
-        };
+        return textResult('❌ Google Ads 설정 없음. googleads_save_config 로 먼저 설정해.');
       }
       return {
         content: [{

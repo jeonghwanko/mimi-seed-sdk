@@ -14,7 +14,6 @@ vi.mock('../appstore/auth.js', () => ({
 import {
   updateProductReviewNote,
   uploadProductReviewScreenshot,
-  type AppStoreProductType,
 } from '../appstore/product-review.js';
 
 const tempDirs: string[] = [];
@@ -123,7 +122,7 @@ describe('uploadProductReviewScreenshot', () => {
 
       const result = await uploadProductReviewScreenshot({
         internalId: 'product-1',
-        productType: productType as AppStoreProductType,
+        productType: productType,
         filePath,
       });
 
