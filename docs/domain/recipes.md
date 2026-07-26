@@ -38,9 +38,10 @@
 5. **README count columns** — the tool-list table in `README.md`, `README.ko.md`, **and** the published
    `packages/mcp-server/README.md`. All three are test-enforced (each row is matched to its domain by the tool
    names it lists, so keep one domain per row).
-6. **Agent guide** — [`../agent-guide.md`](../agent-guide.md) §0: only if the tool changes a workflow or is
-   otherwise undiscoverable, add it to the relevant `select:` batch. In Claude Code an unlisted new tool is
-   invisible until someone selects it ([[pitfalls]] §1).
+6. **Agent guide** — [`../agent-guide.md`](../agent-guide.md) §0: add the tool to the `select:` batch of the
+   task it belongs to. This is **required, not optional** — in Claude Code a tool that is in no batch is
+   invisible until someone happens to keyword-search for it ([[pitfalls]] §1), so `docs-drift.test.ts` fails
+   until every registered tool appears in at least one batch. Add a new row when no existing task fits.
 7. **Test** it next to the behavior in `mcp-server/src/__tests__/`.
 8. If step 6 touched `docs/`: `npm run plugin:sync` from the repo root, and commit `plugins/mimi-seed/`.
 

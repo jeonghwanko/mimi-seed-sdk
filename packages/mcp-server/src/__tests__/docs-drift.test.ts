@@ -60,6 +60,37 @@ describe('docs/domain/tool-catalog.md ↔ tool-manifest.json', () => {
   });
 });
 
+// Claude Code 에서 도구 schema 는 lazy 로드다 — agent-guide §0 의 `select:` 배치에 이름이 없는
+// 도구는 에이전트 눈에 사실상 존재하지 않는다(= pitfalls §1 의 실제 비용). 그래서 "배치는 큐레이션"
+// 이 아니라 **인벤토리 계약**이다: 새 도구를 등록하면 어느 배치엔가 반드시 들어가야 한다.
+describe('docs/agent-guide.md `select:` 배치 ↔ tool-manifest.json', () => {
+  const guide = readFileSync(new URL('../../../../docs/agent-guide.md', import.meta.url), 'utf8');
+  const batched = new Set(
+    [...guide.matchAll(/select:([a-z0-9_,\s]+)/g)].flatMap((m) =>
+      m[1]
+        .replace(/\s+/g, ' ')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+    ),
+  );
+  const registered = Object.values(manifest.domains).flatMap((d) => d.tools);
+
+  it('등록된 모든 도구가 최소 하나의 배치에 들어 있다', () => {
+    const missing = registered.filter((t) => !batched.has(t));
+    expect(
+      missing,
+      `agent-guide §0 의 select: 배치에 없는 도구 — 알맞은 행에 추가하세요: ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('배치에 실재하지 않는 도구 이름이 없다 (오타·개명 잔재)', () => {
+    const known = new Set(registered);
+    const ghosts = [...batched].filter((t) => !known.has(t));
+    expect(ghosts, `등록되지 않은 이름이 배치에 있습니다: ${ghosts.join(', ')}`).toEqual([]);
+  });
+});
+
 // 루트 README 의 "도구 목록" 표는 tool-catalog.md 와 함께 **정확한 개수를 적는** 유일한 산문이다.
 // 예전엔 손으로 맞췄고 실제로 두 도메인(appstore/playstore)이 낡은 채 릴리스됐다.
 // 라벨은 언어마다 다르므로(영역/Domain) 행에 적힌 **도구 이름으로 도메인을 역추적**해 비교한다 —

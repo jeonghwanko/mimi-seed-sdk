@@ -117,6 +117,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | Credential files & roles | `src/*/config.ts`, `src/auth/*` | [auth-credentials.md](auth-credentials.md) | ⚠️ manual |
 | CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |
 | Skills, prompts, resources | `skills/*/SKILL.md`, `prompts.ts`, `resources.ts` | [skills-plugins.md](skills-plugins.md) | ⚠️ manual (incl. the skill count in the table above) |
+| Tool discoverability (`select:` batches) | `tool-manifest.json` | [`../agent-guide.md`](../agent-guide.md) §0 | ✅ `docs-drift.test.ts` — every registered tool must sit in ≥1 batch, and no batch may name a tool that doesn't exist |
 | Agent guide served over MCP | `docs/agent-guide.md` | `packages/mcp-server/assets/agent-guide.md` (refreshed by `npm run plugin:sync`) | ✅ `prompts-resources.test.ts` — byte equality |
 | Auth error codes & their recovery | `mcp-server/src/auth/errors.ts` (`AuthErrorCode`) | [`../troubleshooting.md`](../troubleshooting.md) + `.ko` | ✅ `docs-onboarding.test.ts` — add a code without a recovery entry and CI fails |
 | Credential list & wizard deep-links | `cli/src/credentials.ts` (the registry) | [`../credentials.md`](../credentials.md) + `.ko` | ✅ anchors + EN/KO parity tested; the vendor click-paths themselves are ⚠️ manual (Apple/Meta/Google reorganize their consoles on their own schedule) |
@@ -129,7 +130,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 
 | When you… | Also update |
 |---|---|
-| add / rename / delete a tool | `tool-manifest.json` **and** [tool-catalog.md](tool-catalog.md) (tests fail otherwise) + the README count columns |
+| add / rename / delete a tool | `tool-manifest.json`, [tool-catalog.md](tool-catalog.md), the README count columns, **and** a `select:` batch in [`../agent-guide.md`](../agent-guide.md) §0 — all four are test-enforced ([recipes.md](recipes.md) §1) |
 | add a credential file or auth flow | [auth-credentials.md](auth-credentials.md) |
 | add a CLI command or change the deploy pipeline | [cli-deploy.md](cli-deploy.md) |
 | add a skill, prompt, or plugin surface | [skills-plugins.md](skills-plugins.md) + the skill count in this index + `npm run plugin:sync` |

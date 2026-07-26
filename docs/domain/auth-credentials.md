@@ -29,6 +29,8 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `social-profiles/<profile>.json` | Named Instagram/Threads credentials. A file can contain both platforms; `.mimi-seed.json.socialProfiles` selects each platform independently | `instagram_save_config` / `threads_save_config` or `mimi-seed auth <platform> --profile <id>` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
+| `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
+| `settings.json` | **Not a credential** — user preference (`{ lang }`), deliberately separate so logout/re-auth never resets it. Read by both packages (`cli/src/settings.ts`, `mcp-server/src/lib/lang.ts`) | `mimi-seed lang` / the setup wizard's first prompt |
 
 > Treat every file above as a secret. A repo `.gitignore` should keep them out even if a user runs the CLI
 > inside a project; the SDK itself never writes them into the repo tree.

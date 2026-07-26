@@ -169,11 +169,16 @@ npx mimi-seed doctor   # 모든 자격증명 + 누락 항목별 정확한 복구
 | `mimi-seed lang` | CLI 출력 언어 (`ko` / `en`) |
 | `mimi-seed status` | 연결 상태 + 앱 목록 |
 | `mimi-seed auth` | 자격증명 개별 인증 — `login` / `appstore` / `playstore` / `jenkins` / `ci` / … |
+| `mimi-seed firebase` | Firebase 앱 생성 · config 다운로드 · GA4 링크 |
+| `mimi-seed admob` | AdMob 계정 · 앱 · 광고 단위 조회 및 생성 |
+| `mimi-seed ga4` | GA4 property · data stream 조회 및 생성 |
 | `mimi-seed doctor` | 환경 진단 (토큰 · Git · 앱 · CI) |
 | `mimi-seed check` | 출시 전 Readiness 점검 (점수 + 블로커) |
 | `mimi-seed notes` | AI 릴리즈 노트 (git log → 3 톤 → 다국어 → 적용) |
 | `mimi-seed review` | AI 리뷰 답변 초안 + Play Store 게시 |
 | `mimi-seed deploy` | 출시 파이프라인 전체 (CI 빌드 → 릴리즈 노트 → 스토어) |
+| `mimi-seed mcp` | Claude Code / Codex MCP 등록 — 안내 출력 또는 설정 파일 기록 |
+| `mimi-seed restart` | 등록된 MCP 서버 프로세스 재시작 |
 | `mimi-seed logout` | 로컬 설정 삭제 |
 
 ---

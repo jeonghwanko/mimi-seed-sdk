@@ -42,20 +42,36 @@ tools directly — but the *call order* and *safety rules* below still apply.
 
 ### Ready-made `select:` batches
 
+Every registered tool appears in at least one batch below (test-enforced), so a task you can name is a batch
+you can paste. Pick the row for the job; batching two rows in one `select:` call is fine.
+
 | Goal | `ToolSearch` query |
 |------|--------------------|
 | First contact / "what's connected?" | `select:mimi_seed_status,mimi_seed_auth_status,mimi_seed_auth_start,mimi_seed_remote_sync_credentials` |
-| Play Store release | `select:playstore_get_app,playstore_list_tracks,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release` |
-| Play Store listing + images | `select:playstore_get_listing,playstore_update_listing,playstore_upload_image,playstore_list_images,playstore_replace_images,playstore_delete_all_images` |
-| App Store / TestFlight | `select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
-| App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate` |
-| App Store IAP review metadata | `select:appstore_list_apps,appstore_list_products,appstore_update_product_review_note,appstore_upload_product_review_screenshot` |
+| Release readiness (either store) | `select:release_status,playstore_check_submission_risks,appstore_check_submission_risks,screenshot_validate` |
+| Play Store release | `select:playstore_get_app,playstore_list_tracks,playstore_update_release_notes,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release` |
+| Play Store listing + images | `select:playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_upload_image,playstore_list_images,playstore_replace_images,playstore_delete_all_images` |
+| Play Store reviews + stats | `select:playstore_list_reviews,playstore_reply_review,playstore_get_statistics,generate_review_reply` |
+| Play Store IAP / subscriptions | `select:playstore_list_products,playstore_list_inapp_products,playstore_list_subscriptions,playstore_create_onetime_product,playstore_create_subscription,playstore_update_product,playstore_update_product_listing,playstore_update_subscription_listing,playstore_update_product_state,playstore_delete_product` |
+| App Store / TestFlight | `select:appstore_list_apps,appstore_verify_credentials,appstore_get_app,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_build,appstore_attach_latest_build,appstore_list_beta_groups,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
+| App Store review submission (the bundle) | `select:appstore_list_review_submissions,appstore_add_version_to_review_submission,appstore_remove_review_submission_item,appstore_update_version_string,appstore_cancel_review` |
+| App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot,appstore_delete_screenshot_set,screenshot_validate` |
+| App Store app info + review notes | `select:appstore_get_app_info,appstore_update_app_info_localization,appstore_create_app_info_localization,appstore_update_localization,appstore_get_review_notes,appstore_update_review_notes` |
+| App Store reviews | `select:appstore_list_reviews,appstore_reply_review,generate_review_reply` |
+| App Store IAP (products + review metadata) | `select:appstore_list_products,appstore_create_inapp_purchase,appstore_create_subscription,appstore_update_product,appstore_list_product_localizations,appstore_update_product_localization,appstore_update_product_review_note,appstore_upload_product_review_screenshot,appstore_add_product_to_review,appstore_delete_product` |
 | Release notes from commits | `select:generate_release_notes_from_commits,playstore_update_release_notes,appstore_update_whats_new` |
-| Firebase setup | `select:firebase_list_projects,firebase_get_project,firebase_create_project,firebase_create_android_app,firebase_create_ios_app,firebase_get_android_config,firebase_enable_common_services` |
-| AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |
-| Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
-| CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds` |
-| Service account end-to-end | `select:iam_create_service_account,iam_create_key,iam_add_iam_policy_binding,playstore_register_service_account,playstore_verify_service_account` |
+| Firebase setup | `select:firebase_list_projects,firebase_get_project,firebase_create_project,firebase_create_android_app,firebase_create_ios_app,firebase_get_android_config,firebase_get_ios_config,firebase_enable_common_services` |
+| Firebase apps + services (incl. web) | `select:firebase_list_android_apps,firebase_list_ios_apps,firebase_list_web_apps,firebase_create_web_app,firebase_get_web_config,firebase_enable_service,firebase_list_enabled_services,firebase_delete_android_app,firebase_delete_ios_app,firebase_delete_web_app` |
+| Analytics wiring (Firebase ↔ GA4 ↔ BigQuery) | `select:firebase_link_analytics,firebase_get_analytics_details,ga4_list_account_summaries,ga4_list_properties,ga4_create_property,ga4_list_data_streams,ga4_create_data_stream,ga4_plan_bigquery_link,ga4_create_bigquery_link,ga4_run_report` |
+| BigQuery | `select:bigquery_auth_status,bigquery_list_datasets,bigquery_list_tables,bigquery_get_table_schema,bigquery_run_query` |
+| AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_app,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |
+| Google Ads (UAC) | `select:googleads_config_status,googleads_save_config,googleads_list_accessible_customers,googleads_list_campaigns,googleads_get_campaign_report,googleads_get_uac_report` |
+| Search Console | `select:gsc_list_sites,gsc_list_sitemaps,gsc_get_sitemap,gsc_submit_sitemap,gsc_inspect_url,gsc_search_analytics` |
+| Social posting (Facebook / Instagram / Threads) | `select:facebook_current_config,facebook_save_config,facebook_list_pages,facebook_get_page,facebook_post_photo,facebook_post_multi_photo,instagram_save_config,instagram_get_account,instagram_post_image,instagram_post_carousel,threads_current_config,threads_save_config,threads_refresh_token,threads_get_account,threads_post,threads_post_carousel` |
+| Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_delete_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
+| CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds,ci_cancel_build` |
+| Android signing / keystore | `select:android_signing_setup,android_generate_keystore,jenkins_upload_keystore,jenkins_upload_playstore_sa` |
+| Service account end-to-end | `select:iam_list_service_accounts,iam_create_service_account,iam_list_keys,iam_create_key,iam_add_iam_policy_binding,setup_playstore_connection,playstore_register_service_account,playstore_verify_service_account,playstore_list_service_accounts,playstore_delete_service_account` |
 | Story → researched video | `select:video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
 | YouTube upload / publish | `select:youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,mimi_seed_auth_start` |
 
@@ -156,7 +172,10 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Jenkins** (credentials + jobs) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` · `jenkins_create_job` · `jenkins_update_job` |
 | **Google Cloud IAM** | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **GA4** | `ga4_list_properties` · `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` · `ga4_plan_bigquery_link` · `ga4_create_bigquery_link` |
+| **Google Ads (UAC)** | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` · `googleads_config_status` |
 | **Search Console** | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
+| **Android signing** | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
 | **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_refresh_token` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |

@@ -12,8 +12,9 @@ Claude Code lazy-loads large tool catalogs: the 150+ tool **names** are visible,
 `InputValidationError` → people wrongly conclude "this tool doesn't exist" and pivot to `curl`/`fastlane`.
 
 - As a *consumer*: always `select:` before the first call ([[skills-plugins]], agent-guide §0).
-- As a *developer*: a newly added tool is invisible-until-selected for Claude Code users — document it in the
-  `select:` batches in `docs/agent-guide.md` §0 so agents can find it.
+- As a *developer*: a newly added tool is invisible-until-selected for Claude Code users, so the `select:`
+  batches in `docs/agent-guide.md` §0 are an **inventory contract, not a curated sample** — every registered
+  tool must appear in at least one batch, and `docs-drift.test.ts` fails until it does ([[testing]]).
 
 ## 2. Draft-app track constraint (Play)
 

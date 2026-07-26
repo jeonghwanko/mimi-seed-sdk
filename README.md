@@ -169,11 +169,16 @@ Open a **new** Claude Code / Codex session (trap #2 above) and ask:
 | `mimi-seed lang` | CLI output language (`ko` / `en`) |
 | `mimi-seed status` | Connection status + app list |
 | `mimi-seed auth` | Individual credentials — `login` / `appstore` / `playstore` / `jenkins` / `ci` / … |
+| `mimi-seed firebase` | Firebase apps — create, download config, link GA4 |
+| `mimi-seed admob` | AdMob accounts, apps, ad units — list and create |
+| `mimi-seed ga4` | GA4 properties and data streams — list and create |
 | `mimi-seed doctor` | Diagnose environment (token · Git · apps · CI) |
 | `mimi-seed check` | Pre-release readiness check (score + blockers) |
 | `mimi-seed notes` | AI release notes (git log → 3 tones → multi-locale → apply) |
 | `mimi-seed review` | AI review-reply draft + post to Play Store |
 | `mimi-seed deploy` | Full deploy pipeline (CI build → release notes → store) |
+| `mimi-seed mcp` | Claude Code / Codex MCP registration — print or write the config |
+| `mimi-seed restart` | Restart a registered MCP server process |
 | `mimi-seed logout` | Remove local config |
 
 ---

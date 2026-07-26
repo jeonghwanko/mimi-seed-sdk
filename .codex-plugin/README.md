@@ -18,12 +18,17 @@ codex plugin add mimi-seed@yoonion
 ## 포함 내용
 
 - **MCP 서버**: `mimi-seed` (`@yoonion/mimi-seed-mcp`)
-- **스킬**:
+- **스킬** (`skills/`):
   - `mimi-seed` — 범용 진입 (상태 점검 → 준비도 → 릴리스 노트 → 스토어 적용)
+  - `mimi-seed-onboarding` — 처음 사용 (설치 확인 → 뭘 할 수 있는지 → 최소 자격증명 → 첫 안전한 액션)
   - `playstore-publish` — Google Play 등록정보·이미지·릴리스 노트·트랙 출시/승격
   - `appstore-publish` — App Store Connect What's New + 스크린샷 업로드
   - `deploy` — CI 빌드 → 블로커 점검 → 릴리스 노트 → 스토어 적용 풀 파이프라인
-- **에이전트 가이드**: `docs/agent-guide.md` — deferred-tool 로딩(`ToolSearch select:`) 패턴, 호출 순서, 비가역 작업 안전수칙
+  - `video-create-publish` — story/쇼츠 제작 → 타이포·크롭 검수 → 렌더 검증 → 선택적 YouTube 게시
+  - `mimi-seed-install` — git 체크아웃을 소스에서 설치·등록 (기여자 / 미배포 코드)
+  - `mimi-seed-update` — 서버·스킬·CLI를 최신으로 올리고 실제 돌고 있는 버전까지 검증
+- **에이전트 가이드**: `docs/agent-guide.md` — deferred-tool 로딩(`ToolSearch select:`) 패턴과 도메인별 배치,
+  호출 순서, 비가역 작업 안전수칙
 
 ## 사전 조건
 
