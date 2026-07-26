@@ -20,8 +20,9 @@ Claude Code lazy-loads large tool catalogs: the 150+ tool **names** are visible,
 
 Until an app has its first **non-internal** publish, only the `internal` track may be `completed`;
 `alpha`/`beta`/`production` reject anything but `draft` ("Only releases with status draft may be created on
-draft app"). Closed/open testing also needs **App Content** declarations (content rating, data safety, target
-audience) that are **Console-only** — the API can't set them. Don't treat these as bugs in `playstore_*`.
+draft app"). Closed/open testing also needs the **App Content** declarations, and those split two ways: **data safety is
+scriptable** (`playstore_upload_data_safety` → `applications.dataSafety`, a full-CSV overwrite), while
+**content rating and target audience stay Console-only**. Don't treat the latter as bugs in `playstore_*`.
 
 ## 3. A `403` is usually NOT a permissions gap
 

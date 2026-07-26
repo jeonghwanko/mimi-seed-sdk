@@ -69,7 +69,7 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
 ## 안전 규칙
 
 - `status=completed`(전체 출시/Google 검토 시작)는 비가역에 가깝다 — 명시 승인 없이는 `draft` 유지.
-- **Draft 앱 제약**: 앱이 첫 게시 전이면 `internal` 트랙만 `completed` 가능, alpha/beta/production은 `draft`만 생성됨. 비공개/공개 테스트 출시는 콘텐츠 등급·데이터 보안·타깃 연령(Console 전용) 완료가 선행되어야 한다.
+- **Draft 앱 제약**: 앱이 첫 게시 전이면 `internal` 트랙만 `completed` 가능, alpha/beta/production은 `draft`만 생성됨. 비공개/공개 테스트 출시는 콘텐츠 등급·데이터 안전·타깃 연령 완료가 선행되어야 한다. 이 중 **데이터 안전만 API 로 된다** — `playstore_upload_data_safety`(Console 에서 내보낸 CSV 원문, 기존 제출 전체 덮어씀). 콘텐츠 등급·타깃 연령은 Console 전용이다.
 - 이미지 전체 삭제(`playstore_delete_all_images`)는 되돌릴 수 없으니 수량을 먼저 알린다.
 - 파일은 절대경로. 이미지 바이트를 컨텍스트에 싣지 않는다.
 

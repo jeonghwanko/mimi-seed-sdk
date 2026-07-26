@@ -78,8 +78,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| App Store Connect | 45 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
-| Google Play | 32 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
+| App Store Connect | 50 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
+| Google Play | 33 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
 | Firebase | 20 | `firebase_create_project` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |

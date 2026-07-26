@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as playstoreRaw from '../playstore/tools.js';
@@ -952,6 +954,63 @@ export function registerPlaystoreTools(server: McpServer) {
             '5. 권한 적용까지 약 5분 소요',
             '',
             '초대 완료 후 `playstore_verify_service_account` 로 연결 확인 가능합니다.',
+          ].join('\n'),
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    'playstore_upload_data_safety',
+    [
+      'Play 데이터 안전(Safety Labels) 선언을 업로드한다 — POST applications/{packageName}/dataSafety.',
+      '오래 Console 전용으로 알려졌던 항목이지만 API 가 있다.',
+      '입력은 Play Console 이 내려주는 **CSV 원문**이다 (Console > 앱 콘텐츠 > 데이터 안전 > 내보내기).',
+      '⚠️ 기존 제출을 통째로 덮어쓴다 — 부분 갱신이 아니므로 항상 최신 전체 CSV 를 보낼 것.',
+      '콘텐츠 등급·타깃 연령 설문은 여전히 API 가 없다 (Console 전용).',
+    ].join(' '),
+    {
+      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      csvPath: z
+        .string()
+        .optional()
+        .describe('데이터 안전 CSV 파일의 절대경로. csv 와 둘 중 하나는 필수'),
+      csv: z.string().optional().describe('CSV 원문 문자열. csvPath 와 둘 중 하나는 필수'),
+      confirm: z.boolean().optional().describe('true 명시 시에만 업로드. 생략/false 면 요약만 반환.'),
+    },
+    async ({ packageName, csvPath, csv, confirm }) => {
+      if (!csv && !csvPath) throw new Error('csvPath 또는 csv 중 하나는 필요하다.');
+      if (!csv && csvPath && !path.isAbsolute(csvPath)) {
+        throw new Error(`csvPath 는 절대경로여야 한다: ${csvPath}`);
+      }
+      const content: string = csv ?? fs.readFileSync(csvPath as string, 'utf8');
+      const lines = content.trim().split('\n');
+      if (!confirm) {
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              '🛑 데이터 안전 업로드 dry-run — 아직 보내지 않았다.',
+              `  패키지: ${packageName}`,
+              `  CSV: ${lines.length}줄 / ${Buffer.byteLength(content, 'utf8')} bytes`,
+              `  첫 줄: ${lines[0]?.slice(0, 120) ?? '(비어 있음)'}`,
+              '',
+              '⚠️ 업로드하면 기존 데이터 안전 제출을 통째로 덮어쓴다.',
+              '실행하려면 confirm: true 로 다시 호출.',
+            ].join('\n'),
+          }],
+        };
+      }
+      const auth = await requirePlayStoreAuth(packageName);
+      const r = await playstore.uploadDataSafety(auth, packageName, content);
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✅ 데이터 안전 선언 업로드 완료',
+            `  패키지: ${r.packageName}`,
+            `  전송: ${r.lines}줄 / ${r.bytes} bytes`,
+            'Play Console > 앱 콘텐츠 > 데이터 안전에서 반영을 확인할 것.',
           ].join('\n'),
         }],
       };

@@ -216,7 +216,7 @@ Reissue it with both `repo` and `workflow` ([credentials](credentials.md#ci-gith
 
 - **A brand-new app rejects everything.** Until the first build is uploaded **by hand** in Play Console, an app
   is a draft and most track/release operations don't apply to it. The API cannot bootstrap an app from nothing.
-- **App Content declarations aren't in the API.** Data safety, ads, target audience — Play Console only. No tool
+- **App Content declarations are only partly in the API.** Data safety can be uploaded with `playstore_upload_data_safety` (the CSV Play Console exports; it overwrites the whole submission). Content rating, ads, and target audience are Play Console only. No tool
   will do these for you.
 - **Your unpublished Console edits disappeared.** A Play API edit commits the whole draft. If you were
   mid-edit in the Console on the same app, your uncommitted changes get overwritten. Finish one before starting

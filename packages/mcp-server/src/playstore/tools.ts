@@ -959,6 +959,33 @@ export async function updatePurchaseOptionState(
 // IAP·구독 CRUD는 onesub의 도메인 (결제 영역). 이 파일에는 메타·이미지·릴리스·리뷰만 남김.
 // 옛 createOnetimeProduct / createSubscription 구현은 onesub 위임으로 대체됐어 (index.ts 참고).
 
+// ─── 데이터 안전(Safety Labels) 선언 ───
+//
+// 오랫동안 Console 전용이라고 알려졌지만 API 가 생겼다 (POST applications/{pkg}/dataSafety).
+// 입력은 **Play Console 이 내려주는 CSV 원문**이고, 기존 제출을 통째로 덮어쓴다 —
+// 부분 갱신이 아니므로 항상 최신 전체 CSV 를 보내야 한다.
+// 콘텐츠 등급·타깃 연령 설문은 여전히 API 가 없다 (Console 전용).
+
+export async function uploadDataSafety(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+  safetyLabelsCsv: string,
+): Promise<{ packageName: string; bytes: number; lines: number }> {
+  const csv = safetyLabelsCsv.trim();
+  if (!csv) throw new Error('safetyLabels CSV 가 비어 있다.');
+  if (!csv.includes(',')) {
+    throw new Error('CSV 로 보이지 않는다 — Play Console 에서 받은 데이터 안전 CSV 원문을 그대로 넣을 것.');
+  }
+
+  await publisher().applications.dataSafety({
+    auth,
+    packageName,
+    requestBody: { safetyLabels: csv },
+  });
+
+  return { packageName, bytes: Buffer.byteLength(csv, 'utf8'), lines: csv.split('\n').length };
+}
+
 // ─── 서비스 계정 JSON 검증 ───
 // onesub 같은 서버가 Play 영수증을 백그라운드로 검증하려면 OAuth 토큰 대신
 // service account JSON이 필요. 이 헬퍼는 붙여넣은 JSON으로 실제 Play

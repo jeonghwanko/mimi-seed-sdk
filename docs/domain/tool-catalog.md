@@ -1,4 +1,4 @@
-# Tool catalog — 193 tools across 19 domains
+# Tool catalog — 199 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,8 +11,8 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 45 |
-| Google Play | `registers/playstore.ts` | 32 |
+| App Store Connect | `registers/appstore.ts` | 50 |
+| Google Play | `registers/playstore.ts` | 33 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
@@ -30,15 +30,16 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **193** |
+| **Total** | **19 modules** | **199** |
 
-## Google Play — `registers/playstore.ts` (32) · impl `playstore/tools.ts`
+## Google Play — `registers/playstore.ts` (33) · impl `playstore/tools.ts`
 
 - Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
   `playstore_list_subscriptions` · `playstore_list_products` · `playstore_list_service_accounts` ·
   `playstore_verify_service_account` · `playstore_plan_release`
-- **W** `playstore_update_listing` · `playstore_update_details` (developer contact + default language —
+- **W** `playstore_upload_data_safety` (데이터 안전 CSV — 기존 제출 전체 덮어씀, confirm 게이트) ·
+  `playstore_update_listing` · `playstore_update_details` (developer contact + default language —
   `edits.details.patch`, distinct from the store listing) · `playstore_upload_image` · `playstore_replace_images` ·
   `playstore_update_release_notes` · `playstore_update_latest_release_notes` · `playstore_reply_review` (public) ·
   `playstore_create_onetime_product` · `playstore_create_subscription` · `playstore_update_product` ·
@@ -48,14 +49,17 @@
 - **D** `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (45) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (50) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
   `appstore_list_beta_groups` · `appstore_get_app_info` · `appstore_list_app_info_localizations` ·
   `appstore_list_reviews` · `appstore_list_products` · `appstore_list_product_localizations` ·
-  `appstore_plan_release` · `appstore_list_review_submissions` · `appstore_release_status`
-- **W** `appstore_create_version` · `appstore_attach_build` · `appstore_attach_latest_build` ·
+  `appstore_plan_release` · `appstore_list_review_submissions` · `appstore_release_status` ·
+  `appstore_get_age_rating` · `appstore_get_availability`
+- **W** `appstore_update_age_rating` (심사 제출 전 필수) · `appstore_declare_encryption` (수출 규정 신고) ·
+  `appstore_set_territory_availability` (지역 판매 on/off — confirm 게이트) ·
+  `appstore_create_version` · `appstore_attach_build` · `appstore_attach_latest_build` ·
   `appstore_update_localization` · `appstore_upload_screenshot` · `appstore_update_whats_new` ·
   `appstore_update_review_notes` · `appstore_update_app_info_localization` · `appstore_create_app_info_localization` ·
   `appstore_reply_review` (public) ·

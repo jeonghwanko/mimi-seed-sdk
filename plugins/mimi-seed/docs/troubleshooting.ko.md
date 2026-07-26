@@ -211,7 +211,7 @@ Google 응답에 access/refresh 토큰이 빠져 있다. `--force` 로 재시도
 
 - **새 앱이 뭘 해도 거부한다.** Play Console 에서 **첫 빌드를 손으로 업로드**하기 전까지 그 앱은 draft 이고,
   대부분의 트랙·릴리스 작업이 적용되지 않는다. API 는 무에서 앱을 만들어낼 수 없다.
-- **App Content 선언은 API 에 없다.** 데이터 안전·광고·타겟 연령 — 전부 Play Console 전용이다. 어떤 도구도 대신
+- **App Content 선언은 일부만 API 로 된다.** 데이터 안전은 `playstore_upload_data_safety` 로 업로드할 수 있다 (Console 에서 내보낸 CSV 원문, 기존 제출 전체 덮어씀). 콘텐츠 등급·광고·타겟 연령은 여전히 Play Console 전용이라 어떤 도구도 대신
   해주지 않는다.
 - **Console 에서 편집 중이던 내용이 사라졌다.** Play API 편집은 draft 전체를 커밋한다. 같은 앱을 Console 에서
   편집 중이었다면 커밋하지 않은 변경이 덮어쓰인다. 한쪽을 끝내고 다른 쪽을 시작하라.

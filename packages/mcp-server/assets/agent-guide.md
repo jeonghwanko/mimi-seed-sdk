@@ -55,6 +55,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | Play Store IAP / subscriptions | `select:playstore_list_products,playstore_list_inapp_products,playstore_list_subscriptions,playstore_create_onetime_product,playstore_create_subscription,playstore_update_product,playstore_update_product_listing,playstore_update_subscription_listing,playstore_update_product_state,playstore_delete_product` |
 | App Store / TestFlight | `select:appstore_list_apps,appstore_verify_credentials,appstore_get_app,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_build,appstore_attach_latest_build,appstore_list_beta_groups,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
 | App Store release control (after approval) | `select:appstore_release_status,appstore_release_version,appstore_update_release_type,appstore_phased_release,appstore_list_versions` |
+| Pre-submission declarations (both stores) | `select:appstore_get_age_rating,appstore_update_age_rating,appstore_declare_encryption,appstore_get_availability,appstore_set_territory_availability,playstore_upload_data_safety` |
 | App Store review submission (the bundle) | `select:appstore_list_review_submissions,appstore_add_version_to_review_submission,appstore_remove_review_submission_item,appstore_update_version_string,appstore_cancel_review` |
 | App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot,appstore_delete_screenshot_set,screenshot_validate` |
 | App Store app info + review notes | `select:appstore_get_app_info,appstore_update_app_info_localization,appstore_create_app_info_localization,appstore_update_localization,appstore_get_review_notes,appstore_update_review_notes` |
@@ -250,9 +251,9 @@ General rules:
 - **Draft-app track constraint (Play).** Until an app has its first non-internal
   publish, only the **`internal`** track can be `completed`. `alpha`/`beta`/`production`
   reject anything but `draft` → error: *"Only releases with status draft may be created
-  on draft app."* Closed/open testing also needs the **App Content** declarations
-  (content rating, data safety, target audience) which are **Console-only** — the API
-  cannot set them.
+  on draft app."* Closed/open testing also needs the **App Content** declarations. **Data safety** is
+  uploadable as a CSV (`playstore_upload_data_safety`); **content rating and target
+  audience remain Console-only** — no API sets them.
 - **A `403` on one write but not another is usually NOT a permissions gap.** Every
   `playstore_*` write resolves the same credential (`requirePlayStoreAuth`), so if
   `playstore_upload_image` succeeds but `playstore_update_listing` returns `403`, the
