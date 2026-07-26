@@ -1,4 +1,4 @@
-# Tool catalog — 207 tools across 19 domains
+# Tool catalog — 214 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,8 +11,8 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 58 |
-| Google Play | `registers/playstore.ts` | 33 |
+| App Store Connect | `registers/appstore.ts` | 61 |
+| Google Play | `registers/playstore.ts` | 37 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
@@ -30,15 +30,16 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **207** |
+| **Total** | **19 modules** | **214** |
 
-## Google Play — `registers/playstore.ts` (33) · impl `playstore/tools.ts`
+## Google Play — `registers/playstore.ts` (37) · impl `playstore/tools.ts`
 
-- Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
+- Read: `playstore_list_recovery_actions` · `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
   `playstore_list_subscriptions` · `playstore_list_products` · `playstore_list_service_accounts` ·
   `playstore_verify_service_account` · `playstore_plan_release`
-- **W** `playstore_upload_data_safety` (데이터 안전 CSV — 기존 제출 전체 덮어씀, confirm 게이트) ·
+- **W** `playstore_create_recovery_action` (DRAFT 생성 — 아직 사용자에게 안 나감) ·
+  `playstore_upload_data_safety` (데이터 안전 CSV — 기존 제출 전체 덮어씀, confirm 게이트) ·
   `playstore_update_listing` · `playstore_update_details` (developer contact + default language —
   `edits.details.patch`, distinct from the store listing) · `playstore_upload_image` · `playstore_replace_images` ·
   `playstore_update_release_notes` · `playstore_update_latest_release_notes` · `playstore_reply_review` (public) ·
@@ -46,17 +47,19 @@
   `playstore_update_product_listing` · `playstore_update_subscription_listing` ·
   `playstore_update_product_state` (DRAFT ↔ 활성) ·
   `playstore_register_service_account` · `setup_playstore_connection`
-- **D** `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
+- **D** `playstore_deploy_recovery_action` (원격 인앱 업데이트 실배포) ·
+  `playstore_cancel_recovery_action` · `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (58) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (61) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
   `appstore_list_beta_groups` · `appstore_get_app_info` · `appstore_list_app_info_localizations` ·
   `appstore_list_reviews` · `appstore_list_products` · `appstore_list_product_localizations` ·
   `appstore_plan_release` · `appstore_list_review_submissions` · `appstore_release_status` ·
-  `appstore_get_age_rating` · `appstore_get_availability` · `appstore_beta_status`
+  `appstore_get_age_rating` · `appstore_get_availability` · `appstore_beta_status` · `appstore_list_previews`
+- **W** `appstore_upload_preview` (제품 페이지 미리보기 동영상 — 커밋 후 Apple 인코딩 남음) ·
 - **W** TestFlight: `appstore_update_beta_review_detail` · `appstore_update_beta_test_info` ·
   `appstore_update_whats_to_test` · `appstore_add_beta_testers` (초대 발송) ·
   `appstore_notify_beta_testers` (테스터 전원 알림) ·
@@ -73,6 +76,7 @@
 - **U** `appstore_update_version_string` · `appstore_add_version_to_review_submission` ·
   `appstore_update_release_type` (MANUAL / AFTER_APPROVAL / SCHEDULED 전환) ·
   `appstore_phased_release` (단계적 출시 — `enable`/`pause`/`resume`은 되돌릴 수 있음)
+- **D** `appstore_delete_preview` (동영상·세트 삭제) ·
 - **D** `appstore_submit_beta_review` (Apple 베타 심사 시작) ·
   `appstore_set_beta_group_build` (외부 그룹이면 실배포/회수) ·
   `appstore_submit_for_review` · `appstore_release_version` (즉시 공개) ·

@@ -58,6 +58,8 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | Pre-submission declarations (both stores) | `select:appstore_get_age_rating,appstore_update_age_rating,appstore_declare_encryption,appstore_get_availability,appstore_set_territory_availability,playstore_upload_data_safety` |
 | TestFlight external testing | `select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers,appstore_list_beta_groups,appstore_list_builds` |
 | App Store review submission (the bundle) | `select:appstore_list_review_submissions,appstore_add_version_to_review_submission,appstore_remove_review_submission_item,appstore_update_version_string,appstore_cancel_review` |
+| App Store preview videos | `select:appstore_list_previews,appstore_upload_preview,appstore_delete_preview,appstore_get_metadata` |
+| Play post-release recovery | `select:playstore_list_recovery_actions,playstore_create_recovery_action,playstore_deploy_recovery_action,playstore_cancel_recovery_action,playstore_list_tracks` |
 | App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot,appstore_delete_screenshot_set,screenshot_validate` |
 | App Store app info + review notes | `select:appstore_get_app_info,appstore_update_app_info_localization,appstore_create_app_info_localization,appstore_update_localization,appstore_get_review_notes,appstore_update_review_notes` |
 | App Store reviews | `select:appstore_list_reviews,appstore_reply_review,generate_review_reply` |

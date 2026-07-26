@@ -66,6 +66,16 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
 만든 뒤 **사용자 확인을 거쳐** `playstore_reply_review`로 게시한다. 답변은 공개되고 수정 이력이 남는다.
 설치·평점 추이는 `playstore_get_statistics`로 읽는다.
 
+## 출시 후 긴급 복구
+
+이미 배포된 앱이 치명적으로 망가졌을 때만 쓴다. `playstore_list_recovery_actions`로 현황을 보고,
+`playstore_create_recovery_action`으로 DRAFT를 만든 뒤(대상: allUsers 또는 versionCodes/versionRange —
+둘은 함께 못 쓴다), 사용자 승인을 받아 `playstore_deploy_recovery_action`으로 배포한다.
+
+- 롤백이 아니다. **고친 빌드를 먼저 올려둬야** 원격 인앱 업데이트가 의미를 가진다.
+- 대상은 생성 때 고른 기준 안에서만 넓힐 수 있다 — 범위를 처음에 신중히 잡는다.
+- 취소해도 **이미 적용된 기기는 되돌아가지 않는다**. 배포 전에 대상 범위를 반드시 사용자와 확인한다.
+
 ## 안전 규칙
 
 - `status=completed`(전체 출시/Google 검토 시작)는 비가역에 가깝다 — 명시 승인 없이는 `draft` 유지.

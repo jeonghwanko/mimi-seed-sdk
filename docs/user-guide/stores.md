@@ -99,6 +99,18 @@ Start with `appstore_list_review_submissions`. It shows each bundle's state — 
 A build attaches only to the version whose `CFBundleShortVersionString` matches, so fix the version string
 **before** attaching the new build.
 
+### Preview videos and post-release recovery
+
+`appstore_upload_preview` puts a **preview video** on the product page (same four-step upload as screenshots:
+reserve → chunked PUT → commit). Two things differ from screenshots: Apple **encodes** the file after the
+commit, so a successful upload is not yet a visible video — check `appstore_list_previews` for the state — and
+the constraints are strict (15–30 seconds, fixed resolution per preview type, max 3 per type per locale).
+
+On the Play side, `playstore_*_recovery_action` covers the after-the-fact emergency: an app already on devices
+is broken and you need a **remote in-app update** pushed to a version range. It is not a rollback — ship the
+fixed build first, then create (DRAFT) → deploy → cancel if needed. Targeting can only be widened within the
+criteria you chose at creation, so scope it carefully; `playstore_deploy_recovery_action` requires `confirm`.
+
 ### TestFlight external testing
 
 Internal testers get a build as soon as it finishes processing. **External testers need Apple's beta review**,
