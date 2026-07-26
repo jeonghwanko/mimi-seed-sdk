@@ -69,12 +69,17 @@ once). The inventory now lives in `packages/mcp-server/tool-manifest.json`, enfo
 (`src/__tests__/tool-manifest.test.ts`) that starts the real server and diffs the registered tool list against
 the manifest — add/remove/rename a tool without updating the manifest and `npm test` fails.
 
-That test only guards manifest ↔ **server**, so the *docs* kept drifting behind it (a 2026-07 pass found a
-tool missing from the catalog and two stale per-domain counts). `src/__tests__/docs-drift.test.ts` now closes
-the loop: it diffs the manifest against [[tool-catalog]] — every registered tool must be listed, and the title
-total + "Counts by domain" table must match. ❌ Don't hard-code exact totals anywhere else; write "150+" or
-point to the manifest/[[tool-catalog]]. The README count columns are still **hand-synced** — check them on
-release ([[_index]] "Fact → SSOT → mirror" table).
+The same test also catches a register module that never got wired into `buildServer` (`src/server.ts`): its
+tools silently don't exist. Adding the import to `src/index.ts` instead registers nothing — `index.ts` only
+picks a run mode ([[architecture]]).
+
+That test guards manifest ↔ **server**, so the *docs* kept drifting behind it (a 2026-07 pass found a tool
+missing from the catalog and two stale per-domain counts; a later one found the two READMEs three releases
+behind). `src/__tests__/docs-drift.test.ts` now closes the loop: it diffs the manifest against [[tool-catalog]]
+— every registered tool must be listed, and the title total + "Counts by domain" table must match — **and**
+against the count columns of `README.md` / `README.ko.md`, matching each row to its domain by the tool names
+the row lists (so it works in both languages). ❌ Don't hard-code exact totals anywhere else; write "150+" or
+point to the manifest/[[tool-catalog]] ([[_index]] "Fact → SSOT → mirror" table, [[testing]]).
 
 ## 9. Tool name ≠ register file
 

@@ -27,7 +27,11 @@ Routed by `main()` in `cli/src/index.ts`:
 | `restart` | `mcp-restart.ts` | restart a registered MCP server process |
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 
-Per-command options are the SSOT in `CMD_USAGE` in `index.ts` (also shown by `mimi-seed <cmd> --help`).
+Per-command options are the SSOT in the `usage.<command>` entries of the `catalog(ko, en)` block in
+`index.ts` — that string is exactly what `mimi-seed <cmd> --help` prints (`printCommandHelp`), and the one-line
+summaries next to it in `help` are what a bare `mimi-seed` prints. `auth` is the exception: it owns its own
+detailed help in `auth.ts`. Adding a command means touching three places in `index.ts` (the `switch` case, the
+`usage` entry, the `help` line) — checklist in [[recipes]] §3.
 
 ### Output language
 
@@ -79,7 +83,11 @@ social tokens in its reconnect plan; the setup bin still performs the authoritat
 |---|---|
 | `MIMI_SEED_TOKEN` | PAT for headless/CI mode — `init` skips the browser handshake when set |
 | `MIMI_SEED_WEB_BASE` | web/remote-MCP base (default `https://mimi-seed.pryzm.gg`; `/api/mcp` is appended) |
+| `MIMI_SEED_LANG` | forces CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json`, and `runMcpBin` passes it down to the spawned setup bins |
+| `MIMI_SEED_GOOGLE_CLIENT_ID` / `_SECRET` | use your own Google OAuth client; unset, the client is fetched from the web console at login |
 | `ANTHROPIC_API_KEY` | enables AI note/reply generation |
+
+(The MCP server has its own set — media/video API keys and `MIMI_SEED_FFMPEG_PATH` — in [[auth-credentials]].)
 
 ## `init` — detection → handshake → scaffold
 

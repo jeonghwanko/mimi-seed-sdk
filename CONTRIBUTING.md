@@ -5,8 +5,10 @@ the `mimi-seed` CLI and the `@yoonion/mimi-seed-mcp` MCP server.
 
 **New here?** Read the domain ontology in [`docs/domain/`](docs/domain/) first (start at
 [`docs/domain/_index.md`](docs/domain/_index.md)) — it maps the architecture, the full tool catalog, the
-auth/credential model, and known pitfalls. For *how an agent should call* the tools, see
-[`docs/agent-guide.md`](docs/agent-guide.md).
+auth/credential model, and known pitfalls. Two entries answer most day-one questions directly:
+[`recipes.md`](docs/domain/recipes.md) (ordered checklist per task) and
+[`testing.md`](docs/domain/testing.md) (which guard owns which fact, and what a red test means). For *how an
+agent should call* the tools, see [`docs/agent-guide.md`](docs/agent-guide.md).
 
 ## Repository layout
 
@@ -60,6 +62,10 @@ npm run build && npm test
    [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md), and add a test where it
    makes sense (see `src/__tests__/`). Don't hard-code exact tool counts in prose — the
    manifest is the single source of truth (see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8).
+   The full step list — including the README count columns and when to re-run `npm run plugin:sync` — is
+   [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
+6. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run
+   `npm run plugin:sync` and commit the regenerated `plugins/mimi-seed/` — root `npm test` rejects drift.
 
 ## Releasing (maintainers)
 

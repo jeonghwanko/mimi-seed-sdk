@@ -2,7 +2,9 @@
 
 These instructions extend the repository-level [`AGENTS.md`](../../AGENTS.md) for work under
 `packages/mcp-server/`. Read [`docs/domain/architecture.md`](../../docs/domain/architecture.md), then the domain
-document matching the change.
+document matching the change. The ordered checklists are
+[`docs/domain/recipes.md`](../../docs/domain/recipes.md) §1 (tool) and §2 (credential); the guard map is
+[`docs/domain/testing.md`](../../docs/domain/testing.md).
 
 ## Architecture contract
 

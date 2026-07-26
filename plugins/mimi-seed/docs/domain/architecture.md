@@ -3,8 +3,8 @@
 > ★ Ontology core. How the two packages, the MCP server, and the tool-registration pattern fit together. For the
 > full tool list see [[tool-catalog]]; for credentials see [[auth-credentials]]; for the CLI see [[cli-deploy]].
 >
-> SSOT: `packages/mcp-server/src/index.ts`, `packages/mcp-server/src/registers/*.ts`,
-> `packages/cli/src/index.ts`, the two `package.json` files.
+> SSOT: `packages/mcp-server/src/server.ts` (+ `src/index.ts`), `packages/mcp-server/src/registers/*.ts`,
+> `packages/cli/src/index.ts`, the two `package.json` files. Step-by-step checklists live in [[recipes]].
 
 ## Two packages, one monorepo
 
@@ -23,9 +23,9 @@ mimi-seed-sdk/
 | | `packages/cli` | `packages/mcp-server` |
 |---|---|---|
 | npm name | `mimi-seed` | `@yoonion/mimi-seed-mcp` |
-| version | 0.4.x | 0.6.x |
-| build | **tsup** (esbuild bundle) | **tsc** (plain `dist/`) |
-| node | >=18 | >=20 |
+| version | both follow the **root** `package.json` (`npm run version:set`) — never written down here | ← same |
+| build | **tsup** (esbuild bundle, **no type-check** — run `npx tsc --noEmit`) | **tsc** (plain `dist/`) |
+| node | `.nvmrc` is the floor for both (currently 20); `engines.node` mirrors it | ← same |
 | role | local/CI orchestration + remote-MCP onboarding | the 150+-tool stdio MCP that hits Google/Apple APIs |
 | key deps | `@anthropic-ai/sdk`, `kleur`, `open` | `@modelcontextprotocol/sdk`, `googleapis`, `jose`, `@onesub/providers`, `zod`, `@anthropic-ai/sdk` |
 
@@ -38,16 +38,18 @@ They are not in a parent/child relationship — see the transport split below an
 Every domain follows the same three-layer shape:
 
 ```
-mcp-server/src/index.ts
+mcp-server/src/server.ts   buildServer(version)   ← the single assembly point
   └─ registerXxxTools(server)            ← registers/<domain>.ts
        server.tool(name, description, zodSchema, handler)
          └─ handler calls <domain>/tools.ts   ← implementation (API calls)
               └─ googleapis / ASC REST client  ← external-apis.md
 ```
 
-- `index.ts` constructs one `McpServer({ name: 'mimi-seed', version })` (version read at runtime from
-  `package.json` so it never drifts), then calls all 19 `registerXxxTools(server)` functions plus
-  `registerPrompts(server)` and `registerResources(server)`.
+- **`server.ts`** — not `index.ts` — constructs the one `McpServer({ name: 'mimi-seed-local', version })`
+  (version read at runtime from `package.json` so it never drifts) and calls all 19 `registerXxxTools(server)`
+  functions plus `registerPrompts(server)` and `registerResources(server)`. A **new register module must be
+  added here**; `index.ts` only picks a run mode and hands `buildServer()` a transport. `tool-manifest.test.ts`
+  boots this same function, so a module that never got wired shows up as missing tools rather than silence.
 - Each `registers/<domain>.ts` declares tools with `server.tool(...)`. Input validation is **zod** schemas;
   there is no separate schema file.
 - Business logic lives in sibling folders (`playstore/tools.ts`, `appstore/tools.ts`, …), not in the register
@@ -56,13 +58,14 @@ mcp-server/src/index.ts
   [[external-apis]].
 
 To **add a tool**: implement it in `<domain>/tools.ts`, register it in `registers/<domain>.ts`, and keep the
-count in sync (CONTRIBUTING requires it — see [[pitfalls]]).
+manifest + docs in sync — the ordered checklist is [[recipes]] §1, the guards are [[testing]].
 
 ## MCP server bootstrap & subcommand dispatch
 
-`mcp-server/src/index.ts` has two run modes off `process.argv[2]`:
+`mcp-server/src/index.ts` is the executable entry (`bin: mimi-seed-mcp`) and has two run modes off
+`process.argv[2]`:
 
-1. **No subcommand** → start the MCP server over **stdio** (`StdioServerTransport`). This is what
+1. **No subcommand** → `buildServer(version)` + `StdioServerTransport`. This is what
    `npx -y @yoonion/mimi-seed-mcp` does when a client spawns it.
 2. **A known subcommand** → delegate to a sub-CLI and exit. The `SUBCOMMANDS` map routes setup/admin flows that
    must not hang waiting on stdin:

@@ -2,7 +2,9 @@
 
 These instructions extend the repository-level [`AGENTS.md`](../../AGENTS.md) for work under `packages/cli/`.
 Read [`docs/domain/cli-deploy.md`](../../docs/domain/cli-deploy.md) before changing command behavior, project
-detection, setup, init, or deploy.
+detection, setup, init, or deploy. The ordered checklist is
+[`docs/domain/recipes.md`](../../docs/domain/recipes.md) §3; the guard map is
+[`docs/domain/testing.md`](../../docs/domain/testing.md).
 
 ## Responsibilities
 

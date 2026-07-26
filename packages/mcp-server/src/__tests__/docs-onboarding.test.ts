@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -29,6 +29,24 @@ const USER_GUIDE_PAIRS = [
   ['docs/user-guide/social.md', 'docs/user-guide/social.ko.md'],
   ['docs/user-guide/team-security.md', 'docs/user-guide/team-security.ko.md'],
 ] as const;
+
+/** 온톨로지(docs/domain/*)와 에이전트 컨텍스트 파일. Claude Code 는 CLAUDE.md, Codex 는 AGENTS.md 를
+ *  읽고 두 파일 모두 여기로 라우팅하므로, 링크가 깨지면 두 클라이언트가 같이 길을 잃는다. */
+const DOMAIN_DOCS = readdirSync(path.join(repoRoot, 'docs/domain'))
+  .filter((f) => f.endsWith('.md'))
+  .map((f) => `docs/domain/${f}`);
+
+const CONTRIBUTOR_DOCS = [
+  'CLAUDE.md',
+  'AGENTS.md',
+  'CONTRIBUTING.md',
+  'docs/agent-guide.md',
+  'packages/cli/AGENTS.md',
+  'packages/cli/CLAUDE.md',
+  'packages/mcp-server/AGENTS.md',
+  'packages/mcp-server/CLAUDE.md',
+  ...DOMAIN_DOCS,
+];
 
 /** 마법사가 docs/credentials.md#<anchor> 로 딥링크한다 — 앵커는 API 다.
  *  'what-you-need' 는 README 의 최소 자격증명 안내가 딥링크하는 목표→자격증명 매트릭스. */
@@ -140,10 +158,14 @@ describe('온보딩 문서 ↔ 코드', () => {
   });
 
   // ④ 사용자 문서는 서로 촘촘히 링크한다 — 깨진 링크가 1순위 부패 지점.
+  //    기여자/에이전트 문서(CLAUDE.md · AGENTS.md · docs/domain/*)도 같이 검사한다:
+  //    이 문서들은 "먼저 이 파일을 읽어라"로 서로를 라우팅하므로, 링크가 깨지면
+  //    에이전트가 존재하지 않는 파일을 읽으려다 스스로 판단해 엉뚱하게 진행한다.
   it('문서의 상대 링크가 실제 파일로 해석된다', () => {
     const files = [
       ...DOC_PAIRS.flat(),
       ...USER_GUIDE_PAIRS.flat(),
+      ...CONTRIBUTOR_DOCS,
       '.codex-plugin/README.md',
       'README.md',
       'README.ko.md',
@@ -159,5 +181,22 @@ describe('온보딩 문서 ↔ 코드', () => {
       }
     }
     expect(broken, `깨진 상대 링크: ${broken.join(' · ')}`).toEqual([]);
+  });
+
+  // ⑤ 온톨로지는 [[name]] 위키링크로 서로를 가리킨다 (= docs/domain/name.md).
+  //    마크다운 링크가 아니라 위 검사가 못 잡으므로 따로 해석해 준다.
+  it('docs/domain 의 [[위키링크]]가 실제 문서로 해석된다', () => {
+    const dangling: string[] = [];
+
+    for (const f of DOMAIN_DOCS) {
+      // 인라인 코드(`[[name]]`)는 문법 설명이지 링크가 아니다.
+      const body = read(f).replace(/`[^`\n]*`/g, '');
+      for (const m of body.matchAll(/\[\[([\w-]+)\]\]/g)) {
+        if (!existsSync(path.join(repoRoot, 'docs/domain', `${m[1]}.md`))) {
+          dangling.push(`${f} → [[${m[1]}]]`);
+        }
+      }
+    }
+    expect(dangling, `docs/domain 에 없는 문서를 가리키는 위키링크: ${dangling.join(' · ')}`).toEqual([]);
   });
 });

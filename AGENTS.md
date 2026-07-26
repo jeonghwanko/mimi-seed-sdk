@@ -13,6 +13,8 @@ Use the following task map after reading the index:
 
 | Task | Read first |
 |---|---|
+| "How do I do this?" — ordered per-task checklist and the guard that catches a miss | [`docs/domain/recipes.md`](docs/domain/recipes.md) |
+| A test went red, or which guard owns which fact | [`docs/domain/testing.md`](docs/domain/testing.md) |
 | Package layout, MCP bootstrap, register pattern | [`docs/domain/architecture.md`](docs/domain/architecture.md) |
 | Add, rename, or debug an MCP tool | [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) |
 | Credentials, OAuth, service accounts, JWT | [`docs/domain/auth-credentials.md`](docs/domain/auth-credentials.md) |
@@ -23,6 +25,9 @@ Use the following task map after reading the index:
 
 [`docs/agent-guide.md`](docs/agent-guide.md) is for an agent **using** Mimi Seed tools at runtime. It is not the
 implementation guide for this repository.
+
+This file and [`CLAUDE.md`](CLAUDE.md) (Claude Code) carry the same contract — keep them aligned when either
+changes.
 
 ## Repository map and ownership
 
@@ -58,7 +63,8 @@ implementation here; describe only the public boundary to the web console.
    mirrored document.
 3. Keep changes in the owning package. The two packages are not a workspace and do not import each other.
 4. Keep register files thin: schemas and MCP handlers live in `registers/`; business logic lives in the domain's
-   `tools.ts` or focused module.
+   `tools.ts` or focused module. A **new** register module is wired into `packages/mcp-server/src/server.ts`
+   (`buildServer`), not `src/index.ts`.
 5. Preserve ESM conventions: TypeScript source imports use `.js` specifiers. Tool names are `snake_case`, files
    are `kebab-case`, and domain directories are lowercase.
 6. This is a public repository. Never commit, print, or document secrets, real app/account identifiers, local
@@ -70,8 +76,8 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
 
 ## Documentation and generated files
 
-- Do not repeat parameters already defined by a tool schema or flags already defined by `CMD_USAGE`; link to the
-  owning source instead.
+- Do not repeat parameters already defined by a tool schema, or flags already defined by the `usage.<command>`
+  entries in `packages/cli/src/index.ts`; link to the owning source instead.
 - Never put release version numbers in domain docs. The root `package.json` and version scripts own them.
 - Use “150+” in prose. Exact MCP tool counts belong only in `tool-manifest.json` and
   `docs/domain/tool-catalog.md`.
@@ -101,3 +107,8 @@ npm test
 
 The root `npm test` checks Codex plugin drift and runs both package test suites. The root `npm run build` is a
 bootstrap operation that installs and builds both packages; prefer package-scoped builds during normal edits.
+
+`packages/cli` builds with `tsup`, which does **not** type-check — run `npx tsc --noEmit` there as well. To run a
+single test file: `npx vitest run src/__tests__/<file>.test.ts` from inside the package. Test names and failure
+messages are Korean and usually name the fix; [`docs/domain/testing.md`](docs/domain/testing.md) maps every guard
+to the fact it protects.

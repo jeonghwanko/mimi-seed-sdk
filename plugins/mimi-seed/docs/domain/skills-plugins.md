@@ -77,3 +77,7 @@ it is the #1 entry in [[pitfalls]] and is documented for agents in [`../agent-gu
 > Note: `mimi-seed init` scaffolds **the user's** project with `.claude/mimi-seed.md` + `AGENTS.md` so both
 > clients pick up context there. That is separate from **this repo's** own `CLAUDE.md` / `AGENTS.md`, which
 > point contributors at this ontology. Don't confuse the two ([[cli-deploy]]).
+>
+> Inside this repo the contributor context is mirrored per client and per package: root `CLAUDE.md` ↔
+> `AGENTS.md` carry the same contract, and `packages/*/CLAUDE.md` simply `@`-imports the sibling
+> `packages/*/AGENTS.md` so the package rules exist once. Change one, check the other.
