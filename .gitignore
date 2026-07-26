@@ -12,3 +12,6 @@ dist/
 # Personal local tooling config / generated marketing assets (not part of the SDK)
 .codex/
 artifacts/
+
+# vitest 커버리지 리포트 (로컬 진단용)
+coverage/

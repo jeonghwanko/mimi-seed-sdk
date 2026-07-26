@@ -5,7 +5,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { getMcpOAuthClient } from './constants.js';
 import { AuthError, classifyError, type AuthErrorPayload } from './errors.js';
-import { openPrivateBrowser } from './browser.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
 import { scopesForDomains, mergeScopeStrings, type AuthDomainId } from './scopes.js';
@@ -274,21 +273,6 @@ export function startAuth(
   });
 
   return { url: authUrl, wait };
-}
-
-/**
- * Interactive login — opens a private browser window, waits for callback.
- * startAuth() 래퍼 — CLI에서 사용.
- */
-export async function login(
-  clientId: string,
-  clientSecret: string,
-  options: { domains?: readonly AuthDomainId[] } = {},
-): Promise<StoredTokens> {
-  const { url, wait } = startAuth(clientId, clientSecret, options);
-  console.log('🔐 시크릿 브라우저에서 Google 계정 선택 중...');
-  await openPrivateBrowser(url);
-  return wait;
 }
 
 export type RefreshStatus =

@@ -157,7 +157,7 @@ describe('uploadProductReviewScreenshot', () => {
       if (init?.method === 'POST') {
         return jsonResponse({ data: { id: 'orphan-1', attributes: { uploadOperations: [] } } }, 201);
       }
-      if (init?.method === 'DELETE') return new Response('', { status: 204 });
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
       throw new Error(`unexpected request: ${init?.method}`);
     });
     vi.stubGlobal('fetch', fetchMock);

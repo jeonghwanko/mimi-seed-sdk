@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as api from '../instagram/api.js';
 import { apiBaseFor } from '../instagram/api.js';
 import type { InstagramConfig } from '../instagram/config.js';
+import { withoutBackoff } from './helpers.js';
 
 const cfg: InstagramConfig = {
   accessToken: 'EAAtoken',
@@ -90,8 +91,8 @@ describe('getAccount', () => {
   });
 
   it('falls back to raw text when error body is not JSON', async () => {
-    fetchMock.mockResolvedValueOnce(textResp('Service Unavailable', 503));
-    await expect(api.getAccount(cfg)).rejects.toThrow(/503.*Service Unavailable/);
+    fetchMock.mockImplementation(() => textResp('Service Unavailable', 503));
+    await expect(withoutBackoff(() => api.getAccount(cfg))).rejects.toThrow(/503.*Service Unavailable/);
   });
 });
 

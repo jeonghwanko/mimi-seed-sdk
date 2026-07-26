@@ -95,6 +95,17 @@ Conventions worth copying when you add one:
 - **Test the trap, not the happy path.** Most of these files exist because a specific bug shipped once; their
   header comments say which. Keep that comment when you extend the file.
 
+## Coverage — a map, not a gate
+
+```bash
+npm run coverage          # both packages; text summary + html in ./coverage
+```
+
+Deliberately **no threshold**. A number to hit produces tests written to hit the number, which is the opposite
+of this repo's convention ("test the trap, not the happy path"). The report exists to answer one question:
+*which module has never been executed at all?* That is how the `iam`, `bigquery`, `android/keystore`,
+`ai/*`, `facebook/api`, `appstore/screenshots`, and `checks/screenshots` gaps were found and closed.
+
 ## What is *not* enforced (still on you)
 
 - The credential file map in [[auth-credentials]] and the command table in [[cli-deploy]] — hand-synced.

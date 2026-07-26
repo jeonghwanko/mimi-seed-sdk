@@ -1,13 +1,21 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchWithTimeout, HTTP_TIMEOUT_MS, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+import {
+  fetchWithTimeout,
+  parseRetryAfter,
+  HTTP_TIMEOUT_MS,
+  HTTP_TRANSFER_TIMEOUT_MS,
+  HTTP_MAX_ATTEMPTS,
+} from '../lib/http.js';
 
 const srcRoot = fileURLToPath(new URL('../', import.meta.url));
 
 afterEach(() => vi.unstubAllGlobals());
 
+// 이 블록은 **에러 번역**만 본다. 재시도까지 돌면 관심사와 무관한 백오프를 실제로
+// 기다리게 되므로 maxAttempts: 1 로 격리한다 (재시도 자체는 아래 블록에서 검증).
 describe('fetchWithTimeout', () => {
   it('signal 을 안 주면 타임아웃 signal 을 붙여 넘긴다 (인자는 정확히 2개)', async () => {
     const fetchMock = vi.fn(async () => new Response('{}'));
@@ -38,10 +46,11 @@ describe('fetchWithTimeout', () => {
     const timeoutError = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
     vi.stubGlobal('fetch', vi.fn(async () => { throw timeoutError; }));
 
-    await expect(fetchWithTimeout('https://example.test/a', {}, 1_000)).rejects.toThrow(
+    const once = { timeoutMs: 1_000, maxAttempts: 1 };
+    await expect(fetchWithTimeout('https://example.test/a', {}, once)).rejects.toThrow(
       /example\.test\/a 요청이 1초 안에 끝나지 않아/,
     );
-    await expect(fetchWithTimeout('https://example.test/a', {}, 1_000)).rejects.toMatchObject({
+    await expect(fetchWithTimeout('https://example.test/a', {}, once)).rejects.toMatchObject({
       cause: timeoutError,
     });
   });
@@ -52,14 +61,16 @@ describe('fetchWithTimeout', () => {
     });
     vi.stubGlobal('fetch', vi.fn(async () => { throw wrapped; }));
 
-    await expect(fetchWithTimeout('https://example.test/a')).rejects.toThrow(/안에 끝나지 않아/);
+    await expect(fetchWithTimeout('https://example.test/a', {}, { maxAttempts: 1 })).rejects.toThrow(
+      /안에 끝나지 않아/,
+    );
   });
 
   it('타임아웃이 아닌 에러는 그대로 통과시킨다', async () => {
     const boom = new Error('ECONNREFUSED');
     vi.stubGlobal('fetch', vi.fn(async () => { throw boom; }));
 
-    await expect(fetchWithTimeout('https://example.test/a')).rejects.toBe(boom);
+    await expect(fetchWithTimeout('https://example.test/a', {}, { maxAttempts: 1 })).rejects.toBe(boom);
   });
 
   // Meta Graph API 는 ?access_token=... 로 토큰을 싣는다. 에러에 URL 을 통째로 넣으면
@@ -70,12 +81,164 @@ describe('fetchWithTimeout', () => {
     }));
 
     await expect(
-      fetchWithTimeout('https://graph.facebook.com/v21.0/me?access_token=SECRET-TOKEN-VALUE'),
+      fetchWithTimeout('https://graph.facebook.com/v21.0/me?access_token=SECRET-TOKEN-VALUE', {}, {
+        maxAttempts: 1,
+      }),
     ).rejects.toThrow(/^(?!.*SECRET-TOKEN-VALUE).*$/s);
   });
 
   it('상한값이 뒤집히지 않았다 (전송용 > 기본값)', () => {
     expect(HTTP_TRANSFER_TIMEOUT_MS).toBeGreaterThan(HTTP_TIMEOUT_MS);
+  });
+});
+
+/**
+ * 재시도 정책. 여기서 분기를 잘못 타면 **POST 가 두 번 나가** 스토어에 버전/제품/심사
+ * 제출이 중복 생성된다 — 한 번 실패하는 것보다 훨씬 나쁜 결과다.
+ */
+describe('fetchWithTimeout 재시도', () => {
+  const res = (status: number, headers: Record<string, string> = {}) =>
+    new Response(status === 204 ? null : 'body', { status, headers });
+
+  // 백오프를 실제로 기다리면 이 파일 하나가 14초를 먹는다. 타이머만 가짜로 돌린다.
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** 대기 중인 백오프를 즉시 소진하고 결과를 돌려준다. */
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    const guarded = promise.then(
+      (v) => ({ ok: true as const, v }),
+      (e) => ({ ok: false as const, e }),
+    );
+    await vi.runAllTimersAsync();
+    const r = await guarded;
+    if (r.ok) return r.v;
+    throw r.e;
+  }
+
+  it('429 는 POST 라도 재시도한다 (레이트 리미터는 처리 전에 거절한다)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(res(429, { 'retry-after': '0' }))
+      .mockResolvedValueOnce(res(200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await settle(fetchWithTimeout('https://example.test/a', { method: 'POST', body: '{}' }));
+
+    expect(r.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('5xx 는 POST 에서 재시도하지 않는다 (서버가 이미 처리했을 수 있다)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(503));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await settle(fetchWithTimeout('https://example.test/a', { method: 'POST', body: '{}' }));
+
+    expect(r.status).toBe(503);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('5xx 는 PUT(=청크 업로드)에서는 재시도한다', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(res(502)).mockResolvedValueOnce(res(200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await settle(
+      fetchWithTimeout('https://example.test/chunk', { method: 'PUT', body: new Uint8Array([1, 2, 3]) }),
+    );
+
+    expect(r.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('GET 네트워크 오류는 재시도하고, 끝내 실패하면 마지막 오류를 던진다', async () => {
+    const boom = new Error('ECONNRESET');
+    const fetchMock = vi.fn().mockRejectedValue(boom);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(settle(fetchWithTimeout('https://example.test/a'))).rejects.toBe(boom);
+    expect(fetchMock).toHaveBeenCalledTimes(HTTP_MAX_ATTEMPTS);
+  });
+
+  it('POST 네트워크 오류는 재시도하지 않는다', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNRESET'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      settle(fetchWithTimeout('https://example.test/a', { method: 'POST', body: '{}' })),
+    ).rejects.toThrow('ECONNRESET');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('4xx(429 제외)는 재시도하지 않고 그대로 돌려준다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(403));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await settle(fetchWithTimeout('https://example.test/a'));
+
+    expect(r.status).toBe(403);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('스트림 본문은 재전송하면 빈 요청이 되므로 재시도하지 않는다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(429, { 'retry-after': '0' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const body = new ReadableStream();
+    const r = await settle(fetchWithTimeout('https://example.test/a', { method: 'PUT', body }));
+
+    expect(r.status).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('호출부가 signal 을 넘기면 재시도하지 않는다 (취소 주체는 하나여야 한다)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(429, { 'retry-after': '0' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await settle(fetchWithTimeout('https://example.test/a', { signal: new AbortController().signal }));
+
+    expect(r.status).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('maxAttempts 를 넘길 때까지 재시도하고 마지막 응답을 돌려준다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(429, { 'retry-after': '0' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const r = await settle(fetchWithTimeout('https://example.test/a', {}, { maxAttempts: 2 }));
+
+    expect(r.status).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('세 번째 인자로 숫자를 주면 timeoutMs 로 해석한다 (기존 호출부 호환)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('t', 'TimeoutError'); }));
+    await expect(settle(fetchWithTimeout('https://example.test/a', {}, 1_000))).rejects.toThrow(/1초 안에/);
+  });
+});
+
+describe('parseRetryAfter', () => {
+  const now = Date.parse('2026-07-26T12:00:00Z');
+
+  it('초 단위 숫자를 밀리초로 바꾼다', () => {
+    expect(parseRetryAfter('3', now)).toBe(3_000);
+  });
+
+  it('HTTP-date 를 남은 시간으로 바꾼다', () => {
+    expect(parseRetryAfter('Sun, 26 Jul 2026 12:00:05 GMT', now)).toBe(5_000);
+  });
+
+  it('이미 지난 시각은 0', () => {
+    expect(parseRetryAfter('Sun, 26 Jul 2026 11:59:00 GMT', now)).toBe(0);
+  });
+
+  it('상한을 넘는 값은 잘라낸다 (도구 호출이 매달린 것과 같아진다)', () => {
+    expect(parseRetryAfter('99999', now)).toBeLessThanOrEqual(20_000);
+  });
+
+  it('해석 불가/부재는 null (호출부가 지수 백오프로 폴백)', () => {
+    expect(parseRetryAfter('soon', now)).toBeNull();
+    expect(parseRetryAfter(null, now)).toBeNull();
   });
 });
 

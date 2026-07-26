@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as jobs from '../jenkins/jobs.js';
 import { createItemUrl, jobUrl } from '../jenkins/http.js';
 import type { JenkinsConfig } from '../jenkins/config.js';
+import { withoutBackoff } from './helpers.js';
 
 const cfg: JenkinsConfig = {
   url: 'https://jenkins.example.com',
@@ -108,8 +109,10 @@ describe('listJobs', () => {
   });
 
   it('실패하면 상태코드와 본문을 담아 throw', async () => {
-    fetchMock.mockResolvedValueOnce(textResponse('nope', 500));
-    await expect(jobs.listJobs(cfg)).rejects.toThrow(/조회 실패 \(500\): nope/);
+    // 팩토리로 준다 — 재시도는 시도마다 **새 응답**을 받는다. 같은 Response 를 재사용하면
+    // 앞 시도에서 본문이 소비돼(취소돼) 마지막 시도의 본문이 비어 보인다.
+    fetchMock.mockImplementation(() => textResponse('nope', 500));
+    await expect(withoutBackoff(() => jobs.listJobs(cfg))).rejects.toThrow(/조회 실패 \(500\): nope/);
   });
 });
 
@@ -125,13 +128,13 @@ describe('jobExists', () => {
   });
 
   it('401/500 은 "없음" 으로 삼키지 않고 throw 한다', async () => {
-    fetchMock.mockResolvedValueOnce(textResponse('bad credentials', 401));
-    await expect(jobs.jobExists(cfg, 'my-app')).rejects.toThrow(
+    fetchMock.mockImplementation(() => textResponse('bad credentials', 401));
+    await expect(withoutBackoff(() => jobs.jobExists(cfg, 'my-app'))).rejects.toThrow(
       /존재 확인 실패: my-app \(401\): bad credentials/,
     );
 
-    fetchMock.mockResolvedValueOnce(textResponse('boom', 500));
-    await expect(jobs.jobExists(cfg, 'my-app')).rejects.toThrow(/\(500\): boom/);
+    fetchMock.mockImplementation(() => textResponse('boom', 500));
+    await expect(withoutBackoff(() => jobs.jobExists(cfg, 'my-app'))).rejects.toThrow(/\(500\): boom/);
   });
 });
 

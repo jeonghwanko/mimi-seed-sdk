@@ -78,9 +78,30 @@ the tool never returns and the MCP client has no way to cancel it. So there is e
 - `HTTP_TRANSFER_TIMEOUT_MS` (10m) — byte transfers. The signal stays armed while the body streams, so a 60s
   cap would sever a large screenshot/preview upload or stock-asset download mid-flight. Pass it explicitly.
 
-A caller-supplied `init.signal` wins (the wrapper never overrides someone else's cancellation). Timeouts are
-re-thrown as an actionable message carrying `host + pathname` only — **never the query string**, because Meta
-Graph calls put `access_token=` there and an error string ends up in agent transcripts and logs.
+A caller-supplied `init.signal` wins (the wrapper never overrides someone else's cancellation, and disables
+retry). Timeouts are re-thrown as an actionable message carrying `host + pathname` only — **never the query
+string**, because Meta Graph calls put `access_token=` there and an error string ends up in agent transcripts.
+
+### Retry policy — the idempotency split is the whole point
+
+Play, ASC, and Meta all return 429 and transient 5xx during normal operation. Retrying blindly is worse than
+not retrying, so the rule splits on what a repeat request can do:
+
+| Failure | GET/HEAD/PUT/DELETE | POST |
+|---|---|---|
+| **429** | retry | **retry** — the rate limiter rejects *before* handling, so no duplicate is created |
+| 5xx · 408 · 425 | retry | **no** — the server may have already applied it; a repeat creates a second version / product / review submission |
+| network error or timeout (no response) | retry | **no** — you cannot know whether the request arrived |
+| any other 4xx | no | no |
+
+`Retry-After` (seconds or HTTP-date) wins over the exponential backoff, both clamped to 20s — a longer wait is
+indistinguishable from the hang the timeout exists to prevent. Bodies that cannot be replayed (streams) disable
+retry, because re-sending a consumed stream silently posts an empty request. Chunked uploads are `PUT`, so they
+get the retry that matters most: a transient blip mid-upload no longer strands a half-uploaded asset.
+
+When testing a failure path, use `withoutBackoff()` from `__tests__/helpers.ts` and give the mock a **factory**
+(`mockImplementation(() => res)`, not `mockResolvedValue(res)`) — retries receive a fresh response each attempt,
+and a shared `Response` has its body consumed by the first attempt.
 
 `googleapis`-based domains don't use this — they go through the Google client, which carries its own timeouts.
 
