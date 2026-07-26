@@ -7,7 +7,7 @@
 //   3. 단계적 출시 시작·일시중지·재개·즉시완료 (phasedRelease)
 // Play 는 userFraction/halted 로 3번이 되는데 iOS 만 비어 있었다.
 
-import { V1_BASE, apiRequest, authHeadersOrThrow } from './http.js';
+import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 
 export type AppleReleaseType = 'MANUAL' | 'AFTER_APPROVAL' | 'SCHEDULED';
 export type PhasedReleaseState = 'INACTIVE' | 'ACTIVE' | 'PAUSED' | 'COMPLETE';
@@ -90,7 +90,7 @@ async function getPhasedRelease(versionId: string): Promise<PhasedReleaseSummary
       totalPauseDuration: a.totalPauseDuration as number | undefined,
     };
   } catch (err) {
-    if (/404|not found|NOT_FOUND/i.test((err as Error).message)) return null;
+    if (isNotFound(err)) return null;
     throw err;
   }
 }

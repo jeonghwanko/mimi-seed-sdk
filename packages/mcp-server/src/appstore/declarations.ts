@@ -6,7 +6,7 @@
 //
 // Play 쪽 대응물(데이터 안전 CSV)은 playstore/tools.ts 에 있다 — 자격증명 계통이 달라서 파일을 나눴다.
 
-import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow } from './http.js';
+import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 
 /** Apple 이 쓰는 빈도 척도. 필드마다 같은 enum 을 쓴다. */
 export type Frequency = 'NONE' | 'INFREQUENT_OR_MILD' | 'FREQUENT_OR_INTENSE' | 'INFREQUENT' | 'FREQUENT';
@@ -57,15 +57,22 @@ export async function getAgeRating(appId: string): Promise<{
   declaration: AgeRatingDeclaration;
 }> {
   const appInfoId = await resolveAppInfoId(appId);
-  const data = await get<{ data?: { id: string; attributes?: AgeRatingDeclaration } | null }>(
-    V1_BASE,
-    `/appInfos/${appInfoId}/ageRatingDeclaration`,
-  );
-  return {
-    appInfoId,
-    declarationId: data.data?.id,
-    declaration: data.data?.attributes ?? {},
-  };
+  // 선언 리소스가 아직 없는 앱이 있다 — 그때는 404 다. 에러 대신 "없음"으로 돌려주고
+  // updateAgeRating 이 사람이 읽을 안내를 내도록 한다.
+  try {
+    const data = await get<{ data?: { id: string; attributes?: AgeRatingDeclaration } | null }>(
+      V1_BASE,
+      `/appInfos/${appInfoId}/ageRatingDeclaration`,
+    );
+    return {
+      appInfoId,
+      declarationId: data.data?.id,
+      declaration: data.data?.attributes ?? {},
+    };
+  } catch (err) {
+    if (isNotFound(err)) return { appInfoId, declarationId: undefined, declaration: {} };
+    throw err;
+  }
 }
 
 /**

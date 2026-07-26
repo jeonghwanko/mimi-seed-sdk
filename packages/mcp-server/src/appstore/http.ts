@@ -38,3 +38,16 @@ export async function apiRequest<T>(
   const text = await response.text();
   return (text ? JSON.parse(text) : { ok: true }) as T;
 }
+
+/**
+ * "리소스 없음"인지 **상태 코드로** 판별한다.
+ *
+ * friendlyAppStoreError 가 cause.status 에 실제 HTTP 상태를 붙여준다. 메시지 문자열로
+ * 404 를 찾으면 본문에 'not found'/'404' 가 섞인 403·409 까지 "없음"으로 삼켜서,
+ * 권한 오류가 조용히 빈 결과로 둔갑한다. 상태를 못 읽는 경우에만 문자열로 폴백한다.
+ */
+export function isNotFound(err: unknown): boolean {
+  const cause = (err as { cause?: { status?: number } })?.cause;
+  if (typeof cause?.status === 'number') return cause.status === 404;
+  return /App Store API 404\b/.test((err as Error)?.message ?? '');
+}

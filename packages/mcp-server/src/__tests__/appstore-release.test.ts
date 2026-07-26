@@ -157,6 +157,22 @@ describe('appstore_phased_release', () => {
     await expect(setPhasedRelease({ versionId: 'v1', action: 'pause' })).rejects.toThrow(/enable/);
   });
 
+  // 회귀: 예전엔 에러 **메시지**에서 404/not found 를 문자열로 찾았다. 그러면 본문에
+  // 'not found' 가 섞인 403 까지 "없음"으로 삼켜서 권한 오류가 빈 결과로 둔갑한다.
+  // 이제 friendlyAppStoreError 가 cause 에 붙인 실제 status 로 판별한다.
+  it('본문에 not found 가 있어도 403 은 삼키지 않는다', async () => {
+    stubFetch([
+      { match: /appStoreVersions\/v1\?/, json: version('READY_FOR_SALE') },
+      {
+        match: /appStoreVersionPhasedRelease$/,
+        status: 403,
+        json: { errors: [{ code: 'FORBIDDEN_ERROR', detail: 'resource not found for this API key (404-like text)' }] },
+      },
+    ]);
+
+    await expect(getReleaseStatus('v1')).rejects.toThrow(/403/);
+  });
+
   it('404 는 "단계적 출시 없음"으로 읽는다 (Apple 이 둘 다 쓴다)', async () => {
     stubFetch([
       { match: /appStoreVersions\/v1\?/, json: version('PENDING_DEVELOPER_RELEASE') },

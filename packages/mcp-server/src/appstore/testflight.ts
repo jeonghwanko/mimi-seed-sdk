@@ -7,7 +7,7 @@
 //   빌드 단위 betaBuildLocalizations  What to Test (로케일별)
 // 하나라도 비면 제출이 막히거나 반려된다. 그래서 상태 조회를 "뭐가 비었는지" 중심으로 만든다.
 
-import { V1_BASE, apiRequest, authHeadersOrThrow } from './http.js';
+import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 
 /** 외부 빌드 상태 → 사람이 읽을 뜻 + 다음 행동. */
 const EXTERNAL_STATE: Record<string, string> = {
@@ -46,7 +46,7 @@ async function getOrNull<T>(path: string): Promise<T | null> {
     const r = await get<{ data?: T | null }>(path);
     return r.data ?? null;
   } catch (err) {
-    if (/404|not found|NOT_FOUND/i.test((err as Error).message)) return null;
+    if (isNotFound(err)) return null;
     throw err;
   }
 }
