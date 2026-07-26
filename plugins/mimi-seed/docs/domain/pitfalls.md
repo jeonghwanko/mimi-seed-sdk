@@ -163,6 +163,26 @@ a security boundary. Every read goes through the Zod schemas in `video/schemas.t
 timeline also carry the same `projectId` to reject stale cross-project state. Keep JSON writes atomic and validate
 again at the file boundary before building a render command.
 
+## Jenkins credential id 충돌 — 같은 이름, 다른 종류
+
+`jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_upload_playstore_sa` 는 모두 **upsert** 다.
+id 가 이미 있으면 갱신한다 — 그런데 종류(Secret text vs Secret file)가 달라도 갱신해 버리면 기존 값이
+통째로 사라지고, 그 사실은 다음 빌드가 깨질 때까지 아무도 모른다.
+
+이건 가정이 아니라 실제로 만들 뻔한 지뢰다. `jenkins_upload_playstore_sa` 의 `credential_id` 기본값을
+패키지명 파생으로 바꿨을 때 그 이름(`<앱>-app-key`)이 어떤 환경에는 **이미 Secret text 로 앱 키**를 담고
+있었다. 기본값으로 한 번 호출하면 앱 키가 Play SA 파일로 덮여 사라졌을 것이다.
+
+두 겹으로 막았다:
+
+- `upsertSecretText` / `upsertSecretFile` 이 기존 credential 의 `_class` 를 먼저 읽고, 종류가 다르면
+  **쓰기 전에** 멈춘다. `_class` 는 Jenkins 가 주는 Java 클래스명이라 표시 이름(typeName)과 달리 로케일에
+  흔들리지 않는다. 메타데이터를 못 읽으면 막지 않는다 — 부재를 이유로 정상 작업을 차단하지 않는다.
+- Play SA 기본 id 는 `<앱>-playstore-sa` 다. 무엇을 담는지가 이름에 드러나야 범용 이름과 부딪히지 않는다.
+
+새 credential 도구를 만든다면 upsert 전에 같은 검사를 붙일 것 (`jenkins-credentials.test.ts`).
+
+
 ## 17. Meta carousel publishing can outlive the default MCP timeout
 
 Threads publishing should use the token-scoped `/me/threads` and `/me/threads_publish` endpoints. A saved numeric

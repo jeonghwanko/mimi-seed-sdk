@@ -98,7 +98,7 @@ export function registerAndroidTools(server: McpServer) {
               `  2. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
               `  3. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
               `  4. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
-              `  5. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-app-key")`,
+              `  5. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-playstore-sa")`,
               `     └ SA JSON이 없으면 먼저: setup_playstore_connection(packageName="${package_name}", projectId="...")`,
             ].join('\n'),
           }],
@@ -132,7 +132,7 @@ export function registerAndroidTools(server: McpServer) {
               ? `  6. setup_playstore_connection(packageName="${package_name}", projectId="${project_id}")`
               : `  6. setup_playstore_connection(packageName="${package_name}", projectId="<GCP 프로젝트 ID>")`,
             '     └ GCP 프로젝트 ID를 모르면 사용자에게 확인하세요.',
-            `  7. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-app-key")`,
+            `  7. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-playstore-sa")`,
             '  8. Play Console에서 서비스 계정 초대 (수동, 1회)',
             '     → Play Console → 사용자 및 권한 → SA 이메일 → 릴리즈 관리자 권한 부여',
             '  9. 첫 AAB 빌드 후 Play Console에 내부 테스트용으로 수동 업로드 (신규 앱 첫 번째만)',
@@ -226,10 +226,10 @@ export function registerAndroidTools(server: McpServer) {
       package_name: z.string().describe('Android 패키지명 (예: com.example.app)'),
       // 기본값을 하드코딩 문자열에서 패키지명 파생으로 바꿨다 — 예전 기본값은 한 사설 앱
       // 이름이었고, 여러 앱을 쓰는 사용자는 모든 SA 가 그 이름 하나로 덮였다.
-      credential_id: z.string().optional().describe('Jenkins Credential ID (생략 시 "<앱>-app-key")'),
+      credential_id: z.string().optional().describe('Jenkins Credential ID (생략 시 "<앱>-playstore-sa")'),
     },
     async ({ package_name, credential_id: credentialIdInput }) => {
-      const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-app-key`;
+      const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-playstore-sa`;
       const saPath = join(SA_DIR, `${package_name}.json`);
       if (!existsSync(saPath)) {
         return {

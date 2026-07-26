@@ -21,11 +21,39 @@ function credentialBase(url: string, id: string): string {
   return `${storeBase(url)}/credential/${encodeURIComponent(id)}`;
 }
 
-async function credentialExists(cfg: JenkinsConfig, id: string): Promise<boolean> {
+/**
+ * 기존 credential 의 Java class. 없으면 null, 있는데 메타데이터를 못 읽으면 빈 문자열.
+ *
+ * boolean(존재 여부)만으로는 부족하다 — id 가 같고 **종류가 다른** credential 을
+ * upsert 하면 기존 값이 통째로 사라진다. 예: Secret text 로 앱 키를 넣어둔 id 에
+ * Play SA 파일을 올리면 앱 키가 소멸한다. `_class` 는 Jenkins 가 주는 Java 클래스명이라
+ * 표시 이름(typeName)과 달리 로케일에 흔들리지 않는다.
+ */
+async function credentialClass(cfg: JenkinsConfig, id: string): Promise<string | null> {
   const res = await fetchWithTimeout(`${credentialBase(cfg.url, id)}/api/json`, {
     headers: authHeaders(cfg),
   });
-  return res.ok;
+  if (!res.ok) return null;
+  try {
+    return ((await res.json()) as { _class?: string })._class ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** id 가 이미 **다른 종류**로 쓰이고 있으면 덮어쓰지 않고 멈춘다. */
+function assertSameKind(id: string, existing: string | null, wanted: string, label: string): void {
+  if (existing === null || existing === '' || existing === wanted) return;
+  throw new Error(
+    [
+      `Jenkins credential "${id}" 가 이미 다른 종류로 존재합니다.`,
+      `   기존: ${existing}`,
+      `   요청: ${label}`,
+      '',
+      '덮어쓰면 기존 값이 사라집니다. 다른 id 를 쓰거나, 정말 교체하려면 먼저 삭제하세요.',
+      'jenkins_list_credentials 로 현재 목록을 확인할 수 있습니다.',
+    ].join('\n'),
+  );
 }
 
 export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCredentialSummary[]> {
@@ -49,7 +77,9 @@ export async function upsertSecretText(
   secret: string,
   description = '',
 ): Promise<'created' | 'updated'> {
-  const exists = await credentialExists(cfg, id);
+  const existingClass = await credentialClass(cfg, id);
+  assertSameKind(id, existingClass, TEXT_CLASS, 'Secret text');
+  const exists = existingClass !== null;
   const payload = {
     credentials: {
       scope: 'GLOBAL',
@@ -91,7 +121,9 @@ export async function upsertSecretFile(
   fileName: string,
   description = '',
 ): Promise<'created' | 'updated'> {
-  const exists = await credentialExists(cfg, id);
+  const existingClass = await credentialClass(cfg, id);
+  assertSameKind(id, existingClass, FILE_CLASS, 'Secret file');
+  const exists = existingClass !== null;
   const payload = {
     credentials: {
       scope: 'GLOBAL',
