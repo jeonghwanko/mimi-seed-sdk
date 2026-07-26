@@ -96,6 +96,25 @@ App Store Connect는 버전을 바로 제출하지 않는다. **심사 제출 �
 
 빌드는 `CFBundleShortVersionString`이 같은 버전에만 붙으므로, 새 빌드를 연결하기 **전에** 버전 문자열을 맞춘다.
 
+### TestFlight 외부 테스트
+
+내부 테스터는 빌드 처리만 끝나면 바로 받지만, **외부 테스터는 Apple 베타 심사를 통과해야 한다.** 그 심사가
+보는 항목이 세 군데로 흩어져 있어서, 하나라도 비면 제출이 막히거나 반려된다.
+
+| 항목 | 위치 | 도구 |
+|---|---|---|
+| 심사 연락처·데모 계정·메모 | 앱 단위 단일 리소스 | `appstore_update_beta_review_detail` |
+| 피드백 이메일·테스터용 설명 | 앱 단위, 로케일별 | `appstore_update_beta_test_info` |
+| What to Test | **빌드** 단위, 로케일별 | `appstore_update_whats_to_test` |
+
+`appstore_beta_status`를 먼저 돌린다 — 외부 상태와 함께 아직 빈 필드를 집어준다. 그다음
+`appstore_submit_beta_review`(dry-run이 블로커를 나열한다). 승인되면 `appstore_set_beta_group_build`로 외부
+그룹에 빌드를 붙이는데, 외부 그룹에서는 **이게 곧 배포다**. 테스터 초대는 `appstore_add_beta_testers`(메일
+즉시 발송), 재알림은 `appstore_notify_beta_testers`.
+
+빌드가 `MISSING_EXPORT_COMPLIANCE`에서 멈춰 있다면 TestFlight 문제가 아니라 수출 규정 선언 문제다 —
+위의 `appstore_declare_encryption`을 보라.
+
 ### 승인 이후 — 출시하기
 
 버전을 만들 때 `releaseType`(`MANUAL` / `AFTER_APPROVAL` / `SCHEDULED`)을 정해두면 대부분 해결된다.

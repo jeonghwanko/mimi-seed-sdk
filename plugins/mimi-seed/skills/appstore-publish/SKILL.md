@@ -70,6 +70,25 @@ ASC는 버전을 바로 제출하지 않고 **심사 제출 묶음(reviewSubmiss
 
 빌드는 `CFBundleShortVersionString`이 같은 버전에만 붙는다. 새 빌드를 attach하기 전에 버전 문자열을 맞춘다.
 
+## TestFlight 외부 테스트
+
+내부 테스터는 처리 완료 즉시 받지만 외부 테스터는 Apple 베타 심사를 통과해야 한다. 심사 항목이 앱 단위와
+빌드 단위로 갈려 있어 하나라도 비면 막힌다. 순서는 항상 상태 조회부터다.
+
+```
+ToolSearch(query="select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers")
+```
+
+1. `appstore_beta_status`(buildId + appId) — 외부 상태와 빈 필드를 확인한다.
+2. 빈 것을 채운다: 심사 정보 → `appstore_update_beta_review_detail`(로그인 앱이면 데모 계정 필수),
+   테스트 정보 → `appstore_update_beta_test_info`, What to Test → `appstore_update_whats_to_test`.
+3. `appstore_submit_beta_review` — dry-run으로 블로커를 보고한 뒤 승인받고 confirm.
+4. 승인 후 `appstore_set_beta_group_build`로 외부 그룹에 배포 (**이 순간 테스터에게 나간다**).
+5. 초대·알림은 `appstore_add_beta_testers` / `appstore_notify_beta_testers` — 둘 다 메일이 즉시 나가므로
+   대상 목록을 사용자에게 확인받고 실행한다.
+
+`MISSING_EXPORT_COMPLIANCE`는 TestFlight가 아니라 수출 규정 문제다 → `appstore_declare_encryption`.
+
 ## 승인 이후 출시
 
 버전 생성 때 `releaseType`을 `AFTER_APPROVAL`로 잡아두면 승인과 동시에 자동 출시되므로 아무 것도 할 게 없다.

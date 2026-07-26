@@ -1,4 +1,4 @@
-# Tool catalog — 199 tools across 19 domains
+# Tool catalog — 207 tools across 19 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,7 +11,7 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 50 |
+| App Store Connect | `registers/appstore.ts` | 58 |
 | Google Play | `registers/playstore.ts` | 33 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
@@ -30,7 +30,7 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **19 modules** | **199** |
+| **Total** | **19 modules** | **207** |
 
 ## Google Play — `registers/playstore.ts` (33) · impl `playstore/tools.ts`
 
@@ -49,14 +49,17 @@
 - **D** `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (50) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (58) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
   `appstore_list_beta_groups` · `appstore_get_app_info` · `appstore_list_app_info_localizations` ·
   `appstore_list_reviews` · `appstore_list_products` · `appstore_list_product_localizations` ·
   `appstore_plan_release` · `appstore_list_review_submissions` · `appstore_release_status` ·
-  `appstore_get_age_rating` · `appstore_get_availability`
+  `appstore_get_age_rating` · `appstore_get_availability` · `appstore_beta_status`
+- **W** TestFlight: `appstore_update_beta_review_detail` · `appstore_update_beta_test_info` ·
+  `appstore_update_whats_to_test` · `appstore_add_beta_testers` (초대 발송) ·
+  `appstore_notify_beta_testers` (테스터 전원 알림) ·
 - **W** `appstore_update_age_rating` (심사 제출 전 필수) · `appstore_declare_encryption` (수출 규정 신고) ·
   `appstore_set_territory_availability` (지역 판매 on/off — confirm 게이트) ·
   `appstore_create_version` · `appstore_attach_build` · `appstore_attach_latest_build` ·
@@ -70,7 +73,9 @@
 - **U** `appstore_update_version_string` · `appstore_add_version_to_review_submission` ·
   `appstore_update_release_type` (MANUAL / AFTER_APPROVAL / SCHEDULED 전환) ·
   `appstore_phased_release` (단계적 출시 — `enable`/`pause`/`resume`은 되돌릴 수 있음)
-- **D** `appstore_submit_for_review` · `appstore_release_version` (즉시 공개) ·
+- **D** `appstore_submit_beta_review` (Apple 베타 심사 시작) ·
+  `appstore_set_beta_group_build` (외부 그룹이면 실배포/회수) ·
+  `appstore_submit_for_review` · `appstore_release_version` (즉시 공개) ·
   `appstore_phased_release` `action=complete|disable` (남은 사용자 전체 공개) ·
   `appstore_cancel_review` · `appstore_remove_review_submission_item` ·
   `appstore_delete_screenshot` · `appstore_delete_screenshot_set` · `appstore_delete_product`

@@ -99,6 +99,26 @@ Start with `appstore_list_review_submissions`. It shows each bundle's state — 
 A build attaches only to the version whose `CFBundleShortVersionString` matches, so fix the version string
 **before** attaching the new build.
 
+### TestFlight external testing
+
+Internal testers get a build as soon as it finishes processing. **External testers need Apple's beta review**,
+and what that review checks is spread across three places — miss one and the submission is blocked or rejected:
+
+| What | Where | Tool |
+|---|---|---|
+| Review contact, demo account, notes | app-level, single resource | `appstore_update_beta_review_detail` |
+| Feedback email, tester-facing description | app-level, per locale | `appstore_update_beta_test_info` |
+| What to Test | **build**-level, per locale | `appstore_update_whats_to_test` |
+
+Run `appstore_beta_status` first — it reports the build's external state and names the fields that are still
+empty. Then `appstore_submit_beta_review` (its dry-run lists the blockers). Once approved, attach the build to
+an external group with `appstore_set_beta_group_build` — for an external group that **is** the distribution —
+and invite people with `appstore_add_beta_testers` (sends mail immediately) or re-notify with
+`appstore_notify_beta_testers`.
+
+A build stuck at `MISSING_EXPORT_COMPLIANCE` is the export-compliance declaration, not TestFlight — see
+`appstore_declare_encryption` above.
+
 ### After approval — releasing
 
 Setting `releaseType` when you create the version (`MANUAL` / `AFTER_APPROVAL` / `SCHEDULED`) covers most cases:
