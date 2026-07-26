@@ -1,6 +1,6 @@
 {
   "name": "mimi-seed",
-  "version": "0.14.1",
+  "version": "0.15.0",
   "description": "Mimi Seed CLI \u2014 Claude Code\uc640 Codex\uc5d0\uc11c \uc571 \ucd9c\uc2dc \uc6b4\uc601\uc744 \uad00\ub9ac\ud569\ub2c8\ub2e4.",
   "bin": {
     "mimi-seed": "dist/index.js"
