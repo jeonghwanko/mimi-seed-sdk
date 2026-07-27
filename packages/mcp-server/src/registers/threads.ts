@@ -130,6 +130,36 @@ export function registerThreadsTools(server: McpServer) {
     },
   );
 
+  server.tool(
+    'threads_post_video',
+    [
+      'public URL의 영상을 Threads에 게시합니다.',
+      'Meta가 videoUrl을 직접 가져가므로 외부에서 인증 없이 접근 가능한 URL이어야 합니다.',
+      '3-step API: VIDEO container 생성 → 처리 완료 자동 대기 → threads_publish.',
+      '공개 게시 작업이므로 같은 턴에 사용자의 명시 승인을 받은 뒤 호출하세요.',
+    ].join(' '),
+    {
+      videoUrl: z.string().url().describe('Threads가 가져갈 영상의 public URL'),
+      text: z.string().max(500).default('').describe('게시할 텍스트 (선택, 최대 500자)'),
+      altText: z.string().optional().describe('영상 접근성 대체 텍스트 (선택)'),
+      profile: profileSchema,
+    },
+    async ({ videoUrl, text, altText, profile }) => {
+      const cfg = requireThreadsConfig({ profile });
+      const result = await api.postVideo(cfg, videoUrl, text, altText);
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            '✅ 영상 게시 완료',
+            `   media_id: ${result.id}`,
+            result.permalink ? `   URL: ${result.permalink}` : '',
+          ].filter(Boolean).join('\n'),
+        }],
+      };
+    },
+  );
+
   // 진단용 — 현재 저장된 Threads 설정 요약 (facebook_current_config 와 동일한 패턴).
   server.tool(
     'threads_current_config',

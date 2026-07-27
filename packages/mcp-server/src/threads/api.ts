@@ -190,6 +190,32 @@ export async function postText(
   return publish(cfg, container.id);
 }
 
+/** public URL의 영상을 Threads 미디어 컨테이너로 만든 뒤 처리 완료 후 게시한다. */
+export async function postVideo(
+  cfg: ThreadsConfig,
+  videoUrl: string,
+  text = '',
+  altText?: string,
+): Promise<PublishResult> {
+  const params: Record<string, string> = {
+    media_type: 'VIDEO',
+    video_url: videoUrl,
+    text,
+    access_token: cfg.accessToken,
+  };
+  if (altText) params.alt_text = altText;
+
+  const container = await thFetch<{ id: string }>(
+    cfg.accessToken,
+    '/me/threads',
+    params,
+    'POST',
+  );
+
+  await waitForContainer(cfg, container.id);
+  return publish(cfg, container.id);
+}
+
 export async function postCarousel(
   cfg: ThreadsConfig,
   imageUrls: string[],

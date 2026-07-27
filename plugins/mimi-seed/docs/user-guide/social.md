@@ -9,10 +9,10 @@ accounts, Threads accounts, and TikTok Business Accounts. Their account and toke
 |---|---|---|
 | Facebook | One Page photo, multi-photo with 2–10 images | Not personal-profile posting |
 | Instagram | One image, carousel with 2–10 images | Business/creator account; no Reels, video, or Stories |
-| Threads | Text, one image, carousel with 2–20 images | 500-character text; separate token from Instagram |
+| Threads | Text, one image, one video, carousel with 2–20 images | 500-character text; separate token from Instagram |
 | TikTok Business | Public video from a verified URL | Owned Business Account; not a direct local-file upload |
 
-Every image post requires a **public HTTPS URL** that Meta can fetch. Local paths, intranet URLs, authenticated
+Every image or video post requires a **public HTTPS URL** that Meta can fetch. Local paths, intranet URLs, authenticated
 URLs, and expired signed URLs do not work.
 
 ## 1. Connect accounts
@@ -71,6 +71,13 @@ Prepare this Threads post and show me the final preview first:
 Do not publish until I confirm.
 ```
 
+Threads video:
+
+```text
+Prepare a Threads video post from https://cdn.example.com/releases/2.4.0/demo.mp4. Check the account, caption,
+video URL, and alt text, then show me the final preview. Publish only after I confirm.
+```
+
 Instagram image:
 
 ```text
@@ -88,7 +95,7 @@ and publish only after confirmation.
 ## 4. Verify a published post
 
 Keep the returned media ID and permalink. Permalink lookup is best-effort and may be empty; inspect the latest
-post in the platform when necessary. Images and carousels can take several seconds to process.
+post in the platform when necessary. Images, videos, and carousels can take several seconds to process.
 
 ## Token expiry
 
@@ -103,7 +110,7 @@ Meta OAuth code 190 and 401 responses are translated into an exact recovery comm
 
 - Confirm target account and Page name
 - Review text, mentions, hashtags, and links
-- Open image URLs while logged out
+- Open image and video URLs while logged out
 - Check carousel order and platform item limits
 - Align public post timing with actual store availability
 - Record returned IDs to avoid duplicate posting

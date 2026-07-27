@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { postCarousel, postText, refreshAccessToken } from '../threads/api.js';
+import { postCarousel, postText, postVideo, refreshAccessToken } from '../threads/api.js';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -84,5 +84,42 @@ describe('Threads API', () => {
     expect(paths[0]).toBe('/v1.0/me/threads');
     expect(paths[1]).toBe('/v1.0/me/threads_publish');
     expect(paths).not.toContain('/v1.0/stale-user-id/threads');
+  });
+
+  it('영상 컨테이너가 FINISHED가 된 뒤 게시하고 접근성 텍스트를 전달한다', async () => {
+    const responses = [
+      { id: 'video-container-1' },
+      { id: 'video-container-1', status: 'IN_PROGRESS' },
+      { id: 'video-container-1', status: 'FINISHED' },
+      { id: 'published-video-1' },
+      { permalink: 'https://www.threads.net/@example/post/video-1' },
+    ];
+    const fetchMock = vi.fn(async () => json(responses.shift()));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(postVideo(
+      { accessToken: 'THQVJ_TOKEN', userId: 'user-1' },
+      'https://cdn.example.com/video.mp4',
+      'video caption',
+      '제품 기능을 소개하는 세로 영상',
+    )).resolves.toEqual({
+      id: 'published-video-1',
+      permalink: 'https://www.threads.net/@example/post/video-1',
+    });
+
+    const createCall = fetchMock.mock.calls.find(([input, init]) =>
+      (init as RequestInit | undefined)?.method === 'POST'
+      && new URL(String(input)).pathname === '/v1.0/me/threads');
+    expect(createCall).toBeDefined();
+    const body = new URLSearchParams(String((createCall?.[1] as RequestInit).body));
+    expect(body.get('media_type')).toBe('VIDEO');
+    expect(body.get('video_url')).toBe('https://cdn.example.com/video.mp4');
+    expect(body.get('text')).toBe('video caption');
+    expect(body.get('alt_text')).toBe('제품 기능을 소개하는 세로 영상');
+
+    const paths = fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname);
+    expect(paths.indexOf('/v1.0/me/threads_publish')).toBeGreaterThan(
+      paths.lastIndexOf('/v1.0/video-container-1'),
+    );
   });
 });

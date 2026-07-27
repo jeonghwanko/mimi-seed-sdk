@@ -72,7 +72,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_app,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |
 | Google Ads (UAC) | `select:googleads_config_status,googleads_save_config,googleads_list_accessible_customers,googleads_list_campaigns,googleads_get_campaign_report,googleads_get_uac_report` |
 | Search Console | `select:gsc_list_sites,gsc_list_sitemaps,gsc_get_sitemap,gsc_submit_sitemap,gsc_inspect_url,gsc_search_analytics` |
-| Social posting (Facebook / Instagram / Threads) | `select:facebook_current_config,facebook_save_config,facebook_list_pages,facebook_get_page,facebook_post_photo,facebook_post_multi_photo,instagram_save_config,instagram_get_account,instagram_post_image,instagram_post_carousel,threads_current_config,threads_save_config,threads_refresh_token,threads_get_account,threads_post,threads_post_carousel` |
+| Social posting (Facebook / Instagram / Threads) | `select:facebook_current_config,facebook_save_config,facebook_list_pages,facebook_get_page,facebook_post_photo,facebook_post_multi_photo,instagram_save_config,instagram_get_account,instagram_post_image,instagram_post_carousel,threads_current_config,threads_save_config,threads_refresh_token,threads_get_account,threads_post,threads_post_video,threads_post_carousel` |
 | TikTok Business video publish | `select:tiktok_business_auth_status,tiktok_business_get_account,tiktok_business_get_video_settings,tiktok_business_plan_video_post,tiktok_business_publish_video,tiktok_business_get_publish_status,tiktok_business_list_publish_audits` |
 | Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_delete_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds,ci_cancel_build` |
@@ -185,7 +185,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Google Ads (UAC)** | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` · `googleads_config_status` |
 | **Search Console** | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Android signing** | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
-| **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_refresh_token` |
+| **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_post_video` · `threads_refresh_token` |
 | **TikTok Business** | `tiktok_business_auth_status` · `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
