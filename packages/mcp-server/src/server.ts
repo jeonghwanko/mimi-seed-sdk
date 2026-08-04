@@ -3,6 +3,7 @@ import { registerFirebaseTools } from './registers/firebase.js';
 import { registerAdmobTools } from './registers/admob.js';
 import { registerPlaystoreTools } from './registers/playstore.js';
 import { registerIamTools } from './registers/iam.js';
+import { registerBillingTools } from './registers/billing.js';
 import { registerAppstoreTools } from './registers/appstore.js';
 import { registerChecksTools } from './registers/checks.js';
 import { registerAiTools } from './registers/ai.js';
@@ -40,6 +41,7 @@ export function buildServer(version: string): McpServer {
   registerAdmobTools(server);
   registerPlaystoreTools(server);
   registerIamTools(server);
+  registerBillingTools(server);
   registerAppstoreTools(server);
   registerChecksTools(server);
   registerAiTools(server);

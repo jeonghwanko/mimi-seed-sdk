@@ -16,6 +16,8 @@ import { analyticsadmin } from 'googleapis/build/src/apis/analyticsadmin/index.j
 import { analyticsdata } from 'googleapis/build/src/apis/analyticsdata/index.js';
 import { androidpublisher } from 'googleapis/build/src/apis/androidpublisher/index.js';
 import { bigquery } from 'googleapis/build/src/apis/bigquery/index.js';
+import { billingbudgets } from 'googleapis/build/src/apis/billingbudgets/index.js';
+import { cloudbilling } from 'googleapis/build/src/apis/cloudbilling/index.js';
 import { cloudresourcemanager } from 'googleapis/build/src/apis/cloudresourcemanager/index.js';
 import { auth, firebase } from 'googleapis/build/src/apis/firebase/index.js';
 import { iam } from 'googleapis/build/src/apis/iam/index.js';
@@ -32,6 +34,8 @@ export const google = {
   analyticsdata,
   androidpublisher,
   bigquery,
+  billingbudgets,
+  cloudbilling,
   cloudresourcemanager,
   firebase,
   iam,
