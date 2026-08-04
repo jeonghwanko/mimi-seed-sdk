@@ -1,4 +1,4 @@
-# Tool catalog — 222 tools across 20 domains
+# Tool catalog — 226 tools across 21 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -23,6 +23,7 @@
 | Facebook | `registers/facebook.ts` | 6 |
 | Google Cloud IAM | `registers/iam.ts` | 5 |
 | BigQuery | `registers/bigquery.ts` | 5 |
+| GCP Billing | `registers/billing.ts` | 4 |
 | Threads | `registers/threads.ts` | 7 |
 | TikTok Business | `registers/tiktok.ts` | 7 |
 | Instagram | `registers/instagram.ts` | 4 |
@@ -31,7 +32,7 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **20 modules** | **222** |
+| **Total** | **21 modules** | **226** |
 
 ## Google Play — `registers/playstore.ts` (37) · impl `playstore/tools.ts`
 
@@ -102,6 +103,7 @@
 |---|---|
 | AdMob (`admob.ts`) | `admob_list_accounts` · `admob_list_apps` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` · **W** `admob_create_app` · **W** `admob_create_ad_unit` |
 | IAM (`iam.ts`) | `iam_list_service_accounts` · `iam_list_keys` · **W** `iam_create_service_account` · **W** `iam_create_key` (sensitive — issues a private key) · **W** `iam_add_iam_policy_binding` |
+| GCP Billing (`billing.ts`) | `gcp_get_billing_info` · `gcp_list_billing_projects` (공용 결제계정 판별) · `gcp_list_budgets` · **W** `gcp_create_budget` (알림만 — 지출 차단 아님) |
 | BigQuery (`bigquery.ts`) | `bigquery_run_query` (can incur cost) · `bigquery_list_datasets` · `bigquery_list_tables` · `bigquery_get_table_schema` · `bigquery_auth_status` |
 | GA4 (`ga4.ts`) | `ga4_list_account_summaries` · `ga4_list_properties` · `ga4_list_data_streams` · `ga4_run_report` · `ga4_plan_bigquery_link` · **W** `ga4_create_property` · **W** `ga4_create_data_stream` · **W** `ga4_create_bigquery_link` (confirm 필요, 기존 링크는 no-op) |
 | Search Console (`gsc.ts`) | `gsc_list_sites` · `gsc_list_sitemaps` · `gsc_get_sitemap` · `gsc_inspect_url` · `gsc_search_analytics` · **W** `gsc_submit_sitemap` |

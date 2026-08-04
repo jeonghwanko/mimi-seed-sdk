@@ -75,7 +75,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (150+ 개 · 20개 영역)
+## 제공 도구 (150+ 개 · 21개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
@@ -90,6 +90,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |
 | Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
 | Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |
+| GCP Billing | 4 | `gcp_get_billing_info` / `gcp_list_billing_projects` / `gcp_list_budgets` / `gcp_create_budget` |
 | BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
 | Threads | 7 | `threads_post` / `threads_post_video` / `threads_post_carousel` / `threads_refresh_token` |
 | TikTok Business | 7 | `tiktok_business_plan_video_post` / `tiktok_business_publish_video` / `tiktok_business_get_publish_status` |

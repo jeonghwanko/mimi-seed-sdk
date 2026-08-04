@@ -388,7 +388,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-## Local MCP Tool List (150+ tools · 20 domains)
+## Local MCP Tool List (150+ tools · 21 domains)
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -406,6 +406,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
+| **GCP Billing** | 4 | `gcp_get_billing_info` · `gcp_list_billing_projects` · `gcp_create_budget` |
 | **Threads** | 7 | `threads_post` · `threads_post_video` · `threads_post_carousel` · `threads_refresh_token` |
 | **TikTok Business** | 7 | `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
 | **Checks / Risk** | 4 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |

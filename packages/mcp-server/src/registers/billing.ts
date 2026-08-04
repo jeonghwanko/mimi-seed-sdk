@@ -78,7 +78,7 @@ export function registerBillingTools(server: McpServer) {
     ].join(' '),
     {
       billingAccount: z.string().describe('결제 계정 ID'),
-      displayName: z.string().describe('예산 이름 (예: "penguinrun functions 감시")'),
+      displayName: z.string().describe('예산 이름 (예: "my-app functions 감시")'),
       amountUnits: z
         .number()
         .int()

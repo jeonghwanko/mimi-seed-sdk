@@ -7,7 +7,7 @@ import type { OAuth2Client } from 'google-auth-library';
  * 앱마다 전용 Firebase/GCP 프로젝트를 만드는 컨벤션이라, 새 프로젝트가 생길 때마다
  * "이 프로젝트가 Blaze 인가 → 결제 계정이 공용인가 → 예산 알림을 걸었나"가 반복 작업이 된다.
  *
- * 실제로 겪은 함정 2개가 이 모듈의 존재 이유다 (2026-08-04, pryzm-penguinrun):
+ * 실제로 겪은 함정 2개가 이 모듈의 존재 이유다:
  *
  * 1. **Billing API 가 꺼져 있으면 조회 자체가 403** 이고, 그 403 을 "Spark 이라서"로
  *    오해하기 쉽다. 실제로는 이미 Blaze 였다. `getBillingInfo` 는 이 구분을 명확히 한다
@@ -34,7 +34,7 @@ const budgets = () => google.billingbudgets('v1');
  * mimi-seed 의 OAuth 클라이언트 프로젝트에는 Cloud Billing API 가 없으므로, 지정하지 않으면
  * 대상 프로젝트가 아무리 정상이어도 항상 이렇게 실패한다 (2026-08-04 실측):
  *
- *   "Cloud Billing API has not been used in project 980022244769 before or it is disabled"
+ *   "Cloud Billing API has not been used in project <OAuth 클라이언트 프로젝트 번호> before or it is disabled"
  *
  * 이 메시지의 프로젝트 번호는 **우리가 조회하려는 프로젝트가 아니라 OAuth 클라이언트 쪽**이다 —
  * 그래서 "대상 프로젝트에서 API 를 켰는데도 왜 403 이냐"로 헤매게 된다.
