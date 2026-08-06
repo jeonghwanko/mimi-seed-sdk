@@ -21,6 +21,29 @@ export interface AppStoreCredentials {
    * 여기 적어두는 수밖에 없다. 리포트 도구에만 쓰이므로 없어도 나머지는 다 동작한다.
    */
   vendorNumber?: string;
+
+  /**
+   * 매출 리포트 전용 별도 키 (선택).
+   *
+   * 리포트 엔드포인트는 다른 ASC API 와 요구 롤이 다르다 —
+   * **Admin / Finance / Sales and Reports** 중 하나여야 한다. 배포에 쓰는 키는 보통
+   * App Manager 라 여기서만 403 이 나는데, **Apple 은 발급된 키의 롤을 수정할 수 없게**
+   * 해놨다(폐기 후 재발급만 가능).
+   *
+   * 그렇다고 배포 키를 Admin 으로 갈아끼우면 잘 돌던 릴리스 파이프라인의 자격증명을
+   * 전부 교체해야 하고, 권한도 사용자·재무까지 넓어진다. 그래서 **읽기 전용 Finance 키를
+   * 따로 두고 리포트 도구만 이걸 쓰게** 한다. 배포 키는 손대지 않는다.
+   *
+   * 없으면 최상위 키로 폴백하므로, 배포 키가 이미 Admin 이면 설정할 필요가 없다.
+   */
+  reportsKey?: AppStoreKey;
+}
+
+/** ASC API 키 한 벌. 최상위 자격증명과 reportsKey 가 같은 모양을 공유한다. */
+export interface AppStoreKey {
+  issuerId: string;
+  keyId: string;
+  privateKey: string;
 }
 
 export function getAppStoreCredentials(): AppStoreCredentials | null {
@@ -82,4 +105,27 @@ export async function getAuthHeaders(): Promise<Record<string, string> | null> {
   if (!creds) return null;
   const token = await generateToken(creds);
   return { Authorization: `Bearer ${token}` };
+}
+
+/**
+ * 매출 리포트용 헤더 — reportsKey 가 있으면 그걸로, 없으면 최상위 키로 폴백.
+ *
+ * 폴백이 조용하면 안 된다: 403 이 났을 때 "어느 키가 거부당했는지" 를 모르면 사용자가
+ * 엉뚱한 키의 롤을 들여다보게 된다. 그래서 어느 키를 썼는지 함께 돌려준다.
+ */
+export async function getReportsAuthHeaders(): Promise<
+  { headers: Record<string, string>; source: 'reportsKey' | 'default' } | null
+> {
+  const creds = getAppStoreCredentials();
+  if (!creds) return null;
+  if (creds.reportsKey) {
+    return {
+      headers: { Authorization: `Bearer ${await generateToken(creds.reportsKey)}` },
+      source: 'reportsKey',
+    };
+  }
+  return {
+    headers: { Authorization: `Bearer ${await generateToken(creds)}` },
+    source: 'default',
+  };
 }

@@ -1924,6 +1924,9 @@ export function registerAppstoreTools(server: McpServer) {
       '⚠️ 데이터가 없는 날짜는 Apple 이 404 를 주므로 datesWithoutData 로 따로 돌려준다 —',
       '"매출 0" 과 "리포트 미생성/설정 오류"를 섞지 말 것. 당일치는 보통 아직 없다.',
       'vendorNumber 는 ~/.mimi-seed/appstore.json 에 저장해두면 생략 가능.',
+      '⚠️ **리포트는 요구 롤이 다르다** — Admin/Finance/Sales and Reports 중 하나여야 하고,',
+      '배포에 흔히 쓰는 App Manager 키는 여기서만 403 이 난다. 발급된 키의 롤은 수정할 수 없으므로,',
+      '읽기 전용 Finance 키를 발급해 appstore.json 의 **reportsKey** 에 넣으면 배포 키를 건드리지 않아도 된다.',
     ].join(' '),
     {
       startDate: z.string().describe('시작일 YYYY-MM-DD (DAILY 가 아니면 이 값이 곧 reportDate)'),
