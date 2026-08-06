@@ -1,4 +1,4 @@
-# Tool catalog — 226 tools across 21 domains
+# Tool catalog — 230 tools across 21 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,8 +11,8 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 61 |
-| Google Play | `registers/playstore.ts` | 37 |
+| App Store Connect | `registers/appstore.ts` | 63 |
+| Google Play | `registers/playstore.ts` | 39 |
 | Firebase | `registers/firebase.ts` | 20 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
@@ -32,14 +32,15 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 14 |
-| **Total** | **21 modules** | **226** |
+| **Total** | **21 modules** | **230** |
 
-## Google Play — `registers/playstore.ts` (37) · impl `playstore/tools.ts`
+## Google Play — `registers/playstore.ts` (39) · impl `playstore/tools.ts`
 
 - Read: `playstore_list_recovery_actions` · `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
   `playstore_list_subscriptions` · `playstore_list_products` · `playstore_list_service_accounts` ·
-  `playstore_verify_service_account` · `playstore_plan_release`
+  `playstore_verify_service_account` · `playstore_plan_release` ·
+  `playstore_list_financial_reports` · `playstore_get_financial_report` (GCS 재무 CSV — Play API 엔 매출 엔드포인트가 없다)
 - **W** `playstore_create_recovery_action` (DRAFT 생성 — 아직 사용자에게 안 나감) ·
   `playstore_upload_data_safety` (데이터 안전 CSV — 기존 제출 전체 덮어씀, confirm 게이트) ·
   `playstore_update_listing` · `playstore_update_details` (developer contact + default language —
@@ -53,7 +54,7 @@
   `playstore_cancel_recovery_action` · `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (61) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (63) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
@@ -75,6 +76,8 @@
   `appstore_update_product_review_note` · `appstore_update_product_localization` ·
   `appstore_add_product_to_review` ·
   `appstore_upload_product_review_screenshot`
+- Read(매출): `appstore_get_sales_report` (Sales and Trends — sandbox 가 섞이지 않는 실매출 기준선) ·
+  `appstore_get_finance_report` (정산 — reportDate 는 **Apple 회계월**)
 - **U** `appstore_update_version_string` · `appstore_add_version_to_review_submission` ·
   `appstore_update_release_type` (MANUAL / AFTER_APPROVAL / SCHEDULED 전환) ·
   `appstore_phased_release` (단계적 출시 — `enable`/`pause`/`resume`은 되돌릴 수 있음)

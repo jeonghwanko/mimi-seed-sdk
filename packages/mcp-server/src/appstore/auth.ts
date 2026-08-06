@@ -14,6 +14,13 @@ export interface AppStoreCredentials {
   issuerId: string;   // App Store Connect > Users and Access > Keys > Issuer ID
   keyId: string;      // Key ID
   privateKey: string; // .p8 파일 내용
+  /**
+   * Sales and Trends / Finance 리포트 전용 판매자 번호.
+   *
+   * **API 로는 조회할 수 없다** — ASC > 지급 및 재무 보고서 화면에서 눈으로 읽어
+   * 여기 적어두는 수밖에 없다. 리포트 도구에만 쓰이므로 없어도 나머지는 다 동작한다.
+   */
+  vendorNumber?: string;
 }
 
 export function getAppStoreCredentials(): AppStoreCredentials | null {

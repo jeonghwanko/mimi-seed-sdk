@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary)의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
-  "total": 226,
+  "total": 230,
   "domains": {
     "admob": {
       "label": "AdMob",
@@ -38,7 +38,7 @@
     "appstore": {
       "label": "App Store Connect",
       "credential": "ASC API 키 (mimi-seed auth appstore)",
-      "summary": "버전·빌드 attach·What's New·스크린샷·IAP 심사 메타데이터·심사 제출",
+      "summary": "버전·빌드 attach·What's New·스크린샷·IAP 심사 메타데이터·심사 제출·매출/재무 리포트",
       "tools": [
         "appstore_list_apps",
         "appstore_verify_credentials",
@@ -100,7 +100,9 @@
         "appstore_notify_beta_testers",
         "appstore_list_previews",
         "appstore_upload_preview",
-        "appstore_delete_preview"
+        "appstore_delete_preview",
+        "appstore_get_sales_report",
+        "appstore_get_finance_report"
       ]
     },
     "auth": {
@@ -285,7 +287,7 @@
     "playstore": {
       "label": "Google Play",
       "credential": "Google OAuth (CI/헤드리스는 Play 서비스 계정)",
-      "summary": "리스팅·트랙 릴리스·이미지·리뷰 답변·통계·서비스 계정 등록",
+      "summary": "리스팅·트랙 릴리스·이미지·리뷰 답변·통계·서비스 계정 등록·재무 리포트",
       "tools": [
         "playstore_get_app",
         "playstore_update_details",
@@ -323,7 +325,9 @@
         "playstore_list_recovery_actions",
         "playstore_create_recovery_action",
         "playstore_deploy_recovery_action",
-        "playstore_cancel_recovery_action"
+        "playstore_cancel_recovery_action",
+        "playstore_list_financial_reports",
+        "playstore_get_financial_report"
       ]
     },
     "threads": {
