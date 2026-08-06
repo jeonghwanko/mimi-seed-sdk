@@ -70,6 +70,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | Analytics wiring (Firebase ↔ GA4 ↔ BigQuery) | `select:firebase_link_analytics,firebase_get_analytics_details,ga4_list_account_summaries,ga4_list_properties,ga4_create_property,ga4_list_data_streams,ga4_create_data_stream,ga4_plan_bigquery_link,ga4_create_bigquery_link,ga4_run_report` |
 | BigQuery | `select:bigquery_auth_status,bigquery_list_datasets,bigquery_list_tables,bigquery_get_table_schema,bigquery_run_query` |
 | GCP billing (Blaze 여부 · 비용 범위 · 예산) | `select:gcp_get_billing_info,gcp_list_billing_projects,gcp_list_budgets,gcp_create_budget` |
+| Real revenue (스토어 정산 원장 — sandbox·테스터가 섞이지 않는 유일한 창구) | `select:appstore_get_sales_report,appstore_get_finance_report,playstore_list_financial_reports,playstore_get_financial_report` |
 | AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_app,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |
 | Google Ads (UAC) | `select:googleads_config_status,googleads_save_config,googleads_list_accessible_customers,googleads_list_campaigns,googleads_get_campaign_report,googleads_get_uac_report` |
 | Search Console | `select:gsc_list_sites,gsc_list_sitemaps,gsc_get_sitemap,gsc_submit_sitemap,gsc_inspect_url,gsc_search_analytics` |
