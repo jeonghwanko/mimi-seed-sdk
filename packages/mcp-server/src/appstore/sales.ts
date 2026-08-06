@@ -10,9 +10,9 @@
 
 import zlib from 'node:zlib';
 import { fetchWithTimeout } from '../lib/http.js';
-import { getAppStoreCredentials } from './auth.js';
+import { getAppStoreCredentials, getReportsAuthHeaders } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
-import { authHeadersOrThrow, V1_BASE } from './http.js';
+import { V1_BASE } from './http.js';
 
 /**
  * vendorNumber 해석: 명시 인자 > ~/.mimi-seed/appstore.json 의 vendorNumber.
@@ -54,10 +54,20 @@ async function fetchReport(
   resourcePath: string,
   params: Record<string, string>,
 ): Promise<{ notFound: boolean; rows: ReportRow[]; raw: string }> {
-  const authHeaders = await authHeadersOrThrow();
+  const auth = await getReportsAuthHeaders();
+  if (!auth) {
+    throw new Error(
+      [
+        '❌ App Store Connect 인증이 필요해.',
+        '',
+        '터미널에서 실행:',
+        '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      ].join('\n'),
+    );
+  }
   const query = new URLSearchParams(params).toString();
   const response = await fetchWithTimeout(`${V1_BASE}${resourcePath}?${query}`, {
-    headers: { ...authHeaders, Accept: 'application/a-gzip' },
+    headers: { ...auth.headers, Accept: 'application/a-gzip' },
   });
 
   if (response.status === 404) return { notFound: true, rows: [], raw: '' };
@@ -68,18 +78,21 @@ async function fetchReport(
     throw new Error(
       [
         '❌ 매출 리포트 접근 거부 (403) — 키는 정상인데 **롤이 부족**하다.',
+        `   거부당한 키: ${auth.source === 'reportsKey' ? 'reportsKey (리포트 전용)' : '최상위 키 (배포용과 동일)'}`,
         '',
         '리포트 엔드포인트는 다른 App Store Connect API 와 요구 롤이 다르다:',
         '  필요: **Admin / Finance / Sales and Reports(ACCESS_TO_REPORTS)** 중 하나',
         'App Manager·Developer 키는 앱 메타데이터는 다 되는데 여기서만 막힌다 —',
         '다른 도구가 잘 도는 것은 이 403 과 아무 관계가 없다.',
         '',
-        'App Store Connect > 사용자 및 액세스 > 통합 > App Store Connect API 에서',
-        '해당 키의 액세스 권한을 확인할 것. 키의 롤은 나중에 못 바꾸는 경우가 있으니,',
-        '그때는 위 롤로 **새 키를 발급**하고 다시 등록한다:',
-        '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+        '⚠️ **발급된 키의 롤은 수정할 수 없다** (Apple 정책 — 폐기 후 재발급만 가능).',
+        '그렇다고 배포 키를 갈아끼우면 릴리스 파이프라인 자격증명을 전부 교체해야 한다.',
         '',
-        '⚠️ 이 키를 바꾸면 배포 파이프라인이 같은 키를 쓰는지도 함께 확인할 것.',
+        '권장: **읽기 전용 Finance 키를 따로 발급**해 리포트 도구만 쓰게 한다.',
+        '  1) ASC > 사용자 및 액세스 > 통합 > 팀 키 > 키 생성, 액세스 = Finance',
+        '  2) 받은 .p8 내용을 ~/.mimi-seed/appstore.json 의 reportsKey 에 넣는다:',
+        '     "reportsKey": { "issuerId": "...", "keyId": "...", "privateKey": "-----BEGIN..." }',
+        '배포 키는 그대로 두면 된다 — 리포트 도구만 reportsKey 를 쓴다.',
       ].join('\n'),
     );
   }
@@ -293,13 +306,24 @@ export async function probeReportsAccess(): Promise<{
       'filter[reportDate]': probeDate,
       'filter[version]': '1_0',
     });
-    return { status: 'ok', detail: `매출 리포트 접근 가능 (vendorNumber ${vendorNumber})` };
+    const usingSeparateKey = getAppStoreCredentials()?.reportsKey != null;
+    return {
+      status: 'ok',
+      detail:
+        `매출 리포트 접근 가능 (vendorNumber ${vendorNumber}, ` +
+        `${usingSeparateKey ? 'reportsKey 사용' : '최상위 키 사용'})`,
+    };
   } catch (err) {
     const message = (err as Error)?.message ?? '';
     if (message.includes('403')) {
+      const usingSeparateKey = getAppStoreCredentials()?.reportsKey != null;
       return {
         status: 'forbidden',
-        detail: '매출 리포트 403 — 키 롤 부족 (Admin / Finance / Sales and Reports 필요)',
+        detail:
+          '매출 리포트 403 — 키 롤 부족 (Admin / Finance / Sales and Reports 필요). ' +
+          (usingSeparateKey
+            ? 'reportsKey 가 거부당했다.'
+            : 'reportsKey 를 따로 두면 배포 키를 건드리지 않아도 된다.'),
       };
     }
     return { status: 'error', detail: message.split('\n')[0] };
