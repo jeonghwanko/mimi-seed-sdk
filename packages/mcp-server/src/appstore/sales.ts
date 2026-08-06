@@ -61,6 +61,28 @@ async function fetchReport(
   });
 
   if (response.status === 404) return { notFound: true, rows: [], raw: '' };
+  if (response.status === 403) {
+    // 일반 403 안내("키 role 확인")로는 못 고친다 — 리포트 엔드포인트만 요구 롤이 다르다.
+    // 앱 메타데이터가 멀쩡히 조회되는 키에서도 여기서만 막히는 게 정상 동작이라,
+    // "키가 깨졌나" 로 헤매기 쉽다.
+    throw new Error(
+      [
+        '❌ 매출 리포트 접근 거부 (403) — 키는 정상인데 **롤이 부족**하다.',
+        '',
+        '리포트 엔드포인트는 다른 App Store Connect API 와 요구 롤이 다르다:',
+        '  필요: **Admin / Finance / Sales and Reports(ACCESS_TO_REPORTS)** 중 하나',
+        'App Manager·Developer 키는 앱 메타데이터는 다 되는데 여기서만 막힌다 —',
+        '다른 도구가 잘 도는 것은 이 403 과 아무 관계가 없다.',
+        '',
+        'App Store Connect > 사용자 및 액세스 > 통합 > App Store Connect API 에서',
+        '해당 키의 액세스 권한을 확인할 것. 키의 롤은 나중에 못 바꾸는 경우가 있으니,',
+        '그때는 위 롤로 **새 키를 발급**하고 다시 등록한다:',
+        '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+        '',
+        '⚠️ 이 키를 바꾸면 배포 파이프라인이 같은 키를 쓰는지도 함께 확인할 것.',
+      ].join('\n'),
+    );
+  }
   if (!response.ok) {
     throw friendlyAppStoreError(response.status, await response.text());
   }
@@ -234,6 +256,54 @@ export async function getSalesReport(
   }
 
   return { datesWithData, datesWithoutData, lines, proceedsByCurrency, paidUnits, freeUnits };
+}
+
+/**
+ * 리포트 접근 가능 여부만 싸게 확인한다 (appstore_verify_credentials 용).
+ *
+ * 왜 별도 프로브가 필요한가: 리포트 엔드포인트는 **다른 ASC API 와 요구 롤이 다르다.**
+ * App Manager 키는 GET /apps 가 멀쩡히 되므로 기존 검증은 전부 통과하는데, 매출 도구만
+ * 403 으로 죽는다. 그 사실이 첫 매출 조회 때까지 드러나지 않으면 "도구가 고장났다" 로
+ * 오진하게 된다 — Play 쪽 playstore_verify_service_account 가 'View financial data' 를
+ * 함께 확인하는 것과 같은 이유다.
+ */
+export async function probeReportsAccess(): Promise<{
+  status: 'ok' | 'no_vendor_number' | 'forbidden' | 'error';
+  detail: string;
+}> {
+  let vendorNumber: string;
+  try {
+    vendorNumber = resolveVendorNumber();
+  } catch {
+    return {
+      status: 'no_vendor_number',
+      detail: 'vendorNumber 미설정 — ~/.mimi-seed/appstore.json 에 추가하면 매출 리포트를 쓸 수 있다.',
+    };
+  }
+
+  // 어제 날짜 하루치. 데이터가 없어 404 여도 **권한 확인 목적은 달성**된다 —
+  // 403 이 아니라는 것 자체가 롤이 충분하다는 뜻이다.
+  const probeDate = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  try {
+    await fetchReport('/salesReports', {
+      'filter[frequency]': 'DAILY',
+      'filter[reportType]': 'SALES',
+      'filter[reportSubType]': 'SUMMARY',
+      'filter[vendorNumber]': vendorNumber,
+      'filter[reportDate]': probeDate,
+      'filter[version]': '1_0',
+    });
+    return { status: 'ok', detail: `매출 리포트 접근 가능 (vendorNumber ${vendorNumber})` };
+  } catch (err) {
+    const message = (err as Error)?.message ?? '';
+    if (message.includes('403')) {
+      return {
+        status: 'forbidden',
+        detail: '매출 리포트 403 — 키 롤 부족 (Admin / Finance / Sales and Reports 필요)',
+      };
+    }
+    return { status: 'error', detail: message.split('\n')[0] };
+  }
 }
 
 export async function getFinanceReport(options: {
