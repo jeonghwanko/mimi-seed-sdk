@@ -12,7 +12,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { JWT } from 'google-auth-library';
+import type { JWT } from 'google-auth-library';
+import { newJWT } from '../lib/google-auth-lite.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { requireServiceAccountJson } from '../helpers.js';
 
@@ -77,7 +78,7 @@ function normalizeBucket(raw: string): string {
  */
 function storageClient(packageName?: string): JWT {
   const parsed = JSON.parse(requireServiceAccountJson(packageName));
-  return new JWT({
+  return newJWT({
     email: parsed.client_email,
     key: parsed.private_key,
     scopes: [STORAGE_SCOPE],

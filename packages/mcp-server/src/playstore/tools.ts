@@ -1,6 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
-import type { OAuth2Client } from 'google-auth-library';
-import { JWT } from 'google-auth-library';
+import type { OAuth2Client, JWT } from 'google-auth-library';
+import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import { extractHttpStatus } from '../lib/google-errors.js';
 
@@ -1136,7 +1136,7 @@ export async function verifyServiceAccountJson(
     };
   }
 
-  const jwt = new JWT({
+  const jwt = newJWT({
     email: parsed.client_email,
     key: parsed.private_key,
     scopes: ['https://www.googleapis.com/auth/androidpublisher'],

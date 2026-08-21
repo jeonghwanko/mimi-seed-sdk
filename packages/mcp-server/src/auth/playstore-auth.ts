@@ -1,4 +1,5 @@
-import { JWT } from 'google-auth-library';
+import type { JWT } from 'google-auth-library';
+import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -109,7 +110,7 @@ export function getServiceAccountClient(packageName?: string): JWT | null {
   if (!json) return null;
   try {
     const parsed = JSON.parse(json);
-    return new JWT({
+    return newJWT({
       email: parsed.client_email,
       key: parsed.private_key,
       // androidpublisher(edits/리스팅 등) + Developer Reporting(vitals 통계). 통계 도구가

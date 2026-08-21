@@ -6,7 +6,7 @@ import {
   getBigQueryServiceAccountKey,
 } from './bigquery-auth.js';
 import * as bigquery from '../bigquery/tools.js';
-import { JWT } from 'google-auth-library';
+import { newJWT } from '../lib/google-auth-lite.js';
 import { resolveLang } from '../lib/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
@@ -127,7 +127,7 @@ async function main() {
   if (projectId) {
     console.log(M.probing(projectId));
     try {
-      const jwt = new JWT({
+      const jwt = newJWT({
         email: parsed.client_email,
         key: parsed.private_key,
         scopes: [
