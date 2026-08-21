@@ -1,4 +1,6 @@
-import { SignJWT, importPKCS8 } from 'jose';
+// jose 는 값 import 하지 않는다 — import 만으로 ~0.6초가 나가고, 이 파일은
+// helpers.ts 를 통해 대부분의 register 에 딸려 들어가 MCP 기동 시간을 그대로 밀어올린다.
+// 실제로 필요한 곳은 generateToken() 하나뿐이라 그 안에서 동적 import 한다.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -79,6 +81,7 @@ function normalizePrivateKey(raw: string): string {
 }
 
 export async function generateToken(creds: AppStoreCredentials): Promise<string> {
+  const { SignJWT, importPKCS8 } = await import('jose');
   const normalizedKey = normalizePrivateKey(creds.privateKey);
   let key;
   try {

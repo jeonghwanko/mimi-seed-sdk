@@ -1,5 +1,5 @@
-import { JWT } from 'google-auth-library';
-import type { OAuth2Client } from 'google-auth-library';
+import type { JWT, OAuth2Client } from 'google-auth-library';
+import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -68,7 +68,7 @@ export function deleteBigQueryServiceAccountJson(): boolean {
 }
 
 function makeJwt(sa: ServiceAccountKey): JWT {
-  return new JWT({ email: sa.client_email, key: sa.private_key, scopes: BQ_SCOPES });
+  return newJWT({ email: sa.client_email, key: sa.private_key, scopes: BQ_SCOPES });
 }
 
 export type BigQueryAuthSource = 'service-account' | 'user-oauth';
