@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 /**
  * `.mimi-seed.json` 스키마는 **두 패키지에 손으로 복제돼 있다**.
@@ -15,8 +16,12 @@ import { fileURLToPath } from 'node:url';
  * 두 tsconfig(NodeNext vs Bundler)가 서로의 파일을 검사하게 되기 때문이다.
  */
 
+// repoRoot 는 네이티브 경로다. 여기에 `new URL(repoRoot, 'file://')` 를 쓰면 Windows 에서
+// 'C:\...' 가 file:// 기준 상대경로로 유효하지 않아 `TypeError: Invalid URL` 로 죽는다
+// (POSIX 는 '/home/...' 이라 우연히 통과해서 CI 만 보면 안 잡힌다). 형제 테스트
+// ai-model-parity.test.ts 와 동일하게 path.join 으로 이어붙인다.
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
-const read = (rel: string) => readFileSync(new URL(rel, new URL(repoRoot, 'file://')), 'utf8');
+const read = (rel: string) => readFileSync(path.join(repoRoot, rel), 'utf8');
 
 const MCP = read('packages/mcp-server/src/lib/project-manifest.ts');
 const CLI = read('packages/cli/src/project-manifest.ts');
