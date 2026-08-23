@@ -19,6 +19,7 @@ import type {
   VideoAssetKind,
   VideoAssetManifest,
   VideoAssetSource,
+  VideoCaptionStyle,
   VideoProject,
   VideoScenePlan,
   VideoTimeline,
@@ -130,6 +131,12 @@ export async function planStory(input: PlanStoryInput): Promise<VideoProject> {
     scenes: normalizeScenes(parsed.scenes ?? [], input.targetDurationSec),
   }, 'AI가 생성한 영상 프로젝트');
 
+  persistProject(projectDir, project, input.overwrite === true);
+  return project;
+}
+
+function persistProject(projectDir: string, project: VideoProject, overwrite: boolean): void {
+  const projectPath = path.join(projectDir, PROJECT_FILE);
   mkdirSync(projectDir, { recursive: true });
   mkdirSync(path.join(projectDir, 'assets', 'stock'), { recursive: true });
   mkdirSync(path.join(projectDir, 'assets', 'generated'), { recursive: true });
@@ -137,7 +144,7 @@ export async function planStory(input: PlanStoryInput): Promise<VideoProject> {
   mkdirSync(path.join(projectDir, 'research'), { recursive: true });
   mkdirSync(path.join(projectDir, 'render'), { recursive: true });
   mkdirSync(path.join(projectDir, '.jobs'), { recursive: true });
-  if (existsSync(projectPath) && input.overwrite) {
+  if (existsSync(projectPath) && overwrite) {
     const archiveDir = path.join(projectDir, '.history', `${Date.now()}-${project.projectId}`);
     mkdirSync(archiveDir, { recursive: true });
     for (const name of [PROJECT_FILE, ASSET_FILE, TIMELINE_FILE]) {
@@ -153,6 +160,57 @@ export async function planStory(input: PlanStoryInput): Promise<VideoProject> {
     projectId: project.projectId,
     assets: [],
   } satisfies VideoAssetManifest);
+}
+
+export interface SavePlanInput {
+  projectDir: string;
+  title: string;
+  story: string;
+  language: string;
+  aspectRatio: VideoAspectRatio;
+  targetDurationSec: number;
+  scenes: Array<Partial<VideoScenePlan> & Pick<VideoScenePlan, 'durationSec'>>;
+  style?: string;
+  overwrite?: boolean;
+}
+
+/**
+ * 에이전트(구독 세션)가 직접 작성한 스토리보드를 API 키 없이 project.json으로 저장한다.
+ * video_plan_from_story(ANTHROPIC_API_KEY 필요)의 무료 대안.
+ * 장면 길이 합계가 targetDurationSec와 일치해야 projectSchema 검증을 통과한다.
+ */
+export function savePlan(input: SavePlanInput): VideoProject {
+  const projectDir = requireAbsolutePath(input.projectDir, 'projectDir');
+  const projectPath = path.join(projectDir, PROJECT_FILE);
+  if (existsSync(projectPath) && !input.overwrite) {
+    throw new Error(`이미 영상 프로젝트가 있습니다: ${projectPath}\noverwrite=true로 명시해야 덮어씁니다.`);
+  }
+  const dims = dimensions(input.aspectRatio);
+  const project = parseFile(projectSchema, {
+    version: 1,
+    projectId: randomUUID(),
+    title: input.title,
+    story: input.story,
+    language: input.language,
+    createdAt: new Date().toISOString(),
+    settings: {
+      aspectRatio: input.aspectRatio,
+      ...dims,
+      fps: 30,
+      targetDurationSec: input.targetDurationSec,
+      style: input.style,
+    },
+    scenes: input.scenes.map((scene, index) => ({
+      id: scene.id?.trim() || `scene-${index + 1}`,
+      durationSec: scene.durationSec,
+      narration: scene.narration?.trim() ?? '',
+      onScreenText: scene.onScreenText?.trim() ?? '',
+      visualPrompt: scene.visualPrompt?.trim() ?? '',
+      searchQuery: scene.searchQuery?.trim() || scene.visualPrompt?.trim() || '',
+    })),
+  }, '에이전트가 작성한 영상 프로젝트');
+
+  persistProject(projectDir, project, input.overwrite === true);
   return project;
 }
 
@@ -245,6 +303,7 @@ export function buildTimeline(
   projectDir: string,
   scenes: VideoTimelineScene[],
   audioAssetId?: string,
+  captionStyle?: VideoCaptionStyle,
 ): VideoTimeline {
   const dir = requireAbsolutePath(projectDir, 'projectDir');
   const project = loadProject(dir);
@@ -284,6 +343,7 @@ export function buildTimeline(
     totalDurationSec,
     scenes,
     audioAssetId,
+    captionStyle,
   }, '생성할 영상 타임라인');
   writeJsonAtomic(path.join(dir, TIMELINE_FILE), timeline);
   return timeline;

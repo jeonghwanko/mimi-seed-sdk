@@ -2,9 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { addLocalAsset, buildTimeline, loadTimeline, registerAsset, __testing as projectTesting } from '../video/project.js';
+import { addLocalAsset, buildTimeline, loadTimeline, registerAsset, savePlan, __testing as projectTesting } from '../video/project.js';
 import { __testing as providerTesting } from '../video/providers.js';
-import { buildFfmpegPlan, formatSrt, __testing as renderTesting } from '../video/render.js';
+import { formatAss, resolveCaptionStyle } from '../video/captions.js';
+import { buildFfmpegPlan, __testing as renderTesting } from '../video/render.js';
 import { __testing as researchTesting } from '../video/research.js';
 import type { VideoProject, VideoTimeline } from '../video/types.js';
 
@@ -62,6 +63,38 @@ describe('video project provenance', () => {
     expect(scenes).toHaveLength(5);
     expect(scenes.reduce((sum, scene) => sum + scene.durationSec, 0)).toBe(5);
     expect(scenes.every((scene) => scene.durationSec >= 1)).toBe(true);
+  });
+
+  it('saves an agent-authored plan without any AI API key', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'mimi-seed-video-plan-'));
+    dirs.push(dir);
+    const project = savePlan({
+      projectDir: dir,
+      title: '무료 쇼츠',
+      story: '구독 토큰만으로 만든 영상',
+      language: 'ko',
+      aspectRatio: '9:16',
+      targetDurationSec: 10,
+      scenes: [
+        { durationSec: 4, onScreenText: '이건 **무료**', visualPrompt: 'a coffee bean sprouting' },
+        { durationSec: 6, narration: '결론', visualPrompt: 'sunrise over a farm' },
+      ],
+    });
+    expect(project.scenes).toHaveLength(2);
+    expect(project.scenes[0].id).toBe('scene-1');
+    expect(project.scenes[1].searchQuery).toBe('sunrise over a farm');
+    expect(JSON.parse(readFileSync(path.join(dir, 'project.json'), 'utf8')).title).toBe('무료 쇼츠');
+    // 길이 합계가 target과 다르면 스키마가 거부한다
+    expect(() => savePlan({
+      projectDir: dir,
+      title: 'x',
+      story: 'y',
+      language: 'ko',
+      aspectRatio: '9:16',
+      targetDurationSec: 10,
+      scenes: [{ durationSec: 3 }],
+      overwrite: true,
+    })).toThrow('영상 프로젝트 파일 검증 실패');
   });
 
   it('copies a user-owned asset and builds a renderable timeline', () => {
@@ -123,7 +156,7 @@ describe('video project provenance', () => {
 });
 
 describe('video render planning', () => {
-  it('writes SRT timing and produces a single-process FFmpeg plan', () => {
+  it('writes ASS captions and produces a single-process FFmpeg plan', () => {
     const projectDir = fixtureProject();
     const source = path.join(projectDir, 'source.png');
     writeFileSync(source, Buffer.from('fake image'));
@@ -141,46 +174,76 @@ describe('video render planning', () => {
     const plan = buildFfmpegPlan(projectDir, path.join(projectDir, 'render', 'out.mp4'), 'job-1');
     expect(plan.args).toContain('-filter_complex');
     expect(plan.args.join(' ')).toContain('concat=n=2');
-    expect(plan.args.join(' ')).toContain('subtitles=render/captions-job-1.srt');
+    expect(plan.args.join(' ')).toContain('subtitles=render/captions-job-1.ass');
+    expect(plan.args.join(' ')).not.toContain('force_style');
+    const ass = readFileSync(plan.subtitlePath!, 'utf8');
+    expect(ass).toContain('PlayResX: 1080');
+    expect(ass).toContain('PlayResY: 1920');
   });
 
-  it('formats cumulative subtitle ranges', () => {
-    const timeline: VideoTimeline = {
+  function captionTimeline(scenes: VideoTimeline['scenes'], overrides?: Partial<VideoTimeline>): VideoTimeline {
+    return {
       version: 1,
       projectId: PROJECT_ID,
       createdAt: new Date(0).toISOString(),
       width: 1080,
       height: 1920,
       fps: 30,
-      totalDurationSec: 4,
-      scenes: [
-        { id: 'one', assetId: 'a', durationSec: 1.25, onScreenText: 'One' },
-        { id: 'two', assetId: 'b', durationSec: 2.75, onScreenText: 'Two' },
-      ],
+      totalDurationSec: scenes.reduce((sum, scene) => sum + scene.durationSec, 0),
+      scenes,
+      ...overrides,
     };
-    expect(formatSrt(timeline)).toContain('00:00:01,250 --> 00:00:04,000');
+  }
+
+  it('formats cumulative caption ranges in ASS time', () => {
+    const timeline = captionTimeline([
+      { id: 'one', assetId: 'a', durationSec: 1.25, onScreenText: 'One' },
+      { id: 'two', assetId: 'b', durationSec: 2.75, onScreenText: 'Two' },
+    ]);
+    const ass = formatAss(timeline, resolveCaptionStyle(1080, 1920));
+    expect(ass).toContain('Dialogue: 0,0:00:01.25,0:00:04.00,Caption');
   });
 
-  it('sanitizes subtitle control syntax instead of passing it to libass', () => {
-    const timeline: VideoTimeline = {
-      version: 1,
-      projectId: PROJECT_ID,
-      createdAt: new Date(0).toISOString(),
-      width: 1080,
-      height: 1920,
-      fps: 30,
-      totalDurationSec: 1,
-      scenes: [{
-        id: 'one',
-        assetId: 'a',
-        durationSec: 1,
-        onScreenText: '<font>{\\an8}x</font>\n\n2\n00:00:00,000 --> 99:00:00,000',
-      }],
-    };
-    const srt = formatSrt(timeline);
-    expect(srt).not.toContain('<font>');
-    expect(srt).not.toContain('--> 99:');
-    expect(srt).toContain('｛\\an8｝');
+  it('applies shorts defaults: bold outline style, lower-middle placement, no opaque box', () => {
+    const style = resolveCaptionStyle(1080, 1920);
+    expect(style.fontSizePx).toBe(81);
+    expect(style.position).toBe('lower-middle');
+    const ass = formatAss(captionTimeline([
+      { id: 'one', assetId: 'a', durationSec: 2, onScreenText: '첫 장면' },
+    ]), style);
+    // BorderStyle=1(외곽선), Alignment=2, MarginV=1920*0.28=538
+    expect(ass).toMatch(/Style: Caption,Malgun Gothic,81,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,0,2,97,97,538,1/);
+    expect(ass).toContain('{\\fad(120,80)}');
+  });
+
+  it('renders **keyword** markup as a highlight color run', () => {
+    const ass = formatAss(captionTimeline([
+      { id: 'one', assetId: 'a', durationSec: 2, onScreenText: '이건 **진짜** 무료' },
+    ]), resolveCaptionStyle(1080, 1920));
+    expect(ass).toContain('{\\1c&H0000D4FF&}진짜{\\1c&H00FFFFFF&}');
+    expect(ass).not.toContain('**');
+  });
+
+  it('renders the box preset with a translucent box for tutorials', () => {
+    const style = resolveCaptionStyle(1080, 1920, { preset: 'box' });
+    const ass = formatAss(captionTimeline([
+      { id: 'one', assetId: 'a', durationSec: 2, onScreenText: '단계 1' },
+    ]), style);
+    expect(ass).toMatch(/,3,\d+,0,2,/); // BorderStyle=3
+    expect(ass).toContain('&H50000000');
+  });
+
+  it('sanitizes caption control syntax instead of passing it to libass', () => {
+    const ass = formatAss(captionTimeline([{
+      id: 'one',
+      assetId: 'a',
+      durationSec: 1,
+      onScreenText: '<font>{\\an8}x</font>\n\\N주입',
+    }]), resolveCaptionStyle(1080, 1920));
+    expect(ass).not.toContain('<font>');
+    expect(ass).not.toContain('{\\an8}');
+    expect(ass).toContain('｛＼an8｝');
+    expect(ass).toContain('＼N주입');
   });
 
   it('rejects a hand-edited timeline before values reach FFmpeg filters', () => {
