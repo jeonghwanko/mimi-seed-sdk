@@ -8,10 +8,35 @@ Use this gate for every vertical video, especially when adapting 4:5 carousel ar
 - Define a two-role system: a distinctive Korean display face for hooks and a restrained body/caption face. Use no more than two families and three weights.
 - Do not use Malgun Gothic, Gulim, Dotum, Arial, or an unspecified default as the display face. Accept them only as an emergency body fallback and report the fallback.
 - Prefer a licensed project font. When only Windows Korean fonts exist, pair `NotoSerifKR-VF` Bold/Black for display with `NotoSansKR-VF` Medium/Bold for body instead of mixing in Malgun Gothic.
-- For a 1080px-wide vertical video, start at 88px for a hook, 58px for captions, and 42px for minor labels. Shorten copy before shrinking.
+- For text designed into artwork on a 1080px-wide vertical video, start at 88px for a hook, 58px for sub-copy, and 42px for minor labels. Shorten copy before shrinking. Burned captions follow the "Burned captions" section below instead.
 - Break lines by meaning, not character count. Keep a headline to two lines when possible and avoid single-word orphan lines.
 - Set deliberate line height and tracking; do not let library defaults determine either. Use contrast, scale, and spacing before adding pills, outlines, or decorative English labels.
 - Never ask an image model to render final Korean text.
+
+## Burned captions (shorts style)
+
+The renderer burns `onScreenText` as ASS captions. Defaults follow the dominant 2026 short-form
+grammar: bold face, white fill, black outline at 5.5% of the font size (no opaque box), subtle
+fade-in, lower-middle third placement on 9:16 (clear of the Shorts bottom UI and right-side
+buttons), font size ≈ 4.2% of frame height (81px at 1080×1920).
+
+- **Density**: 3–5 words per screen, at most 2 lines. Four or more lines reads as a wall. Break
+  lines by meaning with `\n`, never by character count.
+- **Highlight**: exactly one keyword per caption via `**keyword**` (default `#FFD400` yellow).
+  A fully highlighted sentence is the same as no highlight. Numbers and the payoff word are the
+  best highlight targets.
+- **Not every scene gets text.** Caption the hook, the evidence, and the CTA; let at least one
+  scene breathe. A caption on every beat is a lecture, not a short.
+- **Font**: inventory installed fonts and pass a bold Korean display gothic as
+  `captionStyle.fontName` (Pretendard, S-Core Dream, 검은고딕 in preference order). The built-in
+  fallback is Malgun Gothic Bold — usable for captions, but report the fallback. Never rely on
+  thin/regular weights for burned captions.
+- **Presets**: `shorts` (default) for outline captions with highlights; `box` for tutorial/step
+  content that needs a translucent subtitle block. Do not use `box` for hook-driven shorts.
+- **Position**: keep the default `lower-middle` on 9:16. Override to `center` only for a
+  single-scene title card; `lower` sits closer to platform UI and is for 16:9/1:1.
+- **QC**: on the contact sheet, verify captions against this section — size, line count,
+  highlight count, and that no caption collides with faces or platform UI.
 
 ## Human-safe cropping
 

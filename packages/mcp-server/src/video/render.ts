@@ -14,10 +14,11 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { formatAss, resolveCaptionStyle } from './captions.js';
 import { readJson, writeJsonAtomic } from './files.js';
 import { loadAssets, loadProject, loadTimeline } from './project.js';
 import { parseFile, renderJobSchema } from './schemas.js';
-import type { VideoAsset, VideoRenderJob, VideoTimeline } from './types.js';
+import type { VideoAsset, VideoRenderJob } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -54,40 +55,6 @@ function readTail(filePath: string, maxBytes = 64 * 1024): string {
     closeSync(fd);
   }
   return buffer.toString('utf8');
-}
-
-function sanitizeSubtitleText(value: string): string {
-  return value
-    .replace(/\r/g, '')
-    .replace(/\n{2,}/g, '\n')
-    .replace(/-->/g, '→')
-    .replace(/</g, '＜')
-    .replace(/>/g, '＞')
-    .replace(/{/g, '｛')
-    .replace(/}/g, '｝')
-    .trim();
-}
-
-function srtTime(seconds: number): string {
-  const ms = Math.max(0, Math.round(seconds * 1000));
-  const hours = Math.floor(ms / 3_600_000);
-  const minutes = Math.floor((ms % 3_600_000) / 60_000);
-  const secs = Math.floor((ms % 60_000) / 1000);
-  const millis = ms % 1000;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
-}
-
-export function formatSrt(timeline: VideoTimeline): string {
-  let cursor = 0;
-  const blocks: string[] = [];
-  for (const scene of timeline.scenes) {
-    const text = sanitizeSubtitleText(scene.onScreenText ?? '');
-    const start = cursor;
-    cursor += scene.durationSec;
-    if (!text) continue;
-    blocks.push(`${blocks.length + 1}\n${srtTime(start)} --> ${srtTime(cursor)}\n${text}\n`);
-  }
-  return blocks.join('\n');
 }
 
 function isImage(asset: VideoAsset): boolean {
@@ -143,16 +110,16 @@ export function buildFfmpegPlan(
   ));
   filters.push(`${timeline.scenes.map((_, index) => `[v${index}]`).join('')}concat=n=${timeline.scenes.length}:v=1:a=0[base]`);
 
-  const srt = formatSrt(timeline);
+  const captionStyle = resolveCaptionStyle(project.settings.width, project.settings.height, timeline.captionStyle);
+  const ass = formatAss(timeline, captionStyle);
   let videoLabel = '[base]';
   let subtitlePath: string | undefined;
-  if (srt) {
-    const relativeSubtitlePath = `render/captions-${jobId}.srt`;
+  if (ass) {
+    const relativeSubtitlePath = `render/captions-${jobId}.ass`;
     subtitlePath = path.join(dir, relativeSubtitlePath);
-    writeFileSync(subtitlePath, srt, 'utf8');
-    filters.push(
-      `[base]subtitles=${relativeSubtitlePath}:force_style='FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,Alignment=2,MarginV=48'[vout]`,
-    );
+    writeFileSync(subtitlePath, ass, 'utf8');
+    // 스타일(폰트·크기·외곽선·하이라이트)은 ASS 파일에 내장 — force_style을 쓰지 않는다.
+    filters.push(`[base]subtitles=${relativeSubtitlePath}[vout]`);
     videoLabel = '[vout]';
   }
 
@@ -362,4 +329,4 @@ export async function validateVideo(
   return { valid: issues.length === 0, format: data.format ?? {}, streams, issues };
 }
 
-export const __testing = { srtTime, ffprobeFor, sanitizeSubtitleText, processAlive, acquireOutputLock, readTail };
+export const __testing = { ffprobeFor, processAlive, acquireOutputLock, readTail };

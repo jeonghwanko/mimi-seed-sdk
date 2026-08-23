@@ -59,6 +59,16 @@ export interface VideoTimelineScene {
   narration?: string;
 }
 
+export interface VideoCaptionStyle {
+  preset?: 'shorts' | 'box';
+  fontName?: string;
+  fontSizePx?: number;
+  textColor?: string;
+  outlineColor?: string;
+  highlightColor?: string;
+  position?: 'lower' | 'lower-middle' | 'center';
+}
+
 export interface VideoTimeline {
   version: 1;
   projectId: string;
@@ -69,6 +79,7 @@ export interface VideoTimeline {
   totalDurationSec: number;
   scenes: VideoTimelineScene[];
   audioAssetId?: string;
+  captionStyle?: VideoCaptionStyle;
 }
 
 export type VideoJobStatus = 'queued' | 'running' | 'completed' | 'failed';

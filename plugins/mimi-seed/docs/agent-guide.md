@@ -80,7 +80,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds,ci_cancel_build` |
 | Android signing / keystore | `select:android_signing_setup,android_generate_keystore,jenkins_upload_keystore,jenkins_upload_playstore_sa` |
 | Service account end-to-end | `select:iam_list_service_accounts,iam_create_service_account,iam_list_keys,iam_create_key,iam_add_iam_policy_binding,setup_playstore_connection,playstore_register_service_account,playstore_verify_service_account,playstore_list_service_accounts,playstore_delete_service_account` |
-| Story → researched video | `select:video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
+| Story → researched video | `select:video_save_plan,video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
 | YouTube upload / publish | `select:youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,mimi_seed_auth_start` |
 
 ---
@@ -191,7 +191,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **TikTok Business** | `tiktok_business_auth_status` · `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
-| **Video production** | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
+| **Video production** | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_save_plan` · `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
 
 ---
 
@@ -218,15 +218,16 @@ For visual production, use the bundled `video-create-publish` skill. It requires
 aspect-ratio-specific human-safe crops, video-native motion, an original-resolution frame review, and a saved
 contact sheet; codec validation alone is not a quality pass.
 
-1. `video_plan_from_story` — create the project and scene plan.
+1. `video_save_plan` — save an agent-authored storyboard (no API key; free-path default). `video_plan_from_story` is the metered alternative when `ANTHROPIC_API_KEY` is configured.
 2. `video_research_youtube` — collect reference-only metadata; never treat a result as a render asset.
 3. `video_search_stock_assets` — find licensed Pexels candidates.
 4. `video_synthesize_research` — combine metadata with any direct human/agent observations. Treat its output as
    metadata-bounded guidance, not proof that the source videos were watched.
 5. Preview then confirm `video_download_stock_assets`; use `video_generate_image(confirm=false)` before any paid
-   generation and call it again with `confirm=true` only after approval. User-owned media goes through
-   `video_add_local_asset` with its ownership/license basis.
-6. `video_build_timeline` — provenance-gated scene assignment.
+   generation and call it again with `confirm=true` only after approval. On the free path, generate scene images
+   with the local `codex` CLI (ChatGPT subscription) instead and register them — like all user-owned media —
+   through `video_add_local_asset` with the ownership/license basis.
+6. `video_build_timeline` — provenance-gated scene assignment. Captions burn in the shorts style (bold outline, `**keyword**` highlight); tune with `captionStyle`.
 7. Preview then confirm `video_render`; poll `video_job_status`, then run `video_validate` on the completed MP4.
 
 > **Mimi Seed does not compile app binaries.** It manages metadata, store releases, and

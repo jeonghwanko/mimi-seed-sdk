@@ -6,6 +6,7 @@ import {
   loadProject,
   loadTimeline,
   planStory,
+  savePlan,
 } from '../video/project.js';
 import {
   downloadStockAssets,
@@ -109,6 +110,35 @@ export function registerVideoTools(server: McpServer) {
       overwrite: z.boolean().default(false).describe('기존 메타데이터를 .history에 보관하고 새 프로젝트로 덮어쓸지 여부'),
     },
     async (input) => text(await planStory(input)),
+  );
+
+  server.tool(
+    'video_save_plan',
+    [
+      '에이전트가 직접 작성한 장면별 스토리보드를 project.json으로 저장합니다. API 키가 필요 없는 video_plan_from_story의 무료 대안입니다.',
+      '스토리보드(장면 분할·내레이션·화면 문구·시각 프롬프트)는 호출 전에 에이전트가 직접 설계하세요.',
+      '장면 durationSec 합계는 targetDurationSec와 일치해야 합니다(허용 오차 0.1초).',
+      '기존 project.json은 overwrite=true 없이는 덮어쓰지 않습니다.',
+    ].join(' '),
+    {
+      projectDir: absolutePath,
+      title: z.string().min(1).max(500).describe('영상 제목'),
+      story: z.string().min(1).max(200_000).describe('영상으로 만들 story 원문'),
+      language: z.string().default('ko').describe('내레이션과 화면 문구 언어'),
+      aspectRatio: z.enum(['9:16', '16:9', '1:1']).default('9:16').describe('출력 화면비'),
+      targetDurationSec: z.number().min(5).max(300).default(30).describe('목표 영상 길이(초)'),
+      scenes: z.array(z.object({
+        id: z.string().min(1).max(100).optional(),
+        durationSec: z.number().positive().max(300),
+        narration: z.string().max(10_000).optional(),
+        onScreenText: z.string().max(2_000).optional().describe('화면 자막. **단어** 마크업으로 키워드 하이라이트'),
+        visualPrompt: z.string().max(10_000).optional().describe('이미지 생성용 프롬프트'),
+        searchQuery: z.string().max(1_000).optional().describe('스톡 영상 검색용 영문 검색어'),
+      })).min(1).max(12),
+      style: z.string().max(10_000).optional().describe('시각 스타일과 톤'),
+      overwrite: z.boolean().default(false).describe('기존 메타데이터를 .history에 보관하고 새 프로젝트로 덮어쓸지 여부'),
+    },
+    async (input) => text(savePlan(input)),
   );
 
   server.tool(
@@ -237,7 +267,8 @@ export function registerVideoTools(server: McpServer) {
     [
       '등록된 이미지·영상 자산을 장면 순서와 길이에 맞춰 timeline.json으로 조합합니다.',
       'assets.json에서 allowedForRendering=true이고 reference-only가 아닌 자산만 허용합니다.',
-      '화면 문구는 최종 렌더에서 자막으로 번인됩니다.',
+      '화면 문구는 최종 렌더에서 쇼츠 스타일 자막(굵은 폰트·흰 글자·검정 외곽선)으로 번인되며, onScreenText 안의 **단어** 마크업은 하이라이트 컬러(기본 노랑)로 강조됩니다.',
+      '한 장면 자막은 3~5어절·최대 2줄로 짧게 쓰고, 하이라이트는 문장당 한 단어만 지정하세요.',
     ].join(' '),
     {
       projectDir: absolutePath,
@@ -245,19 +276,29 @@ export function registerVideoTools(server: McpServer) {
         id: z.string().min(1),
         assetId: z.string().min(1),
         durationSec: z.number().positive().max(300),
-        onScreenText: z.string().optional(),
+        onScreenText: z.string().optional().describe('번인 자막. **단어**로 키워드 1개 하이라이트, \\n으로 의미 단위 줄바꿈'),
         narration: z.string().optional(),
       })).min(1).max(30),
       audioAssetId: z.string().optional(),
+      captionStyle: z.object({
+        preset: z.enum(['shorts', 'box']).optional().describe('shorts(기본): 외곽선 자막+하이라이트 / box: 반투명 박스 자막(튜토리얼용)'),
+        fontName: z.string().min(1).max(200).optional().describe('설치된 굵은 한글 고딕 폰트명(예: Pretendard, 에스코어드림). 생략 시 Malgun Gothic Bold'),
+        fontSizePx: z.number().int().min(24).max(400).optional().describe('생략 시 세로 영상은 높이의 4.2%(1080×1920 기준 81px)'),
+        textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        outlineColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        highlightColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('**단어** 마크업 색. 기본 #FFD400'),
+        position: z.enum(['lower', 'lower-middle', 'center']).optional().describe('생략 시 9:16은 lower-middle(하단-중앙 1/3, 쇼츠 UI 안전영역)'),
+      }).optional().describe('자막 스타일. 생략하면 쇼츠 기본 스타일'),
     },
-    async ({ projectDir, scenes, audioAssetId }) => text(buildTimeline(projectDir, scenes, audioAssetId)),
+    async ({ projectDir, scenes, audioAssetId, captionStyle }) =>
+      text(buildTimeline(projectDir, scenes, audioAssetId, captionStyle)),
   );
 
   server.tool(
     'video_render',
     [
       'timeline.json과 등록 자산을 FFmpeg로 합성해 MP4 렌더 작업을 시작합니다.',
-      '이미지/영상 크롭, 장면 연결, 화면 문구 번인, 선택적 배경음, H.264/yuv420p 출력을 지원합니다.',
+      '이미지/영상 크롭, 장면 연결, 쇼츠 스타일 자막 번인(timeline.json의 captionStyle 적용), 선택적 배경음, H.264/yuv420p 출력을 지원합니다.',
       'confirm=false는 계획만 반환합니다. CPU를 사용하는 로컬 쓰기 작업이므로 승인 후 confirm=true로 호출하세요.',
       '즉시 jobId를 반환하므로 video_job_status로 완료 여부를 확인하세요.',
     ].join(' '),

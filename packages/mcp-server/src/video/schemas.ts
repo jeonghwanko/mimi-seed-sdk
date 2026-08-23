@@ -62,6 +62,18 @@ export const assetManifestSchema = z.object({
   assets: z.array(assetSchema).max(10_000),
 });
 
+export const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, '#RRGGBB 형식이어야 합니다.');
+
+export const captionStyleSchema = z.object({
+  preset: z.enum(['shorts', 'box']).optional(),
+  fontName: z.string().min(1).max(200).optional(),
+  fontSizePx: z.number().int().min(24).max(400).optional(),
+  textColor: hexColorSchema.optional(),
+  outlineColor: hexColorSchema.optional(),
+  highlightColor: hexColorSchema.optional(),
+  position: z.enum(['lower', 'lower-middle', 'center']).optional(),
+});
+
 export const timelineSceneSchema = z.object({
   id: z.string().min(1).max(100),
   assetId: z.string().min(1).max(200),
@@ -80,6 +92,7 @@ export const timelineSchema = z.object({
   totalDurationSec: z.number().finite().positive().max(300),
   scenes: z.array(timelineSceneSchema).min(1).max(30),
   audioAssetId: z.string().min(1).max(200).optional(),
+  captionStyle: captionStyleSchema.optional(),
 }).superRefine((timeline, ctx) => {
   const calculated = timeline.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   if (Math.abs(calculated - timeline.totalDurationSec) > 0.01) {
