@@ -52,8 +52,9 @@ export interface AppStoreVerifyResult {
  * 파일 존재만 보는 requireAppStoreCreds 와 달리, 잘못된 .p8/keyId/issuerId 를
  * "첫 호출 401" 로 늦게 터지기 전에 setup 단계에서 잡아준다.
  */
-export async function verifyAppStoreCredentials(): Promise<AppStoreVerifyResult> {
-  const creds = getAppStoreCredentials();
+export async function verifyAppStoreCredentials(
+  creds = getAppStoreCredentials(),
+): Promise<AppStoreVerifyResult> {
   if (!creds) {
     return {
       ok: false,

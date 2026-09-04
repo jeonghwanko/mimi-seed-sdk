@@ -48,6 +48,24 @@ export interface AppStoreKey {
   privateKey: string;
 }
 
+/**
+ * 최상위 ASC API 키를 교체하되 같은 파일에 저장된 선택 설정은 보존한다.
+ *
+ * 재인증은 primary key 교체이지 appstore.json 전체 초기화가 아니다. 특히
+ * vendorNumber 와 reportsKey 는 별도 화면/키에서 얻는 값이라 다시 묻지 않고
+ * 지우면 매출·분석 기능이 조용히 망가진다.
+ */
+export function mergeAppStoreCredentials(
+  existing: AppStoreCredentials | null,
+  primary: AppStoreKey,
+  vendorNumber?: string,
+): AppStoreCredentials {
+  const merged: AppStoreCredentials = { ...(existing ?? {}), ...primary };
+  const normalizedVendorNumber = vendorNumber?.trim();
+  if (normalizedVendorNumber) merged.vendorNumber = normalizedVendorNumber;
+  return merged;
+}
+
 export function getAppStoreCredentials(): AppStoreCredentials | null {
   const pathToRead = fs.existsSync(CONFIG_PATH)
     ? CONFIG_PATH

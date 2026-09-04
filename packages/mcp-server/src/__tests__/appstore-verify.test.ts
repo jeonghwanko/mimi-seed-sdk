@@ -60,4 +60,25 @@ describe('verifyAppStoreCredentials — 단계별 진단', () => {
     expect(r.appCount).toBe(1);
     expect(r.firstApp?.name).toBe('My App');
   });
+
+  it('저장 전 검증용 자격증명을 직접 받으면 디스크 설정을 읽지 않는다', async () => {
+    const candidate = {
+      issuerId: 'candidate-issuer',
+      keyId: 'candidate-key',
+      privateKey: 'candidate-key-data',
+    };
+    h.generateToken.mockResolvedValue('candidate-jwt');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      text: async () => '',
+      json: async () => ({ data: [], meta: { paging: { total: 0 } } }),
+    })));
+
+    const r = await verifyAppStoreCredentials(candidate);
+
+    expect(r.ok).toBe(true);
+    expect(h.getAppStoreCredentials).not.toHaveBeenCalled();
+    expect(h.generateToken).toHaveBeenCalledWith(candidate);
+  });
 });

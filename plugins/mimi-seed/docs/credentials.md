@@ -77,23 +77,29 @@ If you can't reach it, bring your own client via `MIMI_SEED_GOOGLE_CLIENT_ID` / 
 
 ## App Store Connect
 
-**Unlocks:** every `appstore_*` tool — versions, metadata, screenshots, TestFlight builds, review submission.
+**Unlocks:** `appstore_*` tools — versions, metadata, screenshots, TestFlight builds, review submission,
+Analytics, and sales reports.
 
-**You need first:** a **paid** Apple Developer Program membership, and **Admin** or **App Manager** role on the
-team.
+**You need first:** a **paid** Apple Developer Program membership. **App Manager** is enough for metadata and
+release work, but creating Analytics report requests requires an **Admin** key. Sales reports require **Admin**,
+**Finance**, or **Sales and Reports** access.
 
 **Get it:**
 
 1. App Store Connect → **Users and Access** → **Integrations** → **App Store Connect API**
-2. Generate an API key (Access: *Admin* or *App Manager*)
+2. Generate an API key (Access: *Admin* for the complete feature set)
 3. Collect three things: **Issuer ID**, **Key ID**, and the **`.p8` file**
 
 > ⚠️ **The `.p8` downloads exactly once.** Apple will not let you download it again. If you lose it, revoke the
 > key and issue a new one. Store it somewhere you'll still have next quarter.
 
-**Give it to the wizard:** Issuer ID, Key ID, then the path to the `.p8` on disk.
+**Give it to the wizard:** Issuer ID, Key ID, the path to the `.p8` on disk, and optionally the **Vendor Number**.
+Find the Vendor Number at the upper left of **Sales and Trends** in App Store Connect. Leaving it blank preserves
+the saved value. When already connected, you can update only the Vendor Number without re-entering the API key;
+reconnecting also preserves a separately configured reports key and Vendor Number.
 
-**Verify:** `mimi-seed doctor`, or ask your agent for `appstore_verify_credentials`.
+**Verify:** `mimi-seed doctor`, or ask your agent for `appstore_verify_credentials`. The base check verifies app
+listing access; role-specific Analytics and sales access is confirmed by the first read in that workflow.
 
 ---
 

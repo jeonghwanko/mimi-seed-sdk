@@ -78,22 +78,28 @@ mimi-seed auth login
 
 ## App Store Connect
 
-**열리는 것:** 모든 `appstore_*` 도구 — 버전·메타데이터·스크린샷·TestFlight 빌드·심사 제출.
+**열리는 것:** `appstore_*` 도구 — 버전·메타데이터·스크린샷·TestFlight 빌드·심사 제출·Analytics·매출 리포트.
 
-**먼저 필요한 것:** **유료** Apple Developer Program 멤버십, 그리고 팀에서 **Admin** 또는 **App Manager** 역할.
+**먼저 필요한 것:** **유료** Apple Developer Program 멤버십. 메타데이터·배포만 쓴다면 **App Manager**로 충분하지만,
+Analytics 리포트 요청까지 만들려면 **Admin** 키가 필요하다. 매출 리포트는 **Admin**, **Finance**, 또는
+**Sales and Reports** 권한이 필요하다.
 
 **발급받기:**
 
 1. App Store Connect → **사용자 및 액세스** → **통합** → **App Store Connect API**
-2. API 키 생성 (액세스: *Admin* 또는 *App Manager*)
+2. API 키 생성 (전체 기능을 쓰려면 액세스: *Admin*)
 3. 세 가지를 챙긴다: **Issuer ID**, **Key ID**, **`.p8` 파일**
 
 > ⚠️ **`.p8` 은 딱 한 번만 다운로드된다.** Apple 은 재다운로드를 허용하지 않는다. 잃어버리면 키를 폐기하고 새로
 > 발급해야 한다. 다음 분기에도 남아 있을 곳에 보관하라.
 
-**마법사에 넣을 것:** Issuer ID, Key ID, 그리고 `.p8` 파일의 로컬 경로.
+**마법사에 넣을 것:** Issuer ID, Key ID, `.p8` 파일의 로컬 경로, 그리고 선택적으로 **Vendor Number**.
+Vendor Number는 App Store Connect의 **Sales and Trends** 화면 왼쪽 위에서 확인한다. 빈칸으로 두면 기존 저장값을
+유지한다. 이미 연결된 상태에서는 API 키를 다시 입력하지 않고 Vendor Number만 갱신할 수 있으며, 재인증해도
+별도로 저장한 매출 리포트 키와 Vendor Number를 지우지 않는다.
 
-**확인:** `mimi-seed doctor`, 또는 에이전트에게 `appstore_verify_credentials` 를 시킨다.
+**확인:** `mimi-seed doctor`, 또는 에이전트에게 `appstore_verify_credentials` 를 시킨다. 기본 검증은 앱 조회
+권한을 확인하며, Analytics·매출처럼 역할이 다른 기능은 해당 작업의 첫 읽기 호출로 최종 확인한다.
 
 ---
 

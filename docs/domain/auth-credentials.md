@@ -20,7 +20,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | File (location) | Role | Written by |
 |---|---|---|
 | `tokens.json` | Google OAuth token — covers Firebase, AdMob, Play Developer API, IAM, BigQuery, GA4, Search Console, Google Ads | `mimi-seed-auth` (`auth/cli.ts`) |
-| `appstore.json` | App Store Connect API key material (issuer id + key id + `.p8`), signed into a short-lived JWT at call time | `mimi-seed-appstore-auth` (`appstore/setup-cli.ts`) |
+| `appstore.json` | Primary App Store Connect API key, optional `vendorNumber`, and optional role-specific `reportsKey`; API keys are signed into short-lived JWTs at call time | `mimi-seed-appstore-auth` (`appstore/setup-cli.ts`) and the App Store credential helpers |
 | `play-service-accounts/<packageName>.json` | **Per-package** Play service account — wins over the default | `mimi-seed-playstore-auth` / `playstore_register_service_account` |
 | `play-service-account.json` | Default / legacy Play service account — fallback when no per-package match | same |
 | `bigquery-service-account.json` | BigQuery SA — exempt from Workspace reauth (`invalid_rapt`); OAuth is the fallback | `mimi-seed-bigquery-auth` |
@@ -117,6 +117,8 @@ second call with `confirm=true`.
 
 - ✅ Resolve credentials through the existing helpers (`ensureFreshAccessToken`, the Play SA resolver, the ASC
   JWT minter). Don't re-read `~/.mimi-seed/*.json` ad hoc in a new tool.
+- ✅ Treat App Store re-authentication as a merge: replacing the primary key must preserve an existing
+  `vendorNumber` and role-specific `reportsKey`. Validate the candidate against Apple before saving it.
 - ✅ **Write** through `lib/atomic-write.ts` (`writeCredentialJson` for objects, `writeCredentialFile` for an
   already-serialized key). It writes a temp file, chmods it `0600`, then `rename(2)`s — so a reader sees the old
   content or the new one, never a half-written file, and the file is never briefly world-readable. `writeFileSync`
