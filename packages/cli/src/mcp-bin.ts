@@ -7,6 +7,8 @@
 // 갈라졌던 원인이다. 규칙: **자격증명 하나당 writer 는 정확히 하나**.
 
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { t } from "./i18n.js";
 import { resolveLang } from "./settings.js";
 
@@ -32,6 +34,7 @@ export const MCP_BINS = [
   "mimi-seed-firebase",
   "mimi-seed-admob",
   "mimi-seed-ga4",
+  "mimi-seed-release-doctor",
 ] as const;
 
 export type McpBin = (typeof MCP_BINS)[number];
@@ -43,29 +46,81 @@ export type McpBin = (typeof MCP_BINS)[number];
  * **레지스트리의 배포판**이 실행돼서, 작업 트리를 고쳐도 반영되지 않는다 —
  * "내 코드가 안 도는데?" 로 이어지는 함정이다. (docs/from-source.md)
  */
-function resolveOnPath(bin: string): boolean {
-  if (process.env.MIMI_SEED_FORCE_NPX) return false;
-  const probe = process.platform === "win32" ? "where" : "which";
-  const r = spawnSync(probe, [bin], { stdio: "ignore", shell: true });
-  return r.status === 0;
+function resolveOnPath(bin: string, honorForceNpx = true): string | null {
+  if (honorForceNpx && process.env.MIMI_SEED_FORCE_NPX) return null;
+  if (process.platform === 'win32') {
+    const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path');
+    const directories = (pathKey ? process.env[pathKey] ?? '' : '').split(path.delimiter).filter(Boolean);
+    const names = bin.toLowerCase().endsWith('.cmd') ? [bin] : [`${bin}.cmd`, bin];
+    for (const directory of directories) {
+      for (const name of names) {
+        const candidate = path.join(directory.replace(/^"|"$/g, ''), name);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+    return null;
+  }
+  const probe = "which";
+  const result = spawnSync(probe, [bin], { encoding: "utf8", shell: false });
+  if (result.status !== 0) return null;
+  const candidates = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return candidates[0] ?? null;
+}
+
+/** npm cmd-shim의 실제 JS 진입점을 찾아 셸 없이 node로 실행한다. */
+export function resolveWindowsShimTarget(shimPath: string, source: string): string | null {
+  const matches = [...source.matchAll(/["']([^"']+\.js)["']\s+%\*/gi)];
+  const raw = matches.at(-1)?.[1];
+  if (!raw) return null;
+  return path.normalize(raw.replace(/%~?dp0%?/gi, `${path.dirname(shimPath)}${path.sep}`));
+}
+
+function npxCliPath(shimPath: string | null): string | null {
+  const candidates = [
+    shimPath ? path.join(path.dirname(shimPath), 'node_modules', 'npm', 'bin', 'npx-cli.js') : '',
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+    process.env.npm_execpath ? path.join(path.dirname(process.env.npm_execpath), 'npx-cli.js') : '',
+  ];
+  return candidates.find((candidate) => candidate && existsSync(candidate)) ?? null;
+}
+
+function windowsNodeTarget(command: string, shimPath: string | null): string | null {
+  if (command === 'npx') return npxCliPath(shimPath);
+  if (!shimPath) return null;
+  try {
+    const target = resolveWindowsShimTarget(shimPath, readFileSync(shimPath, 'utf8'));
+    return target && existsSync(target) ? target : null;
+  } catch {
+    return null;
+  }
 }
 
 /** setup bin 실행. stdio inherit 이라 대화형 프롬프트가 그대로 사용자에게 보인다. */
 export async function runMcpBin(bin: McpBin, extraArgs: string[] = []): Promise<number> {
-  const local = resolveOnPath(bin);
-  const cmd = local ? bin : "npx";
+  const localPath = resolveOnPath(bin);
+  const cmd = localPath ? bin : "npx";
   // MIMI_SEED_FORCE_NPX 는 "배포판을 써라" 는 뜻이다. 그런데 전역 `npm link` 가 걸려 있으면
   // 그냥 `npx -y @yoonion/mimi-seed-mcp` 도 PATH 의 **링크된** bin 을 먼저 집어서 결국 체크아웃
   // 코드를 실행한다 (실측으로 확인). `@latest` 를 붙여야 레지스트리의 진짜 배포판을 받아온다.
   const pkg = process.env.MIMI_SEED_FORCE_NPX ? `${MCP_PKG}@latest` : MCP_PKG;
-  const args = local ? extraArgs : ["-y", pkg, bin, ...extraArgs];
+  const args = localPath ? extraArgs : ["-y", pkg, bin, ...extraArgs];
 
   return new Promise((resolve) => {
-    // Windows / POSIX 양쪽 호환을 위해 shell:true (npm link 는 Windows 에서 .cmd 셰임을 깐다).
+    // Windows에서는 .cmd shim이 가리키는 JS를 node로 직접 실행한다. shell:true로 사용자 입력(--path 등)을 넘기면
+    // 공백뿐 아니라 &, | 같은 문자가 명령으로 재해석될 수 있으므로 셸을 통하지 않는다.
     // 언어를 환경변수로 물려준다 — 안 그러면 마법사는 영어인데 자식 프롬프트만 한국어로 나온다.
-    const child = spawn(cmd, args, {
+    const shimPath = process.platform === 'win32' ? (localPath ?? resolveOnPath(cmd, false)) : null;
+    const nodeTarget = process.platform === 'win32' ? windowsNodeTarget(cmd, shimPath) : null;
+    if (process.platform === 'win32' && !nodeTarget) {
+      process.stderr.write(t().auth.npxFailed(cmd, `could not resolve the JavaScript entrypoint for ${shimPath ?? cmd}`));
+      resolve(1);
+      return;
+    }
+    const executable = process.platform === 'win32' ? process.execPath : (localPath ?? cmd);
+    const childArgs = nodeTarget ? [nodeTarget, ...args] : args;
+    const child = spawn(executable, childArgs, {
       stdio: "inherit",
-      shell: true,
+      shell: false,
       env: { ...process.env, MIMI_SEED_LANG: resolveLang() },
     });
     child.on("error", (e) => {

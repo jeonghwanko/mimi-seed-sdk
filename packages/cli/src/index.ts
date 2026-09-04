@@ -142,6 +142,9 @@ ${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 
 
 옵션:
   --app <id>          앱 ID 지정
+  --local             로그인 없이 현재 저장소만 검사
+  --path <dir>        로컬 검사 대상 경로 (기본: 현재 폴더)
+  --json              로컬 검사 결과를 JSON으로 출력
   --fail-on-blocker   블로커 있으면 exit 1 (CI용)`,
       review: `${kleur.bold("mimi-seed review")} — 리뷰 답변 AI 초안 생성 및 Play Store 게시
 
@@ -319,6 +322,9 @@ Options:
 
 Options:
   --app <id>          app ID
+  --local             inspect the current repository without signing in
+  --path <dir>        local project path (default: current directory)
+  --json              print the local report as JSON
   --fail-on-blocker   exit 1 if a blocker is found (for CI)`,
       review: `${kleur.bold("mimi-seed review")} — draft a review reply with AI and post it to the Play Store
 

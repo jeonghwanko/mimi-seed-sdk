@@ -6,7 +6,8 @@
 
 | 점검 | 확인하는 것 |
 |---|---|
-| `mimi-seed check` | Remote 앱 등록, 연동, 문구, 스크린샷, 체크리스트의 준비도와 블로커 |
+| `mimi-seed check --local` | 로그인 없는 저장소 증거: 앱 식별자, Android Target API, Google Play Billing 정책 |
+| 연결 후 `mimi-seed check` | Remote 앱 등록, 연동, 문구, 스크린샷, 체크리스트의 준비도와 블로커 |
 | Local MCP 위험 점검 | Play/App Store의 실제 버전, 빌드, 메타데이터, 심사 제출 조건 |
 
 준비도 점수가 높다고 스토어 심사가 보장되지는 않는다. 반대로 점수가 낮아도 원인을 읽지 않고 숫자만 올리는 것이 목표가 아니다.
@@ -14,10 +15,14 @@
 ## 1. 기본 점검
 
 ```bash
-npx mimi-seed check
+npx mimi-seed check --local
 ```
 
-여러 앱이 등록돼 있다면 앱 ID를 지정한다.
+계정이나 스토어 자격증명이 필요하지 않다. 연결된 Mimi Seed 계정이 없으면 더 짧은
+`npx mimi-seed check`도 자동으로 로컬 경로를 사용한다. 보고서에는 검사한 범위와 스토어 연결 후에만 확인할
+수 있는 범위가 구분되어 나온다.
+
+연결한 뒤 등록된 앱이 여러 개라면 앱 ID를 지정한다.
 
 ```bash
 npx mimi-seed check --app <app-id>
@@ -26,8 +31,12 @@ npx mimi-seed check --app <app-id>
 CI에서는 블로커를 실패로 처리한다.
 
 ```bash
-npx mimi-seed check --app <app-id> --fail-on-blocker
+npx mimi-seed check --local --fail-on-blocker
 ```
+
+로컬 결과를 CI artifact로 남기려면 `--json`을 사용한다. 로컬 검사를 통과해도 스토어 승인을 보장하지 않는다.
+등록정보 응답, 업로드된 빌드, 스크린샷, 심사 상태는 아래의 연결된 점검이 필요하다.
+모노레포에서는 `--path apps/mobile`을 추가해 앱 디렉터리를 지정한다.
 
 ## 2. 공급자별 실제 위험 점검
 

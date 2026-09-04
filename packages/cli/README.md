@@ -7,6 +7,13 @@ git log에서 릴리즈 노트를 생성하고, 출시 전 위험 요소를 자�
 ## 빠른 시작
 
 ```bash
+npx mimi-seed check --local
+```
+
+로그인 없이 현재 저장소의 앱 식별자, Android Target API, Google Play Billing 지원 상태를 먼저 검사합니다.
+정책 결과에는 근거 파일과 공식 출처가 포함됩니다. 실제 스토어 상태까지 연결하려면 그다음 실행합니다.
+
+```bash
 npx mimi-seed init
 ```
 
@@ -21,7 +28,7 @@ npx mimi-seed init
 | `mimi-seed status` | 연결 상태 + 등록 앱 목록 |
 | `mimi-seed auth` | 자격증명 개별 인증 — `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` |
 | `mimi-seed doctor` | 환경 진단 (토큰·Git·앱·CI 한 번에 체크) |
-| `mimi-seed check` | 출시 전 Readiness 점검 (점수 + 블로커) |
+| `mimi-seed check` | 계정이 없으면 로컬 Release Doctor, 연결 후에는 원격 Readiness 점검 |
 | `mimi-seed notes` | AI 릴리즈 노트 생성 (git log → 3 톤 → 다국어 → 적용) |
 | `mimi-seed review` | AI 리뷰 답변 초안 생성 및 Play Store 게시 |
 | `mimi-seed deploy` | 앱 자동 배포 파이프라인 (CI 빌드 → 릴리즈 노트 → 스토어 적용) |
@@ -76,13 +83,23 @@ mimi-seed notes --locale ko,en-US,ja
 
 ## mimi-seed check
 
-출시 전 Readiness 점수와 블로커를 확인합니다.
+계정 연결 전에는 현재 저장소를 읽기 전용으로 검사하고, 연결 후에는 원격 Readiness 점수와 블로커를
+확인합니다. `--local`은 연결 상태와 관계없이 로컬 검사만 실행합니다.
 
 ```bash
 mimi-seed check
 
+# 로그인 없이 저장소만 검사
+mimi-seed check --local
+
+# 모노레포의 특정 앱 검사
+mimi-seed check --local --path apps/mobile
+
 # CI에서 블로커 있으면 exit 1
-mimi-seed check --fail-on-blocker
+mimi-seed check --local --fail-on-blocker
+
+# JSON 보고서
+mimi-seed check --local --json
 ```
 
 ### 옵션
@@ -90,6 +107,9 @@ mimi-seed check --fail-on-blocker
 | 옵션 | 설명 |
 |------|------|
 | `--app <id>` | 앱 ID 지정 (기본: 첫 번째 등록 앱) |
+| `--local` | 로그인 없이 현재 저장소만 검사 |
+| `--path <dir>` | 로컬 검사 대상 경로 (기본: 현재 폴더) |
+| `--json` | 로컬 검사 결과를 JSON으로 출력 |
 | `--fail-on-blocker` | 블로커 존재 시 exit 1 (CI/CD용) |
 
 ---

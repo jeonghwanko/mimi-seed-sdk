@@ -40,6 +40,25 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 ---
 
+## 계정 연결 전에 Release Doctor부터 — 로그인·스토어 키 불필요
+
+Expo, React Native, Android 또는 iOS 저장소에서 실행하세요.
+
+```bash
+npx mimi-seed check --local
+```
+
+Release Doctor는 계정 연결을 요구하기 전에 저장소에서 확정할 수 있는 증거부터 검사합니다. 첫 검사 범위는
+앱 식별자, Android Target API 제출 기준, Google Play Billing 지원 마감입니다. 정책 관련 결과마다 근거 파일,
+권장 조치, 공식 출처를 함께 표시합니다. CI에서는 `--fail-on-blocker`, 기계가 읽는 결과에는 `--json`을
+사용할 수 있으며 모노레포에서는 `--path apps/mobile`로 앱 경로를 지정할 수 있습니다.
+
+연결된 Mimi Seed 계정이 없다면 `npx mimi-seed check`만 실행해도 자동으로 로컬 검사로 전환됩니다. 스토어를
+연결한 뒤에는 같은 명령으로 등록정보, 스크린샷, 업로드된 빌드, 제출 상태까지 검사합니다. 로컬 통과 결과를
+스토어 승인 보장처럼 표시하지는 않습니다.
+
+---
+
 ## 30초 시작
 
 세 단계입니다: **1 설치 → 2 연결 → 3 확인**. 이 페이지는 짧은 버전이고 — **계정 연결 → CI 빌드 →

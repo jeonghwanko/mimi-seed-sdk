@@ -3,6 +3,15 @@
 The goal is to register the current app directory and let Claude Code or Codex understand the app and its
 release workflow.
 
+## 0. Get value before connecting an account
+
+```bash
+npx mimi-seed check --local
+```
+
+This read-only Release Doctor runs without an account or store key. Fix any repository blockers first, then
+connect only the stores and services you actually use.
+
 ## 1. Choose an install mode
 
 Remote MCP is enough for status and diagnostics. Real writes to stores, Firebase, or social platforms require

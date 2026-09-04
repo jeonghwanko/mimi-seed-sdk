@@ -40,6 +40,25 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 ---
 
+## Try Release Doctor first — no account or store key
+
+Run this inside an Expo, React Native, Android, or iOS repository:
+
+```bash
+npx mimi-seed check --local
+```
+
+Release Doctor inspects deterministic repository evidence before asking you to connect anything. The first
+release checks cover app identifiers, Android Target API requirements, and Google Play Billing support dates.
+Every policy finding includes its evidence file, a suggested action, and the official source. Use
+`--fail-on-blocker` in CI, `--json` for machine-readable output, or `--path apps/mobile` in a monorepo.
+
+If no Mimi Seed account is connected, a plain `npx mimi-seed check` automatically takes this local path. After
+you connect stores, the same command adds remote listing, screenshot, uploaded-build, and submission-state
+checks. A local pass is intentionally not presented as a guarantee of store approval.
+
+---
+
 ## 30-Second Setup
 
 Three steps: **1 Install → 2 Connect → 3 Verify**. This page is the short version — for the complete

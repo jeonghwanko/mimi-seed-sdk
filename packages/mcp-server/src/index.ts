@@ -23,6 +23,7 @@ const SUBCOMMANDS: Record<string, () => Promise<unknown>> = {
   'mimi-seed-firebase': () => import('./firebase/cli.js'),
   'mimi-seed-admob': () => import('./admob/cli.js'),
   'mimi-seed-ga4': () => import('./ga4/cli.js'),
+  'mimi-seed-release-doctor': () => import('./checks/release-doctor-cli.js'),
 };
 
 async function main() {

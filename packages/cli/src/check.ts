@@ -2,6 +2,7 @@ import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
+import { runMcpBin } from "./mcp-bin.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 const M = catalog(
@@ -53,14 +54,30 @@ const M = catalog(
 
 interface CheckArgs {
   appId?: string;
+  projectPath: string;
+  projectPathExplicit: boolean;
   failOnBlocker: boolean;
+  local: boolean;
+  json: boolean;
 }
 
 function parseArgs(argv: string[]): CheckArgs {
-  const args: CheckArgs = { failOnBlocker: false };
+  const args: CheckArgs = {
+    projectPath: process.cwd(),
+    projectPathExplicit: false,
+    failOnBlocker: false,
+    local: false,
+    json: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--app" && argv[i + 1]) args.appId = argv[++i];
+    if (argv[i] === "--path" && argv[i + 1]) {
+      args.projectPath = argv[++i];
+      args.projectPathExplicit = true;
+    }
     if (argv[i] === "--fail-on-blocker") args.failOnBlocker = true;
+    if (argv[i] === "--local") args.local = true;
+    if (argv[i] === "--json") args.json = true;
   }
   return args;
 }
@@ -83,9 +100,16 @@ export async function cmdCheck(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
   const cfg = await getEffectiveConfig();
 
-  if (!cfg) {
-    process.stdout.write(kleur.red(M().noAccount));
-    process.exit(1);
+  // The free acquisition path must produce value before asking for credentials. Existing connected
+  // users retain the richer remote readiness score; --local always forces repository-only checks.
+  const localRequested = args.local || args.json || args.projectPathExplicit;
+  if (localRequested || !cfg) {
+    const doctorArgs = [args.projectPath];
+    if (args.json) doctorArgs.push("--json");
+    if (args.failOnBlocker) doctorArgs.push("--fail-on-blocker");
+    const exitCode = await runMcpBin("mimi-seed-release-doctor", doctorArgs);
+    if (exitCode !== 0) process.exit(exitCode);
+    return;
   }
 
   process.stdout.write(kleur.bold(M().title));

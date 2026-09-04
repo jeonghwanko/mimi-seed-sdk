@@ -7,7 +7,8 @@ before any real release.
 
 | Check | What it covers |
 |---|---|
-| `mimi-seed check` | Remote app registration, integration, copy, screenshots, checklist, and blockers |
+| `mimi-seed check --local` | No-login repository evidence: app identifiers, Android Target API, and Google Play Billing policy |
+| Connected `mimi-seed check` | Remote app registration, integration, copy, screenshots, checklist, and blockers |
 | Local MCP risk checks | Actual Play/App Store version, build, metadata, and submission conditions |
 
 A high readiness score does not guarantee store approval. A low score is useful only when you act on its causes.
@@ -15,10 +16,14 @@ A high readiness score does not guarantee store approval. A low score is useful 
 ## 1. Basic check
 
 ```bash
-npx mimi-seed check
+npx mimi-seed check --local
 ```
 
-Select an app when more than one is registered.
+No account or store credential is required. With no connected Mimi Seed account, the shorter
+`npx mimi-seed check` command automatically uses this local path. The report names what was checked and what
+still requires a store connection.
+
+After connecting, select a remote app when more than one is registered.
 
 ```bash
 npx mimi-seed check --app <app-id>
@@ -27,8 +32,12 @@ npx mimi-seed check --app <app-id>
 Fail CI when blockers exist:
 
 ```bash
-npx mimi-seed check --app <app-id> --fail-on-blocker
+npx mimi-seed check --local --fail-on-blocker
 ```
+
+Use `--json` to archive the local result as a CI artifact. A local pass does not guarantee store approval;
+listing answers, uploaded builds, screenshots, and review state require the connected checks below.
+In a monorepo, add `--path apps/mobile` to select the app directory.
 
 ## 2. Provider-specific risk checks
 

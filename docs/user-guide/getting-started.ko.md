@@ -2,6 +2,15 @@
 
 목표는 현재 앱 디렉터리에서 Mimi Seed를 등록하고, Claude Code나 Codex가 앱과 출시 흐름을 인식하게 만드는 것이다.
 
+## 0. 계정 연결 전에 먼저 가치 확인
+
+```bash
+npx mimi-seed check --local
+```
+
+이 읽기 전용 Release Doctor는 계정이나 스토어 키 없이 실행된다. 저장소 블로커를 먼저 고친 뒤 실제로 사용하는
+스토어와 서비스만 연결한다.
+
 ## 1. 설치 방식 선택
 
 상태 확인만 필요하면 Remote MCP만으로 시작할 수 있다. 스토어·Firebase·소셜에 실제로 쓰려면 Local MCP가 필요하다.

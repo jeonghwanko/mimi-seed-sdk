@@ -4,6 +4,20 @@
 
 > 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg/tool>.
 
+## 계정 없이 출시 점검
+
+스토어 자격증명을 연결하기 전에 저장소에서 확정할 수 있는 출시 블로커를 검사합니다.
+
+```bash
+npx -y @yoonion/mimi-seed-mcp mimi-seed-release-doctor .
+```
+
+앱 식별자, 일반 Android 앱의 Target API 제출 기준, Google Play Billing 지원 마감을 확인하며 정책
+결과에는 근거 파일과 공식 출처를 함께 표시합니다. 모노레포에서는 `.` 대신 앱 경로를 전달하세요.
+CI에서는 `--fail-on-blocker`, 기계가 읽는 결과에는 `--json`을 추가할 수 있습니다. Wear OS, Android
+TV, Android Automotive OS, Android XR은 Target API 예외가 있으므로 카테고리 확인 경고를 냅니다.
+등록정보·스크린샷·업로드 빌드·심사 상태는 저장소만으로 알 수 없어 스토어 연결 후 검사합니다.
+
 ## 설치
 
 Claude Code:

@@ -19,7 +19,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` / `tiktok`; `meta` opens the combined Meta setup — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
 | `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI) |
-| `check` | `check.ts` | pre-release readiness (`--fail-on-blocker` for CI) |
+| `check` | `check.ts` | pre-release readiness. With no connected remote account (or `--local`), delegates to the no-login repository Release Doctor; connected users retain the remote score. `--fail-on-blocker` is the CI gate |
 | `notes` | `notes.ts` | release notes: git log → AI → optional store apply |
 | `review` | `review.ts` | AI review-reply draft → optional Play post |
 | `deploy` | `deploy.ts` | full pipeline: CI build → check → notes → apply |
