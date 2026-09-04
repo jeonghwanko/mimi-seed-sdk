@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@yoonion/mimi-seed-mcp"
+        "@yoonion/mimi-seed-mcp@latest"
       ]
     }
   }

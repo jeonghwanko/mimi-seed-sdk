@@ -42,7 +42,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 ## Try Release Doctor first — no account or store key
 
-Run this inside an Expo, React Native, Android, or iOS repository:
+Run this inside an Expo, React Native, Android, iOS, or Unity repository:
 
 ```bash
 npx mimi-seed check --local
@@ -107,7 +107,7 @@ Or register the bare MCP server without skills:
 
 ```bash
 # Claude Code
-claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
+claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp@latest
 ```
 
 Codex (`~/.codex/config.toml`; plugin install registers this automatically):
@@ -115,7 +115,7 @@ Codex (`~/.codex/config.toml`; plugin install registers this automatically):
 ```toml
 [mcp_servers.mimi-seed-local]
 command = "npx"
-args = ["-y", "@yoonion/mimi-seed-mcp"]
+args = ["-y", "@yoonion/mimi-seed-mcp@latest"]
 enabled = true
 ```
 
@@ -126,7 +126,7 @@ Claude Desktop (`claude_desktop_config.json`):
   "mcpServers": {
     "mimi-seed-local": {
       "command": "npx",
-      "args": ["-y", "@yoonion/mimi-seed-mcp"]
+      "args": ["-y", "@yoonion/mimi-seed-mcp@latest"]
     }
   }
 }
@@ -159,7 +159,7 @@ npx mimi-seed init    # project: auto-detect app → browser sign-in → registe
 npx mimi-seed setup   # accounts: one guided wizard for stores · CI · social
 ```
 
-`init` detects Expo · Gradle · Info.plist · pbxproj automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session. (Skipped the plugin and registered the bare MCP server instead? `npx mimi-seed init --local` chains the Google sign-in and the local-MCP registration into the same pass.)
+`init` detects Expo (including identifiers imported from JSON by `app.config.js`/`.ts`) · Gradle · Info.plist · pbxproj · Unity `ProjectSettings.asset` automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session. (Skipped the plugin and registered the bare MCP server instead? `npx mimi-seed init --local` chains the Google sign-in and the local-MCP registration into the same pass.)
 
 You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery; the same wizard also connects App Store Connect, a Play service account, Jenkins, GitHub/GitLab CI, and Facebook / Instagram / Threads whenever you need them → [What do you actually need?](docs/credentials.md#what-you-need)
 

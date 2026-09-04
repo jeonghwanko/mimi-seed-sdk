@@ -104,6 +104,7 @@ function isRelevantFile(name: string): boolean {
     || name === 'AndroidManifest.xml'
     || name === 'Info.plist'
     || name === 'project.pbxproj'
+    || name === 'ProjectSettings.asset'
     || name === 'package.json';
 }
 
@@ -111,7 +112,60 @@ function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort();
 }
 
-function parseExpo(files: ProjectFile[]) {
+function unityApplicationIdentifiers(text: string): { android?: string; ios?: string } {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^\s*applicationIdentifier:\s*$/.test(line));
+  if (start < 0) return {};
+  const baseIndent = lines[start].match(/^\s*/)?.[0].length ?? 0;
+  const result: { android?: string; ios?: string } = {};
+  for (const line of lines.slice(start + 1)) {
+    if (!line.trim()) continue;
+    const indent = line.match(/^\s*/)?.[0].length ?? 0;
+    if (indent <= baseIndent) break;
+    const entry = line.match(/^\s+(Android|iPhone|iOS):\s*([^\s#]+)\s*$/);
+    if (entry?.[1] === 'Android') result.android = entry[2];
+    if (entry && entry[1] !== 'Android') result.ios = entry[2];
+  }
+  return result;
+}
+
+async function readStaticJsonImports(file: ProjectFile, root: string): Promise<Map<string, Record<string, unknown>>> {
+  const result = new Map<string, Record<string, unknown>>();
+  const imports = [
+    ...file.text.matchAll(/\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.json)['"]/g),
+    ...file.text.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"]([^'"]+\.json)['"]\s*\)/g),
+  ];
+  for (const match of imports) {
+    if (!match[2].startsWith('.')) continue;
+    const candidate = path.resolve(path.dirname(file.absolute), match[2]);
+    const relative = path.relative(root, candidate);
+    if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) continue;
+    try {
+      const json = JSON.parse(await fs.readFile(candidate, 'utf8')) as unknown;
+      if (json && typeof json === 'object' && !Array.isArray(json)) {
+        result.set(match[1], json as Record<string, unknown>);
+      }
+    } catch {
+      // Dynamic configs remain useful even when one imported JSON file is absent or malformed.
+    }
+  }
+  return result;
+}
+
+function resolveJsonMember(
+  text: string,
+  block: 'android' | 'ios',
+  field: 'package' | 'bundleIdentifier',
+  imports: Map<string, Record<string, unknown>>,
+): string | undefined {
+  const expression = new RegExp(`\\b${block}\\s*:\\s*\\{[\\s\\S]{0,5000}?\\b${field}\\s*:\\s*([A-Za-z_$][\\w$]*)\\.([A-Za-z_$][\\w$]*)`)
+    .exec(text);
+  if (!expression) return undefined;
+  const value = imports.get(expression[1])?.[expression[2]];
+  return typeof value === 'string' ? value : undefined;
+}
+
+async function parseExpo(files: ProjectFile[], root: string) {
   const androidPackageNames: string[] = [];
   const iosBundleIds: string[] = [];
   const platforms = new Set<string>();
@@ -138,9 +192,12 @@ function parseExpo(files: ProjectFile[]) {
       // Dynamic Expo configs are common. Resolve only obvious literal identifiers and keep the rest as warnings.
       const android = file.text.match(/\bandroid\s*:\s*\{[\s\S]{0,3000}?\bpackage\s*:\s*['"]([^'"]+)['"]/);
       const ios = file.text.match(/\bios\s*:\s*\{[\s\S]{0,3000}?\bbundleIdentifier\s*:\s*['"]([^'"]+)['"]/);
-      if (android?.[1] || ios?.[1] || /\bexpo\s*:/.test(file.text)) detected = true;
-      if (android?.[1]) androidPackageNames.push(android[1]);
-      if (ios?.[1]) iosBundleIds.push(ios[1]);
+      const imports = await readStaticJsonImports(file, root);
+      const importedAndroid = resolveJsonMember(file.text, 'android', 'package', imports);
+      const importedIos = resolveJsonMember(file.text, 'ios', 'bundleIdentifier', imports);
+      if (android?.[1] || ios?.[1] || importedAndroid || importedIos || /\bexpo\s*:/.test(file.text)) detected = true;
+      if (android?.[1] || importedAndroid) androidPackageNames.push(android?.[1] ?? importedAndroid!);
+      if (ios?.[1] || importedIos) iosBundleIds.push(ios?.[1] ?? importedIos!);
     }
   }
   for (const file of files.filter((candidate) => candidate.relative.endsWith('package.json'))) {
@@ -155,8 +212,8 @@ function parseExpo(files: ProjectFile[]) {
   return { androidPackageNames, iosBundleIds, platforms, detected };
 }
 
-function detectProject(files: ProjectFile[]) {
-  const expo = parseExpo(files);
+async function detectProject(files: ProjectFile[], root: string) {
+  const expo = await parseExpo(files, root);
   const gradleFiles = files.filter((file) => /build\.gradle(?:\.kts)?$/.test(file.relative));
   const pbxFiles = files.filter((file) => file.relative.endsWith('project.pbxproj'));
   const plistFiles = files.filter((file) => file.relative.endsWith('Info.plist'));
@@ -170,15 +227,30 @@ function detectProject(files: ProjectFile[]) {
     || /\b(?:SDKROOT\s*=\s*iphoneos|IPHONEOS_DEPLOYMENT_TARGET|TARGETED_DEVICE_FAMILY)\b/.test(file.text));
   const iosPlistFiles = plistFiles.filter((file) =>
     /(?:^|\/)ios\//.test(file.relative) || iosPbxFiles.length > 0);
+  const unitySettingsFiles = files.filter((file) => /(?:^|\/)ProjectSettings\/ProjectSettings\.asset$/.test(file.relative));
+  const unityAndroidPackageNames: string[] = [];
+  const unityIosBundleIds: string[] = [];
+  const unityTargetSdkEvidence: Array<{ file: string; value: number }> = [];
+  for (const file of unitySettingsFiles) {
+    const identifiers = unityApplicationIdentifiers(file.text);
+    const androidId = identifiers.android;
+    const iosId = identifiers.ios;
+    const targetSdk = file.text.match(/^\s*AndroidTargetSdkVersion:\s*(-?\d+)\s*$/m)?.[1];
+    if (androidId) unityAndroidPackageNames.push(androidId);
+    if (iosId) unityIosBundleIds.push(iosId);
+    if (targetSdk && Number.parseInt(targetSdk, 10) > 0) {
+      unityTargetSdkEvidence.push({ file: file.relative, value: Number.parseInt(targetSdk, 10) });
+    }
+  }
 
-  const androidPackageNames = [...expo.androidPackageNames];
+  const androidPackageNames = [...expo.androidPackageNames, ...unityAndroidPackageNames];
   for (const file of androidAppGradleFiles) {
     for (const match of file.text.matchAll(/\bapplicationId\s*(?:=\s*)?["']([^"']+)["']/g)) {
       androidPackageNames.push(match[1]);
     }
   }
 
-  const iosBundleIds = [...expo.iosBundleIds];
+  const iosBundleIds = [...expo.iosBundleIds, ...unityIosBundleIds];
   for (const file of iosPbxFiles) {
     for (const match of file.text.matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g)) {
       const value = match[1].trim().replace(/^["']|["']$/g, '');
@@ -197,11 +269,14 @@ function detectProject(files: ProjectFile[]) {
   const android = androidAppGradleFiles.length > 0
     || expo.androidPackageNames.length > 0
     || expoTargetsAndroid
-    || androidAppManifestFiles.length > 0;
+    || androidAppManifestFiles.length > 0
+    || unityAndroidPackageNames.length > 0
+    || unityTargetSdkEvidence.length > 0;
   const ios = iosPbxFiles.length > 0
     || iosPlistFiles.some((file) => /(?:^|\/)ios\//.test(file.relative))
     || expo.iosBundleIds.length > 0
-    || expoTargetsIos;
+    || expoTargetsIos
+    || unityIosBundleIds.length > 0;
   const androidGradleFiles = gradleFiles.filter((file) =>
     androidAppGradleFiles.includes(file) || /(?:^|\/)android\//.test(file.relative));
 
@@ -211,6 +286,7 @@ function detectProject(files: ProjectFile[]) {
     androidPackageNames: unique(androidPackageNames),
     iosBundleIds: unique(iosBundleIds),
     gradleFiles: [...androidGradleFiles, ...versionCatalogFiles],
+    targetSdkEvidence: unityTargetSdkEvidence,
   };
 }
 
@@ -225,10 +301,15 @@ function targetPolicy(now: Date): { minimum: number | null; scheduleCurrent: boo
   };
 }
 
-function targetSdkFindings(gradleFiles: ProjectFile[], now: Date): ReleaseDoctorFinding[] {
-  const evidence: Array<{ file: string; value: number }> = [];
+function targetSdkFindings(
+  gradleFiles: ProjectFile[],
+  now: Date,
+  supplementalEvidence: Array<{ file: string; value: number }> = [],
+): ReleaseDoctorFinding[] {
+  const evidence: Array<{ file: string; value: number }> = [...supplementalEvidence];
   let hasUnresolvedExpression = false;
   const catalogs = new Map<string, { value: number; file: string }>();
+  let reactNativeTargetSdk: { value: number; file: string } | undefined;
   for (const file of gradleFiles.filter((candidate) => candidate.relative.endsWith('libs.versions.toml'))) {
     let section = '';
     for (const rawLine of file.text.split(/\r?\n/)) {
@@ -240,23 +321,38 @@ function targetSdkFindings(gradleFiles: ProjectFile[], now: Date): ReleaseDoctor
       }
       if (section !== 'versions') continue;
       const version = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*["'](\d+)["']/);
-      if (version) catalogs.set(version[1], { value: Number.parseInt(version[2], 10), file: file.relative });
+      if (version) {
+        const parsed = { value: Number.parseInt(version[2], 10), file: file.relative };
+        if (file.relative === 'node_modules/react-native/gradle/libs.versions.toml' && version[1] === 'targetSdk') {
+          reactNativeTargetSdk = parsed;
+        } else {
+          catalogs.set(version[1], parsed);
+        }
+      }
     }
   }
   for (const file of gradleFiles.filter((candidate) => /build\.gradle(?:\.kts)?$/.test(candidate.relative))) {
+    let resolvedIndirectly = false;
     for (const match of file.text.matchAll(/\btargetSdk(?:Version)?\s*(?:=\s*)?(\d+)/g)) {
       evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
     }
     for (const match of file.text.matchAll(/\btargetSdk(?:Version)?\s*(?:=\s*)?libs\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/g)) {
       const resolved = catalogs.get(match[1]) ?? catalogs.get(match[1].replace(/\./g, '-'));
-      if (resolved) evidence.push({ file: resolved.file, value: resolved.value });
+      if (resolved) {
+        evidence.push({ file: resolved.file, value: resolved.value });
+        resolvedIndirectly = true;
+      }
+    }
+    if (/\btargetSdkVersion\s+rootProject\.ext\.targetSdkVersion\b/.test(file.text) && reactNativeTargetSdk) {
+      evidence.push({ file: reactNativeTargetSdk.file, value: reactNativeTargetSdk.value });
+      resolvedIndirectly = true;
     }
     if (/\btargetSdk(?:Version)?\b/.test(file.text) && !/\btargetSdk(?:Version)?\s*(?:=\s*)?\d+/.test(file.text)) {
       const catalogExpression = /\btargetSdk(?:Version)?\s*(?:=\s*)?libs\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/.exec(file.text);
       const resolved = catalogExpression
         ? catalogs.get(catalogExpression[1]) ?? catalogs.get(catalogExpression[1].replace(/\./g, '-'))
         : undefined;
-      if (!resolved) hasUnresolvedExpression = true;
+      if (!resolved && !resolvedIndirectly) hasUnresolvedExpression = true;
     }
   }
 
@@ -352,7 +448,17 @@ export async function scanReleaseDoctor(projectPath: string, now = new Date()): 
   if (!stat.isDirectory()) throw new Error(`Project path is not a directory: ${root}`);
 
   const files = await walk(root);
-  const detected = detectProject(files);
+  const reactNativeCatalog = path.join(root, 'node_modules', 'react-native', 'gradle', 'libs.versions.toml');
+  try {
+    files.push({
+      absolute: reactNativeCatalog,
+      relative: 'node_modules/react-native/gradle/libs.versions.toml',
+      text: await fs.readFile(reactNativeCatalog, 'utf8'),
+    });
+  } catch {
+    // The package may not be installed; the report will keep the indirect expression unresolved.
+  }
+  const detected = await detectProject(files, root);
   const platforms: Array<'android' | 'ios'> = [];
   if (detected.android) platforms.push('android');
   if (detected.ios) platforms.push('ios');
@@ -428,7 +534,7 @@ export async function scanReleaseDoctor(projectPath: string, now = new Date()): 
         },
       });
     } else {
-      findings.push(...targetSdkFindings(detected.gradleFiles, now));
+      findings.push(...targetSdkFindings(detected.gradleFiles, now, detected.targetSdkEvidence));
     }
 
     const billing = await checkBillingCompliance(root, now);

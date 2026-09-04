@@ -42,7 +42,7 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 ## 계정 연결 전에 Release Doctor부터 — 로그인·스토어 키 불필요
 
-Expo, React Native, Android 또는 iOS 저장소에서 실행하세요.
+Expo, React Native, Android, iOS 또는 Unity 저장소에서 실행하세요.
 
 ```bash
 npx mimi-seed check --local
@@ -107,7 +107,7 @@ codex plugin add mimi-seed@yoonion
 
 ```bash
 # Claude Code
-claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
+claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp@latest
 ```
 
 Codex (`~/.codex/config.toml`, 플러그인 설치 시에는 자동 등록):
@@ -115,7 +115,7 @@ Codex (`~/.codex/config.toml`, 플러그인 설치 시에는 자동 등록):
 ```toml
 [mcp_servers.mimi-seed-local]
 command = "npx"
-args = ["-y", "@yoonion/mimi-seed-mcp"]
+args = ["-y", "@yoonion/mimi-seed-mcp@latest"]
 enabled = true
 ```
 
@@ -126,7 +126,7 @@ Claude Desktop (`claude_desktop_config.json`):
   "mcpServers": {
     "mimi-seed-local": {
       "command": "npx",
-      "args": ["-y", "@yoonion/mimi-seed-mcp"]
+      "args": ["-y", "@yoonion/mimi-seed-mcp@latest"]
     }
   }
 }
@@ -159,7 +159,7 @@ npx mimi-seed init    # 프로젝트: 앱 자동 감지 → 브라우저 로그�
 npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 번에 연결하는 안내형 마법사
 ```
 
-`init` 은 Expo · Gradle · Info.plist · pbxproj 를 자동 감지하고, `.claude/mimi-seed.md`와 `AGENTS.md`를 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식하게 합니다. (플러그인 대신 MCP 서버만 등록했다면? `npx mimi-seed init --local` 이 Google 로그인과 로컬 MCP 등록까지 한 번에 이어서 해줍니다.)
+`init` 은 Expo(`app.config.js`/`.ts`가 JSON에서 가져온 식별자 포함) · Gradle · Info.plist · pbxproj · Unity `ProjectSettings.asset`를 자동 감지하고, `.claude/mimi-seed.md`와 `AGENTS.md`를 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식하게 합니다. (플러그인 대신 MCP 서버만 등록했다면? `npx mimi-seed init --local` 이 Google 로그인과 로컬 MCP 등록까지 한 번에 이어서 해줍니다.)
 
 첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버되고, 같은 마법사가 필요할 때 App Store Connect · Play 서비스 계정 · Jenkins · GitHub/GitLab CI · Facebook / Instagram / Threads까지 연결해줍니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
 

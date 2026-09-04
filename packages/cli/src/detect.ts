@@ -28,6 +28,49 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
+async function importedJsonObjects(
+  configPath: string,
+  text: string,
+  root: string,
+): Promise<Map<string, Record<string, unknown>>> {
+  const result = new Map<string, Record<string, unknown>>();
+  const imports = [
+    ...text.matchAll(/\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+\.json)["']/g),
+    ...text.matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*["']([^"']+\.json)["']\s*\)/g),
+  ];
+  for (const match of imports) {
+    if (!match[2].startsWith(".")) continue;
+    const candidate = path.resolve(path.dirname(configPath), match[2]);
+    const relative = path.relative(root, candidate);
+    if (relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) continue;
+    const jsonText = await readIfExists(candidate);
+    if (!jsonText) continue;
+    try {
+      const json = JSON.parse(jsonText) as unknown;
+      if (json && typeof json === "object" && !Array.isArray(json)) {
+        result.set(match[1], json as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore malformed imported JSON and keep the remaining static evidence.
+    }
+  }
+  return result;
+}
+
+function importedMember(
+  text: string,
+  block: "android" | "ios",
+  field: "package" | "bundleIdentifier",
+  imports: Map<string, Record<string, unknown>>,
+): string | undefined {
+  const match = new RegExp(
+    `\\b${block}\\s*:\\s*\\{[\\s\\S]{0,5000}?\\b${field}\\s*:\\s*([A-Za-z_$][\\w$]*)\\.([A-Za-z_$][\\w$]*)`,
+  ).exec(text);
+  if (!match) return undefined;
+  const value = imports.get(match[1])?.[match[2]];
+  return typeof value === "string" ? value : undefined;
+}
+
 async function walk(
   root: string,
   match: (name: string) => boolean,
@@ -93,6 +136,21 @@ export async function detectHints(cwd: string): Promise<AppHint[]> {
     }
   }
 
+  // 1b. app.config.{js,cjs,mjs,ts} — literal values and imported JSON SSOTs.
+  for (const fname of ["app.config.js", "app.config.cjs", "app.config.mjs", "app.config.ts"]) {
+    const configPath = path.join(cwd, fname);
+    const txt = await readIfExists(configPath);
+    if (!txt) continue;
+    const imports = await importedJsonObjects(configPath, txt, cwd);
+    const pkg = txt.match(/\bandroid\s*:\s*\{[\s\S]{0,5000}?\bpackage\s*:\s*["']([^"']+)["']/)?.[1]
+      ?? importedMember(txt, "android", "package", imports);
+    const bid = txt.match(/\bios\s*:\s*\{[\s\S]{0,5000}?\bbundleIdentifier\s*:\s*["']([^"']+)["']/)?.[1]
+      ?? importedMember(txt, "ios", "bundleIdentifier", imports);
+    if (pkg || bid) {
+      hints.push({ packageName: pkg, bundleId: bid, source: [fname] });
+    }
+  }
+
   // 2. Android build.gradle(.kts) — applicationId
   const gradleFiles = await walk(
     cwd,
@@ -143,7 +201,37 @@ export async function detectHints(cwd: string): Promise<AppHint[]> {
     }
   }
 
-  // 5. package.json — 이름 보충
+  // 5. Unity PlayerSettings — generated Gradle/Xcode projects need not exist yet.
+  const unitySettings = path.join(cwd, "ProjectSettings", "ProjectSettings.asset");
+  const unityText = await readIfExists(unitySettings);
+  if (unityText) {
+    const lines = unityText.split(/\r?\n/);
+    const identifierStart = lines.findIndex((line) => /^\s*applicationIdentifier:\s*$/.test(line));
+    const baseIndent = identifierStart >= 0 ? lines[identifierStart].match(/^\s*/)?.[0].length ?? 0 : 0;
+    let packageName: string | undefined;
+    let bundleId: string | undefined;
+    if (identifierStart >= 0) {
+      for (const line of lines.slice(identifierStart + 1)) {
+        if (!line.trim()) continue;
+        const indent = line.match(/^\s*/)?.[0].length ?? 0;
+        if (indent <= baseIndent) break;
+        const entry = line.match(/^\s+(Android|iPhone|iOS):\s*([^\s#]+)\s*$/);
+        if (entry?.[1] === "Android") packageName = entry[2];
+        if (entry && entry[1] !== "Android") bundleId = entry[2];
+      }
+    }
+    const name = unityText.match(/^\s*productName:\s*(.+?)\s*$/m)?.[1];
+    if (packageName || bundleId) {
+      hints.push({
+        name,
+        packageName,
+        bundleId,
+        source: [path.relative(cwd, unitySettings)],
+      });
+    }
+  }
+
+  // 6. package.json — 이름 보충
   const pkgJson = await readIfExists(path.join(cwd, "package.json"));
   if (pkgJson) {
     try {
@@ -191,6 +279,7 @@ export async function hasAnyProjectSignal(cwd: string): Promise<boolean> {
     (await pathExists(path.join(cwd, "package.json"))) ||
     (await pathExists(path.join(cwd, "app.json"))) ||
     (await pathExists(path.join(cwd, "android"))) ||
-    (await pathExists(path.join(cwd, "ios")))
+    (await pathExists(path.join(cwd, "ios"))) ||
+    (await pathExists(path.join(cwd, "ProjectSettings", "ProjectSettings.asset")))
   );
 }

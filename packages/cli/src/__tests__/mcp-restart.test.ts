@@ -22,7 +22,7 @@ describe('MCP 재연결 안내', () => {
 
   it('Codex 플러그인 전용 설치도 기본 mimi-seed 프로세스 식별자를 얻는다', () => {
     const fallback = __testing.resolveServerConfig({}, 'mimi-seed');
-    expect(fallback?.args).toEqual(['-y', '@yoonion/mimi-seed-mcp']);
+    expect(fallback?.args).toEqual(['-y', '@yoonion/mimi-seed-mcp@latest']);
     expect(__testing.resolveServerConfig({}, 'another-server')).toBeUndefined();
   });
 

@@ -147,6 +147,90 @@ describe('Release Doctor local scan', () => {
     expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
   });
 
+  it('동적 Expo 설정이 import한 JSON의 앱 식별자를 해석한다', async () => {
+    const root = await fixture({
+      'app.config.ts': [
+        'import product from "./product.config.json";',
+        'export default {',
+        '  ios: { bundleIdentifier: product.iosBundleIdentifier },',
+        '  android: { package: product.androidPackage },',
+        '};',
+      ].join('\n'),
+      'product.config.json': JSON.stringify({
+        androidPackage: 'com.example.dynamic',
+        iosBundleIdentifier: 'com.example.dynamic.ios',
+      }),
+      'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+    });
+
+    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(report.identifiers.androidPackageNames).toEqual(['com.example.dynamic']);
+    expect(report.identifiers.iosBundleIds).toEqual(['com.example.dynamic.ios']);
+  });
+
+  it('React Native가 제공하는 targetSdk catalog로 rootProject.ext 표현식을 해석한다', async () => {
+    const root = await fixture({
+      'android/app/build.gradle': [
+        'plugins { id "com.android.application" }',
+        'android { defaultConfig { applicationId "com.example.rn"; targetSdkVersion rootProject.ext.targetSdkVersion } }',
+      ].join('\n'),
+      'node_modules/react-native/gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+    });
+
+    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      code: 'TARGET_SDK_OK',
+      file: 'node_modules/react-native/gradle/libs.versions.toml',
+    }));
+    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_UNRESOLVED' }));
+  });
+
+  it('Unity ProjectSettings와 Android template에서 앱 ID·targetSdk·Billing을 검사한다', async () => {
+    const root = await fixture({
+      'ProjectSettings/ProjectSettings.asset': [
+        'PlayerSettings:',
+        '  applicationIdentifier:',
+        '    Android: com.example.unity',
+        '  AndroidTargetSdkVersion: 36',
+        '  someOtherMap:',
+        '    Android: 1',
+        '    iOS: 0',
+      ].join('\n'),
+      'Assets/Plugins/Android/mainTemplate.gradle': "implementation 'com.android.billingclient:billing:9.0.0'",
+    });
+
+    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(report.platforms).toEqual(['android']);
+    expect(report.identifiers.androidPackageNames).toEqual(['com.example.unity']);
+    expect(report.identifiers.iosBundleIds).toEqual([]);
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'TARGET_SDK_OK', file: 'ProjectSettings/ProjectSettings.asset' }),
+      expect.objectContaining({ code: 'BILLING_PASS', severity: 'info' }),
+    ]));
+    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
+  });
+
+  it('Unity applicationIdentifier의 iPhone 식별자를 iOS 앱으로 감지한다', async () => {
+    const root = await fixture({
+      'ProjectSettings/ProjectSettings.asset': [
+        'PlayerSettings:',
+        '  applicationIdentifier:',
+        '    Android: com.example.unity',
+        '    iPhone: com.example.unity.ios',
+        '  AndroidTargetSdkVersion: 36',
+      ].join('\n'),
+    });
+
+    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(report.platforms).toEqual(['android', 'ios']);
+    expect(report.identifiers.iosBundleIds).toEqual(['com.example.unity.ios']);
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_BUNDLE_ID_FOUND' }));
+  });
+
   it('platforms가 web으로 제한된 Expo 저장소는 모바일 앱으로 과대 감지하지 않는다', async () => {
     const root = await fixture({
       'app.json': JSON.stringify({ expo: { platforms: ['web'] } }),

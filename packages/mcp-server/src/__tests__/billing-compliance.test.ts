@@ -123,7 +123,7 @@ describe('Google Play Billing compliance', () => {
   it('react-native-iap 조회 실패를 Billing 미사용으로 위장하지 않는다', async () => {
     const root = await fixture({
       'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^15.2.0' } }),
-      'node_modules/react-native-iap/openiap-versions.json': JSON.stringify({ google: '2.1.0' }),
+      'node_modules/react-native-iap/openiap-versions.json': JSON.stringify({ google: '99.0.0' }),
     });
     vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 404 })));
 
@@ -138,16 +138,33 @@ describe('Google Play Billing compliance', () => {
     const root = await fixture({
       'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^15.2.0' } }),
       'node_modules/react-native-iap/openiap-versions.json': JSON.stringify({ google: '2.1.0' }),
+      'node_modules/react-native-iap/package.json': JSON.stringify({ version: '15.2.0' }),
     });
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.status).toBe('unresolved');
+    expect(result.status).toBe('warning');
+    expect(result.detectedVersions).toEqual(['8.3.0']);
     expect(result.evidence).toContainEqual(expect.objectContaining({
-      source: 'unresolved',
-      expression: expect.stringContaining('repository-only mode'),
+      source: 'transitive',
+      expression: expect.stringContaining('react-native-iap 15.2.0'),
+    }));
+  });
+
+  it('Unity mainTemplate.gradle의 Billing 의존성을 검사한다', async () => {
+    const root = await fixture({
+      'Assets/Plugins/Android/mainTemplate.gradle': "implementation 'com.android.billingclient:billing:9.0.0'",
+    });
+
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(result.status).toBe('pass');
+    expect(result.detectedVersions).toEqual(['9.0.0']);
+    expect(result.evidence).toContainEqual(expect.objectContaining({
+      file: 'Assets/Plugins/Android/mainTemplate.gradle',
+      source: 'literal',
     }));
   });
 

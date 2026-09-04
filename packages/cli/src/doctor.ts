@@ -49,6 +49,28 @@ function manifestDetail(id: ManifestServiceId, svc: ManifestService): string {
   return parts.join(" / ");
 }
 
+export interface ManifestCredentialMismatch {
+  field: "keyId" | "issuerId";
+  expected: string;
+  actual?: string;
+}
+
+/** 매니페스트가 특정 App Store 키를 고정했으면 단순 파일 존재보다 identity를 우선한다. */
+export function manifestCredentialMismatch(
+  id: ManifestServiceId,
+  svc: ManifestService,
+  identity?: Record<string, string>,
+): ManifestCredentialMismatch | null {
+  if (id !== "appstore") return null;
+  for (const field of ["keyId", "issuerId"] as const) {
+    const expected = svc[field];
+    if (expected && identity?.[field] !== expected) {
+      return { field, expected, actual: identity?.[field] };
+    }
+  }
+  return null;
+}
+
 export async function cmdDoctor(): Promise<void> {
   const cwd = process.cwd();
   const m = t().doctor;
@@ -110,7 +132,10 @@ export async function cmdDoctor(): Promise<void> {
         continue;
       }
       const connected = isSatisfied(spec, detected);
-      if (connected) ok(id, detail);
+      const mismatch = manifestCredentialMismatch(id, svc, detected.get(spec.id)?.identity);
+      if (connected && mismatch) {
+        fail(id, `${m.credentialMismatch(mismatch.field, mismatch.expected, mismatch.actual)}  → ${spec.fix}`);
+      } else if (connected) ok(id, detail);
       else if (!required) warn(`${id} (${t().common.optional})`, svc.note ?? detail);
       else fail(id, `→ ${spec.fix}${detail ? "  " + detail : ""}`);
     }

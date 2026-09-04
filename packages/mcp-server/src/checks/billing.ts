@@ -6,6 +6,14 @@ const LITERAL_DEPENDENCY = /com\.android\.billingclient:billing(?:-ktx)?:([0-9]+
 const VARIABLE_DEPENDENCY = /com\.android\.billingclient:billing(?:-ktx)?:\$\{?([A-Za-z_][A-Za-z0-9_.-]*)\}?/g;
 const VERSION_ASSIGNMENT = /(?:^|\s)([A-Za-z_][A-Za-z0-9_.-]*)\s*(?:=|:)\s*["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']/gm;
 
+// Repository-only scans cannot fetch Maven metadata. Keep a deliberately small,
+// source-verified cache for OpenIAP releases used by supported react-native-iap
+// versions. Unknown releases remain unresolved instead of being guessed.
+const KNOWN_OPENIAP_BILLING = new Map<string, { module: string; version: string }>([
+  ['2.1.0', { module: 'com.android.billingclient:billing-ktx', version: '8.3.0' }],
+  ['2.4.1', { module: 'com.android.billingclient:billing', version: '9.1.0' }],
+]);
+
 const BILLING_SUPPORT_SCHEDULE = [
   { major: 5, submissionDeadline: '2024-08-31', extensionDeadline: '2024-11-01' },
   { major: 6, submissionDeadline: '2025-08-31', extensionDeadline: '2025-11-01' },
@@ -85,6 +93,9 @@ async function walk(root: string, maxDepth = 7): Promise<string[]> {
         entry.isFile()
         && (entry.name === 'build.gradle'
           || entry.name === 'build.gradle.kts'
+          || entry.name === 'mainTemplate.gradle'
+          || entry.name === 'baseProjectTemplate.gradle'
+          || entry.name === 'launcherTemplate.gradle'
           || entry.name === 'libs.versions.toml'
           || entry.name === 'package.json')
       ) {
@@ -219,6 +230,16 @@ async function reactNativeIapEvidence(
     };
   }
 
+  let installedVersion = declaredVersion;
+  try {
+    const installedManifest = JSON.parse(await fs.readFile(path.join(installedDir, 'package.json'), 'utf8')) as {
+      version?: unknown;
+    };
+    if (typeof installedManifest.version === 'string') installedVersion = installedManifest.version;
+  } catch {
+    // The declaration still provides useful evidence when package metadata is unavailable.
+  }
+
   const directCandidates = [
     path.join(installedDir, 'android', 'build.gradle'),
     path.join(installedDir, 'android', 'build.gradle.kts'),
@@ -232,7 +253,7 @@ async function reactNativeIapEvidence(
           file: relativeManifest,
           module: direct[0].slice(0, direct[0].lastIndexOf(':')),
           version: direct[1],
-          expression: `react-native-iap ${declaredVersion} native dependency`,
+          expression: `react-native-iap ${installedVersion} native dependency`,
           source: 'transitive',
         };
       }
@@ -254,17 +275,27 @@ async function reactNativeIapEvidence(
     return {
       file: relativeManifest,
       module: 'com.android.billingclient:billing',
-      expression: `react-native-iap ${declaredVersion} detected; transitive Billing version is unresolved`,
+      expression: `react-native-iap ${installedVersion} detected; transitive Billing version is unresolved`,
       source: 'unresolved',
     };
   }
 
   const coordinate = `io.github.hyochan.openiap:openiap-google:${openIapVersion}`;
+  const known = KNOWN_OPENIAP_BILLING.get(openIapVersion);
   if (!resolveTransitive) {
+    if (known) {
+      return {
+        file: relativeManifest,
+        module: known.module,
+        version: known.version,
+        expression: `react-native-iap ${installedVersion} -> ${coordinate} (embedded Maven metadata)`,
+        source: 'transitive',
+      };
+    }
     return {
       file: relativeManifest,
       module: 'com.android.billingclient:billing',
-      expression: `react-native-iap ${declaredVersion} -> ${coordinate}; transitive lookup unavailable in repository-only mode`,
+      expression: `react-native-iap ${installedVersion} -> ${coordinate}; transitive lookup unavailable in repository-only mode`,
       source: 'unresolved',
     };
   }
@@ -275,17 +306,26 @@ async function reactNativeIapEvidence(
         file: relativeManifest,
         module: resolved.module,
         version: resolved.version,
-        expression: `react-native-iap ${declaredVersion} -> ${coordinate}`,
+        expression: `react-native-iap ${installedVersion} -> ${coordinate}`,
         source: 'transitive',
       };
     }
   } catch {
     // Network failure must not turn a known IAP dependency into not_used.
   }
+  if (known) {
+    return {
+      file: relativeManifest,
+      module: known.module,
+      version: known.version,
+      expression: `react-native-iap ${installedVersion} -> ${coordinate} (embedded Maven metadata fallback)`,
+      source: 'transitive',
+    };
+  }
   return {
     file: relativeManifest,
     module: 'com.android.billingclient:billing',
-    expression: `react-native-iap ${declaredVersion} -> ${coordinate}; Maven Billing version lookup failed`,
+    expression: `react-native-iap ${installedVersion} -> ${coordinate}; Maven Billing version lookup failed`,
     source: 'unresolved',
   };
 }

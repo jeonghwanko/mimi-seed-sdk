@@ -34,7 +34,7 @@ claude plugin list                        # 플러그인으로 설치했는지
 |---|---|---|
 | 플러그인 | `claude plugin list`에 `mimi-seed@yoonion` | 2A |
 | 전역 npm 설치 | 등록 args가 `node <전역 node_modules>/@yoonion/mimi-seed-mcp/dist/index.js` | 2B |
-| npx 등록 | 등록 args가 `npx -y @yoonion/mimi-seed-mcp` | 2C |
+| npx 등록 | 등록 args가 `npx -y @yoonion/mimi-seed-mcp` 또는 `@latest` | 2C |
 | 개발 클론 | `npm ls -g` 출력에 `mimi-seed@x.y.z -> ...\mimi-seed-sdk\packages\cli` 같은 화살표(심볼릭 링크) | 2D |
 
 형태를 확정하기 전에 아무 명령이나 실행하지 않는다. 전역 설치본을 쓰는 사람에게 플러그인 명령을 시키면 아무 일도 안 일어난 채 "업데이트했다"고 착각하게 된다.
@@ -48,7 +48,7 @@ claude plugin marketplace update yoonion
 claude plugin update mimi-seed@yoonion
 ```
 
-이걸로 **스킬과 매니페스트는** 최신이 된다. 하지만 **MCP 서버는 아직 옛것일 수 있다** — 플러그인이 번들하는 `.mcp.json`은 `npx -y @yoonion/mimi-seed-mcp`로 버전을 고정하지 않아서, npx가 캐시된 구버전을 재사용할 수 있다. 반드시 **2C(캐시)** 까지 처리하고 3번으로 간다.
+이걸로 **스킬과 매니페스트는** 최신이 된다. 현행 플러그인의 `.mcp.json`은 `npx -y @yoonion/mimi-seed-mcp@latest`를 사용하므로 새로 뜨는 프로세스는 최신 dist-tag를 확인한다. 하지만 이미 실행 중인 MCP 서버는 옛것일 수 있으므로 반드시 3번에서 다시 띄운다.
 
 서드파티 마켓플레이스는 자동 업데이트가 기본 **off**다. `/plugin` → Marketplaces 탭에서 auto-update를 켜두면 다음 세션 시작 때 자동 갱신된다.
 
@@ -61,10 +61,10 @@ npm install -g mimi-seed@latest                # CLI도 쓴다면 (별개 패키
 
 ### C. npx 등록 (플러그인 번들과 `claude mcp add` 공통)
 
-npx는 캐시(`_npx`)에 있는 버전을 재사용할 수 있어, 등록만으로 최신이 보장되지 않는다. 둘 중 하나:
+npx는 패키지 이름만 지정하면 캐시(`_npx`)에 있는 버전을 재사용할 수 있다. 등록을 다음처럼 명시한다:
 
-- 등록 args에 버전을 박는다 → `npx -y @yoonion/mimi-seed-mcp@latest` (매 기동 시 레지스트리 조회 = 시작이 느려지고 오프라인에서 취약)
-- 또는 npx 캐시를 비운다 → macOS/Linux `rm -rf ~/.npm/_npx`, Windows `%LocalAppData%\npm-cache\_npx` 삭제
+- 등록 args에 dist-tag를 박는다 → `npx -y @yoonion/mimi-seed-mcp@latest` (매 기동 시 레지스트리 확인 = 시작이 조금 느리고 오프라인에서 취약)
+- 이미 `@latest`인데 실행 버전이 옛것이면 캐시 삭제보다 먼저 3번의 플러그인/클라이언트 재시작을 한다.
 
 ### D. 개발 클론 (메인테이너)
 

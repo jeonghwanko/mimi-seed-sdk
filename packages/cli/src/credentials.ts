@@ -56,6 +56,8 @@ export type SetupKind =
 export interface Detected {
   present: boolean;
   detail?: string;
+  /** 매니페스트가 특정 자격증명 identity를 요구할 때 비교할 비밀이 아닌 식별자. */
+  identity?: Record<string, string>;
   /** 파일은 있지만 곧 재연결이 필요한 시간 기반 자격증명 상태. */
   freshness?: "fresh" | "expiring" | "expired";
   /** 상태표 표시용 남은 일수. expired 면 0. */
@@ -307,8 +309,15 @@ export const CREDENTIALS: readonly CredSpec[] = [
     },
     docsAnchor: "app-store-connect",
     detect: (home) => {
-      const cfg = readJson<{ keyId?: string }>(home, "appstore.json");
-      return cfg ? { present: true, detail: cfg.keyId ? `keyId ${cfg.keyId}` : undefined } : { present: false };
+      const cfg = readJson<{ keyId?: string; issuerId?: string }>(home, "appstore.json");
+      return cfg ? {
+        present: true,
+        detail: cfg.keyId ? `keyId ${cfg.keyId}` : undefined,
+        identity: Object.fromEntries([
+          ["keyId", cfg.keyId],
+          ["issuerId", cfg.issuerId],
+        ].filter((entry): entry is [string, string] => typeof entry[1] === "string")),
+      } : { present: false };
     },
   },
   {

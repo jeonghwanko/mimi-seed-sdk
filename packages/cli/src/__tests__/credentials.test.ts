@@ -43,13 +43,17 @@ describe('detectAll', () => {
 
   it('파일이 있으면 감지하고 detail 을 채운다', () => {
     writeCred('tokens.json', { access_token: 'x' });
-    writeCred('appstore.json', { keyId: 'ABC123' });
+    writeCred('appstore.json', { keyId: 'ABC123', issuerId: 'issuer-456' });
     writeCred('jenkins.json', { url: 'http://j', username: 'u', token: 't' });
     writeCred('google-ads.json', { developerToken: 'd', customerId: '1234567890' });
 
     const d = detectAll(home);
     expect(d.get('oauth')!.present).toBe(true);
-    expect(d.get('appstore')).toEqual({ present: true, detail: 'keyId ABC123' });
+    expect(d.get('appstore')).toEqual({
+      present: true,
+      detail: 'keyId ABC123',
+      identity: { keyId: 'ABC123', issuerId: 'issuer-456' },
+    });
     expect(d.get('jenkins')).toEqual({ present: true, detail: 'http://j' });
     expect(d.get('googleads')).toEqual({ present: true, detail: '1234567890' });
   });

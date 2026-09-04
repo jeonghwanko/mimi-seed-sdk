@@ -20,7 +20,7 @@ mimi-seed 를 처음 쓰는 사용자를 **"설치됨 → 뭘 할 수 있는지 
   /plugin install mimi-seed@yoonion
   ```
   ```bash
-  claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp   # 플러그인 없이
+  claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp@latest   # 플러그인 없이
   ```
   설치 후 **새 세션**이 필요하다는 것을 반드시 알린다 (도구는 새 세션에서만 나타난다).
 - 도구가 일부만 보이거나 낡아 보이면 → `mimi-seed-update` 스킬로.

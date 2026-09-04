@@ -67,7 +67,7 @@ const M = catalog(
     localStep1: "1) Google 로그인 (Firebase / AdMob / Play / Ads):",
     localStep2: "2) 로컬 MCP 서버 등록 (원격 'mimi-seed' 와 별개):",
     localCodexHint:
-      '   Codex: ~/.codex/config.toml 에 [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp"]',
+      '   Codex: ~/.codex/config.toml 에 [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp@latest"]',
     localStep3: "3) 나머지 계정 연결 (App Store / Play / Jenkins / CI / 소셜 …):",
     localSetupHint: "   각 항목에서 [?] 를 누르면 토큰 발급 방법을 알려줍니다.",
 
@@ -247,7 +247,7 @@ ${kleur.bold("환경변수:")}
     localStep1: "1) Sign in with Google (Firebase / AdMob / Play / Ads):",
     localStep2: "2) Register the local MCP server (separate from the remote 'mimi-seed'):",
     localCodexHint:
-      '   Codex: add [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp"] to ~/.codex/config.toml',
+      '   Codex: add [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp@latest"] to ~/.codex/config.toml',
     localStep3: "3) Connect the remaining accounts (App Store / Play / Jenkins / CI / social …):",
     localSetupHint: "   Press [?] on any item to see how to obtain that token.",
 
@@ -573,7 +573,7 @@ async function cmdInit(args: string[]): Promise<void> {
     await cmdAuth(["login"]);
     log("");
     log(M().localStep2);
-    log(kleur.cyan("   claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp"));
+    log(kleur.cyan("   claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp@latest"));
     log(kleur.dim(M().localCodexHint));
     log("");
     log(M().localStep3);

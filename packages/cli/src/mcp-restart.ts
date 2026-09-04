@@ -92,7 +92,7 @@ type McpClientKind = 'codex' | 'claude-code' | 'unknown';
 
 const BUILTIN_MIMI_SEED_SERVER: Record<string, unknown> = {
   command: 'npx',
-  args: ['-y', '@yoonion/mimi-seed-mcp'],
+  args: ['-y', '@yoonion/mimi-seed-mcp@latest'],
 };
 
 function detectMcpClient(env: NodeJS.ProcessEnv = process.env): McpClientKind {
@@ -177,7 +177,8 @@ function candidateMarkers(cfg: Record<string, unknown>): string[] {
   const primary = findProcessMarker(cfg);
   if (!primary) return [];
   const base = primary.split('/').pop();
-  return base && base !== primary ? [primary, base] : [primary];
+  const executableBase = base?.replace(/@(?:latest|\d+(?:\.\d+){1,3}(?:[-+][\w.-]+)?)$/, '');
+  return [...new Set([primary, base, executableBase].filter((value): value is string => Boolean(value)))];
 }
 
 /**

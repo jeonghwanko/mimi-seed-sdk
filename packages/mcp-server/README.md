@@ -31,7 +31,7 @@ TV, Android Automotive OS, Android XR은 Target API 예외가 있으므로 카�
 Claude Code:
 
 ```bash
-claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp
+claude mcp add mimi-seed-local -- npx -y @yoonion/mimi-seed-mcp@latest
 ```
 
 Codex (`~/.codex/config.toml`):
@@ -39,7 +39,7 @@ Codex (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.mimi-seed-local]
 command = "npx"
-args = ["-y", "@yoonion/mimi-seed-mcp"]
+args = ["-y", "@yoonion/mimi-seed-mcp@latest"]
 enabled = true
 ```
 
@@ -50,7 +50,7 @@ Claude Desktop (`claude_desktop_config.json`):
   "mcpServers": {
     "mimi-seed-local": {
       "command": "npx",
-      "args": ["-y", "@yoonion/mimi-seed-mcp"]
+      "args": ["-y", "@yoonion/mimi-seed-mcp@latest"]
     }
   }
 }

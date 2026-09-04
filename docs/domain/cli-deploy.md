@@ -91,8 +91,10 @@ social tokens in its reconnect plan; the setup bin still performs the authoritat
 
 ## `init` — detection → handshake → scaffold
 
-1. **Detect** (`detect.ts`): `hasAnyProjectSignal()` then `detectHints()` reads Expo (`app.json`), Gradle, and
-   `Info.plist`/`pbxproj` to infer `{ name, packageName, bundleId }`.
+1. **Detect** (`detect.ts`): `hasAnyProjectSignal()` then `detectHints()` reads Expo (`app.json` and statically
+   resolvable JSON imports in `app.config.js`/`.ts`), Gradle, `Info.plist`/`pbxproj`, and Unity
+   `ProjectSettings/ProjectSettings.asset` to infer `{ name, packageName, bundleId }`. Dynamic executable
+   config is never evaluated; unresolved expressions remain absent instead of being guessed.
 2. **Handshake** (`handshake.ts`): `awaitHandshake()` opens a localhost callback server, the CLI opens
    `<webBase>/cli/connect?...` in the browser, the user logs in, and a PAT is returned to localhost. (In CI,
    `MIMI_SEED_TOKEN` short-circuits this.)
