@@ -25,6 +25,8 @@ export interface ManifestService {
   keyId?: string;
   issuerId?: string;
   url?: string;
+  jobAndroid?: string;
+  jobIos?: string;
   workspaceProvider?: string;
 }
 

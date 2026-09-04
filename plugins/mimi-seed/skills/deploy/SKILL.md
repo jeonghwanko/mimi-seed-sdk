@@ -16,12 +16,16 @@ mimi-seed로 출시를 한 흐름으로 운전한다: CI 빌드 → 블로커 �
 ## 경로 A — CLI (가장 간단)
 
 ```bash
-npx mimi-seed deploy                           # Android, CI 자동 감지
-npx mimi-seed deploy --platform ios            # iOS
-npx mimi-seed deploy --skip-build --version-code 142   # 노트만 적용
+npx mimi-seed deploy --dry-run                  # 로컬 실행 계획만 확인
+npx mimi-seed deploy --app <app-id> --platform ios --ref main --yes
+npx mimi-seed deploy --app <app-id> --skip-build --version-code 142 --yes
 ```
 
 CI(Jenkins · GitHub Actions · GitLab) 자동 감지, `--ci`로 강제 지정 가능.
+실제 실행의 `--yes`는 CI 업로드와 스토어 적용 승인이다. 단순 검증에는 사용하지 않는다.
+CI 실행 번호는 스토어 빌드 번호가 아니다. 실제 산출물 버전을 확인한 뒤 명시하며, 버전을
+지정하지 않은 CI 실행은 빌드 성공 후 스토어 적용 전에 중단한다. 마지막 예시는 노트만
+고치는 명령이 아니라 기존 빌드를 사용하는 배포다. 전체 옵션은 `mimi-seed deploy --help`가 정본이다.
 
 ## 경로 B — MCP 도구 시퀀스
 

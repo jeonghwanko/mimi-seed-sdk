@@ -35,6 +35,8 @@ export interface ManifestService {
   keyId?: string;       // appstore ASC key id
   issuerId?: string;    // appstore issuer id
   url?: string;         // jenkins url
+  jobAndroid?: string;
+  jobIos?: string;
   /** 이 서비스가 워크스페이스 공유 시크릿(provider)으로도 제공되는 경우 그 provider id. */
   workspaceProvider?: string;
 }

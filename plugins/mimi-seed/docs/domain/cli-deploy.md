@@ -125,8 +125,20 @@ CI build (ci-providers.ts)  →  check (readiness)  →  notes (git → AI)  →
 - CI providers (`ci-providers.ts`) detect/trigger **GitHub Actions or GitLab**; `--ci jenkins|github|gitlab`
   forces one, and `setup-jenkins|setup-github|setup-gitlab` run interactive config. Git range for notes comes
   from `git.ts`.
-- `--skip-build` (with `--version-code`) skips CI; `--dry-run` tests the pipeline without writing; `--yes/-y`
-  skips the confirm prompt for automation.
+- Dry-run returns a **local execution plan before authentication, config migration, setup, CI, AI or remote
+  deployment calls**. It does not exercise the remote pipeline. Real execution requires an explicit app ID
+  and approval before CI, since a CI job can itself upload to a store. See the CLI help for flags.
+- Jenkins credentials stay in the local credential file. Project-specific job selection lives in
+  `.mimi-seed.json` under `services.jenkins.jobAndroid` / `jobIos`. A project manifest blocks fallback to a
+  global job; invalid/missing mappings fail closed. Its optional controller URL must match the authenticated
+  local controller and cannot redirect credentials. Folder jobs are encoded segment by segment.
+- `jenkins-project.ts` owns project selection and mobile build parameters. The CLI passes the source branch
+  and selected platform explicitly, disables uploads for the other platform and webfile destinations, and
+  disables user-update announcements. Custom Jenkins pipelines must accept this parameter contract.
+- CI execution IDs are **never** store artifact versions. The server's `buildNumber` is the actual Jenkins
+  execution ID, while `versionCode` is an explicitly supplied store artifact version. Without that version,
+  successful CI execution stops before store apply and prints instructions to resume with a verified version.
+  Automatic artifact-version discovery is not implemented; independently verify the uploaded build first.
 - The same outcome is reachable as an **MCP tool sequence** (the `deploy` skill / `/mimi-seed:deploy` prompt) —
   see [[skills-plugins]] and [`../agent-guide.md`](../agent-guide.md) §4. Keep the two paths behaviorally in
   sync.

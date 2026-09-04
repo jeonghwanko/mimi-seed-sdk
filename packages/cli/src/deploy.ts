@@ -4,6 +4,7 @@ import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { loadJenkinsConfig, migrateLegacyJenkins, type JenkinsConfig } from "./jenkins-config.js";
 import { runMcpBin } from "./mcp-bin.js";
+import { resolveProjectJenkins, jenkinsJobPath, jenkinsBuildParameters } from "./jenkins-project.js";
 import {
   loadCiProviderConfig,
   saveCiProviderConfig,
@@ -32,6 +33,13 @@ function log(msg: string): void {
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 const M = catalog(
   {
+    missingValue: (option: string) => `${option} 뒤에 값을 입력하세요.`,
+    unknownOption: (option: string) => `알 수 없는 deploy 옵션: ${option}`,
+    invalidPlatform: "--platform은 android 또는 ios여야 합니다.",
+    invalidCi: "올바른 --ci 프로바이더를 지정하세요.",
+    invalidVersion: "--version-code는 허용 범위의 양의 정수여야 합니다.",
+    multipleSetup: "setup 명령은 하나만 선택하세요.",
+    drySetup: "--dry-run과 setup을 함께 실행할 수 없습니다.",
     // Jenkins / 빌드
     jenkinsTriggerFailed: (status: number, body: string) => `Jenkins 트리거 실패 ${status}: ${body}`,
     buildStatusFailed: (status: number) => `빌드 상태 조회 실패 ${status}`,
@@ -93,7 +101,7 @@ const M = catalog(
     buildStarted: (n: number) => `  빌드 #${n} 시작됨. 완료 대기 중...`,
     buildFailed: (result: string) => `빌드 실패: ${result}`,
     jenkinsLink: (url: string) => `  Jenkins: ${url}`,
-    versionCodeFromBuild: (n: number) => `  versionCode = buildNumber (${n})`,
+    explicitApproval: "실제 CI 실행·배포에는 --yes 승인이 필요합니다.",
     noProviderConfig: (kind: string) => `${kind} 설정이 없습니다. setup-${kind} 실행.`,
     versionCodeUnsuitable: (kind: string, buildId: number) =>
       `✗ versionCode 미지정 (${kind} run_id ${buildId}는 versionCode로 부적합)`,
@@ -116,6 +124,13 @@ const M = catalog(
     done: "완료. Play Console에서 배포 상태를 확인하세요.",
   },
   {
+    missingValue: (option: string) => `Missing value: ${option}`,
+    unknownOption: (option: string) => `Unknown deploy option: ${option}`,
+    invalidPlatform: "--platform must be android or ios.",
+    invalidCi: "Specify a valid --ci provider.",
+    invalidVersion: "--version-code must be a positive integer within the allowed range.",
+    multipleSetup: "Choose one setup command.",
+    drySetup: "--dry-run cannot run setup.",
     // Jenkins / build
     jenkinsTriggerFailed: (status: number, body: string) =>
       `Jenkins trigger failed ${status}: ${body}`,
@@ -182,7 +197,7 @@ const M = catalog(
     buildStarted: (n: number) => `  Build #${n} started. Waiting for it to finish...`,
     buildFailed: (result: string) => `Build failed: ${result}`,
     jenkinsLink: (url: string) => `  Jenkins: ${url}`,
-    versionCodeFromBuild: (n: number) => `  versionCode = buildNumber (${n})`,
+    explicitApproval: "Real CI execution and deployment require explicit --yes approval.",
     noProviderConfig: (kind: string) => `${kind} is not configured. Run setup-${kind}.`,
     versionCodeUnsuitable: (kind: string, buildId: number) =>
       `✗ No versionCode given (${kind} run_id ${buildId} is not usable as a versionCode)`,
@@ -216,8 +231,11 @@ function jenkinsHeaders(cfg: JenkinsConfig) {
 
 async function triggerBuild(cfg: JenkinsConfig, jobName: string, params: Record<string, string>): Promise<string> {
   const qs = new URLSearchParams(params).toString();
-  const url = `${cfg.url}/job/${encodeURIComponent(jobName)}/buildWithParameters?${qs}`;
-  const res = await fetch(url, { method: "POST", headers: jenkinsHeaders(cfg) });
+  const url = `${cfg.url.replace(/\/+$/, "")}/${jenkinsJobPath(jobName)}/buildWithParameters`;
+  const res = await fetch(url, {
+    method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
+    headers: { ...jenkinsHeaders(cfg), "Content-Type": "application/x-www-form-urlencoded" }, body: qs,
+  });
   if (!res.ok) {
     throw new Error(M().jenkinsTriggerFailed(res.status, await res.text()));
   }
@@ -229,7 +247,7 @@ async function triggerBuild(cfg: JenkinsConfig, jobName: string, params: Record<
 
 async function getQueueBuildNumber(cfg: JenkinsConfig, queueItemId: string): Promise<number | null> {
   const url = `${cfg.url}/queue/item/${queueItemId}/api/json`;
-  const res = await fetch(url, { headers: jenkinsHeaders(cfg) });
+  const res = await fetch(url, { headers: jenkinsHeaders(cfg), redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) return null;
   const data = await res.json() as { executable?: { number?: number } };
   return data.executable?.number ?? null;
@@ -240,8 +258,8 @@ async function getBuildStatus(cfg: JenkinsConfig, jobName: string, buildNumber: 
   result: string | null;
   duration: number;
 }> {
-  const url = `${cfg.url}/job/${encodeURIComponent(jobName)}/${buildNumber}/api/json`;
-  const res = await fetch(url, { headers: jenkinsHeaders(cfg) });
+  const url = `${cfg.url}/${jenkinsJobPath(jobName)}/${buildNumber}/api/json`;
+  const res = await fetch(url, { headers: jenkinsHeaders(cfg), redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(M().buildStatusFailed(res.status));
   const data = await res.json() as { building?: boolean; result?: string | null; duration?: number };
   return {
@@ -359,7 +377,7 @@ export interface DeployArgs {
   setupGitlab: boolean;
   ci: CiKind;
   workflow?: string; // GitHub workflow file (e.g. deploy.yml)
-  ref: string;        // GitHub/GitLab ref (default: main)
+  ref: string;        // CI source ref (Jenkins requires a branch).
 }
 
 export function parseArgs(argv: string[]): DeployArgs {
@@ -376,22 +394,38 @@ export function parseArgs(argv: string[]): DeployArgs {
     ref: "main",
   };
   for (let i = 0; i < argv.length; i++) {
-    if ((argv[i] === "--platform" || argv[i] === "-p") && argv[i + 1]) args.platform = argv[++i] as "android" | "ios";
-    if (argv[i] === "--app" && argv[i + 1]) args.appId = argv[++i];
-    if (argv[i] === "--version-code" && argv[i + 1]) args.versionCode = Number(argv[++i]);
-    if (argv[i] === "--from" && argv[i + 1]) args.fromRef = argv[++i];
-    if (argv[i] === "--to" && argv[i + 1]) args.toRef = argv[++i];
-    if (argv[i] === "--language" && argv[i + 1]) args.language = argv[++i];
-    if (argv[i] === "--dry-run") args.dryRun = true;
-    if (argv[i] === "--yes" || argv[i] === "-y") args.yes = true;
-    if (argv[i] === "--skip-build") args.skipBuild = true;
-    if (argv[i] === "--ci" && argv[i + 1]) args.ci = argv[++i] as CiKind;
-    if (argv[i] === "--workflow" && argv[i + 1]) args.workflow = argv[++i];
-    if (argv[i] === "--ref" && argv[i + 1]) args.ref = argv[++i];
-    if (argv[i] === "setup-jenkins") args.setupJenkins = true;
-    if (argv[i] === "setup-github") args.setupGithub = true;
-    if (argv[i] === "setup-gitlab") args.setupGitlab = true;
+    const option = argv[i];
+    const value = () => {
+      const next = argv[++i];
+      if (!next?.trim() || next.startsWith("--")) throw new Error(M().missingValue(option));
+      return next;
+    };
+    switch (option) {
+      case "--platform": case "-p": args.platform = value() as DeployArgs["platform"]; break;
+      case "--app": args.appId = value(); break;
+      case "--version-code": args.versionCode = Number(value()); break;
+      case "--from": args.fromRef = value(); break;
+      case "--to": args.toRef = value(); break;
+      case "--language": args.language = value(); break;
+      case "--dry-run": args.dryRun = true; break;
+      case "--yes": case "-y": args.yes = true; break;
+      case "--skip-build": args.skipBuild = true; break;
+      case "--ci": args.ci = value() as CiKind; break;
+      case "--workflow": args.workflow = value(); break;
+      case "--ref": args.ref = value(); break;
+      case "setup-jenkins": args.setupJenkins = true; break;
+      case "setup-github": args.setupGithub = true; break;
+      case "setup-gitlab": args.setupGitlab = true; break;
+      default: throw new Error(M().unknownOption(option));
+    }
   }
+  if (!["android", "ios"].includes(args.platform)) throw new Error(M().invalidPlatform);
+  if (!["auto", "jenkins", "github", "gitlab"].includes(args.ci)) throw new Error(M().invalidCi);
+  if (args.versionCode !== undefined && (!Number.isSafeInteger(args.versionCode) || args.versionCode < 1 || args.versionCode > ANDROID_VERSION_CODE_MAX)) {
+    throw new Error(M().invalidVersion);
+  }
+  if ([args.setupJenkins, args.setupGithub, args.setupGitlab].filter(Boolean).length > 1) throw new Error(M().multipleSetup);
+  if (args.dryRun && (args.setupJenkins || args.setupGithub || args.setupGitlab)) throw new Error(M().drySetup);
   return args;
 }
 
@@ -496,6 +530,20 @@ async function runGitProviderBuild(
 
 export async function cmdDeploy(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
+  // This boundary precedes auth, migrations, prompts, remote requests and every CI provider.
+  // A dry run is a local plan, not a request to an external system to behave safely.
+  if (args.dryRun) {
+    const jenkins = loadJenkinsConfig() ?? undefined;
+    const ci = args.skipBuild ? null : resolveCi(args.ci, jenkins, loadCiProviderConfig());
+    if (ci === "jenkins" && !jenkins) throw new Error(M().noJenkinsConfig);
+    const plan = ci === "jenkins" && jenkins
+      ? { ...resolveProjectJenkins(jenkins, args.platform), parameters: jenkinsBuildParameters(args.platform, args.ref, args.appId) }
+      : undefined;
+    log(M().dryRunNotice);
+    log(JSON.stringify({ platform: args.platform, appId: args.appId ?? null, ci, ref: args.ref,
+      jenkins: plan, versionCode: args.versionCode ?? null, versionSource: "explicit --version-code; never CI run ID" }, null, 2));
+    return;
+  }
   const cfg = await getEffectiveConfig();
 
   if (!cfg) {
@@ -523,11 +571,17 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
     return;
   }
 
+  // Confirm before CI, which itself can publish to internal tracks/TestFlight.
+  if (!args.appId) throw new Error(M().noAppId);
+  if (!args.yes) throw new Error(M().explicitApproval);
+  if (args.skipBuild && !args.versionCode) throw new Error(M().versionCodeUnknown);
+
   log(kleur.bold(M().title(args.platform)));
   if (args.dryRun) log(kleur.yellow(M().dryRunNotice));
   log("");
 
-  let versionCode = args.versionCode;
+  const versionCode = args.versionCode;
+  let deployBuildNumber: number | undefined;
 
   // 빌드 단계 (--skip-build 없을 때)
   if (!args.skipBuild) {
@@ -543,15 +597,10 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
         process.exit(1);
       }
       const jenkins = jenkinsCfg;
-      const jobName = args.platform === "android" ? jenkins.jobAndroid : jenkins.jobIos;
-      if (!jobName) {
-        log(kleur.red(M().noJenkinsJob(args.platform)));
-        process.exit(1);
-      }
+      const { job: jobName } = resolveProjectJenkins(jenkins, args.platform);
 
       log(M().jenkinsTrigger(kleur.cyan(jobName)));
-      const buildParams: Record<string, string> = {};
-      if (args.appId) buildParams.MIMI_APP_ID = args.appId;
+      const buildParams = jenkinsBuildParameters(args.platform, args.ref, args.appId);
 
       const queueItemId = await triggerBuild(jenkins, jobName, buildParams);
       if (!queueItemId) {
@@ -581,15 +630,15 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
       if (result !== "SUCCESS") {
         log(kleur.red(M().buildFailed(result)));
         log(kleur.dim(M().jenkinsLink(`${jenkins.url}/job/${encodeURIComponent(jobName)}/${buildNumber}/`)));
-        log(kleur.dim(M().alreadyBuiltHint(String(buildNumber), args.platform)));
+        log(kleur.dim(M().alreadyBuiltHint("<N>", args.platform)));
         process.exit(1);
       }
 
       log(kleur.green(M().buildSucceeded(buildNumber)));
+      deployBuildNumber = buildNumber;
 
       if (!versionCode) {
-        versionCode = buildNumber;
-        log(kleur.dim(M().versionCodeFromBuild(versionCode)));
+        throw new Error(M().versionCodeUnsuitable("Jenkins", buildNumber) + "\n" + M().recommendationNext);
       }
     } else {
       // GitHub Actions or GitLab CI
@@ -615,51 +664,13 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // appId 조회 (미지정 시 첫 번째 앱)
-  let appId = args.appId;
-  if (!appId) {
-    const { mcpCall } = await import("./mcp-client.js");
-    const r = await mcpCall(cfg.endpoint, cfg.token, "list_apps", {});
-    if (!r.isError) {
-      try {
-        const apps = JSON.parse(r.text) as Array<{ id: string; name: string }>;
-        if (apps.length > 0) {
-          appId = apps[0].id;
-          log(kleur.dim(M().appLine(apps[0].name, appId)));
-        }
-      } catch { /* noop */ }
-    }
-  }
-  if (!appId) {
-    log(kleur.red(M().noAppId));
-    process.exit(1);
-  }
-
-  // 프로덕션 쓰기 작업 — 명시적 확인 (notes/review 와 동일한 안전장치).
-  // --dry-run / --yes / 비TTY / CI(MIMI_SEED_TOKEN) 에서는 생략.
-  const needsConfirm =
-    !args.dryRun && !args.yes && process.stdout.isTTY && !process.env.MIMI_SEED_TOKEN;
-  if (needsConfirm) {
-    const target = args.platform === "ios" ? M().targetIos : M().targetAndroid;
-    log("");
-    log(kleur.yellow(M().realDeploy(args.platform, versionCode, target)));
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const answer = await new Promise<string>((resolve) =>
-      rl.question(kleur.bold(M().confirmPrompt), (a) => resolve(a.trim().toLowerCase())),
-    );
-    rl.close();
-    if (answer !== "y" && answer !== "yes") {
-      log(kleur.dim(M().confirmCancelled));
-      return;
-    }
-  }
+  const appId = args.appId;
 
   log("");
   log(M().pipelineStarting);
   log("");
 
-  // Jenkins에서 빌드한 경우 buildNumber를 서버에 전달 (webhook 매칭용)
-  const deployBuildNumber = !args.skipBuild ? versionCode : undefined;
+  // Jenkins execution identity and the uploaded artifact version are independent.
 
   await streamDeploy(cfg.webBase, cfg.token, {
     appId,

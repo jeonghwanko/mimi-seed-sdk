@@ -162,17 +162,17 @@ ${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 
 
 옵션:
   --platform android|ios       배포 플랫폼 (기본: android)
-  --app <id>                   앱 ID 지정
-  --version-code <n>           빌드 번호 직접 지정 (--skip-build 와 함께)
+  --app <id>                   배포할 원격 앱 ID (실제 실행 필수)
+  --version-code <n>           실제 스토어 빌드 번호 (CI 실행 번호 아님)
   --from <ref>                 커밋 범위 시작 (릴리즈 노트용)
   --to <ref>                   커밋 범위 끝 (기본: HEAD)
   --language <코드>            릴리즈 노트 언어 (기본: ko-KR)
-  --dry-run                    실제 배포 없이 파이프라인 테스트
-  --yes, -y                    배포 확인 프롬프트 생략 (스크립트/자동화용)
+  --dry-run                    로컬 계획만 출력 (네트워크·빌드·쓰기 없음)
+  --yes, -y                    CI 실행·스토어 배포 명시적 승인 (실행 필수)
   --skip-build                 CI 빌드 건너뜀 (--version-code 필수)
   --ci jenkins|github|gitlab   CI 강제 선택 (기본: auto)
   --workflow <file>            GitHub workflow 파일 (예: deploy.yml)
-  --ref <branch|tag>           GitHub/GitLab 브랜치/태그 (기본: main)
+  --ref <branch|tag>           CI 소스 (기본: main, Jenkins는 브랜치만)
   setup-jenkins / setup-github / setup-gitlab   CI 설정 대화형 등록`,
       mcp: `${kleur.bold("mimi-seed mcp")} — Claude/Codex MCP 연결
 
@@ -342,17 +342,17 @@ Options:
 
 Options:
   --platform android|ios       target platform (default: android)
-  --app <id>                   app ID
-  --version-code <n>           set the build number explicitly (with --skip-build)
+  --app <id>                   remote app ID (required for execution)
+  --version-code <n>           actual store build number (not a CI run ID)
   --from <ref>                 commit range start (for release notes)
   --to <ref>                   commit range end (default: HEAD)
   --language <code>            release notes language (default: ko-KR)
-  --dry-run                    exercise the pipeline without releasing
-  --yes, -y                    skip the release confirmation prompt (scripts/automation)
+  --dry-run                    print a local plan (no network, builds or writes)
+  --yes, -y                    explicitly approve CI and store release (required)
   --skip-build                 skip the CI build (--version-code required)
   --ci jenkins|github|gitlab   force the CI provider (default: auto)
   --workflow <file>            GitHub workflow file (e.g. deploy.yml)
-  --ref <branch|tag>           GitHub/GitLab branch/tag (default: main)
+  --ref <branch|tag>           CI source (default: main; Jenkins: branches only)
   setup-jenkins / setup-github / setup-gitlab   interactive CI setup`,
       mcp: `${kleur.bold("mimi-seed mcp")} — Claude/Codex MCP connection
 
