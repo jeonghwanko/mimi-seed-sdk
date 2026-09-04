@@ -34,6 +34,7 @@ interface ExperimentList {
     lastUpdateTime?: string;
     definition?: unknown;
   }>;
+  nextPageToken?: string;
 }
 
 interface RolloutList {
@@ -45,12 +46,56 @@ interface RolloutList {
     lastUpdateTime?: string;
     definition?: unknown;
   }>;
+  nextPageToken?: string;
+}
+
+interface PagedItems<T> {
+  items: T[];
+  pages: number;
+  truncated: boolean;
+}
+
+export function countStates(items: Array<{ state?: string }>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    const state = item.state ?? 'UNSPECIFIED';
+    counts[state] = (counts[state] ?? 0) + 1;
+  }
+  return counts;
 }
 
 async function optionalRequest<T>(auth: OAuth2Client, url: string): Promise<OptionalResult<T>> {
   try {
     const response = await auth.request<T>({ url });
     return { available: true, data: response.data };
+  } catch (error) {
+    return {
+      available: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function optionalPagedRequest<T>(
+  auth: OAuth2Client,
+  url: string,
+  field: 'experiments' | 'rollouts',
+): Promise<OptionalResult<PagedItems<T>>> {
+  try {
+    const items: T[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
+    do {
+      const requestUrl = new URL(url);
+      requestUrl.searchParams.set('pageSize', '100');
+      if (pageToken) requestUrl.searchParams.set('pageToken', pageToken);
+      const response = await auth.request<ExperimentList | RolloutList>({ url: requestUrl.toString() });
+      const data = response.data as Record<string, unknown>;
+      items.push(...((data[field] as T[] | undefined) ?? []));
+      pageToken = data.nextPageToken as string | undefined;
+      pages += 1;
+    } while (pageToken && pages < 10);
+    return { available: true, data: { items, pages, truncated: Boolean(pageToken) } };
   } catch (error) {
     return {
       available: false,
@@ -100,12 +145,16 @@ async function fetchDailyUsage(
       view: 'FULL',
       pageSize: Math.max(days + 2, 10),
     });
-    const rows = (response.data.timeSeries ?? [])
+    const points = (response.data.timeSeries ?? [])
       .flatMap((series) => series.points ?? [])
       .map((point) => ({
         date: (point.interval?.endTime ?? end.toISOString()).slice(0, 10),
         fetches: numericPoint(point),
-      }))
+      }));
+    const byDate = new Map<string, number>();
+    for (const point of points) byDate.set(point.date, (byDate.get(point.date) ?? 0) + point.fetches);
+    const rows = [...byDate.entries()]
+      .map(([date, fetches]) => ({ date, fetches }))
       .sort((a, b) => a.date.localeCompare(b.date));
     return { available: true, data: rows };
   } catch (error) {
@@ -131,8 +180,16 @@ export async function getRemoteConfigOverview(
       auth,
       `${parent}/remoteConfig`,
     ),
-    optionalRequest<ExperimentList>(auth, `${parent}/experiments`),
-    optionalRequest<RolloutList>(auth, `${parent}/rollouts`),
+    optionalPagedRequest<NonNullable<ExperimentList['experiments']>[number]>(
+      auth,
+      `${parent}/experiments`,
+      'experiments',
+    ),
+    optionalPagedRequest<NonNullable<RolloutList['rollouts']>[number]>(
+      auth,
+      `${parent}/rollouts`,
+      'rollouts',
+    ),
     fetchDailyUsage(auth, input.projectId, days),
     getBillingInfo(auth, input.projectId)
       .then((data) => ({ available: true, data } as const))
@@ -144,12 +201,48 @@ export async function getRemoteConfigOverview(
 
   const daily = usage.data ?? [];
   const latest = daily.at(-1);
-  const activeExperiments = experiments.data?.experiments?.filter((item) =>
-    ['RUNNING', 'ACTIVE', 'STARTED'].includes(item.state ?? ''),
-  ) ?? [];
-  const activeRollouts = rollouts.data?.rollouts?.filter((item) =>
-    ['RUNNING', 'ACTIVE', 'STARTED', 'IN_PROGRESS'].includes(item.state ?? ''),
-  ) ?? [];
+  const peak = daily.reduce<typeof daily[number] | undefined>(
+    (current, point) => !current || point.fetches > current.fetches ? point : current,
+    undefined,
+  );
+  const withUsageProjection = (point: typeof daily[number]) => ({
+    ...point,
+    utilizationPercent: Number(((point.fetches / FREE_DAILY_FETCHES) * 100).toFixed(2)),
+    level: remoteConfigUsageLevel(point.fetches),
+    projectedStandardDailyCostUsd: Number(estimateRemoteConfigDailyCost(point.fetches).toFixed(4)),
+  });
+  const summarizeExperiment = (item: NonNullable<ExperimentList['experiments']>[number]) => ({
+    name: item.name,
+    displayName: (item.definition as { displayName?: string } | undefined)?.displayName,
+    state: item.state,
+    startTime: item.startTime,
+    endTime: item.endTime,
+    lastUpdateTime: item.lastUpdateTime,
+  });
+  const summarizeRollout = (item: NonNullable<RolloutList['rollouts']>[number]) => ({
+    name: item.name,
+    displayName: (item.definition as { displayName?: string } | undefined)?.displayName,
+    state: item.state,
+    startTime: item.startTime,
+    endTime: item.endTime,
+    lastUpdateTime: item.lastUpdateTime,
+  });
+  const activeExperiments = experiments.data?.items
+    .filter((item) => item.state === 'RUNNING')
+    .map(summarizeExperiment) ?? [];
+  const activeRollouts = rollouts.data?.items
+    .filter((item) => item.state === 'RUNNING')
+    .map(summarizeRollout) ?? [];
+  const recentExperiments = [...(experiments.data?.items ?? [])]
+    .sort((left, right) => (right.lastUpdateTime ?? right.endTime ?? right.startTime ?? '')
+      .localeCompare(left.lastUpdateTime ?? left.endTime ?? left.startTime ?? ''))
+    .slice(0, 20)
+    .map(summarizeExperiment);
+  const recentRollouts = [...(rollouts.data?.items ?? [])]
+    .sort((left, right) => (right.lastUpdateTime ?? right.endTime ?? right.startTime ?? '')
+      .localeCompare(left.lastUpdateTime ?? left.endTime ?? left.startTime ?? ''))
+    .slice(0, 20)
+    .map(summarizeRollout);
 
   return {
     projectId: input.projectId,
@@ -174,14 +267,8 @@ export async function getRemoteConfigOverview(
           available: true,
           metric: 'firebaseremoteconfig.googleapis.com/project/fetch_request_count',
           days: daily,
-          latest: latest
-            ? {
-                ...latest,
-                utilizationPercent: Number(((latest.fetches / FREE_DAILY_FETCHES) * 100).toFixed(2)),
-                level: remoteConfigUsageLevel(latest.fetches),
-                projectedStandardDailyCostUsd: Number(estimateRemoteConfigDailyCost(latest.fetches).toFixed(4)),
-              }
-            : null,
+          latest: latest ? withUsageProjection(latest) : null,
+          peak: peak ? withUsageProjection(peak) : null,
         }
       : usage,
     template: template.available
@@ -196,26 +283,36 @@ export async function getRemoteConfigOverview(
     experiments: experiments.available
       ? {
           available: true,
-          total: experiments.data?.experiments?.length ?? 0,
+          total: experiments.data?.items.length ?? 0,
+          stateCounts: countStates(experiments.data?.items ?? []),
           active: activeExperiments,
+          recent: recentExperiments,
+          pages: experiments.data?.pages ?? 0,
+          truncated: experiments.data?.truncated ?? false,
         }
       : experiments,
     rollouts: rollouts.available
       ? {
           available: true,
-          total: rollouts.data?.rollouts?.length ?? 0,
+          total: rollouts.data?.items.length ?? 0,
+          stateCounts: countStates(rollouts.data?.items ?? []),
           active: activeRollouts,
+          recent: recentRollouts,
+          pages: rollouts.data?.pages ?? 0,
+          truncated: rollouts.data?.truncated ?? false,
         }
       : rollouts,
     warnings: [
-      ...(latest && remoteConfigUsageLevel(latest.fetches) !== 'ok'
-        ? [`Daily fetch usage is ${remoteConfigUsageLevel(latest.fetches)} at ${latest.fetches.toLocaleString()} requests.`]
+      ...(peak && remoteConfigUsageLevel(peak.fetches) !== 'ok'
+        ? [`Peak daily fetch usage is ${remoteConfigUsageLevel(peak.fetches)} at ${peak.fetches.toLocaleString()} requests on ${peak.date}.`]
         : []),
-      ...(latest && latest.fetches >= FREE_DAILY_FETCHES && billing.available && !billing.data.billingEnabled
+      ...(peak && peak.fetches >= FREE_DAILY_FETCHES && billing.available && !billing.data.billingEnabled
         ? ['Spark projects risk throttling above 100,000 daily fetches after the applicable grace period; upgrade to Blaze for uninterrupted overage.']
         : []),
       ...(!usage.available ? ['Cloud Monitoring usage is unavailable; no fetch count was estimated.'] : []),
       ...(!billing.available ? ['Billing plan could not be verified; cost/throttling interpretation is incomplete.'] : []),
+      ...(experiments.data?.truncated ? ['Experiment list exceeded 1,000 items and was truncated.'] : []),
+      ...(rollouts.data?.truncated ? ['Rollout list exceeded 1,000 items and was truncated.'] : []),
     ],
   };
 }

@@ -1,6 +1,7 @@
 import type { OAuth2Client } from 'google-auth-library';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { apiGet } from '../appstore/tools.js';
+import { isNotFound } from '../appstore/http.js';
 
 export type RiskLevel = 'blocker' | 'warning' | 'info';
 
@@ -117,6 +118,7 @@ interface AgeRatingRecord {
     userGeneratedContent?: boolean;
     socialMedia?: boolean;
     socialMediaAgeRestricted?: boolean;
+    ageAssurance?: boolean;
   };
 }
 
@@ -240,9 +242,17 @@ export async function checkAppStoreRisks(
           '개인정보 로컬라이제이션',
         ),
         safeGet<{ data?: AgeRatingRecord | null }>(
-          () => apiGet(`/appInfos/${editable.id}/ageRatingDeclaration`, {
-            'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted',
-          }),
+          async () => {
+            try {
+              return await apiGet(`/appInfos/${editable.id}/ageRatingDeclaration`, {
+                'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted,ageAssurance',
+              });
+            } catch (error) {
+              // A 404 means the declaration is genuinely absent, not that the check is unknown.
+              if (isNotFound(error)) return { data: null };
+              throw error;
+            }
+          },
           risks,
           'AGE_RATING_SOCIAL',
           '연령등급 소셜 미디어 응답',
@@ -275,7 +285,20 @@ export async function checkAppStoreRisks(
             detail: 'socialMediaAgeRestricted=true는 socialMedia=true인 앱에서만 의미가 있습니다.',
           });
         }
-        if (expected.socialMedia !== undefined && declaration.socialMedia !== expected.socialMedia) {
+        if (declaration.socialMediaAgeRestricted === true && declaration.ageAssurance !== true) {
+          risks.push({
+            level: 'blocker',
+            code: 'SOCIAL_MEDIA_AGE_ASSURANCE_MISSING',
+            title: '13세 미만 소셜 기능 제한에 연령 확인이 없음',
+            detail: 'Apple은 socialMediaAgeRestricted=true인 경우 최소한 Declared Age Range API로 연령 범위를 확인하도록 요구합니다. ageAssurance 응답과 실제 구현을 확인하세요.',
+            fixUrl: 'https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions',
+          });
+        }
+        if (
+          expected.socialMedia !== undefined
+          && declaration.socialMedia !== undefined
+          && declaration.socialMedia !== expected.socialMedia
+        ) {
           risks.push({
             level: 'blocker',
             code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH',
@@ -285,6 +308,7 @@ export async function checkAppStoreRisks(
         }
         if (
           expected.socialMediaAgeRestricted !== undefined
+          && declaration.socialMediaAgeRestricted !== undefined
           && declaration.socialMediaAgeRestricted !== expected.socialMediaAgeRestricted
         ) {
           risks.push({

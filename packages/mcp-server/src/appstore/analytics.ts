@@ -19,6 +19,21 @@ interface AnalyticsReportAttributes {
   category?: 'APP_USAGE' | 'APP_STORE_ENGAGEMENT' | 'COMMERCE' | 'FRAMEWORK_USAGE' | 'PERFORMANCE';
 }
 
+export function selectWeeklyAnalyticsReports(
+  reports: Array<JsonApiRow<AnalyticsReportAttributes>>,
+) {
+  const standard = reports.filter((row) => !/Detailed/i.test(row.attributes?.name ?? ''));
+  const detailed = reports.filter((row) => /Detailed/i.test(row.attributes?.name ?? ''));
+  return {
+    engagement: standard.find((row) => /Discovery and Engagement/i.test(row.attributes?.name ?? '')),
+    // Apple only exposes weekly App Store Downloads as a detailed report. Selecting the
+    // standard report here silently yields no WEEKLY instances even when analytics is ready.
+    downloads: detailed.find((row) => /App Store Downloads/i.test(row.attributes?.name ?? ''))
+      ?? standard.find((row) => /App Store Downloads/i.test(row.attributes?.name ?? '')),
+    purchases: standard.find((row) => /App Store Purchases/i.test(row.attributes?.name ?? '')),
+  };
+}
+
 interface AnalyticsInstanceAttributes {
   granularity?: 'DAILY' | 'WEEKLY' | 'MONTHLY';
   processingDate?: string;
@@ -36,9 +51,16 @@ interface WeeklyMetrics {
   productPageViews: number;
   downloads: number;
   proceeds: number;
+  available: {
+    engagement: boolean;
+    downloads: boolean;
+    purchases: boolean;
+  };
 }
 
 const MAX_SEGMENT_BYTES = 50 * 1024 * 1024;
+const MAX_DECOMPRESSED_BYTES = 100 * 1024 * 1024;
+const MAX_WEEKLY_INSTANCES = 8;
 
 async function reportHeaders(): Promise<Record<string, string>> {
   const auth = await getReportsAuthHeaders();
@@ -79,20 +101,50 @@ async function downloadSegment(segment: JsonApiRow<AnalyticsSegmentAttributes>):
   }
   const response = await fetchWithTimeout(attributes.url, {}, HTTP_TRANSFER_TIMEOUT_MS);
   if (!response.ok) throw new Error(`Analytics segment download failed (${response.status}).`);
+  const contentLength = Number(response.headers.get('content-length') ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_SEGMENT_BYTES) {
+    throw new Error(`Analytics segment ${segment.id} response is larger than the 50 MB safety limit.`);
+  }
   const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > MAX_SEGMENT_BYTES) {
+    throw new Error(`Analytics segment ${segment.id} downloaded more than the 50 MB safety limit.`);
+  }
   if (attributes.checksum) {
     const actual = crypto.createHash('md5').update(bytes).digest('hex');
     if (actual !== attributes.checksum.toLowerCase()) {
       throw new Error(`Analytics segment checksum mismatch for ${segment.id}.`);
     }
   }
-  let text: string;
-  try {
-    text = zlib.gunzipSync(bytes).toString('utf8');
-  } catch {
-    text = bytes.toString('utf8');
-  }
+  const isGzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
+  const text = isGzip
+    ? zlib.gunzipSync(bytes, { maxOutputLength: MAX_DECOMPRESSED_BYTES }).toString('utf8')
+    : bytes.toString('utf8');
   return parseTsv(text);
+}
+
+export function selectLatestInstanceRows(
+  batches: Array<{ processingDate: string; rows: ReportRow[] }>,
+): ReportRow[] {
+  const latestByDate = new Map<string, { processingDate: string; rows: ReportRow[] }>();
+  for (const batch of batches) {
+    const rowsByDate = new Map<string, ReportRow[]>();
+    for (const row of batch.rows) {
+      const date = dateOf(row);
+      if (!date) continue;
+      const rows = rowsByDate.get(date) ?? [];
+      rows.push(row);
+      rowsByDate.set(date, rows);
+    }
+    for (const [date, rows] of rowsByDate) {
+      const current = latestByDate.get(date);
+      if (!current || batch.processingDate > current.processingDate) {
+        latestByDate.set(date, { processingDate: batch.processingDate, rows });
+      }
+    }
+  }
+  return [...latestByDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([, value]) => value.rows);
 }
 
 async function rowsForReport(reportId: string): Promise<ReportRow[]> {
@@ -103,16 +155,18 @@ async function rowsForReport(reportId: string): Promise<ReportRow[]> {
   const latest = (instances.data ?? [])
     .filter((row) => row.attributes?.processingDate)
     .sort((a, b) => (b.attributes?.processingDate ?? '').localeCompare(a.attributes?.processingDate ?? ''))
-    .slice(0, 2);
-  const allRows: ReportRow[] = [];
+    .slice(0, MAX_WEEKLY_INSTANCES);
+  const batches: Array<{ processingDate: string; rows: ReportRow[] }> = [];
   for (const instance of latest) {
     const segments = await reportGet<{ data?: Array<JsonApiRow<AnalyticsSegmentAttributes>> }>(
       `/analyticsReportInstances/${instance.id}/segments`,
       { limit: '200' },
     );
-    for (const segment of segments.data ?? []) allRows.push(...await downloadSegment(segment));
+    const rows: ReportRow[] = [];
+    for (const segment of segments.data ?? []) rows.push(...await downloadSegment(segment));
+    batches.push({ processingDate: instance.attributes!.processingDate!, rows });
   }
-  return allRows;
+  return selectLatestInstanceRows(batches);
 }
 
 function numberFrom(row: ReportRow, names: string[]): number {
@@ -132,7 +186,14 @@ function dateOf(row: ReportRow): string | null {
 function ensureWeek(map: Map<string, WeeklyMetrics>, date: string): WeeklyMetrics {
   let week = map.get(date);
   if (!week) {
-    week = { date, impressions: 0, productPageViews: 0, downloads: 0, proceeds: 0 };
+    week = {
+      date,
+      impressions: 0,
+      productPageViews: 0,
+      downloads: 0,
+      proceeds: 0,
+      available: { engagement: false, downloads: false, purchases: false },
+    };
     map.set(date, week);
   }
   return week;
@@ -153,21 +214,27 @@ export function buildWeeklyInsight(input: {
     const date = dateOf(row);
     if (!date) continue;
     const week = ensureWeek(weeks, date);
+    week.available.engagement = true;
     const event = (row.Event ?? '').toLowerCase();
     const pageType = (row['Page Type'] ?? '').toLowerCase();
-    const count = numberFrom(row, ['Counts', 'Count']);
+    const count = numberFrom(row, ['Unique Counts', 'Counts', 'Count']);
     if (event === 'impression') week.impressions += count;
     if (event === 'page view' && (pageType === 'product page' || !pageType)) week.productPageViews += count;
   }
   for (const row of input.downloads) {
     const date = dateOf(row);
     if (!date) continue;
-    ensureWeek(weeks, date).downloads += numberFrom(row, ['Counts', 'Count', 'Downloads', 'Units']);
+    const week = ensureWeek(weeks, date);
+    week.available.downloads = true;
+    week.downloads += numberFrom(row, ['Counts', 'Count', 'Downloads', 'Units']);
   }
   for (const row of input.purchases) {
     const date = dateOf(row);
     if (!date) continue;
-    ensureWeek(weeks, date).proceeds += numberFrom(row, [
+    const week = ensureWeek(weeks, date);
+    week.available.purchases = true;
+    week.proceeds += numberFrom(row, [
+      'Proceeds in USD',
       'Developer Proceeds',
       'Proceeds',
       'Estimated Proceeds',
@@ -175,7 +242,9 @@ export function buildWeeklyInsight(input: {
     ]);
   }
 
-  const ordered = [...weeks.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const ordered = [...weeks.values()]
+    .filter((week) => week.available.engagement && week.available.downloads)
+    .sort((a, b) => a.date.localeCompare(b.date));
   if (ordered.length < 2) {
     return {
       status: 'collecting',
@@ -196,17 +265,22 @@ export function buildWeeklyInsight(input: {
     {
       area: 'product_page',
       changePercent: percentageChange(currentPageRate, previousPageRate),
-      recommendation: '제품 페이지 진입률이 하락했습니다. 아이콘·스크린샷 첫 장·부제 중 하나를 바꿔 Product Page Optimization 테스트를 시작하세요.',
+      declineRecommendation: '제품 페이지 진입률이 하락했습니다. 아이콘·스크린샷 첫 장·부제 중 하나를 바꿔 Product Page Optimization 테스트를 시작하세요.',
+      healthyRecommendation: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 제품 페이지 진입률을 다음 실험 대상으로 삼으세요.',
     },
     {
       area: 'acquisition',
       changePercent: percentageChange(currentDownloadRate, previousDownloadRate),
-      recommendation: '제품 페이지 조회 대비 다운로드 전환이 하락했습니다. 유입 소스별 전환을 나누고 가장 큰 하락 소스에 맞춘 커스텀 제품 페이지를 만드세요.',
+      declineRecommendation: '제품 페이지 조회 대비 다운로드 전환이 하락했습니다. 유입 소스별 전환을 나누고 가장 큰 하락 소스에 맞춘 커스텀 제품 페이지를 만드세요.',
+      healthyRecommendation: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 다운로드 전환을 유입 소스별로 나눠 다음 실험을 정하세요.',
     },
     {
       area: 'monetization',
-      changePercent: percentageChange(currentRevenuePerDownload, previousRevenuePerDownload),
-      recommendation: '다운로드당 수익이 하락했습니다. 구매 리포트에서 상품별 하락을 확인하고 가격·오퍼·구독 전환 중 한 가지를 실험하세요.',
+      changePercent: previous.available.purchases && current.available.purchases
+        ? percentageChange(currentRevenuePerDownload, previousRevenuePerDownload)
+        : null,
+      declineRecommendation: '다운로드당 수익이 하락했습니다. 구매 리포트에서 상품별 하락을 확인하고 가격·오퍼·구독 전환 중 한 가지를 실험하세요.',
+      healthyRecommendation: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 다운로드당 수익을 상품별로 나눠 다음 가격·오퍼 실험을 정하세요.',
     },
   ].filter((candidate) => candidate.changePercent !== null)
     .sort((a, b) => (a.changePercent ?? 0) - (b.changePercent ?? 0));
@@ -220,21 +294,28 @@ export function buildWeeklyInsight(input: {
       impressions: percentageChange(current.impressions, previous.impressions),
       productPageViews: percentageChange(current.productPageViews, previous.productPageViews),
       downloads: percentageChange(current.downloads, previous.downloads),
-      proceeds: percentageChange(current.proceeds, previous.proceeds),
+      proceeds: previous.available.purchases && current.available.purchases
+        ? percentageChange(current.proceeds, previous.proceeds)
+        : null,
       productPageRate: percentageChange(currentPageRate, previousPageRate),
       downloadRate: percentageChange(currentDownloadRate, previousDownloadRate),
-      revenuePerDownload: percentageChange(currentRevenuePerDownload, previousRevenuePerDownload),
+      revenuePerDownload: previous.available.purchases && current.available.purchases
+        ? percentageChange(currentRevenuePerDownload, previousRevenuePerDownload)
+        : null,
     },
     insight: selected
       ? {
           area: selected.area,
           changePercent: selected.changePercent,
-          recommendation: selected.recommendation,
+          trend: (selected.changePercent ?? 0) < 0 ? 'declining' : 'stable_or_improving',
+          recommendation: (selected.changePercent ?? 0) < 0
+            ? selected.declineRecommendation
+            : selected.healthyRecommendation,
         }
       : {
           area: 'data_quality',
           changePercent: null,
-          recommendation: '비교 가능한 분모 데이터가 부족합니다. 표준 Engagement·Downloads·Purchases 리포트가 생성되는지 확인하세요.',
+          recommendation: '비교 가능한 분모 데이터가 부족합니다. Engagement·주간 Downloads Detailed·Purchases 리포트가 생성되는지 확인하세요.',
         },
   };
 }
@@ -275,10 +356,7 @@ export async function getWeeklyInsight(input: {
     `/analyticsReportRequests/${active.id}/reports`,
     { limit: '200' },
   );
-  const standard = (reports.data ?? []).filter((row) => !/Detailed/i.test(row.attributes?.name ?? ''));
-  const engagement = standard.find((row) => /Discovery and Engagement/i.test(row.attributes?.name ?? ''));
-  const downloads = standard.find((row) => /App Store Downloads/i.test(row.attributes?.name ?? ''));
-  const purchases = standard.find((row) => /App Store Purchases/i.test(row.attributes?.name ?? ''));
+  const { engagement, downloads, purchases } = selectWeeklyAnalyticsReports(reports.data ?? []);
   if (!engagement && !downloads && !purchases) {
     return {
       status: 'collecting',

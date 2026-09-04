@@ -6,6 +6,14 @@ const LITERAL_DEPENDENCY = /com\.android\.billingclient:billing(?:-ktx)?:([0-9]+
 const VARIABLE_DEPENDENCY = /com\.android\.billingclient:billing(?:-ktx)?:\$\{?([A-Za-z_][A-Za-z0-9_.-]*)\}?/g;
 const VERSION_ASSIGNMENT = /(?:^|\s)([A-Za-z_][A-Za-z0-9_.-]*)\s*(?:=|:)\s*["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']/gm;
 
+const BILLING_SUPPORT_SCHEDULE = [
+  { major: 5, submissionDeadline: '2024-08-31', extensionDeadline: '2024-11-01' },
+  { major: 6, submissionDeadline: '2025-08-31', extensionDeadline: '2025-11-01' },
+  { major: 7, submissionDeadline: '2026-08-31', extensionDeadline: '2026-11-01' },
+  { major: 8, submissionDeadline: '2027-08-31', extensionDeadline: '2027-11-01' },
+  { major: 9, submissionDeadline: '2028-08-31', extensionDeadline: '2028-11-01' },
+] as const;
+
 const SKIP_DIRS = new Set([
   '.git',
   '.gradle',
@@ -33,10 +41,12 @@ export interface BillingComplianceResult {
   detectedVersions: string[];
   evidence: BillingEvidence[];
   policy: {
-    minimumSupportedMajor: number;
+    minimumSupportedMajor: number | null;
     submissionDeadline: string;
     extensionDeadline: string;
     latestKnownMajor: number;
+    scheduleCurrent: boolean;
+    knownSchedule: Array<{ major: number; submissionDeadline: string; extensionDeadline: string }>;
     sourceUrl: string;
   };
   summary: string;
@@ -51,6 +61,7 @@ export interface BillingComplianceResult {
 interface CatalogInfo {
   versions: Map<string, string>;
   libraries: Map<string, { module?: string; version?: string; versionRef?: string }>;
+  bundles: Map<string, string[]>;
 }
 
 async function walk(root: string, maxDepth = 7): Promise<string[]> {
@@ -83,6 +94,7 @@ async function walk(root: string, maxDepth = 7): Promise<string[]> {
 function parseCatalog(text: string): CatalogInfo {
   const versions = new Map<string, string>();
   const libraries = new Map<string, { module?: string; version?: string; versionRef?: string }>();
+  const bundles = new Map<string, string[]>();
   let section = '';
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.replace(/\s+#.*$/, '').trim();
@@ -97,16 +109,35 @@ function parseCatalog(text: string): CatalogInfo {
       if (match) versions.set(match[1], match[2]);
       continue;
     }
+    if (section === 'bundles') {
+      const match = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*\[([^\]]*)]/);
+      if (match) {
+        bundles.set(match[1], [...match[2].matchAll(/["']([^"']+)["']/g)].map((item) => item[1]));
+      }
+      continue;
+    }
     if (section !== 'libraries') continue;
+    const shorthand = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*["']([^"']+)["']/);
+    if (shorthand) {
+      const coordinates = shorthand[2].split(':');
+      libraries.set(shorthand[1], {
+        module: coordinates.length >= 2 ? `${coordinates[0]}:${coordinates[1]}` : undefined,
+        version: coordinates.length >= 3 ? coordinates.slice(2).join(':') : undefined,
+      });
+      continue;
+    }
     const match = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*\{(.+)}\s*$/);
     if (!match) continue;
     const body = match[2];
-    const module = body.match(/module\s*=\s*["']([^"']+)["']/)?.[1];
+    const explicitModule = body.match(/module\s*=\s*["']([^"']+)["']/)?.[1];
+    const group = body.match(/group\s*=\s*["']([^"']+)["']/)?.[1];
+    const name = body.match(/name\s*=\s*["']([^"']+)["']/)?.[1];
+    const module = explicitModule ?? (group && name ? `${group}:${name}` : undefined);
     const version = body.match(/(?:^|,)\s*version\s*=\s*["']([^"']+)["']/)?.[1];
     const versionRef = body.match(/version\.ref\s*=\s*["']([^"']+)["']/)?.[1];
     libraries.set(match[1], { module, version, versionRef });
   }
-  return { versions, libraries };
+  return { versions, libraries, bundles };
 }
 
 function collectVariables(text: string): Map<string, string> {
@@ -125,17 +156,34 @@ function majorOf(version: string): number | null {
 }
 
 function policyAt(now: Date): BillingComplianceResult['policy'] {
-  const currentYear = now.getUTCFullYear();
-  const deadlineThisYear = new Date(Date.UTC(currentYear, 7, 31, 23, 59, 59));
-  const minimumSupportedMajor = now > deadlineThisYear ? currentYear - 2018 : currentYear - 2019;
-  const unsupportedMajor = minimumSupportedMajor - 1;
+  const deadlineEnd = (date: string) => new Date(`${date}T23:59:59.999Z`);
+  const next = BILLING_SUPPORT_SCHEDULE.find((row) => now <= deadlineEnd(row.submissionDeadline));
+  const lastExpired = [...BILLING_SUPPORT_SCHEDULE]
+    .filter((row) => now > deadlineEnd(row.submissionDeadline))
+    .at(-1);
   return {
-    minimumSupportedMajor,
-    submissionDeadline: `${unsupportedMajor + 2019}-08-31`,
-    extensionDeadline: `${unsupportedMajor + 2019}-11-01`,
-    latestKnownMajor: Math.max(9, minimumSupportedMajor + 1),
+    minimumSupportedMajor: next?.major ?? null,
+    submissionDeadline: lastExpired?.submissionDeadline ?? BILLING_SUPPORT_SCHEDULE[0].submissionDeadline,
+    extensionDeadline: lastExpired?.extensionDeadline ?? BILLING_SUPPORT_SCHEDULE[0].extensionDeadline,
+    latestKnownMajor: BILLING_SUPPORT_SCHEDULE.at(-1)!.major,
+    scheduleCurrent: Boolean(next),
+    knownSchedule: BILLING_SUPPORT_SCHEDULE.map((row) => ({ ...row })),
     sourceUrl: 'https://developer.android.com/google/play/billing/deprecation-faq',
   };
+}
+
+function scheduleForMajor(major: number) {
+  return BILLING_SUPPORT_SCHEDULE.find((row) => row.major === major);
+}
+
+function catalogScope(file: string): string {
+  const parent = path.dirname(file);
+  return path.basename(parent) === 'gradle' ? path.dirname(parent) : parent;
+}
+
+function isWithin(scope: string, file: string): boolean {
+  const relative = path.relative(scope, file);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
 export async function checkBillingCompliance(
@@ -143,35 +191,45 @@ export async function checkBillingCompliance(
   now = new Date(),
 ): Promise<BillingComplianceResult> {
   const root = path.resolve(projectPath);
+  let rootStat;
+  try {
+    rootStat = await fs.stat(root);
+  } catch {
+    throw new Error(`Android project path does not exist or is not readable: ${root}`);
+  }
+  if (!rootStat.isDirectory()) throw new Error(`Android project path is not a directory: ${root}`);
   const files = await walk(root);
   const texts = new Map<string, string>();
   for (const file of files) texts.set(file, await fs.readFile(file, 'utf8'));
 
-  const catalogFile = files.find((file) => path.basename(file) === 'libs.versions.toml');
-  const catalog = catalogFile ? parseCatalog(texts.get(catalogFile) ?? '') : { versions: new Map(), libraries: new Map() };
-  const allVariables = new Map<string, string>();
+  const catalogs = files
+    .filter((file) => path.basename(file) === 'libs.versions.toml')
+    .map((file) => ({ file, scope: catalogScope(file), info: parseCatalog(texts.get(file) ?? '') }));
+  const variablesByFile = new Map<string, Map<string, string>>();
   for (const [file, text] of texts) {
     if (path.basename(file) === 'libs.versions.toml') continue;
-    for (const [key, value] of collectVariables(text)) allVariables.set(key, value);
+    variablesByFile.set(file, collectVariables(text));
   }
+
+  const catalogFor = (file: string): CatalogInfo | undefined => catalogs
+    .filter((entry) => isWithin(entry.scope, file))
+    .sort((left, right) => right.scope.length - left.scope.length)[0]?.info
+    ?? (catalogs.length === 1 ? catalogs[0].info : undefined);
+
+  const variableFor = (file: string, key: string): string | undefined => [...variablesByFile.entries()]
+    .filter(([candidate]) => candidate === file || isWithin(path.dirname(candidate), file))
+    .sort(([left], [right]) => path.dirname(right).length - path.dirname(left).length)
+    .map(([, variables]) => variables.get(key))
+    .find((value) => value !== undefined);
 
   const evidence: BillingEvidence[] = [];
   for (const [file, text] of texts) {
     const relative = path.relative(root, file).replace(/\\/g, '/');
     if (path.basename(file) === 'libs.versions.toml') {
-      for (const [alias, lib] of catalog.libraries) {
-        if (!lib.module || !BILLING_MODULE.test(lib.module)) continue;
-        const version = lib.version ?? (lib.versionRef ? catalog.versions.get(lib.versionRef) : undefined);
-        evidence.push({
-          file: relative,
-          module: lib.module,
-          version,
-          expression: `libs.${alias.replace(/-/g, '.')}`,
-          source: version ? 'version_catalog' : 'unresolved',
-        });
-      }
       continue;
     }
+
+    const catalog = catalogFor(file);
 
     for (const match of text.matchAll(LITERAL_DEPENDENCY)) {
       evidence.push({
@@ -182,7 +240,7 @@ export async function checkBillingCompliance(
       });
     }
     for (const match of text.matchAll(VARIABLE_DEPENDENCY)) {
-      const version = allVariables.get(match[1]);
+      const version = variableFor(file, match[1]);
       evidence.push({
         file: relative,
         module: match[0].slice(0, match[0].lastIndexOf(':')),
@@ -191,11 +249,31 @@ export async function checkBillingCompliance(
         source: version ? 'variable' : 'unresolved',
       });
     }
+    for (const bundleMatch of text.matchAll(/\blibs\.bundles\.([A-Za-z0-9_.-]+)/g)) {
+      const bundleAlias = normalizeAlias(bundleMatch[1]);
+      const libraryAliases = catalog?.bundles.get(bundleAlias) ?? catalog?.bundles.get(bundleMatch[1]) ?? [];
+      for (const libraryAlias of libraryAliases) {
+        const normalizedLibraryAlias = normalizeAlias(libraryAlias);
+        const lib = catalog?.libraries.get(normalizedLibraryAlias) ?? catalog?.libraries.get(libraryAlias);
+        if (!lib?.module || !BILLING_MODULE.test(lib.module)) continue;
+        const version = lib.version ?? (lib.versionRef ? catalog?.versions.get(lib.versionRef) : undefined);
+        if (!evidence.some((row) => row.file === relative && row.expression === bundleMatch[0] && row.module === lib.module)) {
+          evidence.push({
+            file: relative,
+            module: lib.module,
+            version,
+            expression: bundleMatch[0],
+            source: version ? 'version_catalog' : 'unresolved',
+          });
+        }
+      }
+    }
     for (const aliasMatch of text.matchAll(/\blibs\.([A-Za-z0-9_.-]+)/g)) {
+      if (aliasMatch[1].startsWith('bundles.')) continue;
       const alias = normalizeAlias(aliasMatch[1]);
-      const lib = catalog.libraries.get(alias) ?? catalog.libraries.get(aliasMatch[1]);
+      const lib = catalog?.libraries.get(alias) ?? catalog?.libraries.get(aliasMatch[1]);
       if (!lib?.module || !BILLING_MODULE.test(lib.module)) continue;
-      const version = lib.version ?? (lib.versionRef ? catalog.versions.get(lib.versionRef) : undefined);
+      const version = lib.version ?? (lib.versionRef ? catalog?.versions.get(lib.versionRef) : undefined);
       if (!evidence.some((row) => row.file === relative && row.expression === aliasMatch[0])) {
         evidence.push({
           file: relative,
@@ -227,11 +305,20 @@ export async function checkBillingCompliance(
   if (evidence.length === 0) {
     status = 'not_used';
     summary = 'Google Play Billing dependency was not found in the scanned Gradle project.';
-  } else if (majors.some((major) => major < policy.minimumSupportedMajor)) {
+  } else if (!policy.scheduleCurrent || policy.minimumSupportedMajor === null) {
+    status = 'unresolved';
+    summary = `The official schedule embedded in this release ends at Billing Library ${policy.latestKnownMajor}; current policy must be refreshed from the source.`;
+    actions.push('Check the official Billing deprecation table and update Mimi Seed before relying on this result.');
+  } else if (majors.some((major) => major < policy.minimumSupportedMajor!)) {
     status = 'blocker';
     summary = `Billing Library ${detectedVersions.join(', ')} is below the submission minimum major ${policy.minimumSupportedMajor}.`;
     actions.push(`Upgrade to a supported Billing Library before submitting a new app or update.`);
-    actions.push(`If Google granted an extension, verify it in Play Console; the listed extension deadline is ${policy.extensionDeadline}.`);
+    for (const major of [...new Set(majors.filter((value) => value < policy.minimumSupportedMajor!))].sort()) {
+      const schedule = scheduleForMajor(major);
+      actions.push(schedule
+        ? `Billing Library ${major}: standard deadline ${schedule.submissionDeadline}; extension deadline ${schedule.extensionDeadline} only if Google granted it in Play Console.`
+        : `Billing Library ${major}: its deadline predates the embedded official table; no active extension should be assumed.`);
+    }
   } else if (unresolved || majors.length === 0) {
     status = 'unresolved';
     summary = 'A Billing dependency was found, but at least one version expression could not be resolved statically.';
@@ -239,7 +326,8 @@ export async function checkBillingCompliance(
   } else if (majors.some((major) => major === policy.minimumSupportedMajor)) {
     status = 'warning';
     summary = `Billing Library ${detectedVersions.join(', ')} is currently supported but is the next major scheduled for deprecation.`;
-    actions.push(`Plan an upgrade before ${policy.minimumSupportedMajor + 2019}-08-31.`);
+    const nextDeadline = scheduleForMajor(policy.minimumSupportedMajor);
+    if (nextDeadline) actions.push(`Plan an upgrade before ${nextDeadline.submissionDeadline}.`);
   } else {
     status = 'pass';
     summary = `Billing Library ${detectedVersions.join(', ')} satisfies the current submission policy.`;

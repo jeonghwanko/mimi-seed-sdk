@@ -108,4 +108,58 @@ describe('checkAppStoreRisks', () => {
       level: 'warning',
     }));
   });
+
+  it('13세 미만 소셜 기능 제한인데 연령 확인이 없으면 blocker로 만든다', async () => {
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'version-1' }] };
+      if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') return { data: [] };
+      if (path === '/appStoreVersions/version-1/relationships/build') return { data: { id: 'build-1' } };
+      if (path === '/apps/1234567890/appInfos') return { data: [{ id: 'info-1', attributes: {} }] };
+      if (path === '/appInfos/info-1/appInfoLocalizations') {
+        return { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] };
+      }
+      if (path === '/appInfos/info-1/ageRatingDeclaration') {
+        return {
+          data: {
+            attributes: {
+              userGeneratedContent: true,
+              socialMedia: true,
+              socialMediaAgeRestricted: true,
+              ageAssurance: false,
+            },
+          },
+        };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const risks = await checkAppStoreRisks('1234567890');
+    expect(risks).toContainEqual(expect.objectContaining({
+      code: 'SOCIAL_MEDIA_AGE_ASSURANCE_MISSING',
+      level: 'blocker',
+    }));
+  });
+
+  it('연령등급 선언 404를 API 장애가 아니라 미응답 blocker로 판정한다', async () => {
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'version-1' }] };
+      if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') return { data: [] };
+      if (path === '/appStoreVersions/version-1/relationships/build') return { data: { id: 'build-1' } };
+      if (path === '/apps/1234567890/appInfos') return { data: [{ id: 'info-1', attributes: {} }] };
+      if (path === '/appInfos/info-1/appInfoLocalizations') {
+        return { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] };
+      }
+      if (path === '/appInfos/info-1/ageRatingDeclaration') {
+        throw Object.assign(new Error('missing declaration'), { cause: { status: 404 } });
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const risks = await checkAppStoreRisks('1234567890');
+    expect(risks).toContainEqual(expect.objectContaining({
+      code: 'SOCIAL_MEDIA_ANSWERS_MISSING',
+      level: 'blocker',
+    }));
+    expect(risks.some((risk) => risk.code === 'API_ERROR_AGE_RATING_SOCIAL')).toBe(false);
+  });
 });
