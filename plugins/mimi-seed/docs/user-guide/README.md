@@ -23,6 +23,8 @@ launch**. Start with the outcome you want instead of memorizing tool names.
 | Connect the required accounts and tokens | [Connect accounts](accounts.md) |
 | Trigger and monitor a CI build | [Build and CI](build-ci.md) |
 | Check for launch blockers | [Release readiness](release-readiness.md) |
+| Test Release Doctor and report redacted accuracy/timing | [Release Doctor pilot](release-doctor-pilot.md) |
+| Review the public-repository Release Doctor baseline | [Release Doctor validation](release-doctor-validation.md) |
 | Deploy Android or iOS end to end | [End-to-end deploy](deploy.md) |
 | Operate Play Store or App Store directly | [Store operations](stores.md) |
 | Operate Firebase, AdMob, GA4, or BigQuery | [Cloud and analytics](cloud-operations.md) |

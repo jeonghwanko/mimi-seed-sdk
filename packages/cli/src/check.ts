@@ -8,6 +8,11 @@ import { runMcpBin } from "./mcp-bin.js";
 const M = catalog(
   {
     noAccount: "연결된 계정 없음. `mimi-seed init` 실행.\n",
+    missingOptionValue: (option: string) => `${option} 뒤에 값을 입력하세요.`,
+    unknownOption: (option: string) => `알 수 없는 check 옵션: ${option}`,
+    unexpectedArgument: (value: string) => `예상하지 않은 check 인자: ${value}`,
+    localAppConflict: "--app은 원격 검사 전용이므로 --local, --path, --json과 함께 사용할 수 없습니다.\n",
+    localStarting: "Release Doctor 실행 중… 첫 실행은 검사기 다운로드로 시간이 걸릴 수 있습니다.\n",
     title: "mimi-seed check — 출시 전 점검\n\n",
     appsFailed: (msg: string) => `앱 목록 조회 실패: ${msg}\n`,
     noApps: "등록된 앱이 없습니다. `mimi-seed init` 후 앱을 등록하세요.\n",
@@ -30,6 +35,11 @@ const M = catalog(
   },
   {
     noAccount: "No account connected. Run `mimi-seed init`.\n",
+    missingOptionValue: (option: string) => `Provide a value after ${option}.`,
+    unknownOption: (option: string) => `Unknown check option: ${option}`,
+    unexpectedArgument: (value: string) => `Unexpected check argument: ${value}`,
+    localAppConflict: "--app is remote-only and cannot be combined with --local, --path, or --json.\n",
+    localStarting: "Running Release Doctor… the first run may take longer while the checker downloads.\n",
     title: "mimi-seed check — pre-launch check\n\n",
     appsFailed: (msg: string) => `Failed to list apps: ${msg}\n`,
     noApps: "No apps registered. Run `mimi-seed init`, then register an app.\n",
@@ -52,7 +62,7 @@ const M = catalog(
   },
 );
 
-interface CheckArgs {
+export interface CheckArgs {
   appId?: string;
   projectPath: string;
   projectPathExplicit: boolean;
@@ -61,7 +71,7 @@ interface CheckArgs {
   json: boolean;
 }
 
-function parseArgs(argv: string[]): CheckArgs {
+export function parseCheckArgs(argv: string[]): CheckArgs {
   const args: CheckArgs = {
     projectPath: process.cwd(),
     projectPathExplicit: false,
@@ -69,15 +79,22 @@ function parseArgs(argv: string[]): CheckArgs {
     local: false,
     json: false,
   };
+  const takeValue = (option: string, index: number): string => {
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(M().missingOptionValue(option));
+    return value;
+  };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--app" && argv[i + 1]) args.appId = argv[++i];
-    if (argv[i] === "--path" && argv[i + 1]) {
-      args.projectPath = argv[++i];
+    const token = argv[i];
+    if (token === "--app") args.appId = takeValue(token, i++);
+    else if (token === "--path") {
+      args.projectPath = takeValue(token, i++);
       args.projectPathExplicit = true;
-    }
-    if (argv[i] === "--fail-on-blocker") args.failOnBlocker = true;
-    if (argv[i] === "--local") args.local = true;
-    if (argv[i] === "--json") args.json = true;
+    } else if (token === "--fail-on-blocker") args.failOnBlocker = true;
+    else if (token === "--local") args.local = true;
+    else if (token === "--json") args.json = true;
+    else if (token.startsWith("-")) throw new Error(M().unknownOption(token));
+    else throw new Error(M().unexpectedArgument(token));
   }
   return args;
 }
@@ -97,16 +114,34 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 export async function cmdCheck(argv: string[]): Promise<void> {
-  const args = parseArgs(argv);
+  let args: CheckArgs;
+  try {
+    args = parseCheckArgs(argv);
+  } catch (error) {
+    process.stderr.write(kleur.red(`${error instanceof Error ? error.message : String(error)}\n`));
+    process.exitCode = 2;
+    return;
+  }
   const cfg = await getEffectiveConfig();
 
   // The free acquisition path must produce value before asking for credentials. Existing connected
   // users retain the richer remote readiness score; --local always forces repository-only checks.
   const localRequested = args.local || args.json || args.projectPathExplicit;
+  if (args.appId && localRequested) {
+    process.stderr.write(kleur.red(M().localAppConflict));
+    process.exitCode = 2;
+    return;
+  }
+  if (args.appId && !cfg) {
+    process.stderr.write(kleur.red(M().noAccount));
+    process.exitCode = 1;
+    return;
+  }
   if (localRequested || !cfg) {
     const doctorArgs = [args.projectPath];
     if (args.json) doctorArgs.push("--json");
     if (args.failOnBlocker) doctorArgs.push("--fail-on-blocker");
+    if (!args.json) process.stderr.write(kleur.dim(M().localStarting));
     const exitCode = await runMcpBin("mimi-seed-release-doctor", doctorArgs);
     if (exitCode !== 0) process.exit(exitCode);
     return;

@@ -23,6 +23,8 @@
 | 필요한 토큰과 계정 연결 | [계정 연결](accounts.ko.md) |
 | CI 빌드 시작·상태 추적 | [빌드와 CI](build-ci.ko.md) |
 | 출시 전에 누락 사항 검사 | [출시 준비도](release-readiness.ko.md) |
+| Release Doctor 정확도·실행 시간 시험 | [Release Doctor 파일럿](release-doctor-pilot.ko.md) |
+| 공개 저장소 Release Doctor 기준선 확인 | [Release Doctor 검증](release-doctor-validation.ko.md) |
 | Android/iOS 전체 배포 | [전체 배포](deploy.ko.md) |
 | Play Store·App Store 개별 작업 | [스토어 운영](stores.ko.md) |
 | Firebase·AdMob·GA4·BigQuery 운영 | [클라우드와 분석](cloud-operations.ko.md) |

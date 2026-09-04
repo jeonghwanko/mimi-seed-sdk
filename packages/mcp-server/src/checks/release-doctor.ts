@@ -117,14 +117,18 @@ function parseExpo(files: ProjectFile[]) {
   const platforms = new Set<string>();
   let detected = false;
   for (const file of files.filter((candidate) => /(?:^|\/)app(?:\.config)?\.(?:json|js|cjs|mjs|ts)$/.test(candidate.relative))) {
-    detected = true;
     try {
       const json = JSON.parse(file.text) as Record<string, unknown>;
-      const expo = ((json.expo && typeof json.expo === 'object') ? json.expo : json) as {
+      const hasExpoRoot = Boolean(json.expo && typeof json.expo === 'object');
+      const expo = (hasExpoRoot ? json.expo : json) as {
         android?: { package?: unknown };
         ios?: { bundleIdentifier?: unknown };
         platforms?: unknown;
       };
+      if (hasExpoRoot
+        || typeof expo.android?.package === 'string'
+        || typeof expo.ios?.bundleIdentifier === 'string'
+        || Array.isArray(expo.platforms)) detected = true;
       if (typeof expo.android?.package === 'string') androidPackageNames.push(expo.android.package);
       if (typeof expo.ios?.bundleIdentifier === 'string') iosBundleIds.push(expo.ios.bundleIdentifier);
       if (Array.isArray(expo.platforms)) {
@@ -134,6 +138,7 @@ function parseExpo(files: ProjectFile[]) {
       // Dynamic Expo configs are common. Resolve only obvious literal identifiers and keep the rest as warnings.
       const android = file.text.match(/\bandroid\s*:\s*\{[\s\S]{0,3000}?\bpackage\s*:\s*['"]([^'"]+)['"]/);
       const ios = file.text.match(/\bios\s*:\s*\{[\s\S]{0,3000}?\bbundleIdentifier\s*:\s*['"]([^'"]+)['"]/);
+      if (android?.[1] || ios?.[1] || /\bexpo\s*:/.test(file.text)) detected = true;
       if (android?.[1]) androidPackageNames.push(android[1]);
       if (ios?.[1]) iosBundleIds.push(ios[1]);
     }
@@ -155,44 +160,57 @@ function detectProject(files: ProjectFile[]) {
   const gradleFiles = files.filter((file) => /build\.gradle(?:\.kts)?$/.test(file.relative));
   const pbxFiles = files.filter((file) => file.relative.endsWith('project.pbxproj'));
   const plistFiles = files.filter((file) => file.relative.endsWith('Info.plist'));
+  const androidAppGradleFiles = gradleFiles.filter((file) =>
+    /\bcom\.android\.application\b|\blibs\.plugins\.android\.application\b|\bapplicationId\b/.test(file.text));
+  const androidAppManifestFiles = files.filter((file) =>
+    /(?:^|\/)android\/app\/src\/main\/AndroidManifest\.xml$/.test(file.relative));
+  const versionCatalogFiles = files.filter((file) => file.relative.endsWith('libs.versions.toml'));
+  const iosPbxFiles = pbxFiles.filter((file) =>
+    /(?:^|\/)ios\//.test(file.relative)
+    || /\b(?:SDKROOT\s*=\s*iphoneos|IPHONEOS_DEPLOYMENT_TARGET|TARGETED_DEVICE_FAMILY)\b/.test(file.text));
+  const iosPlistFiles = plistFiles.filter((file) =>
+    /(?:^|\/)ios\//.test(file.relative) || iosPbxFiles.length > 0);
 
   const androidPackageNames = [...expo.androidPackageNames];
-  for (const file of gradleFiles) {
+  for (const file of androidAppGradleFiles) {
     for (const match of file.text.matchAll(/\bapplicationId\s*(?:=\s*)?["']([^"']+)["']/g)) {
       androidPackageNames.push(match[1]);
     }
   }
 
   const iosBundleIds = [...expo.iosBundleIds];
-  for (const file of pbxFiles) {
+  for (const file of iosPbxFiles) {
     for (const match of file.text.matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g)) {
       const value = match[1].trim().replace(/^["']|["']$/g, '');
-      if (value && !value.includes('$')) iosBundleIds.push(value);
+      if (value && !value.includes('$') && !/(?:^|\.)(?:Tests?|UITests?|RunnerTests)$/i.test(value)) {
+        iosBundleIds.push(value);
+      }
     }
   }
-  for (const file of plistFiles) {
+  for (const file of iosPlistFiles) {
     const match = file.text.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
     if (match?.[1] && !match[1].includes('$')) iosBundleIds.push(match[1]);
   }
 
   const expoTargetsAndroid = expo.detected && (expo.platforms.size === 0 || expo.platforms.has('android'));
   const expoTargetsIos = expo.detected && (expo.platforms.size === 0 || expo.platforms.has('ios'));
-  const android = gradleFiles.length > 0
+  const android = androidAppGradleFiles.length > 0
     || expo.androidPackageNames.length > 0
     || expoTargetsAndroid
-    || files.some((file) => /(?:^|\/)android\//.test(file.relative));
-  const ios = pbxFiles.length > 0
-    || plistFiles.length > 0
+    || androidAppManifestFiles.length > 0;
+  const ios = iosPbxFiles.length > 0
+    || iosPlistFiles.some((file) => /(?:^|\/)ios\//.test(file.relative))
     || expo.iosBundleIds.length > 0
-    || expoTargetsIos
-    || files.some((file) => /(?:^|\/)ios\//.test(file.relative));
+    || expoTargetsIos;
+  const androidGradleFiles = gradleFiles.filter((file) =>
+    androidAppGradleFiles.includes(file) || /(?:^|\/)android\//.test(file.relative));
 
   return {
     android,
     ios,
     androidPackageNames: unique(androidPackageNames),
     iosBundleIds: unique(iosBundleIds),
-    gradleFiles,
+    gradleFiles: [...androidGradleFiles, ...versionCatalogFiles],
   };
 }
 
@@ -210,12 +228,35 @@ function targetPolicy(now: Date): { minimum: number | null; scheduleCurrent: boo
 function targetSdkFindings(gradleFiles: ProjectFile[], now: Date): ReleaseDoctorFinding[] {
   const evidence: Array<{ file: string; value: number }> = [];
   let hasUnresolvedExpression = false;
-  for (const file of gradleFiles) {
+  const catalogs = new Map<string, { value: number; file: string }>();
+  for (const file of gradleFiles.filter((candidate) => candidate.relative.endsWith('libs.versions.toml'))) {
+    let section = '';
+    for (const rawLine of file.text.split(/\r?\n/)) {
+      const line = rawLine.replace(/\s+#.*$/, '').trim();
+      const sectionMatch = line.match(/^\[([^\]]+)]$/);
+      if (sectionMatch) {
+        section = sectionMatch[1];
+        continue;
+      }
+      if (section !== 'versions') continue;
+      const version = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*["'](\d+)["']/);
+      if (version) catalogs.set(version[1], { value: Number.parseInt(version[2], 10), file: file.relative });
+    }
+  }
+  for (const file of gradleFiles.filter((candidate) => /build\.gradle(?:\.kts)?$/.test(candidate.relative))) {
     for (const match of file.text.matchAll(/\btargetSdk(?:Version)?\s*(?:=\s*)?(\d+)/g)) {
       evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
     }
+    for (const match of file.text.matchAll(/\btargetSdk(?:Version)?\s*(?:=\s*)?libs\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/g)) {
+      const resolved = catalogs.get(match[1]) ?? catalogs.get(match[1].replace(/\./g, '-'));
+      if (resolved) evidence.push({ file: resolved.file, value: resolved.value });
+    }
     if (/\btargetSdk(?:Version)?\b/.test(file.text) && !/\btargetSdk(?:Version)?\s*(?:=\s*)?\d+/.test(file.text)) {
-      hasUnresolvedExpression = true;
+      const catalogExpression = /\btargetSdk(?:Version)?\s*(?:=\s*)?libs\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/.exec(file.text);
+      const resolved = catalogExpression
+        ? catalogs.get(catalogExpression[1]) ?? catalogs.get(catalogExpression[1].replace(/\./g, '-'))
+        : undefined;
+      if (!resolved) hasUnresolvedExpression = true;
     }
   }
 
@@ -293,7 +334,11 @@ function targetSdkFindings(gradleFiles: ProjectFile[], now: Date): ReleaseDoctor
 function hasSpecializedAndroidProfile(files: ProjectFile[]): boolean {
   return files
     .filter((file) => file.relative.endsWith('AndroidManifest.xml'))
-    .some((file) => /android\.hardware\.type\.(?:watch|automotive)|android\.software\.(?:leanback|xr)|LEANBACK_LAUNCHER/i.test(file.text));
+    .some((file) => {
+      const manifest = file.text.replace(/<!--[\s\S]*?-->/g, '');
+      return /android\.hardware\.type\.(?:watch|automotive)|android\.(?:software|hardware)\.xr|LEANBACK_LAUNCHER/i.test(manifest)
+        || /android\.software\.leanback[^>]*android:required\s*=\s*["']true["']/i.test(manifest);
+    });
 }
 
 export async function scanReleaseDoctor(projectPath: string, now = new Date()): Promise<ReleaseDoctorReport> {
@@ -353,6 +398,20 @@ export async function scanReleaseDoctor(projectPath: string, now = new Date()): 
           detail: detected.androidPackageNames.join(', '),
         },
       });
+      if (detected.androidPackageNames.length > 1) {
+        findings.push({
+          code: 'MULTIPLE_ANDROID_APPLICATION_IDS',
+          severity: 'warning',
+          title: 'Multiple Android application IDs share this scan scope',
+          detail: 'Repository-wide Target API and Billing evidence may belong to different apps or variants.',
+          action: 'Run Release Doctor with --path set to one mobile app root before treating blockers as app-specific.',
+          ko: {
+            title: '검사 범위에 Android application ID가 여러 개 있음',
+            detail: '저장소 전체에서 찾은 Target API와 Billing 근거가 서로 다른 앱 또는 variant에 속할 수 있습니다.',
+            action: '블로커를 특정 앱의 결과로 판단하기 전에 --path로 모바일 앱 루트를 하나만 지정해 다시 검사하세요.',
+          },
+        });
+      }
     }
     if (hasSpecializedAndroidProfile(files)) {
       findings.push({
@@ -425,6 +484,20 @@ export async function scanReleaseDoctor(projectPath: string, now = new Date()): 
           detail: detected.iosBundleIds.join(', '),
         },
       });
+      if (detected.iosBundleIds.length > 1) {
+        findings.push({
+          code: 'MULTIPLE_IOS_BUNDLE_IDS',
+          severity: 'warning',
+          title: 'Multiple iOS bundle identifiers share this scan scope',
+          detail: 'The identifiers may represent multiple apps, extensions, or release targets in the same repository.',
+          action: 'Confirm which identifier belongs to the release target; use --path to narrow a monorepo scan.',
+          ko: {
+            title: '검사 범위에 iOS bundle identifier가 여러 개 있음',
+            detail: '같은 저장소의 여러 앱, extension 또는 출시 타깃 식별자가 함께 감지됐을 수 있습니다.',
+            action: '출시 타깃의 식별자를 확인하고, 모노레포라면 --path로 검사 범위를 좁히세요.',
+          },
+        });
+      }
     }
   }
 

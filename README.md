@@ -57,6 +57,10 @@ If no Mimi Seed account is connected, a plain `npx mimi-seed check` automaticall
 you connect stores, the same command adds remote listing, screenshot, uploaded-build, and submission-state
 checks. A local pass is intentionally not presented as a guarantee of store approval.
 
+Testing an app for a noncommercial purpose? Join the
+[10-minute Release Doctor pilot](docs/user-guide/release-doctor-pilot.md). Share redacted finding codes and
+timing only—never credentials, private source, absolute paths, or raw JSON.
+
 ---
 
 ## 30-Second Setup

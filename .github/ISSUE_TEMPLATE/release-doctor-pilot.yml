@@ -1,0 +1,87 @@
+name: Release Doctor pilot feedback
+description: Report detection quality, false positives, or first-run friction without sharing credentials or private source.
+title: "[Release Doctor pilot] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Release Doctor. Do not paste credentials, private source, absolute local paths, app identifiers, or an unredacted JSON report. Finding codes and counts are enough.
+
+  - type: checkboxes
+    id: eligibility
+    attributes:
+      label: Pilot eligibility
+      description: Mimi Seed currently uses the PolyForm Noncommercial license. Commercial evaluation requires separate written permission.
+      options:
+        - label: This test is noncommercial (including any open-source use), or I have separate permission.
+          required: true
+
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework
+      options:
+        - Expo managed
+        - Expo prebuild
+        - React Native CLI
+        - Native Android
+        - Native iOS
+        - Flutter
+        - Other mobile stack
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node major, and monorepo/non-monorepo only. Do not include usernames or local paths.
+      placeholder: Windows 11, Node 22, monorepo
+    validations:
+      required: true
+
+  - type: input
+    id: timing
+    attributes:
+      label: Time to first result
+      description: Approximate cold and warm run times.
+      placeholder: cold 65s, warm 3s
+    validations:
+      required: true
+
+  - type: textarea
+    id: result
+    attributes:
+      label: Redacted result
+      description: Share finding codes and counts only, for example TARGET_SDK_BELOW_MINIMUM and blockers=1.
+      placeholder: "platforms=android; blockers=1; warnings=0; codes=TARGET_SDK_BELOW_MINIMUM"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: accuracy
+    attributes:
+      label: Was the result accurate?
+      options:
+        - Yes
+        - False positive
+        - Missed a known blocker
+        - Could not complete the run
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected versus actual behavior
+      description: Describe structure and behavior only. Do not attach private build files.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, app identifiers, usernames, absolute paths, and private source.
+          required: true

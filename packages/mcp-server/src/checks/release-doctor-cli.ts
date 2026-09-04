@@ -1,24 +1,7 @@
 #!/usr/bin/env node
 import { resolveLang } from '../lib/lang.js';
 import { scanReleaseDoctor, type ReleaseDoctorFinding } from './release-doctor.js';
-
-interface Args {
-  projectPath: string;
-  json: boolean;
-  failOnBlocker: boolean;
-}
-
-function parseArgs(argv: string[]): Args {
-  let projectPath = process.cwd();
-  let json = false;
-  let failOnBlocker = false;
-  for (const arg of argv) {
-    if (arg === '--json') json = true;
-    else if (arg === '--fail-on-blocker') failOnBlocker = true;
-    else if (!arg.startsWith('-')) projectPath = arg;
-  }
-  return { projectPath, json, failOnBlocker };
-}
+import { parseReleaseDoctorArgs, RELEASE_DOCTOR_USAGE } from './release-doctor-cli-args.js';
 
 const COPY = {
   ko: {
@@ -72,7 +55,11 @@ function renderFinding(
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseReleaseDoctorArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stdout.write(`${RELEASE_DOCTOR_USAGE}\n`);
+    return;
+  }
   const report = await scanReleaseDoctor(args.projectPath);
   if (args.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
