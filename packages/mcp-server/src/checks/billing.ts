@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fetchWithTimeout } from '../lib/http.js';
 
 const BILLING_MODULE = /com\.android\.billingclient:billing(?:-ktx)?/;
 const LITERAL_DEPENDENCY = /com\.android\.billingclient:billing(?:-ktx)?:([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})/g;
@@ -32,7 +33,7 @@ export interface BillingEvidence {
   module: string;
   version?: string;
   expression?: string;
-  source: 'literal' | 'variable' | 'version_catalog' | 'unresolved';
+  source: 'literal' | 'variable' | 'version_catalog' | 'transitive' | 'unresolved';
 }
 export interface BillingComplianceResult {
   projectPath: string;
@@ -81,7 +82,8 @@ async function walk(root: string, maxDepth = 7): Promise<string[]> {
         entry.isFile()
         && (entry.name === 'build.gradle'
           || entry.name === 'build.gradle.kts'
-          || entry.name === 'libs.versions.toml')
+          || entry.name === 'libs.versions.toml'
+          || entry.name === 'package.json')
       ) {
         result.push(path.join(dir, entry.name));
       }
@@ -155,6 +157,131 @@ function majorOf(version: string): number | null {
   return Number.isFinite(major) ? major : null;
 }
 
+export function billingVersionFromPom(pom: string): { module: string; version: string } | null {
+  for (const match of pom.matchAll(/<dependency>([\s\S]*?)<\/dependency>/g)) {
+    const block = match[1];
+    const group = block.match(/<groupId>\s*([^<]+)\s*<\/groupId>/)?.[1]?.trim();
+    const artifact = block.match(/<artifactId>\s*([^<]+)\s*<\/artifactId>/)?.[1]?.trim();
+    const version = block.match(/<version>\s*([^<]+)\s*<\/version>/)?.[1]?.trim();
+    if (group === 'com.android.billingclient' && /^billing(?:-ktx)?$/.test(artifact ?? '') && version) {
+      return { module: `${group}:${artifact}`, version };
+    }
+  }
+  return null;
+}
+
+async function nearestNodePackage(packageDir: string, root: string): Promise<string | null> {
+  let current = packageDir;
+  while (isWithin(root, current)) {
+    const candidate = path.join(current, 'node_modules', 'react-native-iap');
+    try {
+      if ((await fs.stat(candidate)).isDirectory()) return candidate;
+    } catch {
+      // Keep walking toward the project root; workspaces commonly hoist node_modules.
+    }
+    if (current === root) break;
+    current = path.dirname(current);
+  }
+  return null;
+}
+
+async function reactNativeIapEvidence(
+  root: string,
+  manifestFile: string,
+  manifestText: string,
+): Promise<BillingEvidence | null> {
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(manifestText) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const dependencyGroups = ['dependencies', 'devDependencies', 'optionalDependencies']
+    .map((key) => manifest[key])
+    .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object');
+  const declaredVersion = dependencyGroups
+    .map((group) => group['react-native-iap'])
+    .find((value): value is string => typeof value === 'string');
+  if (!declaredVersion) return null;
+
+  const relativeManifest = path.relative(root, manifestFile).replace(/\\/g, '/');
+  const installedDir = await nearestNodePackage(path.dirname(manifestFile), root);
+  if (!installedDir) {
+    return {
+      file: relativeManifest,
+      module: 'com.android.billingclient:billing',
+      expression: `react-native-iap ${declaredVersion} is declared but not installed; transitive Billing version is unresolved`,
+      source: 'unresolved',
+    };
+  }
+
+  const directCandidates = [
+    path.join(installedDir, 'android', 'build.gradle'),
+    path.join(installedDir, 'android', 'build.gradle.kts'),
+  ];
+  for (const candidate of directCandidates) {
+    try {
+      const text = await fs.readFile(candidate, 'utf8');
+      const direct = [...text.matchAll(LITERAL_DEPENDENCY)][0];
+      if (direct) {
+        return {
+          file: relativeManifest,
+          module: direct[0].slice(0, direct[0].lastIndexOf(':')),
+          version: direct[1],
+          expression: `react-native-iap ${declaredVersion} native dependency`,
+          source: 'transitive',
+        };
+      }
+    } catch {
+      // Newer react-native-iap versions delegate Billing to the OpenIAP Maven artifact.
+    }
+  }
+
+  let openIapVersion: string | undefined;
+  try {
+    const versions = JSON.parse(await fs.readFile(path.join(installedDir, 'openiap-versions.json'), 'utf8')) as {
+      google?: unknown;
+    };
+    if (typeof versions.google === 'string') openIapVersion = versions.google;
+  } catch {
+    // Older releases may not use OpenIAP; fall through to an unresolved, safe result.
+  }
+  if (!openIapVersion || !/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(openIapVersion)) {
+    return {
+      file: relativeManifest,
+      module: 'com.android.billingclient:billing',
+      expression: `react-native-iap ${declaredVersion} detected; transitive Billing version is unresolved`,
+      source: 'unresolved',
+    };
+  }
+
+  const coordinate = `io.github.hyochan.openiap:openiap-google:${openIapVersion}`;
+  try {
+    const pomUrl = `https://repo.maven.apache.org/maven2/io/github/hyochan/openiap/openiap-google/${openIapVersion}/openiap-google-${openIapVersion}.pom`;
+    const response = await fetchWithTimeout(pomUrl, {}, { timeoutMs: 15_000, maxAttempts: 2 });
+    if (response.ok) {
+      const resolved = billingVersionFromPom(await response.text());
+      if (resolved) {
+        return {
+          file: relativeManifest,
+          module: resolved.module,
+          version: resolved.version,
+          expression: `react-native-iap ${declaredVersion} -> ${coordinate}`,
+          source: 'transitive',
+        };
+      }
+    }
+  } catch {
+    // Network failure must not turn a known IAP dependency into not_used.
+  }
+  return {
+    file: relativeManifest,
+    module: 'com.android.billingclient:billing',
+    expression: `react-native-iap ${declaredVersion} -> ${coordinate}; Maven Billing version lookup failed`,
+    source: 'unresolved',
+  };
+}
+
 function policyAt(now: Date): BillingComplianceResult['policy'] {
   const deadlineEnd = (date: string) => new Date(`${date}T23:59:59.999Z`);
   const next = BILLING_SUPPORT_SCHEDULE.find((row) => now <= deadlineEnd(row.submissionDeadline));
@@ -224,8 +351,13 @@ export async function checkBillingCompliance(
 
   const evidence: BillingEvidence[] = [];
   for (const [file, text] of texts) {
+    if (path.basename(file) !== 'package.json') continue;
+    const transitive = await reactNativeIapEvidence(root, file, text);
+    if (transitive && !evidence.some((row) => row.expression === transitive.expression)) evidence.push(transitive);
+  }
+  for (const [file, text] of texts) {
     const relative = path.relative(root, file).replace(/\\/g, '/');
-    if (path.basename(file) === 'libs.versions.toml') {
+    if (path.basename(file) === 'libs.versions.toml' || path.basename(file) === 'package.json') {
       continue;
     }
 
@@ -322,7 +454,7 @@ export async function checkBillingCompliance(
   } else if (unresolved || majors.length === 0) {
     status = 'unresolved';
     summary = 'A Billing dependency was found, but at least one version expression could not be resolved statically.';
-    actions.push('Resolve the reported Gradle variable or version catalog alias and run the check again.');
+    actions.push('Resolve the reported Gradle/version catalog expression or install the declared IAP package, then run the check again.');
   } else if (majors.some((major) => major === policy.minimumSupportedMajor)) {
     status = 'warning';
     summary = `Billing Library ${detectedVersions.join(', ')} is currently supported but is the next major scheduled for deprecation.`;

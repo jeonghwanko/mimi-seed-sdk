@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { checkBillingCompliance } from '../checks/billing.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { billingVersionFromPom, checkBillingCompliance } from '../checks/billing.js';
 
 const dirs: string[] = [];
 
@@ -18,9 +18,19 @@ async function fixture(files: Record<string, string>): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 describe('Google Play Billing compliance', () => {
+  it('Maven POM에서 Billing 전이 의존성만 정확히 읽는다', () => {
+    expect(billingVersionFromPom([
+      '<project><dependencies>',
+      '<dependency><groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-stdlib</artifactId><version>2.2.0</version></dependency>',
+      '<dependency><groupId>com.android.billingclient</groupId><artifactId>billing-ktx</artifactId><version>8.3.0</version></dependency>',
+      '</dependencies></project>',
+    ].join(''))).toEqual({ module: 'com.android.billingclient:billing-ktx', version: '8.3.0' });
+  });
+
   it('2026-09-04에 Billing 7을 제출 blocker로 판정한다', async () => {
     const root = await fixture({
       'app/build.gradle.kts': 'dependencies { implementation("com.android.billingclient:billing-ktx:7.1.1") }',
@@ -82,6 +92,41 @@ describe('Google Play Billing compliance', () => {
     const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
     expect(result.status).toBe('blocker');
     expect(result.detectedVersions).toEqual(['7.1.1']);
+  });
+
+  it('react-native-iap의 OpenIAP POM을 따라 Billing 버전을 판정한다', async () => {
+    const root = await fixture({
+      'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^15.2.0' } }),
+      'node_modules/react-native-iap/openiap-versions.json': JSON.stringify({ google: '2.1.0' }),
+      'node_modules/react-native-iap/android/build.gradle': 'implementation "io.github.hyochan.openiap:openiap-google:${googleVersionString}"',
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response([
+      '<project><dependencies><dependency>',
+      '<groupId>com.android.billingclient</groupId>',
+      '<artifactId>billing-ktx</artifactId>',
+      '<version>8.3.0</version>',
+      '</dependency></dependencies></project>',
+    ].join(''))));
+
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+    expect(result.status).toBe('warning');
+    expect(result.detectedVersions).toEqual(['8.3.0']);
+    expect(result.evidence).toContainEqual(expect.objectContaining({
+      source: 'transitive',
+      expression: expect.stringContaining('openiap-google:2.1.0'),
+    }));
+  });
+
+  it('react-native-iap 조회 실패를 Billing 미사용으로 위장하지 않는다', async () => {
+    const root = await fixture({
+      'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^15.2.0' } }),
+      'node_modules/react-native-iap/openiap-versions.json': JSON.stringify({ google: '2.1.0' }),
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 404 })));
+
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+    expect(result.status).toBe('unresolved');
+    expect(result.evidence).toContainEqual(expect.objectContaining({ source: 'unresolved' }));
   });
 
   it('Billing 의존성이 없으면 not_used로 끝낸다', async () => {

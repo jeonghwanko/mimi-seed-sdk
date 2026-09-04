@@ -13,7 +13,7 @@ export function registerChecksTools(server: McpServer) {
     'android_check_billing_compliance',
     [
       '로컬 Android 저장소의 Google Play Billing Library 버전을 읽기 전용으로 탐지하고 제출 정책 마감과 비교합니다.',
-      'build.gradle, build.gradle.kts, gradle/libs.versions.toml의 literal·변수·version catalog를 검사합니다.',
+      'build.gradle, build.gradle.kts, gradle/libs.versions.toml의 literal·변수·version catalog와 react-native-iap의 OpenIAP 전이 의존성을 검사합니다.',
       '코드를 자동 수정하지 않고 공식 Android CLI Skill 설치 명령과 업그레이드 프롬프트만 반환합니다.',
     ].join(' '),
     {
