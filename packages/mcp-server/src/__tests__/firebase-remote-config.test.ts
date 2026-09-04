@@ -50,6 +50,9 @@ describe('Remote Config overview', () => {
     mocks.getBillingInfo.mockResolvedValue({ billingEnabled: true, billingAccountName: 'billingAccounts/test' });
     const auth = {
       request: vi.fn(async ({ url }: { url: string }) => {
+        if (url.includes('firebase.googleapis.com/v1beta1/projects/')) {
+          return { data: { projectNumber: '123456789' } };
+        }
         if (url.endsWith('/remoteConfig')) {
           return { data: { parameters: { flag: {} }, conditions: [{}], version: { versionNumber: '12' } } };
         }
@@ -65,8 +68,19 @@ describe('Remote Config overview', () => {
     expect(result.template).toMatchObject({ available: true, parameterCount: 1, conditionCount: 1 });
     expect(result.experiments).toMatchObject({ available: true, total: 1 });
     expect(result.rollouts).toMatchObject({ available: true, total: 1 });
+    expect(result).toMatchObject({ projectId: 'my-app', quotaProjectId: 'my-app' });
     expect(auth.request).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringContaining('/namespaces/firebase/remoteConfig'),
+      headers: { 'x-goog-user-project': 'my-app' },
+    }));
+    expect(mocks.timeSeriesList).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'projects/my-app' }),
+      { headers: { 'x-goog-user-project': 'my-app' } },
+    );
+    expect(mocks.getBillingInfo).toHaveBeenCalledWith(expect.anything(), 'my-app', 'my-app');
+    expect(auth.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining('/projects/123456789/namespaces/firebase/rollouts'),
+      headers: { 'x-goog-user-project': 'my-app' },
     }));
   });
 
@@ -82,6 +96,9 @@ describe('Remote Config overview', () => {
     mocks.getBillingInfo.mockResolvedValue({ billingEnabled: false, billingAccountName: null });
     const auth = {
       request: vi.fn(async ({ url }: { url: string }) => {
+        if (url.includes('firebase.googleapis.com/v1beta1/projects/')) {
+          return { data: { projectNumber: '123456789' } };
+        }
         if (url.endsWith('/remoteConfig')) return { data: {} };
         if (url.includes('/experiments?') && !url.includes('pageToken=')) {
           return { data: { experiments: [{ name: 'exp1', state: 'DONE' }], nextPageToken: 'next' } };
@@ -103,6 +120,10 @@ describe('Remote Config overview', () => {
       stateCounts: { DONE: 1, RUNNING: 1 },
       active: [{ name: 'exp2', displayName: 'B', state: 'RUNNING' }],
     });
+    expect(auth.request).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining('pageToken=next'),
+      headers: { 'x-goog-user-project': 'my-app' },
+    }));
   });
 
   it('진행 중인 오늘 값이 작아도 최근 peak를 숨기지 않는다', async () => {
@@ -117,6 +138,9 @@ describe('Remote Config overview', () => {
     mocks.getBillingInfo.mockResolvedValue({ billingEnabled: false, billingAccountName: null });
     const auth = {
       request: vi.fn(async ({ url }: { url: string }) => {
+        if (url.includes('firebase.googleapis.com/v1beta1/projects/')) {
+          return { data: { projectNumber: '123456789' } };
+        }
         if (url.endsWith('/remoteConfig')) return { data: {} };
         if (url.includes('/experiments?')) return { data: { experiments: [] } };
         if (url.includes('/rollouts?')) return { data: { rollouts: [] } };
@@ -131,5 +155,36 @@ describe('Remote Config overview', () => {
       peak: { date: '2026-09-03', fetches: 120000, level: 'critical' },
     });
     expect(result.warnings.join(' ')).toContain('120,000');
+  });
+
+  it('별도 quota 프로젝트를 모든 Google 요청에 일관되게 전달한다', async () => {
+    mocks.timeSeriesList.mockResolvedValue({ data: { timeSeries: [] } });
+    mocks.getBillingInfo.mockResolvedValue({ billingEnabled: false, billingAccountName: null });
+    const auth = {
+      request: vi.fn(async ({ url }: { url: string }) => {
+        if (url.includes('firebase.googleapis.com/v1beta1/projects/')) {
+          return { data: { projectNumber: '123456789' } };
+        }
+        if (url.endsWith('/remoteConfig')) return { data: {} };
+        if (url.includes('/experiments?')) return { data: { experiments: [] } };
+        if (url.includes('/rollouts?')) return { data: { rollouts: [] } };
+        throw new Error(`unexpected ${url}`);
+      }),
+    };
+
+    const result = await getRemoteConfigOverview(auth as never, {
+      projectId: 'spark-app',
+      quotaProjectId: 'quota-blaze',
+    });
+
+    expect(result.quotaProjectId).toBe('quota-blaze');
+    for (const [request] of auth.request.mock.calls) {
+      expect(request).toMatchObject({ headers: { 'x-goog-user-project': 'quota-blaze' } });
+    }
+    expect(mocks.timeSeriesList).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'projects/spark-app' }),
+      { headers: { 'x-goog-user-project': 'quota-blaze' } },
+    );
+    expect(mocks.getBillingInfo).toHaveBeenCalledWith(expect.anything(), 'spark-app', 'quota-blaze');
   });
 });

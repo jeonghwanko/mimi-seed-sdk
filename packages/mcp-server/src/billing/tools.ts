@@ -58,12 +58,17 @@ export type BillingInfo = {
   verdict: string;
 };
 
-export async function getBillingInfo(auth: OAuth2Client, projectId: string): Promise<BillingInfo> {
-  // 조회 대상 프로젝트 자신을 quota 주체로 쓴다 — 거기 Billing API 가 켜져 있어야 한다.
+export async function getBillingInfo(
+  auth: OAuth2Client,
+  projectId: string,
+  quotaProjectId = projectId,
+): Promise<BillingInfo> {
+  // 기본은 조회 대상 프로젝트를 quota 주체로 쓰되, Spark 프로젝트처럼 유료 API를
+  // 소비할 수 없는 대상은 별도의 Blaze quota 프로젝트를 지정할 수 있다.
   const res = await billing().projects.getBillingInfo({
     auth,
     name: `projects/${projectId}`,
-    ...quotaHeaders(projectId),
+    ...quotaHeaders(quotaProjectId),
   });
   const enabled = res.data.billingEnabled ?? false;
   const account = res.data.billingAccountName ?? null;

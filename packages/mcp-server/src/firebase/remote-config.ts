@@ -5,6 +5,7 @@ import { getBillingInfo } from '../billing/tools.js';
 const FREE_DAILY_FETCHES = 100_000;
 const FIRST_PAID_TIER_END = 10_000_000;
 const REMOTE_CONFIG_BASE = 'https://firebaseremoteconfig.googleapis.com/v1';
+const FIREBASE_MANAGEMENT_BASE = 'https://firebase.googleapis.com/v1beta1';
 
 interface OptionalResult<T> {
   available: boolean;
@@ -64,9 +65,16 @@ export function countStates(items: Array<{ state?: string }>): Record<string, nu
   return counts;
 }
 
-async function optionalRequest<T>(auth: OAuth2Client, url: string): Promise<OptionalResult<T>> {
+async function optionalRequest<T>(
+  auth: OAuth2Client,
+  url: string,
+  quotaProjectId: string,
+): Promise<OptionalResult<T>> {
   try {
-    const response = await auth.request<T>({ url });
+    const response = await auth.request<T>({
+      url,
+      headers: { 'x-goog-user-project': quotaProjectId },
+    });
     return { available: true, data: response.data };
   } catch (error) {
     return {
@@ -80,6 +88,7 @@ async function optionalPagedRequest<T>(
   auth: OAuth2Client,
   url: string,
   field: 'experiments' | 'rollouts',
+  quotaProjectId: string,
 ): Promise<OptionalResult<PagedItems<T>>> {
   try {
     const items: T[] = [];
@@ -89,7 +98,10 @@ async function optionalPagedRequest<T>(
       const requestUrl = new URL(url);
       requestUrl.searchParams.set('pageSize', '100');
       if (pageToken) requestUrl.searchParams.set('pageToken', pageToken);
-      const response = await auth.request<ExperimentList | RolloutList>({ url: requestUrl.toString() });
+      const response = await auth.request<ExperimentList | RolloutList>({
+        url: requestUrl.toString(),
+        headers: { 'x-goog-user-project': quotaProjectId },
+      });
       const data = response.data as Record<string, unknown>;
       items.push(...((data[field] as T[] | undefined) ?? []));
       pageToken = data.nextPageToken as string | undefined;
@@ -128,6 +140,7 @@ async function fetchDailyUsage(
   auth: OAuth2Client,
   projectId: string,
   days: number,
+  quotaProjectId: string,
 ): Promise<OptionalResult<Array<{ date: string; fetches: number }>>> {
   try {
     const end = new Date();
@@ -144,6 +157,8 @@ async function fetchDailyUsage(
       'aggregation.crossSeriesReducer': 'REDUCE_SUM',
       view: 'FULL',
       pageSize: Math.max(days + 2, 10),
+    }, {
+      headers: { 'x-goog-user-project': quotaProjectId },
     });
     const points = (response.data.timeSeries ?? [])
       .flatMap((series) => series.points ?? [])
@@ -167,31 +182,56 @@ async function fetchDailyUsage(
 
 export async function getRemoteConfigOverview(
   auth: OAuth2Client,
-  input: { projectId: string; namespace?: string; days?: number },
+  input: { projectId: string; namespace?: string; days?: number; quotaProjectId?: string },
 ) {
   const namespace = input.namespace ?? 'firebase';
   const days = Math.min(Math.max(input.days ?? 7, 1), 30);
+  // User OAuth otherwise charges quota to the shared OAuth-client project. The
+  // resource project is the safest default; Spark projects can point this at a
+  // separate Blaze project with the relevant APIs enabled.
+  const quotaProjectId = input.quotaProjectId ?? input.projectId;
   const encodedProject = encodeURIComponent(input.projectId);
   const encodedNamespace = encodeURIComponent(namespace);
   const parent = `${REMOTE_CONFIG_BASE}/projects/${encodedProject}/namespaces/${encodedNamespace}`;
+
+  // The rollout beta endpoint rejects project IDs even though the REST path uses
+  // the generic {project} placeholder; live responses require projectNumber.
+  const projectNumber = optionalRequest<{ projectNumber?: string }>(
+    auth,
+    `${FIREBASE_MANAGEMENT_BASE}/projects/${encodedProject}`,
+    quotaProjectId,
+  );
+  const rolloutsPromise = projectNumber.then(async (result) => {
+    if (!result.available || !result.data?.projectNumber) {
+      return {
+        available: false,
+        error: result.error ?? 'Firebase project number is unavailable.',
+      } satisfies OptionalResult<PagedItems<NonNullable<RolloutList['rollouts']>[number]>>;
+    }
+    const rolloutParent = `${REMOTE_CONFIG_BASE}/projects/${encodeURIComponent(result.data.projectNumber)}/namespaces/${encodedNamespace}`;
+    return optionalPagedRequest<NonNullable<RolloutList['rollouts']>[number]>(
+      auth,
+      `${rolloutParent}/rollouts`,
+      'rollouts',
+      quotaProjectId,
+    );
+  });
 
   const [template, experiments, rollouts, usage, billing] = await Promise.all([
     optionalRequest<RemoteConfigTemplate>(
       auth,
       `${parent}/remoteConfig`,
+      quotaProjectId,
     ),
     optionalPagedRequest<NonNullable<ExperimentList['experiments']>[number]>(
       auth,
       `${parent}/experiments`,
       'experiments',
+      quotaProjectId,
     ),
-    optionalPagedRequest<NonNullable<RolloutList['rollouts']>[number]>(
-      auth,
-      `${parent}/rollouts`,
-      'rollouts',
-    ),
-    fetchDailyUsage(auth, input.projectId, days),
-    getBillingInfo(auth, input.projectId)
+    rolloutsPromise,
+    fetchDailyUsage(auth, input.projectId, days, quotaProjectId),
+    getBillingInfo(auth, input.projectId, quotaProjectId)
       .then((data) => ({ available: true, data } as const))
       .catch((error: unknown) => ({
         available: false,
@@ -246,6 +286,7 @@ export async function getRemoteConfigOverview(
 
   return {
     projectId: input.projectId,
+    quotaProjectId,
     namespace,
     pricingPolicy: {
       effectiveDate: '2026-09-01',

@@ -42,10 +42,13 @@ export function registerFirebaseTools(server: McpServer) {
       projectId: z.string().describe('Firebase / Google Cloud 프로젝트 ID'),
       namespace: z.string().optional().describe('Remote Config namespace (기본: firebase)'),
       days: z.number().int().min(1).max(30).optional().describe('사용량 조회 일수 (기본: 7, 최대: 30)'),
+      quotaProjectId: z.string().optional().describe(
+        'API quota/과금 프로젝트 ID. 기본은 projectId. Spark 프로젝트의 Monitoring 조회가 billing_required이면 Remote Config·Monitoring API가 활성화된 Blaze 프로젝트를 지정',
+      ),
     },
-    async ({ projectId, namespace, days }) => {
+    async ({ projectId, namespace, days, quotaProjectId }) => {
       const auth = await requireAuth();
-      return jsonResult(await getRemoteConfigOverview(auth, { projectId, namespace, days }));
+      return jsonResult(await getRemoteConfigOverview(auth, { projectId, namespace, days, quotaProjectId }));
     },
   );
 
