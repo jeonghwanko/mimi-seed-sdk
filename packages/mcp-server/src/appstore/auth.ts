@@ -19,7 +19,7 @@ export interface AppStoreCredentials {
   /**
    * Sales and Trends / Finance 리포트 전용 판매자 번호.
    *
-   * **API 로는 조회할 수 없다** — ASC > 지급 및 재무 보고서 화면에서 눈으로 읽어
+   * **API 로는 조회할 수 없다** — ASC > Reports 화면의 Legal Entity Name 아래에서 눈으로 읽어
    * 여기 적어두는 수밖에 없다. 리포트 도구에만 쓰이므로 없어도 나머지는 다 동작한다.
    */
   vendorNumber?: string;
@@ -48,6 +48,16 @@ export interface AppStoreKey {
   privateKey: string;
 }
 
+/** 빈 입력은 미설정으로 처리하고, 값이 있으면 Apple 보고서 필터에 안전한 숫자인지 확인한다. */
+export function normalizeVendorNumber(vendorNumber?: string): string | undefined {
+  const normalized = vendorNumber?.trim();
+  if (!normalized) return undefined;
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error('Vendor Number는 숫자만 입력하세요 (digits only).');
+  }
+  return normalized;
+}
+
 /**
  * 최상위 ASC API 키를 교체하되 같은 파일에 저장된 선택 설정은 보존한다.
  *
@@ -61,7 +71,7 @@ export function mergeAppStoreCredentials(
   vendorNumber?: string,
 ): AppStoreCredentials {
   const merged: AppStoreCredentials = { ...(existing ?? {}), ...primary };
-  const normalizedVendorNumber = vendorNumber?.trim();
+  const normalizedVendorNumber = normalizeVendorNumber(vendorNumber);
   if (normalizedVendorNumber) merged.vendorNumber = normalizedVendorNumber;
   return merged;
 }

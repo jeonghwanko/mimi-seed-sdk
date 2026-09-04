@@ -10,7 +10,7 @@
 
 import zlib from 'node:zlib';
 import { fetchWithTimeout } from '../lib/http.js';
-import { getAppStoreCredentials, getReportsAuthHeaders } from './auth.js';
+import { getAppStoreCredentials, getReportsAuthHeaders, normalizeVendorNumber } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
 import { V1_BASE } from './http.js';
 
@@ -22,13 +22,14 @@ import { V1_BASE } from './http.js';
  * 매출 0 으로 둔갑하는 게 이 도구에서 제일 위험한 오답이라 사전에 막는다.
  */
 function resolveVendorNumber(explicit?: string): string {
-  const vendorNumber = explicit?.trim() || getAppStoreCredentials()?.vendorNumber?.trim();
+  const vendorNumber = normalizeVendorNumber(explicit)
+    ?? normalizeVendorNumber(getAppStoreCredentials()?.vendorNumber);
   if (!vendorNumber) {
     throw new Error(
       [
         '❌ vendorNumber 가 없어 — 매출 리포트는 판매자 번호가 반드시 필요해.',
         '',
-        'App Store Connect > 비즈니스(지급 및 재무 보고서) 상단에 있는 8~9자리 숫자야.',
+        'App Store Connect > Reports > 왼쪽 위 Legal Entity Name 아래에 있는 숫자야.',
         'API 로는 조회할 수 없으니 한 번만 저장해 두면 이후 생략할 수 있어:',
         '  ~/.mimi-seed/appstore.json 에 "vendorNumber": "<번호>" 추가',
         '또는 이 도구의 vendorNumber 인자로 직접 넘겨.',

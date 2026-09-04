@@ -94,8 +94,10 @@ release work, but creating Analytics report requests requires an **Admin** key. 
 > key and issue a new one. Store it somewhere you'll still have next quarter.
 
 **Give it to the wizard:** Issuer ID, Key ID, the path to the `.p8` on disk, and optionally the **Vendor Number**.
-Find the Vendor Number at the upper left of **Sales and Trends** in App Store Connect. Leaving it blank preserves
-the saved value. When already connected, you can update only the Vendor Number without re-entering the API key;
+Open **Reports** at the top of App Store Connect; the Vendor Number appears at the upper left under the Legal
+Entity Name. Enter digits only. Leaving it blank preserves
+the saved value. When already connected, enter `v` at the API Key prompt to update only the Vendor Number without
+re-entering the key;
 reconnecting also preserves a separately configured reports key and Vendor Number.
 
 **Verify:** `mimi-seed doctor`, or ask your agent for `appstore_verify_credentials`. The base check verifies app

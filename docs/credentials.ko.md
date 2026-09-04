@@ -94,8 +94,10 @@ Analytics 리포트 요청까지 만들려면 **Admin** 키가 필요하다. 매
 > 발급해야 한다. 다음 분기에도 남아 있을 곳에 보관하라.
 
 **마법사에 넣을 것:** Issuer ID, Key ID, `.p8` 파일의 로컬 경로, 그리고 선택적으로 **Vendor Number**.
-Vendor Number는 App Store Connect의 **Sales and Trends** 화면 왼쪽 위에서 확인한다. 빈칸으로 두면 기존 저장값을
-유지한다. 이미 연결된 상태에서는 API 키를 다시 입력하지 않고 Vendor Number만 갱신할 수 있으며, 재인증해도
+Vendor Number는 App Store Connect 상단의 **Reports**를 연 뒤 왼쪽 위 Legal Entity Name 아래에서 확인한다.
+숫자만 입력해야 한다. 빈칸으로 두면 기존 저장값을
+유지한다. 이미 연결된 상태에서는 API Key 질문에 `v`를 입력해 키를 다시 입력하지 않고 Vendor Number만
+갱신할 수 있으며, 재인증해도
 별도로 저장한 매출 리포트 키와 Vendor Number를 지우지 않는다.
 
 **확인:** `mimi-seed doctor`, 또는 에이전트에게 `appstore_verify_credentials` 를 시킨다. 기본 검증은 앱 조회
