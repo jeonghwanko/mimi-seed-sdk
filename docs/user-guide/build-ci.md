@@ -9,7 +9,7 @@ job. The CI workflow owns signing, dependency installation, tests, `.aab`/`.ipa`
 |---|---|---|
 | GitHub Actions | Trigger workflow_dispatch and monitor the run | Run ID is not a versionCode; pass one explicitly |
 | GitLab CI | Trigger and monitor a pipeline | Pipeline ID is not a versionCode; pass one explicitly |
-| Jenkins | Trigger a parameterized build and follow queue/build state | A successful build number can be used as versionCode |
+| Jenkins | Trigger a parameterized build and follow queue/build state | Build number is execution ID only; pass `versionCode` explicitly |
 
 ## 1. Make CI work on its own first
 
@@ -63,9 +63,9 @@ npx mimi-seed deploy \
 Use `--ci gitlab --ref main` for GitLab or `--ci jenkins` for Jenkins. `mimi-seed deploy --help` is the source
 of truth for current flags.
 
-> A GitHub run ID or GitLab pipeline ID is not an Android versionCode. Decide the versionCode in the workflow
-> and pass it as `--version-code <N>`. A Jenkins build number can work, but it must still exceed the app's
-> previous version.
+> A GitHub run ID, GitLab pipeline ID, and Jenkins build number are execution identifiers only. They are not
+> Android versionCode values. Define the artifact `versionCode` in CI output and pass it explicitly as
+> `--version-code <N>` for every CI path.
 
 ## 4. If the build already exists
 

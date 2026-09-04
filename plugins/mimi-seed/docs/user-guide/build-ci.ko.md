@@ -9,7 +9,7 @@ Mimi Seed는 앱 컴파일러가 아니다. 이미 만들어 둔 GitHub Actions,
 |---|---|---|
 | GitHub Actions | workflow_dispatch 트리거, run 추적 | run ID를 versionCode로 쓰지 않음. 명시적으로 전달 |
 | GitLab CI | pipeline 트리거, 상태 추적 | pipeline ID를 versionCode로 쓰지 않음. 명시적으로 전달 |
-| Jenkins | 파라미터 빌드 트리거, queue/build 추적 | 성공한 build number를 기본 versionCode로 사용 가능 |
+| Jenkins | 파라미터 빌드 트리거, queue/build 추적 | build number는 실행 식별자이며 versionCode와 분리됨 |
 
 ## 1. CI 자체가 먼저 할 수 있어야 하는 것
 
@@ -63,8 +63,8 @@ npx mimi-seed deploy \
 GitLab은 `--ci gitlab --ref main`, Jenkins는 `--ci jenkins`를 사용한다. 실제로 허용되는 옵션은
 `mimi-seed deploy --help`가 기준이다.
 
-> GitHub run ID와 GitLab pipeline ID는 Android versionCode가 아니다. 워크플로에서 versionCode를 결정하고
-> `--version-code <N>`으로 전달한다. Jenkins는 build number를 사용할 수 있지만 앱의 기존 버전보다 커야 한다.
+> GitHub run ID, GitLab pipeline ID, Jenkins build number는 모두 실행 ID입니다. `versionCode`는 CI 산출물에서
+> 확인해 `--version-code <N>`으로 매번 명시하세요.
 
 ## 4. 이미 빌드가 끝났다면
 

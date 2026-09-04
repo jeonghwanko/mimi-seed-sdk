@@ -249,20 +249,25 @@ Facebook·Instagram·Threads 토큰은 저장된 만료일을 함께 확인합�
 CI 빌드부터 스토어 적용까지 출시 파이프라인 전체를 자동화합니다. 단계: **init → verify(블로커 점검) → notes(릴리즈 노트) → apply(스토어 적용) → promote**.
 
 ```bash
-# Android 기본 배포 (CI 빌드 자동 감지 → Play Store)
+# 실행 전 점검(원격 호출 없음)
 mimi-seed deploy
 
-# iOS 배포
-mimi-seed deploy --platform ios
+# 실제 배포 (앱 지정 + 승인 필요)
+mimi-seed deploy --app <app-id> --platform ios --version-code 142 --yes
 
-# 이미 빌드된 버전으로 노트만 적용 (CI 빌드 건너뜀)
-mimi-seed deploy --skip-build --version-code 142
+# 이미 빌드된 버전으로 배포 (CI 건너뜀)
+mimi-seed deploy --app <app-id> --skip-build --version-code 142 --yes
 
-# 실제 배포 없이 파이프라인만 테스트
-mimi-seed deploy --dry-run
+# 실행 플랜만 확인
+mimi-seed deploy --platform android --version-code 142 --dry-run
 ```
 
 지원 CI: **Jenkins · GitHub Actions · GitLab CI** (`--ci`로 강제 선택, 기본은 자동 감지).
+
+> 실제 실행에서 CI 실행 ID·파이프라인 ID는 스토어 버전코드가 아닙니다. CI에서 산출한 실제 `versionCode`를
+> 확인해 `--version-code`로 직접 전달하세요.
+
+> `--yes`는 실전의 CI 실행·스토어 적용 승인 플래그입니다. dry-run은 원격 실행 없이 예고 단계만 확인합니다.
 
 ### CI 설정 등록 (최초 1회)
 
@@ -277,15 +282,16 @@ mimi-seed deploy setup-gitlab     # GitLab project·trigger 등록
 | 옵션 | 기본값 | 설명 |
 |------|--------|------|
 | `--platform android\|ios` | `android` | 배포 플랫폼 |
-| `--app <id>` | 첫 등록 앱 | 앱 ID 지정 |
-| `--version-code <n>` | — | 빌드 번호 직접 지정 (`--skip-build`와 함께) |
+| `--app <id>` | — | 앱 ID 지정. 실전 실행은 필수 |
+| `--version-code <n>` | — | 스토어에 제출할 아티팩트 버전 코드 |
 | `--from <ref>` / `--to <ref>` | 최신 태그 / `HEAD` | 릴리즈 노트용 커밋 범위 |
 | `--language <코드>` | `ko-KR` | 릴리즈 노트 언어 |
-| `--dry-run` | false | 실제 배포 없이 파이프라인 테스트 |
+| `--dry-run` | false | 원격 호출 없이 실행 플랜만 출력 |
 | `--skip-build` | false | CI 빌드 건너뜀 (`--version-code` 필수) |
 | `--ci jenkins\|github\|gitlab` | auto | CI 강제 선택 |
 | `--workflow <file>` | — | GitHub workflow 파일 (예: `deploy.yml`) |
 | `--ref <branch\|tag>` | `main` | GitHub/GitLab 브랜치/태그 |
+| `--yes` | false | 실제 실행 승인 생략 (`non-interactive` 자동화용) |
 
 ---
 
