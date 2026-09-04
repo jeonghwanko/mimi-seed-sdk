@@ -49,6 +49,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 |------|--------------------|
 | First contact / "what's connected?" | `select:mimi_seed_status,mimi_seed_auth_status,mimi_seed_auth_start,mimi_seed_remote_sync_credentials` |
 | Release readiness (either store) | `select:release_status,playstore_check_submission_risks,appstore_check_submission_risks,screenshot_validate` |
+| Android Billing compliance | `select:android_check_billing_compliance,playstore_check_submission_risks` |
 | Play Store release | `select:playstore_get_app,playstore_list_tracks,playstore_update_release_notes,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release` |
 | Play Store listing + images | `select:playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_upload_image,playstore_list_images,playstore_replace_images,playstore_delete_all_images` |
 | Play Store reviews + stats | `select:playstore_list_reviews,playstore_reply_review,playstore_get_statistics,generate_review_reply` |
@@ -67,10 +68,12 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | Release notes from commits | `select:generate_release_notes_from_commits,playstore_update_release_notes,appstore_update_whats_new` |
 | Firebase setup | `select:firebase_list_projects,firebase_get_project,firebase_create_project,firebase_create_android_app,firebase_create_ios_app,firebase_get_android_config,firebase_get_ios_config,firebase_enable_common_services` |
 | Firebase apps + services (incl. web) | `select:firebase_list_android_apps,firebase_list_ios_apps,firebase_list_web_apps,firebase_create_web_app,firebase_get_web_config,firebase_enable_service,firebase_list_enabled_services,firebase_delete_android_app,firebase_delete_ios_app,firebase_delete_web_app` |
+| Remote Config usage + experiments | `select:firebase_get_remote_config_overview,gcp_get_billing_info` |
 | Analytics wiring (Firebase ↔ GA4 ↔ BigQuery) | `select:firebase_link_analytics,firebase_get_analytics_details,ga4_list_account_summaries,ga4_list_properties,ga4_create_property,ga4_list_data_streams,ga4_create_data_stream,ga4_plan_bigquery_link,ga4_create_bigquery_link,ga4_run_report` |
 | BigQuery | `select:bigquery_auth_status,bigquery_list_datasets,bigquery_list_tables,bigquery_get_table_schema,bigquery_run_query` |
 | GCP billing (Blaze 여부 · 비용 범위 · 예산) | `select:gcp_get_billing_info,gcp_list_billing_projects,gcp_list_budgets,gcp_create_budget` |
 | Real revenue (스토어 정산 원장 — sandbox·테스터가 섞이지 않는 유일한 창구) | `select:appstore_get_sales_report,appstore_get_finance_report,playstore_list_financial_reports,playstore_get_financial_report` |
+| App Store weekly growth insight | `select:appstore_get_weekly_insight,appstore_get_sales_report` |
 | AdMob | `select:admob_list_accounts,admob_list_apps,admob_create_app,admob_create_ad_unit,admob_list_ad_units,admob_get_today_earnings,admob_get_report` |
 | Google Ads (UAC) | `select:googleads_config_status,googleads_save_config,googleads_list_accessible_customers,googleads_list_campaigns,googleads_get_campaign_report,googleads_get_uac_report` |
 | Search Console | `select:gsc_list_sites,gsc_list_sitemaps,gsc_get_sitemap,gsc_submit_sitemap,gsc_inspect_url,gsc_search_analytics` |
@@ -176,8 +179,8 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | Domain | Representative tools |
 |--------|----------------------|
 | **Google Play** | `playstore_get_app` · `playstore_get_listing` · `playstore_update_listing` · `playstore_list_tracks` · `playstore_update_latest_release_notes` · `playstore_promote_release` · `playstore_submit_release` · `playstore_upload_image` · `playstore_replace_images` · `playstore_check_submission_risks` · `playstore_get_statistics` · `playstore_reply_review` · `playstore_register_service_account` |
-| **App Store Connect** | `appstore_list_apps` · `appstore_list_versions` · `appstore_create_version` · `appstore_update_whats_new` · `appstore_update_localization` · `appstore_list_builds` · `appstore_attach_latest_build` · `appstore_upload_screenshot` · `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_list_beta_groups` · `appstore_reply_review` |
-| **Firebase** | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_list_*_apps` |
+| **App Store Connect** | `appstore_list_apps` · `appstore_list_versions` · `appstore_create_version` · `appstore_update_whats_new` · `appstore_update_localization` · `appstore_list_builds` · `appstore_attach_latest_build` · `appstore_upload_screenshot` · `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_list_beta_groups` · `appstore_reply_review` · `appstore_get_weekly_insight` |
+| **Firebase** | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_get_remote_config_overview` · `firebase_list_*_apps` |
 | **AdMob** | `admob_create_app` · `admob_create_ad_unit` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (**GitHub Actions / GitLab only**) |
 | **Jenkins** (credentials + jobs) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` · `jenkins_create_job` · `jenkins_update_job` |
@@ -189,7 +192,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Android signing** | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
 | **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_post_video` · `threads_refresh_token` |
 | **TikTok Business** | `tiktok_business_auth_status` · `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
-| **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
+| **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **Video production** | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_save_plan` · `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
 

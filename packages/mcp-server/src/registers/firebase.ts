@@ -5,6 +5,7 @@ import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { friendlyGoogleError } from '../lib/google-errors.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { getRemoteConfigOverview } from '../firebase/remote-config.js';
 
 // 모든 firebase tools 호출을 친절 에러로 감싸는 프록시 — 17개 핸들러에 개별
 // try/catch 없이 raw GaxiosError(API 미활성화/프로젝트 없음/billing/권한)를
@@ -30,6 +31,24 @@ const firebase: typeof firebaseRaw = new Proxy(firebaseRaw, {
 });
 
 export function registerFirebaseTools(server: McpServer) {
+  server.tool(
+    'firebase_get_remote_config_overview',
+    [
+      'Firebase Remote Config의 일일 fetch 사용량, 과금 임계치, 현재 템플릿, A/B 실험과 rollout을 한 번에 조회합니다.',
+      '사용량은 Cloud Monitoring의 공식 fetch_request_count 메트릭을 사용하며, 조회 권한이 없으면 숫자를 추정하지 않고 unavailable로 반환합니다.',
+      '읽기 전용입니다. 10만 건 무료 구간 대비 80%부터 warning, 100%부터 critical로 표시합니다.',
+    ].join(' '),
+    {
+      projectId: z.string().describe('Firebase / Google Cloud 프로젝트 ID'),
+      namespace: z.string().optional().describe('Remote Config namespace (기본: firebase)'),
+      days: z.number().int().min(1).max(30).optional().describe('사용량 조회 일수 (기본: 7, 최대: 30)'),
+    },
+    async ({ projectId, namespace, days }) => {
+      const auth = await requireAuth();
+      return jsonResult(await getRemoteConfigOverview(auth, { projectId, namespace, days }));
+    },
+  );
+
   server.tool(
     'firebase_list_projects',
     '내 Firebase 프로젝트 목록 조회',

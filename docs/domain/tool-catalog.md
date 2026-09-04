@@ -1,4 +1,4 @@
-# Tool catalog — 231 tools across 21 domains
+# Tool catalog — 234 tools across 21 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -11,9 +11,9 @@
 
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 63 |
+| App Store Connect | `registers/appstore.ts` | 64 |
 | Google Play | `registers/playstore.ts` | 39 |
-| Firebase | `registers/firebase.ts` | 20 |
+| Firebase | `registers/firebase.ts` | 21 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub/GitLab) | `registers/ci.ts` | 6 |
 | Jenkins (credentials + jobs) | `registers/jenkins.ts` | 10 |
@@ -27,12 +27,12 @@
 | Threads | `registers/threads.ts` | 7 |
 | TikTok Business | `registers/tiktok.ts` | 7 |
 | Instagram | `registers/instagram.ts` | 4 |
-| Checks | `registers/checks.ts` | 4 |
+| Checks | `registers/checks.ts` | 5 |
 | Auth | `registers/auth.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
-| **Total** | **21 modules** | **231** |
+| **Total** | **21 modules** | **234** |
 
 ## Google Play — `registers/playstore.ts` (39) · impl `playstore/tools.ts`
 
@@ -54,7 +54,7 @@
   `playstore_cancel_recovery_action` · `playstore_submit_release` · `playstore_promote_release` · `playstore_delete_all_images` ·
   `playstore_delete_product` · `playstore_delete_service_account`
 
-## App Store Connect — `registers/appstore.ts` (63) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (64) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
@@ -76,7 +76,8 @@
   `appstore_update_product_review_note` · `appstore_update_product_localization` ·
   `appstore_add_product_to_review` ·
   `appstore_upload_product_review_screenshot`
-- Read(매출): `appstore_get_sales_report` (Sales and Trends — sandbox 가 섞이지 않는 실매출 기준선) ·
+- Read(분석/매출): `appstore_get_weekly_insight` (Analytics 주간 변화에서 제품 페이지·획득·수익화 중 한 가지 개선안을 선택; 최초 ongoing report 생성은 confirm 필요) ·
+  `appstore_get_sales_report` (Sales and Trends — sandbox 가 섞이지 않는 실매출 기준선) ·
   `appstore_get_finance_report` (정산 — reportDate 는 **Apple 회계월**)
 - **U** `appstore_update_version_string` · `appstore_add_version_to_review_submission` ·
   `appstore_update_release_type` (MANUAL / AFTER_APPROVAL / SCHEDULED 전환) ·
@@ -89,12 +90,12 @@
   `appstore_cancel_review` · `appstore_remove_review_submission_item` ·
   `appstore_delete_screenshot` · `appstore_delete_screenshot_set` · `appstore_delete_product`
 
-## Firebase — `registers/firebase.ts` (20)
+## Firebase — `registers/firebase.ts` (21)
 
 - Read: `firebase_list_projects` · `firebase_get_project` · `firebase_list_android_apps` ·
   `firebase_get_android_config` · `firebase_list_ios_apps` · `firebase_get_ios_config` ·
   `firebase_list_web_apps` · `firebase_get_web_config` · `firebase_list_enabled_services` ·
-  `firebase_get_analytics_details`
+  `firebase_get_analytics_details` · `firebase_get_remote_config_overview` (일일 fetch·무료 한도 경고·실험/rollout 상태)
 - **W** `firebase_create_project` (new GCP project + addFirebase, polls 2 long-running operations) ·
   `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_create_web_app` ·
   `firebase_enable_service` · `firebase_enable_common_services` · `firebase_link_analytics`
@@ -127,7 +128,7 @@
 
 | Domain (file) | Tools |
 |---|---|
-| Checks (`checks.ts`) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `screenshot_validate` · `release_status` |
+| Checks (`checks.ts`) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | Auth (`auth.ts`) | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | AI (`ai.ts`) — needs `ANTHROPIC_API_KEY` | `generate_release_notes_from_commits` · `generate_review_reply` |
 

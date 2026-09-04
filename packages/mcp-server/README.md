@@ -79,9 +79,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| App Store Connect | 63 | `appstore_submit_for_review` / `appstore_upload_screenshot` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
+| App Store Connect | 64 | `appstore_submit_for_review` / `appstore_get_weekly_insight` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
 | Google Play | 39 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
-| Firebase | 20 | `firebase_create_project` / `firebase_create_android_app` / `firebase_get_android_config` / `firebase_create_ios_app` |
+| Firebase | 21 | `firebase_create_project` / `firebase_get_remote_config_overview` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
 | Jenkins (크리덴셜 + 잡) | 10 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` |
@@ -94,7 +94,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
 | Threads | 7 | `threads_post` / `threads_post_video` / `threads_post_carousel` / `threads_refresh_token` |
 | TikTok Business | 7 | `tiktok_business_plan_video_post` / `tiktok_business_publish_video` / `tiktok_business_get_publish_status` |
-| 점검 / 위험 | 4 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `screenshot_validate` / `release_status` |
+| 점검 / 위험 | 5 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `android_check_billing_compliance` / `screenshot_validate` / `release_status` |
 | Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
 | 인증 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |

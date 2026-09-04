@@ -6,8 +6,22 @@ import { requireAuth, requirePlayStoreAuth } from '../helpers.js';
 import * as appstore from '../appstore/tools.js';
 import * as playstore from '../playstore/tools.js';
 import { jsonResult } from '../lib/mcp-response.js';
+import { checkBillingCompliance } from '../checks/billing.js';
 
 export function registerChecksTools(server: McpServer) {
+  server.tool(
+    'android_check_billing_compliance',
+    [
+      '로컬 Android 저장소의 Google Play Billing Library 버전을 읽기 전용으로 탐지하고 제출 정책 마감과 비교합니다.',
+      'build.gradle, build.gradle.kts, gradle/libs.versions.toml의 literal·변수·version catalog를 검사합니다.',
+      '코드를 자동 수정하지 않고 공식 Android CLI Skill 설치 명령과 업그레이드 프롬프트만 반환합니다.',
+    ].join(' '),
+    {
+      projectPath: z.string().optional().describe('검사할 프로젝트 절대경로 (기본: MCP 프로세스 현재 디렉터리)'),
+    },
+    async ({ projectPath }) => jsonResult(await checkBillingCompliance(projectPath ?? process.cwd())),
+  );
+
   server.tool(
     'playstore_check_submission_risks',
     [
@@ -33,13 +47,19 @@ export function registerChecksTools(server: McpServer) {
       'App Store 제출 전 위험 요소를 자동으로 점검합니다.',
       '블로커(반드시 수정)와 경고(권장 수정)로 분류하여 반환합니다.',
       '점검 항목: 메타데이터 완성도(설명/What\'s New/키워드), 스크린샷, TestFlight 빌드, 개인정보처리방침 URL.',
+      '2026년 9월 필수화된 소셜 미디어 연령등급 응답을 확인하고, 기대 기능 값을 주면 App Store Connect 응답과 비교합니다.',
       'App Store 인증이 필요합니다 (appstore_* 도구 사용 가능 상태여야 함).',
     ].join(' '),
     {
       appId: z.string().describe('App Store 앱 ID (appstore_list_apps 결과의 id 필드)'),
+      socialMediaCapability: z.boolean().optional().describe('앱이 소셜 피드·UGC 확산 기능을 제공하는지에 대한 프로젝트 사실'),
+      socialMediaAgeRestricted: z.boolean().optional().describe('소셜 미디어 기능이 13세 미만에게 비활성화되는지에 대한 프로젝트 사실'),
     },
-    async ({ appId }) => {
-      const risks = await checkAppStoreRisks(appId);
+    async ({ appId, socialMediaCapability, socialMediaAgeRestricted }) => {
+      const risks = await checkAppStoreRisks(appId, {
+        socialMedia: socialMediaCapability,
+        socialMediaAgeRestricted,
+      });
       const text = formatRisks(risks, 'App Store');
       return { content: [{ type: 'text', text }] };
     },

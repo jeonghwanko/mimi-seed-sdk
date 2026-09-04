@@ -73,12 +73,23 @@ describe('연령 등급', () => {
 
     await decl.updateAgeRating({
       appId: 'app1',
-      declaration: { gambling: true, violenceRealistic: undefined, lootBox: false },
+      declaration: {
+        gambling: true,
+        violenceRealistic: undefined,
+        lootBox: false,
+        socialMedia: true,
+        socialMediaAgeRestricted: true,
+      },
     });
 
     const patch = calls.find((c) => c.method === 'PATCH');
     expect(patch?.url).toContain('/ageRatingDeclarations/decl1');
-    expect(patch?.body.data.attributes).toEqual({ gambling: true, lootBox: false });
+    expect(patch?.body.data.attributes).toEqual({
+      gambling: true,
+      lootBox: false,
+      socialMedia: true,
+      socialMediaAgeRestricted: true,
+    });
   });
 
   it('바꿀 항목이 없으면 호출조차 하지 않는다', async () => {

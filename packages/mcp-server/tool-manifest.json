@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary)의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
-  "total": 231,
+  "total": 234,
   "domains": {
     "admob": {
       "label": "AdMob",
@@ -38,7 +38,7 @@
     "appstore": {
       "label": "App Store Connect",
       "credential": "ASC API 키 (mimi-seed auth appstore)",
-      "summary": "버전·빌드 attach·What's New·스크린샷·IAP 심사 메타데이터·심사 제출·매출/재무 리포트",
+      "summary": "버전·빌드 attach·What's New·스크린샷·IAP 심사 메타데이터·심사 제출·매출/재무·주간 인사이트",
       "tools": [
         "appstore_list_apps",
         "appstore_verify_credentials",
@@ -102,6 +102,7 @@
         "appstore_upload_preview",
         "appstore_delete_preview",
         "appstore_get_sales_report",
+        "appstore_get_weekly_insight",
         "appstore_get_finance_report"
       ]
     },
@@ -142,10 +143,11 @@
     "checks": {
       "label": "출시 점검",
       "credential": "점검 대상 스토어의 자격증명",
-      "summary": "제출 전 위험 점검·스크린샷 규격 검증·릴리스 상태",
+      "summary": "제출 전 위험·Billing 정책 점검·스크린샷 규격 검증·릴리스 상태",
       "tools": [
         "playstore_check_submission_risks",
         "appstore_check_submission_risks",
+        "android_check_billing_compliance",
         "screenshot_validate",
         "release_status"
       ]
@@ -179,7 +181,7 @@
     "firebase": {
       "label": "Firebase",
       "credential": "Google OAuth",
-      "summary": "프로젝트/앱 생성·설정 파일 다운로드·서비스 활성화",
+      "summary": "프로젝트/앱 생성·설정 파일 다운로드·서비스 활성화·Remote Config 운영 현황",
       "tools": [
         "firebase_list_projects",
         "firebase_get_project",
@@ -200,7 +202,8 @@
         "firebase_enable_common_services",
         "firebase_list_enabled_services",
         "firebase_link_analytics",
-        "firebase_get_analytics_details"
+        "firebase_get_analytics_details",
+        "firebase_get_remote_config_overview"
       ]
     },
     "ga4": {

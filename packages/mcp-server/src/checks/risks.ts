@@ -112,11 +112,22 @@ interface AppInfoLocalizationRecord {
   attributes?: { locale?: string; privacyPolicyUrl?: string; privacyPolicyText?: string };
 }
 
+interface AgeRatingRecord {
+  attributes?: {
+    userGeneratedContent?: boolean;
+    socialMedia?: boolean;
+    socialMediaAgeRestricted?: boolean;
+  };
+}
+
 interface BuildRelationshipResponse {
   data?: { type: 'builds'; id: string } | null;
 }
 
-export async function checkAppStoreRisks(appId: string): Promise<SubmissionRisk[]> {
+export async function checkAppStoreRisks(
+  appId: string,
+  expected: { socialMedia?: boolean; socialMediaAgeRestricted?: boolean } = {},
+): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
 
   const versions = await safeGet(
@@ -218,20 +229,78 @@ export async function checkAppStoreRisks(appId: string): Promise<SubmissionRisk[
     const editable = infos.find((i) => stateOf(i) !== APP_INFO_LIVE_STATE) ?? infos[0];
 
     if (editable) {
-      const localizations = await safeGet(
-        () => apiGet(`/appInfos/${editable.id}/appInfoLocalizations`, {
-          'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
-          'limit': '200',
-        }),
-        risks,
-        'PRIVACY',
-        '개인정보 로컬라이제이션',
-      );
+      const [localizations, ageRating] = await Promise.all([
+        safeGet(
+          () => apiGet(`/appInfos/${editable.id}/appInfoLocalizations`, {
+            'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
+            'limit': '200',
+          }),
+          risks,
+          'PRIVACY',
+          '개인정보 로컬라이제이션',
+        ),
+        safeGet<{ data?: AgeRatingRecord | null }>(
+          () => apiGet(`/appInfos/${editable.id}/ageRatingDeclaration`, {
+            'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted',
+          }),
+          risks,
+          'AGE_RATING_SOCIAL',
+          '연령등급 소셜 미디어 응답',
+        ),
+      ]);
       if (localizations) {
         const locs = (localizations.data ?? []) as AppInfoLocalizationRecord[];
         const hasPrivacy = locs.some((l) => l.attributes?.privacyPolicyUrl || l.attributes?.privacyPolicyText);
         if (!hasPrivacy) {
           risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 URL 없음', detail: 'App Store 가이드라인 5.1.1 — 필수 항목입니다. 모든 로컬라이제이션에서 privacyPolicyUrl 또는 privacyPolicyText 중 하나를 입력하세요.' });
+        }
+      }
+
+      if (ageRating) {
+        const declaration = ageRating.data?.attributes ?? {};
+        if (declaration.socialMedia === undefined || declaration.socialMediaAgeRestricted === undefined) {
+          risks.push({
+            level: 'blocker',
+            code: 'SOCIAL_MEDIA_ANSWERS_MISSING',
+            title: '연령등급 소셜 미디어 질문 미응답',
+            detail: '2026년 9월부터 신규 앱·업데이트 제출에 socialMedia와 socialMediaAgeRestricted 응답이 필요합니다.',
+            fixUrl: 'https://developer.apple.com/news/?id=tlur8uvi',
+          });
+        }
+        if (declaration.socialMediaAgeRestricted === true && declaration.socialMedia !== true) {
+          risks.push({
+            level: 'blocker',
+            code: 'SOCIAL_MEDIA_AGE_RESTRICTION_MISMATCH',
+            title: '13세 미만 제한 응답 불일치',
+            detail: 'socialMediaAgeRestricted=true는 socialMedia=true인 앱에서만 의미가 있습니다.',
+          });
+        }
+        if (expected.socialMedia !== undefined && declaration.socialMedia !== expected.socialMedia) {
+          risks.push({
+            level: 'blocker',
+            code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH',
+            title: '앱 기능과 App Store 소셜 미디어 응답 불일치',
+            detail: `프로젝트 기능 선언은 socialMedia=${expected.socialMedia}이지만 App Store Connect는 ${String(declaration.socialMedia)}입니다.`,
+          });
+        }
+        if (
+          expected.socialMediaAgeRestricted !== undefined
+          && declaration.socialMediaAgeRestricted !== expected.socialMediaAgeRestricted
+        ) {
+          risks.push({
+            level: 'blocker',
+            code: 'SOCIAL_MEDIA_AGE_GATE_MISMATCH',
+            title: '13세 미만 기능 제한과 App Store 응답 불일치',
+            detail: `프로젝트 기능 선언은 socialMediaAgeRestricted=${expected.socialMediaAgeRestricted}이지만 App Store Connect는 ${String(declaration.socialMediaAgeRestricted)}입니다.`,
+          });
+        }
+        if (declaration.userGeneratedContent && declaration.socialMedia === false) {
+          risks.push({
+            level: 'warning',
+            code: 'UGC_WITHOUT_SOCIAL_MEDIA',
+            title: 'UGC는 있으나 소셜 미디어 기능은 없음으로 응답',
+            detail: '피드·좋아요·댓글·공유·발견 기능이 있다면 socialMedia 응답을 true로 바꿔야 합니다.',
+          });
         }
       }
     }

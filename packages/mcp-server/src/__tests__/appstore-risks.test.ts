@@ -80,4 +80,32 @@ describe('checkAppStoreRisks', () => {
     );
     expect(risks.some((risk) => risk.code === 'NO_SCREENSHOTS_ko')).toBe(false);
   });
+
+  it('프로젝트의 소셜 기능 사실과 ASC 연령등급 응답 불일치를 blocker로 만든다', async () => {
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'version-1' }] };
+      if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') return { data: [] };
+      if (path === '/appStoreVersions/version-1/relationships/build') return { data: { id: 'build-1' } };
+      if (path === '/apps/1234567890/appInfos') {
+        return { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] };
+      }
+      if (path === '/appInfos/info-1/appInfoLocalizations') {
+        return { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] };
+      }
+      if (path === '/appInfos/info-1/ageRatingDeclaration') {
+        return { data: { attributes: { userGeneratedContent: true, socialMedia: false, socialMediaAgeRestricted: false } } };
+      }
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const risks = await checkAppStoreRisks('1234567890', { socialMedia: true });
+    expect(risks).toContainEqual(expect.objectContaining({
+      code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH',
+      level: 'blocker',
+    }));
+    expect(risks).toContainEqual(expect.objectContaining({
+      code: 'UGC_WITHOUT_SOCIAL_MEDIA',
+      level: 'warning',
+    }));
+  });
 });

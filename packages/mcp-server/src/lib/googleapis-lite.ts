@@ -85,6 +85,9 @@ export const google = {
   get iam(): typeof import('googleapis/build/src/apis/iam/index.js').iam {
     return sub('iam').iam as typeof import('googleapis/build/src/apis/iam/index.js').iam;
   },
+  get monitoring(): typeof import('googleapis/build/src/apis/monitoring/index.js').monitoring {
+    return sub('monitoring').monitoring as typeof import('googleapis/build/src/apis/monitoring/index.js').monitoring;
+  },
   get searchconsole(): typeof import('googleapis/build/src/apis/searchconsole/index.js').searchconsole {
     return sub('searchconsole').searchconsole as typeof import('googleapis/build/src/apis/searchconsole/index.js').searchconsole;
   },

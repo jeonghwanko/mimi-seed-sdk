@@ -9,6 +9,7 @@ import * as appstoreDeclarations from '../appstore/declarations.js';
 import * as testflight from '../appstore/testflight.js';
 import * as previews from '../appstore/previews.js';
 import * as appstoreSales from '../appstore/sales.js';
+import { getWeeklyInsight } from '../appstore/analytics.js';
 import {
   createAppleOneTimePurchase, createAppleSubscription,
   updateAppleProduct, deleteAppleProduct, listAppleProducts,
@@ -25,6 +26,21 @@ function stringifyAttr(value: unknown): string {
 }
 
 export function registerAppstoreTools(server: McpServer) {
+  server.tool(
+    'appstore_get_weekly_insight',
+    [
+      'App Store Connect Analytics의 표준 주간 Engagement·Downloads·Purchases 리포트를 내려받아 지난 두 기간을 비교합니다.',
+      '제품 페이지·획득·수익화 중 가장 크게 악화된 한 영역과 근거 지표, 실행할 개선안 하나를 반환합니다.',
+      'ONGOING report request가 없으면 기본은 생성하지 않습니다. createIfMissing=true와 confirmCreate=true를 함께 줘야 생성하며 최초 데이터는 24~48시간 뒤 제공됩니다.',
+    ].join(' '),
+    {
+      appId: z.string().describe('App Store 앱 ID'),
+      createIfMissing: z.boolean().optional().describe('ONGOING Analytics report request가 없을 때 생성 준비'),
+      confirmCreate: z.boolean().optional().describe('지속 Analytics report request 생성 명시 확인'),
+    },
+    async (args) => jsonResult(await getWeeklyInsight(args)),
+  );
+
   server.tool(
     'appstore_list_apps',
     'App Store Connect 앱 목록 조회',
@@ -1370,6 +1386,8 @@ export function registerAppstoreTools(server: McpServer) {
       lootBox: z.boolean().optional().describe('확률형 아이템(루트박스) 포함 여부'),
       unrestrictedWebAccess: z.boolean().optional().describe('제한 없는 웹 접근'),
       userGeneratedContent: z.boolean().optional().describe('사용자 생성 콘텐츠'),
+      socialMedia: z.boolean().optional().describe('UGC를 피드·탐색 방식으로 재배포·확산·상호작용하는 소셜 미디어 기능'),
+      socialMediaAgeRestricted: z.boolean().optional().describe('소셜 미디어 기능을 13세 미만 사용자에게 비활성화'),
       messagingAndChat: z.boolean().optional().describe('메시지/채팅 기능'),
       advertising: z.boolean().optional().describe('광고 포함'),
       healthOrWellnessTopics: z.boolean().optional().describe('건강/웰니스 주제'),
