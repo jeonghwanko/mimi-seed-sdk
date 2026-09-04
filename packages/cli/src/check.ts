@@ -1,8 +1,10 @@
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
+import { renderReleaseDoctor } from "./checks/release-doctor-render.js";
+import { scanReleaseDoctor } from "./checks/release-doctor.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
-import { runMcpBin } from "./mcp-bin.js";
+import { resolveLang } from "./settings.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 const M = catalog(
@@ -12,7 +14,7 @@ const M = catalog(
     unknownOption: (option: string) => `알 수 없는 check 옵션: ${option}`,
     unexpectedArgument: (value: string) => `예상하지 않은 check 인자: ${value}`,
     localAppConflict: "--app은 원격 검사 전용이므로 --local, --path, --json과 함께 사용할 수 없습니다.\n",
-    localStarting: "Release Doctor 실행 중… 첫 실행은 검사기 다운로드로 시간이 걸릴 수 있습니다.\n",
+    localFailed: (message: string) => `Release Doctor 실행 실패: ${message}\n`,
     title: "mimi-seed check — 출시 전 점검\n\n",
     appsFailed: (msg: string) => `앱 목록 조회 실패: ${msg}\n`,
     noApps: "등록된 앱이 없습니다. `mimi-seed init` 후 앱을 등록하세요.\n",
@@ -39,7 +41,7 @@ const M = catalog(
     unknownOption: (option: string) => `Unknown check option: ${option}`,
     unexpectedArgument: (value: string) => `Unexpected check argument: ${value}`,
     localAppConflict: "--app is remote-only and cannot be combined with --local, --path, or --json.\n",
-    localStarting: "Running Release Doctor… the first run may take longer while the checker downloads.\n",
+    localFailed: (message: string) => `Release Doctor failed: ${message}\n`,
     title: "mimi-seed check — pre-launch check\n\n",
     appsFailed: (msg: string) => `Failed to list apps: ${msg}\n`,
     noApps: "No apps registered. Run `mimi-seed init`, then register an app.\n",
@@ -138,12 +140,16 @@ export async function cmdCheck(argv: string[]): Promise<void> {
     return;
   }
   if (localRequested || !cfg) {
-    const doctorArgs = [args.projectPath];
-    if (args.json) doctorArgs.push("--json");
-    if (args.failOnBlocker) doctorArgs.push("--fail-on-blocker");
-    if (!args.json) process.stderr.write(kleur.dim(M().localStarting));
-    const exitCode = await runMcpBin("mimi-seed-release-doctor", doctorArgs);
-    if (exitCode !== 0) process.exit(exitCode);
+    try {
+      const report = await scanReleaseDoctor(args.projectPath);
+      process.stdout.write(args.json
+        ? `${JSON.stringify(report, null, 2)}\n`
+        : renderReleaseDoctor(report, resolveLang()));
+      if (args.failOnBlocker && report.counts.blocker > 0) process.exitCode = 1;
+    } catch (error) {
+      process.stderr.write(kleur.red(M().localFailed(error instanceof Error ? error.message : String(error))));
+      process.exitCode = 2;
+    }
     return;
   }
 

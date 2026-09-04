@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { scanReleaseDoctor } from '../checks/release-doctor.js';
+import { renderReleaseDoctor } from '../checks/release-doctor-render.js';
 
 const roots: string[] = [];
 
@@ -244,5 +245,15 @@ describe('Release Doctor local scan', () => {
       severity: 'warning',
     }));
     expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM' }));
+  });
+
+  it('CLI와 직접 bin이 공유하는 보고서 렌더러를 한국어와 영어로 출력한다', async () => {
+    const root = await fixture({
+      'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 35 } }',
+    });
+    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(renderReleaseDoctor(report, 'ko')).toContain('현재 제출 기준 미달');
+    expect(renderReleaseDoctor(report, 'en')).toContain('below the submission minimum');
   });
 });

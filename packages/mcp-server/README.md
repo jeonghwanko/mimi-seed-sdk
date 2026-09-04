@@ -8,6 +8,14 @@
 
 스토어 자격증명을 연결하기 전에 저장소에서 확정할 수 있는 출시 블로커를 검사합니다.
 
+일반 사용자는 전체 MCP 패키지를 먼저 설치하지 않는 경량 CLI 경로를 권장합니다.
+
+```bash
+npx -y mimi-seed@latest check --local
+```
+
+MCP 패키지를 이미 설치했다면 같은 검사기의 직접 bin도 사용할 수 있습니다.
+
 ```bash
 npx -y @yoonion/mimi-seed-mcp mimi-seed-release-doctor .
 ```

@@ -14,6 +14,9 @@ detection, setup, init, or deploy. The ordered checklist is
 - `src/mcp-client.ts` talks to the remote HTTP MCP used for onboarding; it is not the local stdio MCP server.
 - `src/detect.ts`, `handshake.ts`, and `release-manifest.ts` own the `init` pipeline.
 - `src/deploy.ts` orchestrates CI build → readiness check → release notes → store apply.
+- `src/checks/{billing,release-doctor,release-doctor-render}.ts` are generated mirrors used
+  to bundle the no-login check. Their source of truth is the matching MCP package files; refresh them only with
+  `npm run release-doctor:sync` from the repository root.
 
 Keep the CLI as the onboarding and orchestration layer. Store/cloud API implementation belongs in
 `packages/mcp-server`.

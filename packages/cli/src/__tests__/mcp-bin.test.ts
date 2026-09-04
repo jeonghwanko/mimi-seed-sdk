@@ -6,11 +6,11 @@ import { resolveWindowsShimTarget, runMcpBin } from '../mcp-bin.js';
 
 describe('mcp bin process boundary', () => {
   it('Windows npm shim에서 실제 JS 진입점을 안전하게 해석한다', () => {
-    const shim = 'C:\\tools\\mimi-seed-release-doctor.cmd';
-    const source = '"%dp0%\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\checks\\release-doctor-cli.js" %*';
+    const shim = 'C:\\tools\\mimi-seed-ga4.cmd';
+    const source = '"%dp0%\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\ga4\\cli.js" %*';
 
     expect(resolveWindowsShimTarget(shim, source)).toBe(
-      'C:\\tools\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\checks\\release-doctor-cli.js',
+      'C:\\tools\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\ga4\\cli.js',
     );
   });
 
@@ -21,7 +21,7 @@ describe('mcp bin process boundary', () => {
   it.runIf(process.platform === 'win32')('공백이 있는 Windows shim 경로를 셸 없이 끝까지 실행한다', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mimi shim '));
     const target = path.join(root, 'release doctor.js');
-    const shim = path.join(root, 'mimi-seed-release-doctor.cmd');
+    const shim = path.join(root, 'mimi-seed-ga4.cmd');
     const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ?? 'Path';
     const originalPath = process.env[pathKey];
     try {
@@ -29,7 +29,7 @@ describe('mcp bin process boundary', () => {
       await fs.writeFile(shim, `@echo off\n"${process.execPath}" "${target}" %*\n`);
       process.env[pathKey] = `${root}${path.delimiter}${originalPath ?? ''}`;
 
-      await expect(runMcpBin('mimi-seed-release-doctor', ['path with spaces'])).resolves.toBe(0);
+      await expect(runMcpBin('mimi-seed-ga4', ['path with spaces'])).resolves.toBe(0);
     } finally {
       process.env[pathKey] = originalPath;
       await fs.rm(root, { recursive: true, force: true });

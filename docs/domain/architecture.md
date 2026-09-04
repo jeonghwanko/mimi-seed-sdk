@@ -71,6 +71,12 @@ through `catalog(ko, en)` so an English CLI user gets English tone guidance, and
 generators return different JSON shapes (`tones[]` vs flat keys). Merging would delete working behavior; the
 guard locks only what must not diverge (classifier keywords, tone/sentiment keys, `max_tokens`).
 
+Release Doctor is a different kind of duplication: the MCP package owns `src/checks/{billing,release-doctor,
+release-doctor-render}.ts`, while `scripts/sync-release-doctor.mjs` copies them byte for
+byte into the CLI. The CLI bundles that mirror so its no-login check runs in-process instead of launching a
+second, dependency-heavy `npx`. Never edit the CLI mirror; `npm run release-doctor:sync` is its only writer and
+`npm run plugin:check` rejects drift.
+
 To **add a tool**: implement it in `<domain>/tools.ts`, register it in `registers/<domain>.ts`, and keep the
 manifest + docs in sync — the ordered checklist is [[recipes]] §1, the guards are [[testing]].
 

@@ -33,7 +33,7 @@ changes.
 
 | Path | Owner / purpose |
 |---|---|
-| `packages/cli/` | `mimi-seed`: onboarding, local/CI orchestration, remote HTTP MCP setup |
+| `packages/cli/` | `mimi-seed`: onboarding, local/CI orchestration, remote HTTP MCP setup; bundles the generated Release Doctor mirror |
 | `packages/mcp-server/` | `@yoonion/mimi-seed-mcp`: local stdio MCP, domain tools, auth setup binaries |
 | `skills/` | Claude Code and Codex skill sources |
 | `.codex-plugin/`, `.mcp.json` | Codex plugin and MCP registration sources |
@@ -61,7 +61,9 @@ implementation here; describe only the public boundary to the web console.
    lock files unless the task requires it.
 2. Treat code as the final source of truth. Use the SSOT and drift table in the domain index before updating a
    mirrored document.
-3. Keep changes in the owning package. The two packages are not a workspace and do not import each other.
+3. Keep changes in the owning package. The two packages are not a workspace and do not import each other. The
+   CLI's `src/checks` Release Doctor files are generated mirrors of the MCP sources; edit the MCP source,
+   then run `npm run release-doctor:sync`.
 4. Keep register files thin: schemas and MCP handlers live in `registers/`; business logic lives in the domain's
    `tools.ts` or focused module. A **new** register module is wired into `packages/mcp-server/src/server.ts`
    (`buildServer`), not `src/index.ts`.
@@ -85,6 +87,8 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
 - Keep English and `.ko` onboarding documents structurally equivalent when changing user-facing guidance.
 - Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, or `LICENSE` require `npm run plugin:sync`.
   Commit the resulting `plugins/mimi-seed/` update; do not hand-edit it.
+- Do not hand-edit the CLI Release Doctor mirror. `npm run release-doctor:check` enforces byte equality with the
+  MCP-owned source and `npm run release-doctor:sync` refreshes it.
 
 ## Verification
 

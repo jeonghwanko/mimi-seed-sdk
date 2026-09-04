@@ -26,7 +26,8 @@ npm run test:watch                         # watch mode
 npm run plugin:check
 ```
 
-`npm run plugin:check` = `sync-agent-guide --check` + `sync-codex-plugin --check` + `version --check`. Every one
+`npm run plugin:check` = `sync-agent-guide --check` + `sync-codex-plugin --check` +
+`sync-release-doctor --check` + `version --check`. Every one
 of them has a `--check`-less twin (`npm run plugin:sync`, `npm run version:set`) that *fixes* the drift instead
 of reporting it. **Test names and failure messages are Korean and usually name the fix** — read the message
 before changing any assertion.
@@ -42,6 +43,7 @@ before changing any assertion.
 | `mcp-server/…/prompts-resources.test.ts` | prompts + resources smoke, and `assets/agent-guide.md` is **byte-identical** to `docs/agent-guide.md` | edit the agent guide without syncing | `npm run plugin:sync` |
 | `mcp-server/…/version-sync.test.ts` | root `package.json` version == both packages, both plugin manifests, the generated Codex manifest, both lockfiles | hand-edit a version | `npm run version:set <version>` |
 | `scripts/sync-codex-plugin.mjs --check` | `plugins/mimi-seed/` == root `.codex-plugin` · `.mcp.json` · `skills` · `docs` · `LICENSE`, plus the Codex marketplace contract | edit a distribution source, or hand-edit the generated copy | `npm run plugin:sync` |
+| `scripts/sync-release-doctor.mjs --check` | MCP-owned Release Doctor source == the CLI bundle mirror | edit either copy independently or forget to refresh after a policy change | edit the MCP source, then `npm run release-doctor:sync` |
 | `cli/…/i18n-coverage.test.ts` | no user-facing Hangul literal outside a `ko` catalog | hardcode a Korean string the compiler can't see | move it into `catalog(ko, en)` |
 | `cli/…/credentials.test.ts` | the credential registry's `detect`/`plan` logic, **and** every `mcp-bin` it names exists in the mcp-server `bin` map | reference a bin you didn't publish | add the `bin` + `SUBCOMMANDS` entry |
 | `mcp-server/…/package-bin-contract.test.ts` | every published `package.json` bin target maps from `dist/**/*.js` to an existing `src/**/*.ts` entrypoint, and `dist` is included in the npm package | rename or add a bin without its source file, or stop shipping the compiled directory | add/fix the source entrypoint and keep `files: ["dist", …]` |

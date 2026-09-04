@@ -50,7 +50,8 @@ npx mimi-seed check --local
 
 Release Doctor inspects deterministic repository evidence before asking you to connect anything. The first
 release checks cover app identifiers, Android Target API requirements, and Google Play Billing support dates.
-Every policy finding includes its evidence file, a suggested action, and the official source. Use
+The checker is bundled in the CLI, so it does not install the full MCP package or call the network during the
+repository-only scan. Every policy finding includes its evidence file, a suggested action, and the official source. Use
 `--fail-on-blocker` in CI, `--json` for machine-readable output, or `--path apps/mobile` in a monorepo.
 
 If no Mimi Seed account is connected, a plain `npx mimi-seed check` automatically takes this local path. After

@@ -32,7 +32,9 @@ index below is imported automatically; the linked docs are **not**, so `Read` th
 
 1. **Code is the SSOT**; these docs mirror it. On a conflict, believe the code and fix the doc — the drift map in
    the ontology index says which facts are test-enforced and which are hand-synced.
-2. **Stay in the owning package.** The two packages are not a workspace and never import each other.
+2. **Stay in the owning package.** The two packages are not a workspace and never import each other. The CLI's
+   `src/checks` Release Doctor files are generated mirrors: edit the MCP source, then run
+   `npm run release-doctor:sync`; never hand-edit the mirror.
 3. **Register files stay thin** — name, description, zod schema, thin handler in `registers/<domain>.ts`; API
    logic in `<domain>/tools.ts`. A *new* register module is wired into `src/server.ts`, not `src/index.ts`.
 4. **One writer per credential file.** The package that validates a credential owns writing it (`ci.json` is the

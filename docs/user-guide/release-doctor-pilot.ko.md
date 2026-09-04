@@ -14,7 +14,8 @@
    npx -y mimi-seed@latest check --local --json
    ```
 
-2. 첫 실행과 두 번째 실행의 대략적인 시간을 기록한다. 첫 실행은 검사기를 내려받을 수 있다.
+2. 첫 실행과 두 번째 실행의 대략적인 시간을 기록한다. 첫 실행은 CLI 패키지를 내려받을 수 있지만 검사기는
+   번들되어 있어 두 번째 npx 설치를 실행하지 않는다.
 3. finding code를 Play Console, App Store Connect 또는 빌드에서 이미 알고 있는 블로커와 비교한다.
 4. 원본 JSON은 공개하지 않는다. 절대 로컬 경로와 앱 식별자가 포함될 수 있다.
 5. 프레임워크, 실행 시간, finding code, 개수만 가린 뒤

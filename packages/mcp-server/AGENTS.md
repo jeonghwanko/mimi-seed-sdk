@@ -20,6 +20,10 @@ src/index.ts
 `src/index.ts` also owns subcommand dispatch for setup/admin CLIs. The `bin` map in `package.json` is a
 cross-package contract used by `packages/cli/src/mcp-bin.ts`.
 
+Release Doctor policy and rendering source lives in `src/checks/`. The CLI bundles a
+generated mirror for a fast no-login path; after changing those files, run `npm run release-doctor:sync` at the
+repository root and commit the mirror.
+
 ## Adding or changing a tool
 
 1. Read [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md) to find the owning register file and

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { billingVersionFromPom, checkBillingCompliance } from '../checks/billing.js';
+import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
 const dirs: string[] = [];
 
@@ -108,7 +109,9 @@ describe('Google Play Billing compliance', () => {
       '</dependency></dependencies></project>',
     ].join(''))));
 
-    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'), {
+      resolveTransitive: resolveOpenIapBilling,
+    });
     expect(result.status).toBe('warning');
     expect(result.detectedVersions).toEqual(['8.3.0']);
     expect(result.evidence).toContainEqual(expect.objectContaining({
@@ -124,9 +127,28 @@ describe('Google Play Billing compliance', () => {
     });
     vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 404 })));
 
-    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'), {
+      resolveTransitive: resolveOpenIapBilling,
+    });
     expect(result.status).toBe('unresolved');
     expect(result.evidence).toContainEqual(expect.objectContaining({ source: 'unresolved' }));
+  });
+
+  it('저장소 전용 모드에서는 react-native-iap 판정을 위해 네트워크를 호출하지 않는다', async () => {
+    const root = await fixture({
+      'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^15.2.0' } }),
+      'node_modules/react-native-iap/openiap-versions.json': JSON.stringify({ google: '2.1.0' }),
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.status).toBe('unresolved');
+    expect(result.evidence).toContainEqual(expect.objectContaining({
+      source: 'unresolved',
+      expression: expect.stringContaining('repository-only mode'),
+    }));
   });
 
   it('Billing 의존성이 없으면 not_used로 끝낸다', async () => {

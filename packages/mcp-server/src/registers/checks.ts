@@ -7,6 +7,7 @@ import * as appstore from '../appstore/tools.js';
 import * as playstore from '../playstore/tools.js';
 import { jsonResult } from '../lib/mcp-response.js';
 import { checkBillingCompliance } from '../checks/billing.js';
+import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
 export function registerChecksTools(server: McpServer) {
   server.tool(
@@ -19,7 +20,11 @@ export function registerChecksTools(server: McpServer) {
     {
       projectPath: z.string().optional().describe('검사할 프로젝트 절대경로 (기본: MCP 프로세스 현재 디렉터리)'),
     },
-    async ({ projectPath }) => jsonResult(await checkBillingCompliance(projectPath ?? process.cwd())),
+    async ({ projectPath }) => jsonResult(await checkBillingCompliance(
+      projectPath ?? process.cwd(),
+      new Date(),
+      { resolveTransitive: resolveOpenIapBilling },
+    )),
   );
 
   server.tool(

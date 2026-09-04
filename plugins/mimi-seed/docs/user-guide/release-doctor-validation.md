@@ -13,6 +13,7 @@ preflight fixtures, not customer validation. The next milestone is five independ
 
 The core repository scan completed in under 100 ms per fixture on the validation machine. That excludes npx
 installation time, which remains the largest first-run usability risk and is measured separately in the pilot.
+The bundled CLI path no longer launches a second MCP-package installation.
 
 This baseline checks platform classification and static policy evidence only. It does not test private source,
 store credentials, uploaded builds, metadata, or review submission behavior.

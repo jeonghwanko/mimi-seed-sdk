@@ -15,7 +15,8 @@ preceded this pilot.
    npx -y mimi-seed@latest check --local --json
    ```
 
-2. Record approximate cold-run and warm-run times. The cold run may download the checker.
+2. Record approximate cold-run and warm-run times. The cold run may download the CLI package; the checker itself
+   is bundled and does not launch a second npx install.
 3. Compare the finding codes with blockers you already know from Play Console, App Store Connect, or the build.
 4. Do not publish the raw JSON. It can contain absolute local paths and app identifiers.
 5. Submit only redacted counts, finding codes, framework, and timing through the

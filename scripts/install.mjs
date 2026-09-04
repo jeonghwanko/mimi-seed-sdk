@@ -59,6 +59,7 @@ console.log('');
 // MCP 서버가 mimi-seed://agent/guide 로 서빙하는 asset 사본을 원본과 동기화.
 // (codex 등록 여부와 무관 — 링크된 서버가 낡은 가이드를 서빙하는 사고 방지.)
 run('node scripts/sync-agent-guide.mjs', root);
+run('node scripts/sync-release-doctor.mjs', root);
 
 for (const pkg of PKGS) {
   const cwd = path.join(root, pkg.dir);
