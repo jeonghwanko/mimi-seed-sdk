@@ -72,7 +72,7 @@ export function resolveWindowsShimTarget(shimPath: string, source: string): stri
   const matches = [...source.matchAll(/["']([^"']+\.js)["']\s+%\*/gi)];
   const raw = matches.at(-1)?.[1];
   if (!raw) return null;
-  return path.normalize(raw.replace(/%~?dp0%?/gi, `${path.dirname(shimPath)}${path.sep}`));
+  return path.win32.normalize(raw.replace(/%~?dp0%?/gi, `${path.win32.dirname(shimPath)}${path.win32.sep}`));
 }
 
 function npxCliPath(shimPath: string | null): string | null {
