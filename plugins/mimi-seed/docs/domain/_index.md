@@ -115,6 +115,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | Exact tool **and domain** counts | `tool-manifest.json` | [tool-catalog.md](tool-catalog.md) + the README count columns **only** | ✅ `docs-drift.test.ts` — it also rejects a hard-coded `<n> domains` / `<n> tools` / `<n>개 영역` anywhere else in the contributor and agent docs, so prose must say "150+" or name the domains |
 | Domain counts in the READMEs | `tool-manifest.json` | `README.md`, `README.ko.md`, `packages/mcp-server/README.md` | ✅ `docs-drift.test.ts` — each row is matched to its domain by the tool names it lists, so every language/copy is covered |
 | Credential files & roles | `src/*/config.ts`, `src/auth/*` | [auth-credentials.md](auth-credentials.md) | ⚠️ manual |
+| Published MCP executable entrypoints | `packages/mcp-server/package.json` `bin` | matching `src/**/*.ts` entrypoints emitted under `dist/` | ✅ `package-bin-contract.test.ts` — every bin must map to an existing source file and `dist` must ship |
 | CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |
 | Skills, prompts, resources | `skills/*/SKILL.md`, `prompts.ts`, `resources.ts` | [skills-plugins.md](skills-plugins.md) | ⚠️ manual (incl. the skill count in the table above) |
 | Tool discoverability (`select:` batches) | `tool-manifest.json` | [`../agent-guide.md`](../agent-guide.md) §0 | ✅ `docs-drift.test.ts` — every registered tool must sit in ≥1 batch, and no batch may name a tool that doesn't exist |

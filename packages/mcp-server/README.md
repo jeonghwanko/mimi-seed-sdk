@@ -63,9 +63,17 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-tiktok-business-auth # TikTok Business O
 
 각 자격증명을 **어디서 어떻게 발급받는지**는 [`docs/credentials.md`](../../docs/credentials.md) 참고.
 
-- **App Store Connect**: Users and Access → Integrations에서 API Key 생성 후 Issuer ID / Key ID / .p8 경로 입력 → `~/.mimi-seed/appstore.json` (.p8은 **1회만** 다운로드됨)
+- **App Store Connect**: Users and Access → Integrations에서 API Key 생성 후 Issuer ID / Key ID / `.p8`
+  경로와 선택적인 Vendor Number 입력 → Apple API 검증 성공 후 `~/.mimi-seed/appstore.json` 저장 (`.p8`은
+  **1회만** 다운로드됨). 기존 연결의 첫 질문에서 Enter/`N`은 종료, `y`는 기본 키 교체, `v`는 Vendor
+  Number만 갱신합니다. 키 교체 시 기존 `vendorNumber`와 별도 `reportsKey`는 보존됩니다.
 - **Google Play**: 서비스 계정은 **선택** — OAuth 토큰이 `androidpublisher` 스코프를 갖고 있어 로컬 작업은 그대로 됩니다. CI/헤드리스에서만 필요.
 - **BigQuery**: 선택 — OAuth로도 동작하며, Workspace 재인증 정책에 막힐 때만 서비스 계정이 필요합니다.
+
+App Store 권한은 작업별로 다릅니다. 메타데이터·출시는 **App Manager**, Analytics 리포트 요청 생성은
+**Admin**, 매출 리포트는 **Admin / Finance / Sales and Reports**가 필요합니다. Vendor Number는 App Store
+Connect 상단 **Reports**의 왼쪽 위 Legal Entity Name 아래에 표시되는 숫자입니다. 자세한 내용은
+[`docs/credentials.ko.md`](../../docs/credentials.ko.md#app-store-connect)를 참고하세요.
 
 AI 기능(릴리즈 노트 생성, 리뷰 답변)을 쓰려면:
 

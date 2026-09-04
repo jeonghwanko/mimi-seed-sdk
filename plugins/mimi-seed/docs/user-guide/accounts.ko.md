@@ -37,10 +37,27 @@ npx mimi-seed auth meta        # Facebook + Instagram + Threads
 | story 기반 영상 제작 | `ANTHROPIC_API_KEY` + 실제 사용할 공급자의 `YOUTUBE_API_KEY`, `PEXELS_API_KEY`, `OPENAI_API_KEY`; 렌더링용 FFmpeg |
 | 소셜 게시 | 사용하는 Facebook/Instagram/Threads 계정만 |
 
+## App Store Connect 상세 연결
+
+```bash
+npx mimi-seed auth appstore
+```
+
+설정은 Issuer ID, Key ID, `.p8` 경로와 선택적인 숫자 Vendor Number를 받으며, 새 API key를 저장하기 전에
+Apple API로 검증한다. 기존 설정이 있으면 Enter/`N`은 변경 없이 종료, `y`는 기본 key 교체, `v`는 Vendor
+Number만 갱신한다. 기본 key를 교체해도 저장된 Vendor Number와 별도 reports key는 보존한다.
+
+메타데이터·출시 작업은 App Manager key를 사용한다. Analytics 리포트 요청 생성은 Admin, 매출 리포트는
+Admin·Finance·Sales and Reports 권한이 필요하다. Vendor Number는 App Store Connect 상단 **Reports**의
+왼쪽 위 Legal Entity Name 아래에 표시된다. 전체 발급 경로는
+[계정 연결 레퍼런스](../credentials.ko.md#app-store-connect)를 참고한다.
+
 ## 저장 전에 검증되는 것
 
-Jenkins, Google Ads, Facebook, Instagram, Threads 설정은 저장 전에 실제 공급자 호출로 검증된다. 잘못된
-토큰은 성공한 설정처럼 저장되지 않는다. Play와 App Store도 연결 후 계정·앱 조회 도구로 확인한다.
+App Store Connect, Jenkins, Google Ads, Facebook, Instagram, Threads 설정은 저장 전에 실제 공급자 호출로
+검증된다. 잘못된 토큰은 성공한 설정처럼 저장되지 않는다. Play는 연결 후 계정·앱 조회 도구로 확인한다.
+App Store 기본 검증은 앱 목록 접근을 확인하며, Analytics·매출처럼 역할이 다른 기능은 해당 흐름의 첫 읽기로
+최종 확인한다.
 
 ## 만료와 재연결
 

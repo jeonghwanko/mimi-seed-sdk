@@ -38,10 +38,28 @@ The exact vendor-console steps and prerequisites live in the [credential referen
 | Story-based video production | `ANTHROPIC_API_KEY` plus only the provider keys used: `YOUTUBE_API_KEY`, `PEXELS_API_KEY`, `OPENAI_API_KEY`; FFmpeg for rendering |
 | Social publishing | Only the Facebook/Instagram/Threads accounts you use |
 
+## App Store Connect details
+
+```bash
+npx mimi-seed auth appstore
+```
+
+The setup asks for the Issuer ID, Key ID, `.p8` path, and an optional digits-only Vendor Number. It verifies a
+new API key with Apple before saving. If a working configuration already exists, use Enter/`N` to leave it
+unchanged, `y` to replace the primary key, or `v` to update only the Vendor Number. Replacing the primary key
+preserves the saved Vendor Number and any separate reports key.
+
+Use an App Manager key for metadata and release operations. Creating Analytics report requests needs Admin;
+sales reports need Admin, Finance, or Sales and Reports. The Vendor Number appears under the Legal Entity Name
+at the upper left of App Store Connect **Reports**. See the [credential reference](../credentials.md#app-store-connect)
+for the full setup path.
+
 ## What is validated before saving
 
-Jenkins, Google Ads, Facebook, Instagram, and Threads setups call the provider before saving. A rejected token
-is not persisted as a successful setup. After connecting Play or App Store, verify it with an account/app read.
+App Store Connect, Jenkins, Google Ads, Facebook, Instagram, and Threads setups call the provider before saving.
+A rejected token is not persisted as a successful setup. After connecting Play, verify it with an account/app
+read. App Store's base probe confirms app-list access; role-specific Analytics and sales access is confirmed by
+the first read in that workflow.
 
 ## Expiry and reconnection
 

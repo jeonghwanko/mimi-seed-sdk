@@ -141,6 +141,27 @@ npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 �
 
 `setup` 은 첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
 
+#### App Store Connect: 한 번 연결하고 안전하게 갱신하기
+
+```bash
+npx mimi-seed auth appstore
+# CLI 없이 MCP 패키지만 쓴다면:
+npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
+```
+
+마법사는 Issuer ID, Key ID, `.p8` 경로와 선택적인 Vendor Number를 받습니다. 새 API key는 저장 전에
+Apple API로 검증하며, 거부되면 기존의 정상 설정을 그대로 둡니다. 이미 연결된 상태의 첫 질문에는 세 경로가
+있습니다.
+
+- `N` 또는 Enter: 아무것도 바꾸지 않고 종료합니다.
+- `y`: 기본 API key를 교체합니다. 저장된 Vendor Number와 별도 reports key는 보존합니다.
+- `v`: API key를 다시 입력하지 않고 Vendor Number만 갱신합니다.
+
+메타데이터·출시 작업은 **App Manager**, Analytics 리포트 요청 생성은 **Admin**, 매출 리포트는
+**Admin / Finance / Sales and Reports** 권한이 필요합니다. 숫자로 된 Vendor Number는 App Store Connect
+상단 **Reports**를 열어 왼쪽 위 Legal Entity Name 아래에서 확인합니다. 전체 권한표는
+[자격증명 레퍼런스](docs/credentials.ko.md#app-store-connect)를 참고하세요.
+
 CLI 없이 MCP 서버만 쓰나요? Google 로그인만 따로 하려면:
 
 ```bash

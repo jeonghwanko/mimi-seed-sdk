@@ -72,8 +72,8 @@
 7. **File map** — [[auth-credentials]]: add the row (location and role only — never a value).
 
 **Guards:** `docs-onboarding.test.ts` (anchors · EN/KO parity · error codes) · `credentials.test.ts` (every
-referenced bin exists in the mcp-server `bin` map) · `setup.test.ts` (never spawns a blocking bin when
-non-interactive).
+referenced bin exists in the mcp-server `bin` map) · `package-bin-contract.test.ts` (every published bin maps
+to a source entrypoint and `dist` ships) · `setup.test.ts` (never spawns a blocking bin when non-interactive).
 **Verify:** both packages — `npm test --prefix packages/mcp-server && npm test --prefix packages/cli`.
 
 > Public repo: the docs may describe *where a credential lives and what reads it*, never a value, a real issuer

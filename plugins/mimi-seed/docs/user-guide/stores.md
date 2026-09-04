@@ -57,6 +57,11 @@ Then perform only the required work:
 - A processed build already uploaded by CI/Xcode
 - A new version number and localized metadata
 
+> `appstore_verify_credentials` confirms JWT signing and app-list access; it does not prove every role-specific
+> endpoint. Creating Analytics report requests needs Admin, while sales reports need Admin, Finance, or Sales
+> and Reports plus a Vendor Number. Set up or repair those values in the
+> [account guide](accounts.md#app-store-connect-details).
+
 ### Typical read sequence
 
 ```text

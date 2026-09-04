@@ -141,6 +141,27 @@ You don't need every account on day one — most people need **two or three**. O
 
 On first run `setup` asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Reconnect the three Meta platforms any time with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
 
+#### App Store Connect: connect once, update safely
+
+```bash
+npx mimi-seed auth appstore
+# Without the CLI:
+npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth
+```
+
+The wizard asks for the Issuer ID, Key ID, `.p8` path, and an optional Vendor Number. It calls Apple before
+saving a new API key; a rejected key leaves the previous working configuration untouched. On an existing
+connection, the first prompt has three deliberate paths:
+
+- `N` or Enter: exit without changing anything.
+- `y`: replace the primary API key. The saved Vendor Number and a separate reports key are preserved.
+- `v`: update only the Vendor Number without re-entering the API key.
+
+Use **App Manager** for metadata and release work, **Admin** when creating Analytics report requests, and
+**Admin / Finance / Sales and Reports** for sales reports. Find the digits-only Vendor Number under the Legal
+Entity Name at the upper left of App Store Connect **Reports**. See the
+[credential reference](docs/credentials.md#app-store-connect) for the complete permission matrix.
+
 Using the bare MCP server without the CLI? The Google sign-in alone is:
 
 ```bash

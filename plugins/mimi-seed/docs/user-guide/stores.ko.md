@@ -56,6 +56,11 @@ playstore_get_app
 - CI/Xcode에서 이미 업로드되어 처리 완료된 빌드
 - 새 버전 번호와 locale별 메타데이터
 
+> `appstore_verify_credentials`는 JWT 서명과 앱 목록 접근을 확인하며 역할별 모든 endpoint를 보장하지는
+> 않는다. Analytics 리포트 요청 생성은 Admin, 매출 리포트는 Admin·Finance·Sales and Reports 권한과 Vendor
+> Number가 필요하다. 값의 설정·복구 방법은 [계정 연결 가이드](accounts.ko.md#app-store-connect-상세-연결)를
+> 참고한다.
+
 ### 일반적인 읽기 순서
 
 ```text

@@ -193,6 +193,21 @@ mimi-seed auth instagram  # Instagram
 mimi-seed auth threads    # Threads
 ```
 
+### App Store Connect 재인증과 Vendor Number
+
+`mimi-seed auth appstore`는 새 API key를 Apple API로 검증한 뒤에만 저장합니다. 기존 연결이 있으면 첫
+질문에서 다음 중 하나를 선택합니다.
+
+| 입력 | 동작 |
+|---|---|
+| `N` 또는 Enter | 변경 없이 종료 |
+| `y` | Issuer ID, Key ID, `.p8`를 다시 받아 기본 API key 교체 |
+| `v` | API key는 유지하고 Vendor Number만 갱신 |
+
+재인증은 기존 `vendorNumber`와 별도 `reportsKey`를 보존합니다. Vendor Number는 숫자만 입력하며 App Store
+Connect의 **Reports** 화면 왼쪽 위 Legal Entity Name 아래에서 확인합니다. 역할별 차이와 `.p8` 보관 주의사항은
+[`docs/credentials.ko.md`](../../docs/credentials.ko.md#app-store-connect)에 정리되어 있습니다.
+
 Facebook·Instagram·Threads 토큰은 저장된 만료일을 함께 확인합니다. 만료됐거나 7일 이내 만료 예정이면
 `mimi-seed setup`이 자동으로 재연결 목록에 올리며, 위 개별 명령으로 바로 갱신할 수도 있습니다.
 
