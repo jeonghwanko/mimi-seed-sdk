@@ -133,6 +133,9 @@ alone does not prove that an existing client is fixed; smoke-test the actual cal
 - Search requests send `query` and optional `pageToken`, **not `pageSize`**. Google controls page size.
 - Follow every `nextPageToken`. Cost reports have no GAQL `LIMIT` and include removed campaigns;
   the active campaign inventory is a separate, intentionally filtered view.
+- Repeated cursors and malformed success payloads fail rather than returning partial totals. Invalid
+  numeric metrics fail rather than turning into JSON null or zero. Actual cost micros must be safe integers;
+  average cost metrics may contain fractional micros. Omitted zero-valued protobuf scalars remain valid.
 - Campaign inventory queries use `start_date_time` / `end_date_time`, retaining date-only output aliases.
 - `googleads/errors.ts` preserves nested provider codes, field violations and request IDs, redacts current
   credentials, and never echoes non-JSON proxy bodies. A successful accessible-customers call does not
@@ -140,6 +143,8 @@ alone does not prove that an existing client is fixed; smoke-test the actual cal
 - `cost_micros` is divided by one million into the account currency; campaign reports include currency and
   account time zone. Historical `cpi` / UAC `installs` output names represent conversions unless conversion
   action settings independently establish that they are installs. They are not cohort D7 ROAS.
+- Both MCP report responses and the script include the shared `REPORT_METRIC_NOTE`; prefer the additive
+  `conversions` and `costPerConversion` fields to historical install/CPI aliases.
 - Guard: `src/__tests__/googleads.test.ts` covers request bodies, pagination, long-range totals, removed
   campaigns, dates, supported campaign fields, partial failure, provider diagnostics and secret redaction.
 

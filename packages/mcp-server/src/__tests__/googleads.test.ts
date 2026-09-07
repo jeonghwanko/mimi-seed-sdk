@@ -28,6 +28,41 @@ describe('googleads 요청', () => {
 
   const range = { startDate: '2026-01-01', endDate: '2026-08-31' };
 
+  it('반복 페이지 토큰은 무한 루프 대신 실패한다', async () => {
+    fetchMock.mockResolvedValue({ ok: true, text: async () => JSON.stringify({ results: [], nextPageToken: 'loop' }) });
+    await expect(getCampaignReport(auth, cfg, range)).rejects.toThrow('repeated a page token');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([null, [], { results: {} }, { results: [null] }, { results: [{}] }, { error: {} }, { nextPageToken: 123 }])('비정상 성공 응답을 0원으로 처리하지 않는다: %j', async (response) => {
+    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(response) });
+    await expect(getCampaignReport(auth, cfg, range)).rejects.toThrow('invalid search response');
+  });
+
+  it('비 JSON 성공 응답 본문을 오류에 노출하지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => 'private-invalid-json' });
+    await expect(getCampaignReport(auth, cfg, range)).rejects.toThrow(/^Google Ads returned invalid JSON\.$/);
+  });
+
+  it.each(['NaN', 'Infinity', '', ' ', null, false, '9007199254740993', '1.5'])('비정상 비용을 null/0원/부정확한 숫자로 반환하지 않는다: %j', async (costMicros) => {
+    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ results: [{ campaign: { id: '1' }, metrics: { costMicros } }] }) });
+    await expect(getCampaignReport(auth, cfg, range)).rejects.toThrow(/numeric metric|currency micros/);
+  });
+
+  it('metrics 누락은 실패하지만 Google의 생략된 0 스칼라는 허용한다', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ results: [{ campaign: { id: '1' } }] }) });
+    await expect(getCampaignReport(auth, cfg, range)).rejects.toThrow('missing metrics');
+    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ results: [{ campaign: { id: '1' }, metrics: {} }] }) });
+    expect((await getCampaignReport(auth, cfg, range))[0]).toMatchObject({ cost: 0, costPerConversion: null });
+  });
+
+  it('전환당 평균 비용의 소수 micros는 정수 비용과 구분한다', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ results: [{ campaign: { id: '1' }, metrics: { costMicros: '1000000', conversions: '3', costPerConversion: 333333.333333 } }] }) });
+    const [row] = await getCampaignReport(auth, cfg, range);
+    expect(row.costPerConversion).toBeCloseTo(1 / 3);
+    expect(row.cpi).toBe(row.costPerConversion);
+  });
+
   it('캠페인 날짜는 지원되는 date_time 필드를 조회하고 기존 날짜 응답을 유지한다', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ results: [{ campaign: {
       startDateTime: '2026-01-01 00:00:00', endDateTime: '2026-08-31 23:59:59',
@@ -67,6 +102,8 @@ describe('googleads 요청', () => {
     const rows = await getUacReport(auth, cfg, range);
     expect(rows[0].cost).toBe(501);
     expect(rows[0].installs).toBe(1002); // Legacy name; this metric counts conversions, not necessarily installs.
+    expect(rows[0].conversions).toBe(1002);
+    expect(rows[0].costPerConversion).toBe(0.5);
     for (const call of fetchMock.mock.calls) {
       const body = JSON.parse(call[1].body);
       expect(body).not.toHaveProperty('pageSize');

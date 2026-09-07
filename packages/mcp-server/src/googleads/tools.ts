@@ -9,6 +9,21 @@ import { googleAdsError } from './errors.js';
 const API_VERSION = 'v24';
 const BASE = `https://googleads.googleapis.com/${API_VERSION}`;
 
+export const REPORT_METRIC_NOTE = 'cost is in account currency, not micros. conversions are Google Ads conversions, not necessarily installs. Legacy installs/cpi aliases do not establish install CPI or cohort D7 ROAS.';
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function metricNumber(value: unknown): number {
+  // Protobuf JSON can omit zero-valued scalars, but explicit malformed values are not zero.
+  if (value === undefined) return 0;
+  if ((typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && !/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) ||
+    !Number.isFinite(Number(value))) throw new Error('Google Ads returned an invalid numeric metric.');
+  return Number(value);
+}
+
 export interface DateRange {
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
@@ -55,6 +70,7 @@ async function search(
 
   const all: any[] = [];
   let pageToken: string | undefined;
+  const seenTokens = new Set<string>();
 
   do {
     // Google Ads controls page size; sending pageSize is rejected by current APIs.
@@ -72,17 +88,29 @@ async function search(
       throw googleAdsError(res.status, text, [accessToken, cfg.developerToken]);
     }
 
-    const json = JSON.parse(text);
+    let json: any;
+    try { json = JSON.parse(text); } catch { throw new Error('Google Ads returned invalid JSON.'); }
+    if (!isRecord(json) || 'error' in json ||
+      (json.results !== undefined && !Array.isArray(json.results)) ||
+      (json.nextPageToken !== undefined && typeof json.nextPageToken !== 'string') ||
+      (json.results ?? []).some((row: unknown) => !isRecord(row) || !isRecord(row.campaign))) {
+      throw new Error('Google Ads returned an invalid search response.');
+    }
     all.push(...(json.results ?? []));
     pageToken = json.nextPageToken ?? undefined;
+    if (pageToken) {
+      if (seenTokens.has(pageToken)) throw new Error('Google Ads repeated a page token; refusing partial totals.');
+      seenTokens.add(pageToken);
+    }
   } while (pageToken);
 
   return all;
 }
 
 function microsToCurrency(micros: string | number | undefined): number {
-  if (micros == null) return 0;
-  return Number(micros) / 1_000_000;
+  const value = metricNumber(micros);
+  if (!Number.isSafeInteger(value)) throw new Error('Google Ads returned unsafe or fractional currency micros.');
+  return value / 1_000_000;
 }
 
 // ─── 접근 가능한 고객 목록 (API 연결 확인용) ─────────────────────
@@ -165,6 +193,9 @@ export async function getCampaignReport(
   `;
 
   const rows = await search(auth, cfg, query);
+  for (const row of rows) {
+    if (!isRecord(row.metrics)) throw new Error('Google Ads report row is missing metrics.');
+  }
   return rows.map((r: any) => ({
     currencyCode: r.customer?.currencyCode,
     timeZone: r.customer?.timeZone,
@@ -173,14 +204,16 @@ export async function getCampaignReport(
     status: r.campaign?.status,
     channelType: r.campaign?.advertisingChannelType,
     channelSubType: r.campaign?.advertisingChannelSubType,
-    clicks: Number(r.metrics?.clicks ?? 0),
-    impressions: Number(r.metrics?.impressions ?? 0),
+    clicks: metricNumber(r.metrics?.clicks),
+    impressions: metricNumber(r.metrics?.impressions),
     cost: microsToCurrency(r.metrics?.costMicros),
-    conversions: Number(r.metrics?.conversions ?? 0),
-    conversionsValue: Number(r.metrics?.conversionsValue ?? 0),
-    cpi: microsToCurrency(r.metrics?.costPerConversion),
-    ctr: Number(r.metrics?.ctr ?? 0),
-    avgCpc: microsToCurrency(r.metrics?.averageCpc),
+    conversions: metricNumber(r.metrics?.conversions),
+    conversionsValue: metricNumber(r.metrics?.conversionsValue),
+    costPerConversion: metricNumber(r.metrics?.conversions) > 0
+      ? metricNumber(r.metrics?.costPerConversion) / 1_000_000 : null,
+    cpi: metricNumber(r.metrics?.costPerConversion) / 1_000_000,
+    ctr: metricNumber(r.metrics?.ctr),
+    avgCpc: metricNumber(r.metrics?.averageCpc) / 1_000_000,
   }));
 }
 
@@ -223,16 +256,17 @@ export async function getUacReport(
   }>();
 
   for (const r of rows) {
+    if (!isRecord(r.metrics) || !r.campaign?.id) throw new Error('Google Ads UAC row is missing campaign or metrics.');
     const id = String(r.campaign?.id ?? '');
     const existing = byId.get(id);
     const cost = microsToCurrency(r.metrics?.costMicros);
-    const installs = Number(r.metrics?.conversions ?? 0);
+    const installs = metricNumber(r.metrics?.conversions);
     if (existing) {
-      existing.clicks += Number(r.metrics?.clicks ?? 0);
-      existing.impressions += Number(r.metrics?.impressions ?? 0);
+      existing.clicks += metricNumber(r.metrics?.clicks);
+      existing.impressions += metricNumber(r.metrics?.impressions);
       existing.cost += cost;
       existing.installs += installs;
-      existing.installsValue += Number(r.metrics?.conversionsValue ?? 0);
+      existing.installsValue += metricNumber(r.metrics?.conversionsValue);
       if (r.segments?.date) existing.dates.push(r.segments.date);
     } else {
       byId.set(id, {
@@ -240,11 +274,11 @@ export async function getUacReport(
         name: r.campaign?.name ?? '',
         status: r.campaign?.status ?? '',
         subType: r.campaign?.advertisingChannelSubType ?? '',
-        clicks: Number(r.metrics?.clicks ?? 0),
-        impressions: Number(r.metrics?.impressions ?? 0),
+        clicks: metricNumber(r.metrics?.clicks),
+        impressions: metricNumber(r.metrics?.impressions),
         cost,
         installs,
-        installsValue: Number(r.metrics?.conversionsValue ?? 0),
+        installsValue: metricNumber(r.metrics?.conversionsValue),
         dates: r.segments?.date ? [r.segments.date] : [],
       });
     }
@@ -258,6 +292,9 @@ export async function getUacReport(
     clicks: c.clicks,
     impressions: c.impressions,
     cost: c.cost,
+    conversions: c.installs,
+    conversionsValue: c.installsValue,
+    costPerConversion: c.installs > 0 ? c.cost / c.installs : null,
     installs: c.installs,
     installsValue: c.installsValue,
     cpi: c.installs > 0 ? c.cost / c.installs : 0,

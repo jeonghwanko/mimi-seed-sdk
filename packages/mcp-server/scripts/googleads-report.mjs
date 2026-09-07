@@ -4,7 +4,7 @@ import process from 'node:process';
 import console from 'node:console';
 import { requireAuth } from '../dist/helpers.js';
 import { requireConfig } from '../dist/googleads/config.js';
-import { getCampaignReport } from '../dist/googleads/tools.js';
+import { getCampaignReport, REPORT_METRIC_NOTE } from '../dist/googleads/tools.js';
 
 const [startDate, endDate, ...extra] = process.argv.slice(2);
 if (!startDate || !endDate || extra.length) {
@@ -22,7 +22,7 @@ if (!startDate || !endDate || extra.length) {
       currencyCode: campaigns[0]?.currencyCode ?? null,
       timeZone: campaigns[0]?.timeZone ?? null,
       totalCost: campaigns.reduce((sum, row) => sum + row.cost, 0),
-      metricNote: 'cost is account currency, not micros; conversions and legacy cpi are not necessarily installs/CPI.',
+      metricNote: REPORT_METRIC_NOTE,
       campaigns,
     }, null, 2));
   } catch (error) {
