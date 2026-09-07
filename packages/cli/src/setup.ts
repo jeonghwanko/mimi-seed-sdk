@@ -29,6 +29,7 @@ import { promptGitProviderSetup } from "./deploy.js";
 import { saveCiProviderConfig, verifyCiToken } from "./ci-providers.js";
 import { t } from "./i18n.js";
 import { isLangUnset, writeSettings, type Lang } from "./settings.js";
+import { usageRun } from "./telemetry.js";
 
 function log(msg = ""): void {
   process.stdout.write(msg + "\n");
@@ -272,6 +273,7 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   printStatus(detected, platforms);
 
   const mode = resolveMode(opts, process.env, process.stdin.isTTY);
+  const finish = mode === "interactive" ? usageRun("setup", process.cwd()) : async () => {};
   const plan = planSetup(detected, {
     only: opts.only,
     reconnect: opts.reconnect,
@@ -303,6 +305,10 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   }
 
   if (plan.length === 0) {
+    const satisfied = opts.only
+      ? CREDENTIALS.filter(c => opts.only!.includes(c.id)).every(c => isSatisfied(c, detected))
+      : missingRequired(detected, platforms).length === 0;
+    await finish(satisfied ? "completed" : "incomplete");
     // "연결할 게 없다"는 요청 범위 안에서의 이야기다 — --only 로 좁혔다면 그렇게 말해야 한다.
     if (opts.only) {
       log(kleur.green(t().setup.onlyAlreadyDone));
@@ -369,6 +375,10 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   printStatus(detected, platforms);
 
   const stillMissing = missingRequired(detected, platforms);
+  const requestedMissing = opts.only
+    ? CREDENTIALS.filter(c => opts.only!.includes(c.id) && !isSatisfied(c, detected))
+    : stillMissing;
+  await finish(!aborted && requestedMissing.length === 0 ? "completed" : "incomplete");
   if (stillMissing.length === 0) {
     log(kleur.green(t().setup.requiredDone));
     log(kleur.cyan(t().setup.tryPrompt));

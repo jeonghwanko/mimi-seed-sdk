@@ -20,6 +20,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
 | `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI) |
 | `check` | `check.ts` | pre-release readiness. With no connected remote account (or `--local`), runs the bundled no-login Release Doctor in-process; connected users retain the remote score. `--fail-on-blocker` is the CI gate |
+| `telemetry` | `telemetry.ts` | opt-in SDK usage measurement and consent settings; projects are represented by installation-salted hashes |
 | `notes` | `notes.ts` | release notes: git log → AI → optional store apply |
 | `review` | `review.ts` | AI review-reply draft → optional Play post |
 | `deploy` | `deploy.ts` | full pipeline: CI build → check → notes → apply |

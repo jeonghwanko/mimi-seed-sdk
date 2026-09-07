@@ -1,0 +1,62 @@
+[
+  {
+    "slug": "google-play-target-api-checker",
+    "title": "Google Play Target API checker",
+    "koTitle": "Google Play Target API 출시 점검",
+    "intro": "Check the target SDK resolved from your Android, Expo or Unity repository before preparing a submission.",
+    "koIntro": "Android·Expo·Unity 저장소에서 확인되는 Target SDK를 제출 전에 점검합니다.",
+    "detail": "The report links the evidence file and Google’s policy source. Unresolved framework-managed values produce a warning; resolve the actual release build before making a submission decision.",
+    "koDetail": "근거 파일과 Google 정책 출처를 보여줍니다. 프레임워크가 관리하는 값은 정적으로 확정되지 않을 수 있으므로 실제 출시 빌드를 확인하세요.",
+    "source": "https://support.google.com/googleplay/android-developer/answer/11926878"
+  },
+  {
+    "slug": "google-play-billing-checker",
+    "title": "Google Play Billing deadline checker",
+    "koTitle": "Google Play Billing 지원 기간 점검",
+    "intro": "Find detectable Billing library dependencies before an Android release.",
+    "koIntro": "Android 출시 전에 저장소에서 확인 가능한 Billing 의존성을 점검합니다.",
+    "detail": "Release Doctor checks supported dependency declarations, including relevant transitive framework evidence. A missing declaration does not prove billing is absent. Compare the resolved release dependency tree with the linked policy.",
+    "koDetail": "지원하는 의존성 선언과 프레임워크 단서를 확인합니다. 선언을 찾지 못해도 결제가 없다고 단정하지 않습니다. 실제 출시 의존성 트리를 정책과 비교하세요.",
+    "source": "https://developer.android.com/google/play/billing/deprecation-faq"
+  },
+  {
+    "slug": "expo-release-readiness",
+    "title": "Expo release readiness check",
+    "koTitle": "Expo 출시 준비 점검",
+    "intro": "Start in the Expo app directory and inspect Android/iOS identifiers and available policy evidence without store credentials.",
+    "koIntro": "Expo 앱 폴더에서 스토어 키 없이 Android·iOS 식별자와 정책 근거를 확인합니다.",
+    "detail": "Static app configuration is inspected without executing app.config code. Dynamic values can require a manual check. A clean local scan does not validate EAS builds, store metadata or approval.",
+    "koDetail": "app.config 코드를 실행하지 않고 정적 설정을 읽습니다. 동적 값은 수동 확인이 필요할 수 있습니다. 로컬 통과는 EAS 빌드·스토어 등록정보·심사 승인을 보장하지 않습니다.",
+    "source": "https://docs.expo.dev/workflow/configuration/"
+  },
+  {
+    "slug": "unity-google-play-compliance",
+    "title": "Unity Google Play release check",
+    "koTitle": "Unity Google Play 출시 점검",
+    "intro": "Inspect a Unity project’s mobile identifiers and Android policy evidence from repository files.",
+    "koIntro": "Unity 저장소 파일에서 모바일 식별자와 Android 정책 근거를 확인합니다.",
+    "detail": "Start from the folder containing ProjectSettings. Generated Gradle values, plugin dependencies and special device categories can require checking the exported Android project and final build.",
+    "koDetail": "ProjectSettings가 있는 폴더에서 시작하세요. 생성된 Gradle 값·플러그인 의존성·특수 기기 유형은 내보낸 Android 프로젝트와 최종 빌드에서 추가 확인이 필요합니다.",
+    "source": "https://docs.unity3d.com/Manual/android-BuildProcess.html"
+  },
+  {
+    "slug": "app-store-screenshot-checker",
+    "title": "App Store screenshot requirements check",
+    "koTitle": "App Store 스크린샷 규격 점검",
+    "intro": "Start with a local project check, then connect App Store Connect to inspect screenshot and listing readiness.",
+    "koIntro": "로컬 프로젝트 검사 후 App Store Connect를 연결해 스크린샷과 등록정보 준비 상태를 확인합니다.",
+    "detail": "Screenshot coverage is a connected-store workflow, not part of the repository-only scan. Connect the required account, then ask your MCP client to check screenshot requirements and missing slots. Review Apple’s current requirements before uploading.",
+    "koDetail": "스크린샷 검사는 저장소 전용 검사에 포함되지 않습니다. 필요한 계정을 연결한 뒤 MCP 클라이언트에 규격과 누락 슬롯 점검을 요청하세요. 업로드 전 Apple의 최신 요건도 확인하세요.",
+    "source": "https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications/"
+  },
+  {
+    "slug": "react-native-pre-release-checklist",
+    "title": "React Native pre-release checklist",
+    "koTitle": "React Native 출시 전 체크리스트",
+    "intro": "Check detectable native configuration before packaging a React Native release.",
+    "koIntro": "React Native 출시 패키징 전에 정적으로 확인 가능한 네이티브 설정을 점검합니다.",
+    "detail": "Review identifiers, target SDK evidence and Billing findings, then validate signing, the uploaded build, privacy declarations and store metadata separately. Add the local check to CI only after reviewing its first report.",
+    "koDetail": "식별자·Target SDK 근거·Billing 결과를 확인하고 서명·업로드 빌드·개인정보 선언·스토어 등록정보를 별도로 검증하세요. 첫 보고서를 검토한 뒤 CI에 추가하세요.",
+    "source": "https://reactnative.dev/docs/signed-apk-android"
+  }
+]

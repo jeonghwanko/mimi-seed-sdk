@@ -17,6 +17,7 @@ import {
 } from "./config.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdCheck } from "./check.js";
+import { cmdTelemetry } from "./telemetry.js";
 import { cmdNotes } from "./notes.js";
 import { cmdReview } from "./review.js";
 import { cmdAuth } from "./auth.js";
@@ -93,6 +94,7 @@ const M = catalog(
 
     // 명령별 상세 사용법 (SSOT). `mimi-seed <command> --help` 와 overview 가 공유.
     usage: {
+      telemetry: "mimi-seed telemetry on|off|status — 선택적 사용량 측정. 기본 꺼짐. 임의 설치 ID, 프로젝트 해시, 버전, OS, 결과 코드와 실행시간을 전송합니다. 개인정보 안내: https://mimi-seed.pryzm.gg/privacy/sdk-usage . MIMI_SEED_TELEMETRY=0은 항상 전송을 끕니다.",
       init: `${kleur.bold("mimi-seed init")} — 현재 프로젝트를 Mimi Seed에 연결
 
 앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) → 브라우저 PAT 발급(원격 MCP) → 앱 등록
@@ -196,6 +198,7 @@ ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed ga4")}         GA4 property·data stream 생성·조회
   ${kleur.cyan("mimi-seed doctor")}      환경 진단 (토큰·Git·프로젝트·CI 체크)
   ${kleur.cyan("mimi-seed check")}       출시 전 Readiness 점검
+  ${kleur.cyan("mimi-seed telemetry")}   선택적 사용량 측정 설정
   ${kleur.cyan("mimi-seed notes")}       릴리즈 노트 생성 (git log → AI → 마켓 적용)
   ${kleur.cyan("mimi-seed review")}      리뷰 답변 AI 초안 생성 및 Play Store 게시
   ${kleur.cyan("mimi-seed deploy")}      앱 자동 배포 (CI → Play Store/App Store)
@@ -273,6 +276,7 @@ ${kleur.bold("환경변수:")}
       "  ⚠ This command contains the real token (it stays in your shell history). The token is also stored in ~/.mimi-seed/config.json.",
 
     usage: {
+      telemetry: "mimi-seed telemetry on|off|status — optional usage measurement, off by default. Sends a random installation ID, project hash, version, OS, result codes and duration. Privacy: https://mimi-seed.pryzm.gg/privacy/sdk-usage . MIMI_SEED_TELEMETRY=0 always disables transmission.",
       init: `${kleur.bold("mimi-seed init")} — connect the current project to Mimi Seed
 
 Auto-detects apps (Expo/Gradle/Info.plist/pbxproj) → issues a PAT in the browser (remote MCP) → registers the apps
@@ -376,6 +380,7 @@ ${kleur.bold("Commands:")}
   ${kleur.cyan("mimi-seed ga4")}         create and list GA4 properties and data streams
   ${kleur.cyan("mimi-seed doctor")}      environment check (token · Git · project · CI)
   ${kleur.cyan("mimi-seed check")}       pre-release readiness check
+  ${kleur.cyan("mimi-seed telemetry")}   optional usage measurement settings
   ${kleur.cyan("mimi-seed notes")}       generate release notes (git log → AI → push to stores)
   ${kleur.cyan("mimi-seed review")}      draft a review reply with AI and post it to the Play Store
   ${kleur.cyan("mimi-seed deploy")}      automated app release (CI → Play Store/App Store)
@@ -688,6 +693,9 @@ async function main(): Promise<void> {
         break;
       case "check":
         await cmdCheck(restArgs);
+        break;
+      case "telemetry":
+        cmdTelemetry(restArgs);
         break;
       case "notes":
         await cmdNotes(restArgs);

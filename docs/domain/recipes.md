@@ -147,6 +147,9 @@ Then commit with a [Conventional Commit](https://www.conventionalcommits.org/) m
 generated from it. CI publishes each package whose version is not yet on npm (idempotent, so version-less
 pushes are safe). Details and the rationale: [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
+Intermediate validation uses `beta.N` or `next.N` versions. `scripts/release-channel.mjs` owns their npm
+dist-tags; stable versions alone update `latest`. Batch routine fixes before a stable release.
+
 ---
 
 ## 7. Before you open the PR

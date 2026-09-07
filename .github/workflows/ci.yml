@@ -33,6 +33,7 @@ jobs:
           node-version-file: .nvmrc
 
       - run: npm run plugin:check
+      - run: node --test scripts/release-channel.test.mjs
 
   build-test:
     name: ${{ matrix.package }} (node ${{ matrix.node }})
@@ -91,6 +92,9 @@ jobs:
           fi
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
+          CHANNEL=$(node --input-type=module -e "import { releaseChannel } from '../../scripts/release-channel.mjs'; console.log(releaseChannel(process.argv[1]))" "$VERSION")
+          RELEASE_FLAGS=()
+          if [ "$CHANNEL" != "latest" ]; then RELEASE_FLAGS+=(--prerelease); fi
           # 빠른 경로: 이미 있으면 publish 시도 자체를 생략 (--prefer-online 으로 캐시 우회)
           if npm view "$NAME@$VERSION" version --prefer-online >/dev/null 2>&1; then
             echo "• $NAME@$VERSION 이미 npm 에 존재 — skip"
@@ -102,12 +106,12 @@ jobs:
           # 어느 쪽이든 메시지 포맷과 무관하게 안전. (둘 다 2026-07 실사고.)
           for attempt in 1 2 3; do
             echo "→ publishing $NAME@$VERSION (attempt $attempt)"
-            if npm publish --access public --provenance; then
+            if npm publish --access public --provenance --tag "$CHANNEL"; then
               echo "✓ published $NAME@$VERSION (provenance 서명됨)"
               # 새 버전 publish 성공 시 GitHub Release 자동 생성 (자동 release notes).
               # 실패해도 publish 는 이미 끝났으므로 비치명적 처리.
               TAG="${{ matrix.package }}-v$VERSION"
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes \
+              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes "${RELEASE_FLAGS[@]}" \
                 || echo "⚠ GitHub Release 생성 실패 (publish 는 성공) — 무시"
               exit 0
             fi
@@ -117,7 +121,7 @@ jobs:
               # 부분 성공(publish 는 됐는데 응답만 실패) 케이스에도 Release 는 남긴다.
               # 이미 존재하면 gh 가 실패하고 || 가드가 삼킨다.
               TAG="${{ matrix.package }}-v$VERSION"
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes \
+              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes "${RELEASE_FLAGS[@]}" \
                 || echo "⚠ GitHub Release 생성 실패/이미 존재 — 무시"
               exit 0
             fi

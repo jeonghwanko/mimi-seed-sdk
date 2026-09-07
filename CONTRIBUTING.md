@@ -94,6 +94,12 @@ are safe. Requires the `NPM_TOKEN` repo secret.
 
 **Versioning:** bump the **patch** number only unless a maintainer decides otherwise.
 
+Batch routine fixes into one stable release per day when practical. Use explicit `beta.N` or `next.N`
+prerelease versions for intermediate validation (`npm run version:set <version>`). CI publishes them to
+the matching npm dist-tag and marks the GitHub Release as a prerelease; they cannot replace `latest`.
+Only a stable version gets `latest`. Urgent fixes can ship immediately; the daily cadence is a practice,
+not a lock that delays a critical repair. See npm's [dist-tag guidance](https://docs.npmjs.com/adding-dist-tags-to-packages/).
+
 ## License
 
 By contributing, you agree your contributions are licensed under the
