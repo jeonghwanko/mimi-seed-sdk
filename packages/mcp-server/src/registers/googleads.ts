@@ -48,7 +48,7 @@ export function registerGoogleAdsTools(server: McpServer) {
 
   server.tool(
     'googleads_get_campaign_report',
-    '기간별 캠페인 성과 리포트 (클릭, 노출, 비용, 전환수, CPI, CTR)',
+    '기간별 캠페인 성과 리포트 (클릭, 노출, 계정 통화 비용, 전환수, 전환당 비용). 설치 CPI나 코호트 ROAS가 아님.',
     {
       startDate: z.string().describe('시작일 (YYYY-MM-DD)'),
       endDate: z.string().describe('종료일 (YYYY-MM-DD)'),
@@ -68,6 +68,7 @@ export function registerGoogleAdsTools(server: McpServer) {
           type: 'text',
           text: JSON.stringify({
             period: { startDate, endDate },
+            metricNote: googleads.REPORT_METRIC_NOTE,
             summary: {
               totalCost: Math.round(totalCost * 100) / 100,
               totalClicks,
@@ -84,7 +85,7 @@ export function registerGoogleAdsTools(server: McpServer) {
 
   server.tool(
     'googleads_get_uac_report',
-    '앱 캠페인(UAC) 리포트 — 앱 설치 캠페인별 설치수, CPI, ROAS 집계',
+    '앱 캠페인(UAC) 비용·전환 리포트. legacy installs/cpi 필드는 일반 전환 기반 별칭이며 설치수·설치 CPI·D7 ROAS로 단정하지 말 것.',
     {
       startDate: z.string().describe('시작일 (YYYY-MM-DD)'),
       endDate: z.string().describe('종료일 (YYYY-MM-DD)'),
@@ -102,9 +103,11 @@ export function registerGoogleAdsTools(server: McpServer) {
           type: 'text',
           text: JSON.stringify({
             period: { startDate, endDate },
+            metricNote: googleads.REPORT_METRIC_NOTE,
             summary: {
               totalCost: Math.round(totalCost * 100) / 100,
               totalInstalls,
+              totalConversions: totalInstalls,
               avgCpi: totalInstalls > 0 ? Math.round(totalCost / totalInstalls * 100) / 100 : null,
               campaignCount: report.length,
             },

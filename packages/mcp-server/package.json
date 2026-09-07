@@ -20,11 +20,13 @@
   },
   "files": [
     "dist",
+    "scripts/googleads-report.mjs",
     "assets",
     "tool-manifest.json",
     "LICENSE"
   ],
   "scripts": {
+    "report:googleads": "node scripts/googleads-report.mjs",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "auth": "tsx src/auth/cli.ts",
