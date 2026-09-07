@@ -5,6 +5,7 @@ import { scanReleaseDoctor } from "./checks/release-doctor.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
 import { resolveLang } from "./settings.js";
+import { telemetryNotice, usageRun } from "./telemetry.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 const M = catalog(
@@ -16,6 +17,7 @@ const M = catalog(
     localAppConflict: "--app은 원격 검사 전용이므로 --local, --path, --json과 함께 사용할 수 없습니다.\n",
     localFailed: (message: string) => `Release Doctor 실행 실패: ${message}\n`,
     title: "mimi-seed check — 출시 전 점검\n\n",
+    localNext: "\n스토어 검사 연결: npx mimi-seed init\nCI에서 반복 검사: npx mimi-seed check --local --fail-on-blocker\n",
     appsFailed: (msg: string) => `앱 목록 조회 실패: ${msg}\n`,
     noApps: "등록된 앱이 없습니다. `mimi-seed init` 후 앱을 등록하세요.\n",
     app: (name: string) => `앱: ${name}\n\n`,
@@ -43,6 +45,7 @@ const M = catalog(
     localAppConflict: "--app is remote-only and cannot be combined with --local, --path, or --json.\n",
     localFailed: (message: string) => `Release Doctor failed: ${message}\n`,
     title: "mimi-seed check — pre-launch check\n\n",
+    localNext: "\nConnect store checks: npx mimi-seed init\nRun in CI: npx mimi-seed check --local --fail-on-blocker\n",
     appsFailed: (msg: string) => `Failed to list apps: ${msg}\n`,
     noApps: "No apps registered. Run `mimi-seed init`, then register an app.\n",
     app: (name: string) => `App: ${name}\n\n`,
@@ -140,15 +143,19 @@ export async function cmdCheck(argv: string[]): Promise<void> {
     return;
   }
   if (localRequested || !cfg) {
+    const finish = usageRun("check", args.projectPath);
     try {
       const report = await scanReleaseDoctor(args.projectPath);
       process.stdout.write(args.json
         ? `${JSON.stringify(report, null, 2)}\n`
         : renderReleaseDoctor(report, resolveLang()));
+      if (!args.json && !process.env.CI) process.stdout.write(M().localNext + telemetryNotice());
       if (args.failOnBlocker && report.counts.blocker > 0) process.exitCode = 1;
+      await finish("completed", report);
     } catch (error) {
       process.stderr.write(kleur.red(M().localFailed(error instanceof Error ? error.message : String(error))));
       process.exitCode = 2;
+      await finish("failed");
     }
     return;
   }

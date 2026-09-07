@@ -1,0 +1,35 @@
+name: Release Doctor
+on:
+  workflow_call:
+    inputs:
+      project-path:
+        type: string
+        default: '.'
+      cli-version:
+        description: 'Exact stable version for reproducible checks; latest for scheduled policy refreshes'
+        type: string
+        default: 'latest'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Check repository evidence
+        env:
+          PROJECT_PATH: ${{ inputs.project-path }}
+          CLI_VERSION: ${{ inputs.cli-version }}
+          MIMI_SEED_LANG: en
+          MIMI_SEED_TELEMETRY: '0'
+        run: |
+          if [[ ! "$CLI_VERSION" =~ ^(latest|[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo 'Use latest or an exact stable version.' >&2
+            exit 2
+          fi
+          npx -y "mimi-seed@$CLI_VERSION" check --local --path "$PROJECT_PATH" --fail-on-blocker

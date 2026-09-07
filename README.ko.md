@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://mimi-seed.pryzm.gg"><strong>🌐 홈페이지</strong></a> &nbsp;·&nbsp;
-  <a href="https://mimi-seed.pryzm.gg/workspace/api-tokens">🔑 PAT 발급</a> &nbsp;·&nbsp;
+  <a href="#계정-연결-전에-release-doctor부터--로그인스토어-키-불필요">🌱 Release Doctor 시작</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.md">🇺🇸 English</a>
 </p>
@@ -41,6 +41,12 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 ---
 
 ## 계정 연결 전에 Release Doctor부터 — 로그인·스토어 키 불필요
+
+[Target API](docs/guides/google-play-target-api-checker.ko.md) · [Billing](docs/guides/google-play-billing-checker.ko.md) · [Expo](docs/guides/expo-release-readiness.ko.md) · [Unity](docs/guides/unity-google-play-compliance.ko.md) · [스크린샷](docs/guides/app-store-screenshot-checker.ko.md) · [React Native](docs/guides/react-native-pre-release-checklist.ko.md)
+
+첫 결과를 확인한 뒤 [CI 반복 검사와 상태 배지](docs/user-guide/release-doctor-ci.ko.md)를 추가하세요.
+선택적 사용량 측정은 기본 꺼짐입니다. `mimi-seed telemetry --help`와
+[측정 안내](https://mimi-seed.pryzm.gg/privacy/sdk-usage)를 참고하세요.
 
 Expo, React Native, Android, iOS 또는 Unity 저장소에서 실행하세요.
 

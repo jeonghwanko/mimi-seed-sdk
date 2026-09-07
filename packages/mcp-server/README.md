@@ -1,5 +1,25 @@
 # @yoonion/mimi-seed-mcp
 
+Connected app-release operations for Claude Code, Codex and other MCP clients.
+
+Start with a lightweight, account-free check in your app repository (Node 20+):
+
+```bash
+npx -y mimi-seed@latest check --local
+```
+
+Review identifiers, Target API and detectable Play Billing evidence first. Then connect stores for
+metadata, screenshot and uploaded-build checks. Local results do not guarantee store approval.
+
+[Install the plugin for Claude Code or Codex](https://github.com/jeonghwanko/mimi-seed-sdk#30-second-setup)
+· [English tool catalog](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/domain/tool-catalog.md)
+· [Release guides](https://mimi-seed.pryzm.gg/guides/expo-release-readiness)
+
+Use `npx mimi-seed setup` to connect only the accounts you need, then open a fresh client session.
+Licensed under PolyForm Noncommercial; commercial use requires a separate license.
+
+## 한국어 가이드
+
 **Mimi Seed** — Firebase · AdMob · Google Play · App Store Connect를 AI 콘솔에서 관리. Claude Code / Codex / Cursor / 기타 MCP 클라이언트에서 한 줄 등록으로 사용.
 
 > 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg/tool>.

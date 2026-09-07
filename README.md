@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://mimi-seed.pryzm.gg"><strong>🌐 Homepage</strong></a> &nbsp;·&nbsp;
-  <a href="https://mimi-seed.pryzm.gg/workspace/api-tokens">🔑 Get API Token</a> &nbsp;·&nbsp;
+  <a href="#try-release-doctor-first--no-account-or-store-key">🌱 Try Release Doctor</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.ko.md">🇰🇷 한국어</a>
 </p>
@@ -41,6 +41,12 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 ---
 
 ## Try Release Doctor first — no account or store key
+
+[Target API](docs/guides/google-play-target-api-checker.md) · [Billing](docs/guides/google-play-billing-checker.md) · [Expo](docs/guides/expo-release-readiness.md) · [Unity](docs/guides/unity-google-play-compliance.md) · [Screenshots](docs/guides/app-store-screenshot-checker.md) · [React Native](docs/guides/react-native-pre-release-checklist.md)
+
+After the first report, [add CI checks and a status badge](docs/user-guide/release-doctor-ci.md).
+Optional usage measurement is off by default; see `mimi-seed telemetry --help` and the
+[privacy notice](https://mimi-seed.pryzm.gg/privacy/sdk-usage).
 
 Run this inside an Expo, React Native, Android, iOS, or Unity repository:
 
