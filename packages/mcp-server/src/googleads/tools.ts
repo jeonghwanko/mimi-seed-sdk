@@ -1,6 +1,7 @@
 import type { OAuth2Client } from 'google-auth-library';
 import type { GoogleAdsConfig } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { googleAdsError } from './errors.js';
 
 // Google Ads API는 ~13개월 주기로 sunset (항상 최신 3개 major만 유지).
 // v24 = 2026-06 기준 현행 major. 새 major 출시 시 갱신 필요.
@@ -11,6 +12,16 @@ const BASE = `https://googleads.googleapis.com/${API_VERSION}`;
 export interface DateRange {
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
+}
+
+function validateDateRange(range: DateRange): void {
+  for (const value of [range.startDate, range.endDate]) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
+      throw new Error('Google Ads dates must be valid YYYY-MM-DD calendar dates.');
+    }
+  }
+  if (range.startDate > range.endDate) throw new Error('Google Ads startDate must not exceed endDate.');
 }
 
 // ─── 내부 헬퍼 ───────────────────────────────────────────────
@@ -46,7 +57,8 @@ async function search(
   let pageToken: string | undefined;
 
   do {
-    const body: Record<string, unknown> = { query, pageSize: 1000 };
+    // Google Ads controls page size; sending pageSize is rejected by current APIs.
+    const body: Record<string, unknown> = { query };
     if (pageToken) body.pageToken = pageToken;
 
     const res = await fetchWithTimeout(url, {
@@ -57,15 +69,7 @@ async function search(
 
     const text = await res.text();
     if (!res.ok) {
-      let msg = `Google Ads API ${res.status}`;
-      try {
-        const err = JSON.parse(text);
-        const detail = err?.error?.message ?? err?.[0]?.error?.message ?? text;
-        msg += `: ${detail}`;
-      } catch {
-        msg += `: ${text.slice(0, 300)}`;
-      }
-      throw new Error(msg);
+      throw googleAdsError(res.status, text, [accessToken, cfg.developerToken]);
     }
 
     const json = JSON.parse(text);
@@ -92,14 +96,7 @@ export async function listAccessibleCustomers(auth: OAuth2Client, cfg: GoogleAds
   });
   const text = await res.text();
   if (!res.ok) {
-    let msg = `Google Ads API ${res.status}`;
-    try {
-      const err = JSON.parse(text);
-      msg += `: ${err?.error?.message ?? text.slice(0, 300)}`;
-    } catch {
-      msg += `: ${text.slice(0, 300)}`;
-    }
-    throw new Error(msg);
+    throw googleAdsError(res.status, text, [accessToken, cfg.developerToken]);
   }
   return JSON.parse(text);
 }
@@ -114,8 +111,8 @@ export async function listCampaigns(auth: OAuth2Client, cfg: GoogleAdsConfig) {
       campaign.status,
       campaign.advertising_channel_type,
       campaign.advertising_channel_sub_type,
-      campaign.start_date,
-      campaign.end_date,
+      campaign.start_date_time,
+      campaign.end_date_time,
       campaign_budget.amount_micros
     FROM campaign
     WHERE campaign.status != 'REMOVED'
@@ -130,8 +127,9 @@ export async function listCampaigns(auth: OAuth2Client, cfg: GoogleAdsConfig) {
     status: r.campaign?.status,
     channelType: r.campaign?.advertisingChannelType,
     channelSubType: r.campaign?.advertisingChannelSubType,
-    startDate: r.campaign?.startDate,
-    endDate: r.campaign?.endDate,
+    // Keep date-only response fields compatible while querying the supported schema.
+    startDate: r.campaign?.startDateTime?.slice(0, 10),
+    endDate: r.campaign?.endDateTime?.slice(0, 10),
     dailyBudget: microsToCurrency(r.campaignBudget?.amountMicros),
   }));
 }
@@ -143,8 +141,11 @@ export async function getCampaignReport(
   cfg: GoogleAdsConfig,
   range: DateRange,
 ) {
+  validateDateRange(range);
   const query = `
     SELECT
+      customer.currency_code,
+      customer.time_zone,
       campaign.id,
       campaign.name,
       campaign.status,
@@ -159,14 +160,14 @@ export async function getCampaignReport(
       metrics.ctr,
       metrics.average_cpc
     FROM campaign
-    WHERE campaign.status != 'REMOVED'
-      AND segments.date BETWEEN '${range.startDate}' AND '${range.endDate}'
+    WHERE segments.date BETWEEN '${range.startDate}' AND '${range.endDate}'
     ORDER BY metrics.cost_micros DESC
-    LIMIT 500
   `;
 
   const rows = await search(auth, cfg, query);
   return rows.map((r: any) => ({
+    currencyCode: r.customer?.currencyCode,
+    timeZone: r.customer?.timeZone,
     id: r.campaign?.id,
     name: r.campaign?.name,
     status: r.campaign?.status,
@@ -190,6 +191,7 @@ export async function getUacReport(
   cfg: GoogleAdsConfig,
   range: DateRange,
 ) {
+  validateDateRange(range);
   const query = `
     SELECT
       campaign.id,
@@ -209,7 +211,6 @@ export async function getUacReport(
       AND campaign.advertising_channel_sub_type IN ('APP_CAMPAIGN', 'APP_CAMPAIGN_FOR_ENGAGEMENT', 'APP_CAMPAIGN_FOR_PRE_REGISTRATION')
       AND segments.date BETWEEN '${range.startDate}' AND '${range.endDate}'
     ORDER BY segments.date DESC, metrics.cost_micros DESC
-    LIMIT 500
   `;
 
   const rows = await search(auth, cfg, query);

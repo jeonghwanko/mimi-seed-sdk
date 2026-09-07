@@ -122,6 +122,30 @@ and writes a local audit record. The reservation prevents concurrent workers fro
 remains in place for pending, published, or unknown outcomes. Reconcile through
 `tiktok_business_get_publish_status` or the owned account before retrying.
 
+## Google Ads reporting compatibility
+
+`googleads/tools.ts` owns both MCP reports and the read-only `report:googleads` package script.
+Run the script with two ISO dates after building the MCP package; it reuses `requireAuth` and
+`requireConfig`, never a copied token or a second REST implementation. Output is JSON; failures exit nonzero.
+An already-running MCP process must be restarted to load rebuilt code. Updating source or disk files
+alone does not prove that an existing client is fixed; smoke-test the actual calling path.
+
+- Search requests send `query` and optional `pageToken`, **not `pageSize`**. Google controls page size.
+- Follow every `nextPageToken`. Cost reports have no GAQL `LIMIT` and include removed campaigns;
+  the active campaign inventory is a separate, intentionally filtered view.
+- Campaign inventory queries use `start_date_time` / `end_date_time`, retaining date-only output aliases.
+- `googleads/errors.ts` preserves nested provider codes, field violations and request IDs, redacts current
+  credentials, and never echoes non-JSON proxy bodies. A successful accessible-customers call does not
+  validate report queries. Do not recommend reauthentication merely because Search returns HTTP 400.
+- `cost_micros` is divided by one million into the account currency; campaign reports include currency and
+  account time zone. Historical `cpi` / UAC `installs` output names represent conversions unless conversion
+  action settings independently establish that they are installs. They are not cohort D7 ROAS.
+- Guard: `src/__tests__/googleads.test.ts` covers request bodies, pagination, long-range totals, removed
+  campaigns, dates, supported campaign fields, partial failure, provider diagnostics and secret redaction.
+
+Provider references: [pagination](https://developers.google.com/google-ads/api/docs/reporting/paging),
+[release notes](https://developers.google.com/google-ads/api/docs/release-notes).
+
 ## Security note (public repo)
 
 Error messages may include provider reasons — make sure they never echo **credential values, tokens, `.p8`
