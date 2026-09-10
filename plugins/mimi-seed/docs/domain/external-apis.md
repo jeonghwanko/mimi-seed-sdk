@@ -35,7 +35,7 @@ drop a deprecated transitive `glob`; don't remove it casually.
 
 Tools resolve credentials through shared gates, not ad hoc file reads:
 
-- `requireAuth(requiredScope?)` — ensures a fresh Google OAuth token (delegates to
+- `requireAuth(requiredScope?, profile?)` — ensures a fresh Google OAuth token (delegates to
   `auth/google-auth.ts:ensureFreshAccessToken`).
 - `requirePlayStoreAuth(packageName?)` / `requireServiceAccountJson(packageName?)` — resolve the **per-package**
   Play service account (falls back to the default). See [[auth-credentials]].

@@ -2,6 +2,8 @@
 import readline from 'node:readline';
 import {
   startAuth,
+  googleProfilePath,
+  listGoogleProfiles,
   getStoredTokens,
   ensureFreshAccessToken,
   type StoredTokens,
@@ -35,6 +37,8 @@ const ko = {
   옵션:
     --domains <ids>  요청할 권한 도메인 (쉼표 구분, 미지정 시 전체).
                      가능한 값: ${DOMAIN_IDS.join(', ')}
+    --profile <id>  Google login profile (isolated account/channel)
+    --channel <id>  Verify YouTube channel before saving (requires --profile)
     --no-browser     URL 자동 오픈 안 함 (직접 복붙)
     --timeout <초>   콜백 대기 시간 (기본 600)
     --force          기존 토큰 무시하고 강제 재로그인
@@ -107,6 +111,8 @@ const en: typeof ko = {
   Options:
     --domains <ids>  Permission domains to request (comma-separated; all when omitted).
                      Available: ${DOMAIN_IDS.join(', ')}
+    --profile <id>  Google login profile (isolated account/channel)
+    --channel <id>  Verify YouTube channel before saving (requires --profile)
     --no-browser     Do not open the URL automatically (copy-paste it yourself)
     --timeout <sec>  How long to wait for the callback (default 600)
     --force          Ignore the existing token and force a re-login
@@ -168,6 +174,8 @@ const en: typeof ko = {
 const M = resolveLang() === 'en' ? en : ko;
 
 const args = process.argv.slice(2);
+let profile: string | undefined;
+let expectedChannelId: string | undefined;
 const hasFlag = (name: string) => args.includes(`--${name}`);
 const flagValue = (name: string): string | undefined => {
   const i = args.indexOf(`--${name}`);
@@ -202,7 +210,9 @@ function printAuthError(p: AuthErrorPayload): void {
 
 /** 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께 출력. */
 function printGrantedDomains(): void {
-  const summary = summarizeGrantedDomains(getStoredTokens()?.scope);
+  const channel = getStoredTokens(profile)?.youtubeChannel;
+  if (channel) err(`YouTube: ${channel.title} (${channel.id})`);
+  const summary = summarizeGrantedDomains(getStoredTokens(profile)?.scope);
   if (!summary.known) {
     err(M.domainsUnknown);
     return;
@@ -214,8 +224,9 @@ function printGrantedDomains(): void {
 async function cmdStatus(): Promise<number> {
   err('');
   err(M.statusTitle);
+  err(`Google profiles: ${JSON.stringify(listGoogleProfiles())}`);
   err('');
-  const r = await ensureFreshAccessToken();
+  const r = await ensureFreshAccessToken(undefined, profile);
   switch (r.status) {
     case 'fresh':
       err(M.statusFresh(fmtRemaining(r.msUntilExpiry)));
@@ -244,7 +255,7 @@ async function cmdRefresh(): Promise<number> {
   err('');
   err(M.refreshTrying);
   err('');
-  const r = await ensureFreshAccessToken(0); // 무조건 갱신 시도
+  const r = await ensureFreshAccessToken(0, profile); // 무조건 갱신 시도
   switch (r.status) {
     case 'fresh':
       err(M.refreshNotNeeded(fmtRemaining(r.msUntilExpiry)));
@@ -271,7 +282,7 @@ async function cmdLogout(): Promise<number> {
   const fs = await import('node:fs');
   const path = await import('node:path');
   const os = await import('node:os');
-  const tokenPath = path.join(os.homedir(), '.mimi-seed', 'tokens.json');
+  const tokenPath = profile !== undefined ? googleProfilePath(profile) : path.join(os.homedir(), '.mimi-seed', 'tokens.json');
   err('');
   if (fs.existsSync(tokenPath)) {
     fs.rmSync(tokenPath, { force: true });
@@ -312,11 +323,11 @@ async function cmdLogin(): Promise<number> {
 
   // 1) 기존 토큰이 있으면 silent refresh 먼저 시도.
   //    --domains 는 "권한을 추가로 부여하겠다"는 명시적 의도라 이 단축 경로를 건너뛴다.
-  if (!force && !domains) {
-    const existing = getStoredTokens();
+  if (!force && !domains && !expectedChannelId) {
+    const existing = getStoredTokens(profile);
     if (existing) {
       err(M.loginChecking);
-      const r = await ensureFreshAccessToken();
+      const r = await ensureFreshAccessToken(undefined, profile);
       if (r.status === 'fresh' || r.status === 'refreshed') {
         const label = r.status === 'fresh' ? M.loginValid : M.loginRefreshed;
         err(M.loginAlready(label, fmtRemaining(r.msUntilExpiry)));
@@ -343,6 +354,8 @@ async function cmdLogin(): Promise<number> {
   try {
     const { clientId, clientSecret } = await getMcpOAuthClient();
     const r = startAuth(clientId, clientSecret, {
+      profile,
+      expectedChannelId,
       timeoutMs: timeoutSec * 1000,
       domains,
     });
@@ -418,6 +431,16 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  const readOption = (name: string) => {
+    const eq = args.find((arg) => arg.startsWith(`--${name}=`));
+    const value = eq ? eq.slice(name.length + 3) : flagValue(name);
+    if ((hasFlag(name) || eq !== undefined) && !value) throw new Error(`--${name} requires a value.`);
+    return value;
+  };
+  profile = readOption('profile');
+  expectedChannelId = readOption('channel');
+  if (profile !== undefined) googleProfilePath(profile);
+  if (expectedChannelId && !profile) throw new Error('--channel requires --profile.');
   let code: number;
   if (hasFlag('status')) code = await cmdStatus();
   else if (hasFlag('refresh')) code = await cmdRefresh();

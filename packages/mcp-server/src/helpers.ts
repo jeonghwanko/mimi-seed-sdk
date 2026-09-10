@@ -8,13 +8,13 @@ export { ensureFreshAccessToken };
 
 const REAUTH_CMD = '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth';
 
-function formatAuthError(p: AuthErrorPayload): string {
+function formatAuthError(p: AuthErrorPayload, profile?: string): string {
   // 재로그인 안내는 needsReauth 인 경우에만 — CONFIG_FETCH_FAILED 처럼 재로그인이
   // 해법이 아닌 에러에 무조건 붙이면 같은 실패를 반복하게 만든다.
   return [
     `❌ [${p.code}] ${p.message}`,
     p.hint ? `→ ${p.hint}` : '',
-    ...(p.needsReauth ? ['', '터미널에서 재로그인:', REAUTH_CMD] : []),
+    ...(p.needsReauth ? ['', '터미널에서 재로그인:', profile === undefined ? REAUTH_CMD : `${REAUTH_CMD} --profile ${profile}`] : []),
   ]
     .filter((l) => l !== '')
     .join('\n');
@@ -33,9 +33,9 @@ function formatAuthError(p: AuthErrorPayload): string {
  *
  * OAuth 토큰에만 적용된다 — SA JWT 는 자체 scopes 로 토큰을 받으므로 이 검사 대상이 아니다.
  */
-function assertStoredScope(requiredScope?: string): void {
+function assertStoredScope(requiredScope?: string, profile?: string): void {
   if (!requiredScope) return;
-  const scopeStr = getStoredTokens()?.scope;
+  const scopeStr = getStoredTokens(profile)?.scope;
   const missing =
     scopeStr === undefined
       ? !isPreTrackingScope(requiredScope)
@@ -47,7 +47,7 @@ function assertStoredScope(requiredScope?: string): void {
       code: 'INSUFFICIENT_SCOPE',
       message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 현재 로그인에 그 권한이 없어.`,
       hint: domainArg
-        ? `mimi-seed-auth --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
+        ? `mimi-seed-auth${profile === undefined ? '' : ` --profile ${profile}`} --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
         : 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
       retriable: false,
       needsReauth: true,
@@ -63,12 +63,12 @@ function assertStoredScope(requiredScope?: string): void {
  * 기존엔 만료 시 각 OAuth 도구(firebase/admob/iam/googleads/checks)가
  * googleapis GaxiosError 를 그대로 노출 → 사용자는 "재로그인하라"는 안내를 못 받았다.
  */
-export async function requireAuth(requiredScope?: string) {
-  const result = await ensureFreshAccessToken();
+export async function requireAuth(requiredScope?: string, profile?: string) {
+  const result = await ensureFreshAccessToken(undefined, profile);
   if (result.status === 'unauthenticated' || result.status === 'expired_refresh_failed') {
-    throw new Error(formatAuthError(result.error));
+    throw new Error(formatAuthError(result.error, profile));
   }
-  const client = getAuthenticatedClient();
+  const client = getAuthenticatedClient(profile);
   if (!client) {
     throw new Error(
       formatAuthError({
@@ -80,7 +80,7 @@ export async function requireAuth(requiredScope?: string) {
       }),
     );
   }
-  assertStoredScope(requiredScope);
+  assertStoredScope(requiredScope, profile);
   return client;
 }
 

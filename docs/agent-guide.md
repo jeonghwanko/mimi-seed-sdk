@@ -84,7 +84,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | Android signing / keystore | `select:android_signing_setup,android_generate_keystore,jenkins_upload_keystore,jenkins_upload_playstore_sa` |
 | Service account end-to-end | `select:iam_list_service_accounts,iam_create_service_account,iam_list_keys,iam_create_key,iam_add_iam_policy_binding,setup_playstore_connection,playstore_register_service_account,playstore_verify_service_account,playstore_list_service_accounts,playstore_delete_service_account` |
 | Story → researched video | `select:video_save_plan,video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
-| YouTube upload / publish | `select:youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,mimi_seed_auth_start` |
+| YouTube upload / publish | `select:youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,mimi_seed_auth_start,mimi_seed_auth_status` |
 
 ---
 
@@ -301,3 +301,11 @@ domain, with the credential each domain needs — read it to answer "what can Mi
 ---
 
 _Keep this guide in sync with `README.md`'s tool list and the `skills/` directory._
+
+### YouTube account selection
+
+For multiple accounts/channels, use `mimi_seed_auth_start` with a named `profile`, `domains:["youtube"]`,
+and `expectedChannelId` from the user's target channel. Have the user select that Google/personal/Brand
+channel during consent, then check `mimi_seed_auth_status` with the same profile. Pass both `profile` and
+required `expectedChannelId` to `youtube_upload_video`; use that profile for status/privacy calls too.
+A missing profile never falls back to the default account. A channel mismatch stops before media transfer.

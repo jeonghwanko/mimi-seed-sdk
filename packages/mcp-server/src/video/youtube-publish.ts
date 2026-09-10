@@ -1,3 +1,4 @@
+import { verifyYouTubeChannel } from '../auth/youtube-channel.js';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { google, type youtube_v3 } from '../lib/googleapis-lite.js';
@@ -10,6 +11,7 @@ export const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl'
 export type YouTubePrivacyStatus = 'private' | 'unlisted' | 'public';
 
 export interface UploadYouTubeVideoInput {
+  expectedChannelId: string;
   filePath: string;
   title: string;
   description?: string;
@@ -88,6 +90,8 @@ function safeStatus(video: youtube_v3.Schema$Video) {
   return {
     videoId: video.id ?? null,
     title: video.snippet?.title ?? null,
+    channelId: video.snippet?.channelId ?? null,
+    channelTitle: video.snippet?.channelTitle ?? null,
     privacyStatus: video.status?.privacyStatus ?? null,
     uploadStatus: video.status?.uploadStatus ?? null,
     processingStatus: video.processingDetails?.processingStatus ?? null,
@@ -116,6 +120,8 @@ export async function getYouTubeVideoStatus(auth: OAuth2Client, videoId: string)
 }
 
 export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTubeVideoInput) {
+  if (!input.expectedChannelId) throw new Error('expectedChannelId is required before uploading.');
+  const channel = await verifyYouTubeChannel(auth, input.expectedChannelId);
   const privacyStatus = input.privacyStatus ?? 'private';
   assertVisibilityConfirmed(privacyStatus, input.confirmVisible);
   const file = assertUploadFile(input.filePath);
@@ -160,6 +166,7 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
     if (!videoId) throw new Error('YouTube 업로드 응답에 videoId가 없습니다.');
     return {
       ...safeStatus(response.data),
+      authenticatedChannel: channel,
       requestedPrivacyStatus: privacyStatus,
       file: { path: input.filePath, size: file.size, ...facts },
       validationWarnings: validation.issues,

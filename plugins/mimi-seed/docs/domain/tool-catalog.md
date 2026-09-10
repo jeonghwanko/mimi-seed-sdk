@@ -136,7 +136,7 @@
 
 - Research/read: `youtube_get_video_status` · `video_research_youtube` (metadata/reference-only) ·
   `video_search_stock_assets` · `video_job_status` · `video_validate`
-- **W** `youtube_upload_video` (기본 private, public/unlisted는 명시 확인 필수) ·
+- **W** `youtube_upload_video` (profile로 계정 선택, expectedChannelId 필수·실제 채널 검증, 기본 private, public/unlisted는 명시 확인 필수) ·
   `youtube_update_video_privacy` (public/unlisted는 명시 확인 필수)
 - **W** `video_plan_from_story` (Anthropic + local project) · `video_save_plan` (agent-authored storyboard,
   no API key — free-path default) · `video_synthesize_research` (metadata/user notes →

@@ -62,6 +62,14 @@ describe('requireAuth — 스코프 pre-flight (도메인 선택형 로그인)',
     h.getAuthenticatedClient.mockReturnValue(client);
   });
 
+  it('선택한 프로필의 토큰·갱신·클라이언트만 사용한다', async () => {
+    h.getStoredTokens.mockReturnValue({ scope: CLOUD_PLATFORM });
+    await expect(requireAuth(CLOUD_PLATFORM, 'travel')).resolves.toBe(client);
+    expect(h.ensureFreshAccessToken).toHaveBeenCalledWith(undefined, 'travel');
+    expect(h.getAuthenticatedClient).toHaveBeenCalledWith('travel');
+    expect(h.getStoredTokens).toHaveBeenCalledWith('travel');
+  });
+
   it('요구 스코프가 부여돼 있으면 통과', async () => {
     h.getStoredTokens.mockReturnValue({ scope: `${CLOUD_PLATFORM} ${GA4_EDIT}` });
     await expect(requireAuth(CLOUD_PLATFORM)).resolves.toBe(client);

@@ -40,7 +40,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 
 | Provider | Mechanism | Where in code |
 |---|---|---|
-| **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | One OAuth token in `tokens.json`; `ensureFreshAccessToken()` refreshes it before use | `auth/google-auth.ts` |
+| **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | Default OAuth token in `tokens.json`, or isolated named grants in `google-profiles/<profile>.json`; `ensureFreshAccessToken()` refreshes the selected grant | `auth/google-auth.ts` |
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
 | **Meta social posting** | Long-lived Page/account tokens with a saved expiry estimate; `mimi-seed setup` reconnects expired/expiring tokens | `facebook/`, `instagram/`, `threads/` |
@@ -131,3 +131,35 @@ second call with `confirm=true`.
   messages, not in tests. Tests use placeholder fixtures only.
 - ❌ Never add real issuer/key IDs, SA emails (`*@*.iam.gserviceaccount.com`), or project IDs to docs or
   fixtures. Use placeholders: `<packageName>`, `com.example.app`, `<service-account>@<project>.iam.gserviceaccount.com`.
+
+## Named Google / YouTube channels
+
+`mimi_seed_auth_start({profile:"travel", domains:["youtube"], expectedChannelId:"UCxxxxxxxxxxxxxxxxxxxxxx"})`
+starts an isolated login. Select the intended Google account **and personal/Brand channel** in Google's
+consent flow. A channel ID alone cannot route `videos.insert`: normal uploads belong to the OAuth channel.
+We verify `channels.list(mine=true)` before saving and again before uploading. Zero, multiple, or mismatched
+channels fail closed. Do not silently switch to the default account.
+
+Named grants live in `google-profiles/<profile>.json` (lowercase letters/digits/underscore/hyphen, 1–64 chars).
+`auth/google-auth.ts` is the sole writer: OAuth client credentials, tokens, and verified channel metadata
+commit together with `writeCredentialJson`. A denied/mismatched login leaves the old grant intact. Default
+`tokens.json` / `credentials.json` and their legacy fallback remain for callers that omit `profile`; named
+profiles never use that fallback. Fresh login scopes come from Google's response, never another account's
+stored scope. Refresh preserves channel metadata and refuses a stale grant after profile replacement.
+
+`mimi_seed_auth_status({profile:"travel"})` returns live channel verification, safe saved-profile metadata,
+and the current server's latest login attempt status. A failed attempt can coexist with an older valid grant;
+do not mistake that grant for a successful new login. No token/client secret appears in the profile list.
+
+CLI equivalents (the main CLI forwards these arguments):
+
+```sh
+mimi-seed auth login --profile travel --domains youtube --channel UCxxxxxxxxxxxxxxxxxxxxxx
+mimi-seed auth status --profile travel
+mimi-seed auth logout --profile travel
+```
+
+`youtube_upload_video` now **requires** `expectedChannelId` for both default and named logins; pass `profile`
+to select the grant. Status and privacy tools accept the same profile. This intentional input-contract
+change prevents accidental uploads to a previously authenticated account. Upload/status results include
+channel identity. The channel check is not an upload and does not consume upload quota.

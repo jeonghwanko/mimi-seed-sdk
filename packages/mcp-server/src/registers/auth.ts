@@ -1,3 +1,5 @@
+import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getGoogleAuthAttempt } from '../auth/google-auth.js';
+import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getMcpOAuthClient } from '../auth/constants.js';
@@ -330,6 +332,8 @@ export function registerAuthTools(server: McpServer) {
       '토큰 만료(invalid_rapt) / 재인증 필요 시 사용. 10분 내 완료해야 함.',
     ].join(' '),
     {
+      profile: z.string().regex(GOOGLE_PROFILE_ID).optional().describe('계정/채널별 Google 로그인 프로필. 생략하면 기존 기본 로그인.'),
+      expectedChannelId: z.string().regex(YOUTUBE_CHANNEL_ID).optional().describe('이 채널로 로그인했는지 검증한 뒤 저장. profile 필수. Google 로그인에서 해당 개인/브랜드 채널을 선택하세요.'),
       domains: z
         .array(z.enum(DOMAIN_IDS))
         .optional()
@@ -338,7 +342,7 @@ export function registerAuthTools(server: McpServer) {
             '예: ["ga4","googleads"] — 기존에 부여된 다른 도메인 권한은 유지된다.',
         ),
     },
-    async ({ domains }) => {
+    async ({ domains, profile, expectedChannelId }) => {
       // 설정 조회 실패를 분류된 안내로 — raw throw 는 MCP 클라이언트에 마커 문자열만 노출된다.
       let clientId: string;
       let clientSecret: string;
@@ -348,7 +352,7 @@ export function registerAuthTools(server: McpServer) {
         const p = classifyError(e, { phase: 'login' });
         return textResult(`❌ [${p.code}] ${p.message}${p.hint ? `\n→ ${p.hint}` : ''}`);
       }
-      const { url, wait } = startAuth(clientId, clientSecret, { domains });
+      const { url, wait } = startAuth(clientId, clientSecret, { domains, profile, expectedChannelId });
       // fire-and-forget — 토큰은 콜백 서버가 자동 저장
       wait.then(
         () => { /* saved */ },
@@ -366,6 +370,8 @@ export function registerAuthTools(server: McpServer) {
             url,
             '',
             scopeLine,
+            `로그인 프로필: ${profile ?? '(기본)'} / 대상 채널: ${expectedChannelId ?? '(로그인 후 확인)'}`,
+            'YouTube는 Google 로그인에서 선택한 개인/브랜드 채널에 연결됩니다. 완료 후 mimi_seed_auth_status(profile=...)로 실제 채널을 확인하세요.',
             '',
             '이 URL을 브라우저에서 열고 Google 계정으로 승인해줘.',
             '완료되면 localhost:9876으로 자동 리다이렉트되고 토큰이 저장돼.',
@@ -379,11 +385,25 @@ export function registerAuthTools(server: McpServer) {
   server.tool(
     'mimi_seed_auth_status',
     'Mimi Seed MCP 인증 상태 확인 (만료 시 refresh_token으로 자동 갱신 시도)',
-    {},
-    async () => {
+    {
+      profile: z.string().regex(GOOGLE_PROFILE_ID).optional().describe('확인할 Google 로그인 프로필. 저장된 프로필 목록도 반환.'),
+    },
+    async ({ profile }) => {
+      const profiles = listGoogleProfiles();
+      const loginAttempt = getGoogleAuthAttempt(profile);
+      if (profile !== undefined) {
+        const result = await ensureFreshAccessToken(undefined, profile);
+        if (result.status === 'unauthenticated' || result.status === 'expired_refresh_failed') {
+          return textResult(JSON.stringify({ profile, status: result.status, error: result.error, loginAttempt, profiles }));
+        }
+        const client = getAuthenticatedClient(profile);
+        const channel = result.tokens.youtubeChannel && client
+          ? await verifyYouTubeChannel(client, result.tokens.youtubeChannel.id) : null;
+        return textResult(JSON.stringify({ profile, status: result.status, youtubeChannel: channel, loginAttempt, profiles }));
+      }
       const r = await ensureFreshAccessToken();
       const refreshHint = formatLastRefreshHint(getTokensLastRefreshMs());
-      const refreshLine = `   마지막 갱신: ${refreshHint.label}`;
+      const refreshLine = `   마지막 갱신: ${refreshHint.label}\nGoogle profiles: ${JSON.stringify(profiles)}`;
       const recommendation = refreshHint.recommendation ? `\n\n${refreshHint.recommendation}` : '';
 
       // 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께
@@ -413,6 +433,7 @@ export function registerAuthTools(server: McpServer) {
               text:
                 `❌ [${r.error.code}] ${r.error.message}\n` +
                 (r.error.hint ? `→ ${r.error.hint}\n\n` : '\n') +
+                `Google profiles: ${JSON.stringify(profiles)}\n` +
                 '터미널에서 실행:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
             }],
           };

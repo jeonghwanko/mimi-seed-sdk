@@ -1,7 +1,7 @@
 {
   "name": "mimi-seed",
   "keywords": ["release-doctor", "expo", "react-native", "unity", "google-play", "app-store", "release-readiness", "mcp", "cli"],
-  "version": "0.19.13",
+  "version": "0.19.14",
   "description": "Release Doctor: check Expo, React Native and Unity release risks before connecting app stores.",
   "bin": {
     "mimi-seed": "dist/index.js"

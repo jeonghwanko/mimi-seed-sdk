@@ -1,3 +1,5 @@
+import { GOOGLE_PROFILE_ID } from '../auth/google-auth.js';
+import { YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
@@ -38,13 +40,15 @@ export function registerVideoTools(server: McpServer) {
   server.tool(
     'youtube_upload_video',
     [
-      '로컬 영상 파일을 현재 Google OAuth 계정의 YouTube 채널에 업로드합니다.',
+      '로컬 영상 파일을 선택한 Google 로그인 프로필의 채널에 업로드합니다. expectedChannelId를 실제 인증 채널과 대조한 후 전송합니다.',
       '기본 공개 상태는 private이며 public/unlisted는 같은 턴의 명시 승인 후 confirmVisible=true가 필요합니다.',
       '업로드 후 youtube_get_video_status로 처리 완료 여부와 실제 공개 상태를 확인하세요.',
       '요청이 타임아웃되면 업로드가 뒤늦게 완료될 수 있으므로 YouTube Studio를 먼저 확인하고 중복 재시도하지 마세요.',
       'YouTube OAuth 권한이 없으면 mimi_seed_auth_start(domains=["youtube"])로 증분 연결하세요.',
     ].join(' '),
     {
+      profile: z.string().regex(GOOGLE_PROFILE_ID).optional().describe('Google 로그인 프로필. 지정한 프로필만 사용하며 기본 계정으로 대체하지 않습니다.'),
+      expectedChannelId: z.string().regex(YOUTUBE_CHANNEL_ID).describe('업로드 대상 채널 ID. 인증된 채널과 다르면 업로드 중단.'),
       filePath: absolutePath.describe('업로드할 .mp4/.mov/.webm 영상 절대경로'),
       title: z.string().min(1).max(100).describe('YouTube 영상 제목'),
       description: z.string().max(5_000).optional().describe('영상 설명과 음원 출처/라이선스 표기'),
@@ -58,7 +62,7 @@ export function registerVideoTools(server: McpServer) {
       confirmVisible: z.boolean().default(false).describe('public/unlisted 게시에 대한 명시 확인'),
     },
     async (input) => {
-      const auth = await requireAuth(YOUTUBE_SCOPE);
+      const auth = await requireAuth(YOUTUBE_SCOPE, input.profile);
       return text(await uploadYouTubeVideo(auth, input));
     },
   );
@@ -67,10 +71,11 @@ export function registerVideoTools(server: McpServer) {
     'youtube_get_video_status',
     '내 YouTube 영상의 업로드 처리 상태와 현재 공개 상태를 조회합니다.',
     {
+      profile: z.string().regex(GOOGLE_PROFILE_ID).optional().describe('영상 소유 채널의 Google 로그인 프로필'),
       videoId: z.string().min(1).max(64).describe('YouTube video ID'),
     },
-    async ({ videoId }) => {
-      const auth = await requireAuth(YOUTUBE_SCOPE);
+    async ({ videoId, profile }) => {
+      const auth = await requireAuth(YOUTUBE_SCOPE, profile);
       return text(await getYouTubeVideoStatus(auth, videoId));
     },
   );
@@ -82,12 +87,13 @@ export function registerVideoTools(server: McpServer) {
       'public/unlisted 변경은 같은 턴의 명시 승인 후 confirmVisible=true가 필요합니다.',
     ].join(' '),
     {
+      profile: z.string().regex(GOOGLE_PROFILE_ID).optional().describe('영상 소유 채널의 Google 로그인 프로필'),
       videoId: z.string().min(1).max(64).describe('YouTube video ID'),
       privacyStatus: z.enum(['private', 'unlisted', 'public']),
       confirmVisible: z.boolean().default(false).describe('public/unlisted 변경에 대한 명시 확인'),
     },
     async (input) => {
-      const auth = await requireAuth(YOUTUBE_SCOPE);
+      const auth = await requireAuth(YOUTUBE_SCOPE, input.profile);
       return text(await updateYouTubeVideoPrivacy(auth, input));
     },
   );
