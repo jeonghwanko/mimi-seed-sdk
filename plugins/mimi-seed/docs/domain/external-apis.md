@@ -19,7 +19,7 @@
 | GA4 | GA4 Admin v1beta (속성/스트림), Admin v1alpha (BigQueryLink) + Data v1beta APIs | `googleapis` |
 | Search Console | Search Console API | `googleapis` |
 | Google Ads | Google Ads reporting | `googleapis` / REST per `googleads_save_config` |
-| YouTube publishing | YouTube Data API v3 (upload, processing/status, privacy) | `googleapis` + local file streams |
+| YouTube | YouTube Data API v3 (channel/video reads, upload, metadata, thumbnails, scheduling, privacy, comments/replies) + YouTube Analytics API v2 (reports) | `googleapis` + local file streams |
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |
 | Facebook / Instagram / Threads | Meta Graph APIs | `fetch`; shared expiry/error recovery in `lib/meta-auth.ts` |
 | TikTok Business | API for Business v1.3 Organic API (`/tt_user/*`, `/business/*`) | `fetchWithTimeout`; short-term token refresh + POST unknown-outcome audit |

@@ -1,4 +1,4 @@
-# Tool catalog — 234 tools across 21 domains
+# Tool catalog — 244 tools across 22 domains
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
 > (destructive / near-irreversible) markers. Everything unmarked is read-only.
@@ -32,7 +32,8 @@
 | Android signing | `registers/android.ts` | 3 |
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
-| **Total** | **21 modules** | **234** |
+| YouTube | `registers/youtube.ts` | 10 |
+| **Total** | **22 modules** | **244** |
 
 ## Google Play — `registers/playstore.ts` (39) · impl `playstore/tools.ts`
 
@@ -145,6 +146,20 @@
   `video_build_timeline` · `video_render` (local FFmpeg job, preview then confirm)
 - YouTube results are permanently marked `reference-only`; only assets with recorded provenance and
   `allowedForRendering=true` can enter a timeline.
+
+## YouTube — `registers/youtube.ts` (9) · impl `youtube/*.ts`
+
+- Read: `youtube_get_channel` · `youtube_list_videos` · `youtube_get_analytics_report` ·
+  `youtube_list_comments` · `youtube_list_comment_replies` · `youtube_get_content_insights`
+- `youtube_get_content_insights` is a bounded current-vs-previous-period evidence brief with a ranked
+  metadata sample; it does not call an AI API or generate a storyboard.
+- **W** `youtube_update_video_metadata` · `youtube_set_thumbnail` · `youtube_schedule_video`
+- **W** `youtube_reply_comment` (agent-authored supplied text; preview by default, explicit confirmation required for public posting)
+- All YouTube writes preview by default and require explicit confirmation before the provider write.
+- Analytics reports use the separate `youtube_analytics` OAuth domain (`youtube.readonly` and
+  `yt-analytics.readonly`); channel and video-list reads also accept the publishing `youtube` grant.
+  The tools accept an optional named `profile` and channel expectation for multi-channel accounts;
+  they do not grant or alter publishing access.
 
 ## TikTok Business — `registers/tiktok.ts` (7) · impl `tiktok-business/*.ts`
 

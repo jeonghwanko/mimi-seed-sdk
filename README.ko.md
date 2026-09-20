@@ -436,7 +436,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 
 ---
 
-## 도구 목록 (Local MCP · 150+ 개 · 21개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 22개 영역)
 
 > 아래 도구는 **Local MCP** — 로컬 Google OAuth — 로 동작합니다. Remote MCP는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -463,6 +463,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **인증** | 4 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
 | **영상 제작** | 15 | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_plan_from_story` · `video_research_youtube` · `video_render` |
+| **YouTube** | 10 | `youtube_get_channel` · `youtube_list_videos` · `youtube_get_analytics_report` · `youtube_get_content_insights` · `youtube_update_video_metadata` · `youtube_set_thumbnail` · `youtube_schedule_video` · `youtube_list_comments` · `youtube_list_comment_replies` · `youtube_reply_comment` |
 
 전체 카탈로그 → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · 소스 → [packages/mcp-server](packages/mcp-server)
 

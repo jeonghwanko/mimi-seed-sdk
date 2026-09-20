@@ -44,6 +44,7 @@ function sub(name: string): Record<string, unknown> {
 }
 
 export type { youtube_v3 } from 'googleapis/build/src/apis/youtube/index.js';
+export type { youtubeAnalytics_v2 } from 'googleapis/build/src/apis/youtubeAnalytics/index.js';
 
 /**
  * 기존 `google.<api>(...)` 호출부와 100% 동일하게 동작하는 지연 로딩 네임스페이스.
@@ -96,5 +97,8 @@ export const google = {
   },
   get youtube(): typeof import('googleapis/build/src/apis/youtube/index.js').youtube {
     return sub('youtube').youtube as typeof import('googleapis/build/src/apis/youtube/index.js').youtube;
+  },
+  get youtubeAnalytics(): typeof import('googleapis/build/src/apis/youtubeAnalytics/index.js').youtubeAnalytics {
+    return sub('youtubeAnalytics').youtubeAnalytics as typeof import('googleapis/build/src/apis/youtubeAnalytics/index.js').youtubeAnalytics;
   },
 };

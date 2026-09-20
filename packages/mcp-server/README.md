@@ -125,7 +125,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-## 제공 도구 (150+ 개 · 21개 영역)
+## 제공 도구 (150+ 개 · 22개 영역)
 
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
@@ -150,6 +150,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | 인증 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
 | 영상 제작·YouTube | 15 | `youtube_upload_video` / `youtube_get_video_status` / `youtube_update_video_privacy` / `video_plan_from_story` / `video_render` |
+| YouTube | 10 | `youtube_get_channel` / `youtube_list_videos` / `youtube_get_analytics_report` / `youtube_get_content_insights` / `youtube_update_video_metadata` / `youtube_set_thumbnail` / `youtube_schedule_video` / `youtube_list_comments` / `youtube_list_comment_replies` / `youtube_reply_comment` |
 
 > 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `appstore_create_inapp_purchase` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` 등.
 > 전체 카탈로그(항상 최신): [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)

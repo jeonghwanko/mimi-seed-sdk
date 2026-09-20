@@ -49,6 +49,8 @@ Cloud IAM · BigQuery 가 모두 같은 OAuth 토큰을 탄다. 여기서 시작
 
 **열리는 것:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`
 
+YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한다. 채널·영상 목록·댓글 조회는 이 권한이나 기존 게시용 `youtube` 권한으로 할 수 있고, 영상 관리 쓰기와 댓글 답글은 `youtube` 권한을 사용한다.
+
 **먼저 필요한 것:** Google 계정. 그게 전부다.
 
 **발급받기:** 미리 가져올 게 **없다**. Google Cloud 프로젝트도, OAuth 클라이언트도 직접 만들지 않는다 —
@@ -251,6 +253,9 @@ Google **Workspace 재인증 정책**(`invalid_rapt`)이 OAuth 토큰을 계속 
 <a id="instagram"></a>
 
 ## Instagram
+
+**브라우저 로그인(기본):** `mimi-seed auth instagram`을 실행하고 브라우저에서 로그인과 권한 동의를 완료한다. Mimi Seed가 계정을 검증하고 실제 만료시간과 함께 자동 저장한다. 운영자가 Instagram 전용 앱 자격증명과 등록된 콜백을 갖춘 HTTPS 브로커를 구성해야 하며 SDK가 이를 배포하지는 않는다. 브로커 연결 실패 시 기존 인증을 보존하고 토큰 붙여넣기를 요구하지 않는다. 고급 수동 흐름에만 `--manual-token`을 사용한다.
+
 
 **열리는 것:** `instagram_*` — 이미지·캐러셀 게시.
 

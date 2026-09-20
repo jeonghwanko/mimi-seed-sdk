@@ -43,7 +43,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | Default OAuth token in `tokens.json`, or isolated named grants in `google-profiles/<profile>.json`; `ensureFreshAccessToken()` refreshes the selected grant | `auth/google-auth.ts` |
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
-| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Threads defaults to browser OAuth through an operator-managed HTTPS broker, with manual token entry retained for advanced/headless use | `facebook/`, `instagram/`, `threads/` |
+| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Instagram and Threads default to browser OAuth through operator-managed HTTPS brokers, with manual token entry retained for advanced/headless use | `facebook/`, `instagram/`, `threads/` |
 | **TikTok Business Organic API** | Short-term access token renewed from a refresh token five minutes before expiry | `tiktok-business/auth.ts` |
 
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
@@ -69,12 +69,15 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 
 The Google OAuth login no longer forces the full scope list. The SSOT for the **auth-domain → scope**
 mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `admob`, `playstore`,
-`googleads`, `gsc`, `ga4`, `youtube`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
+`googleads`, `gsc`, `ga4`, `youtube`, `youtube_analytics`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
 
 - `mimi-seed-auth --domains ga4,googleads` (CLI) and `mimi_seed_auth_start(domains=[…])` (MCP) request only
   the selected domains' scopes; omitting the option requests everything (old behavior).
-- The `youtube` domain unlocks video upload, processing/status reads, and privacy changes without introducing
+- The `youtube` domain unlocks video upload, processing/status reads, privacy changes, video management writes, and comment replies without introducing
   a second credential store.
+- The `youtube_analytics` domain adds `youtube.readonly` and `yt-analytics.readonly` for Analytics
+  reports. Channel and video-list reads also accept the existing publishing `youtube` grant; the
+  analytics report requires `youtube_analytics`.
 - Requests are sent with `include_granted_scopes=true`, so a re-login **adds** the new scopes on top of the
   existing grant instead of replacing it. `tokens.json` stores the cumulative granted `scope` string.
 - `requireAuth(<scope>)` in `helpers.ts` pre-flights a tool's required scope against the stored grant and, on
@@ -164,7 +167,13 @@ mimi-seed auth status --profile travel
 mimi-seed auth logout --profile travel
 ```
 
+For channel and Analytics reads, request `domains:["youtube_analytics"]` (or
+`--domains youtube_analytics`). The optional `profile` and `expectedChannelId` select and verify the
+channel without adding publishing scopes.
+
 `youtube_upload_video` now **requires** `expectedChannelId` for both default and named logins; pass `profile`
 to select the grant. Status and privacy tools accept the same profile. This intentional input-contract
 change prevents accidental uploads to a previously authenticated account. Upload/status results include
 channel identity. The channel check is not an upload and does not consume upload quota.
+
+- Instagram browser login follows the same broker security boundary in `instagram/browser-login.ts`, using Instagram-specific routes and app credentials. The validated provider expiry is persisted by `instagram/setup.ts`; failure preserves the existing account.

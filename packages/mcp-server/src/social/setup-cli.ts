@@ -22,6 +22,7 @@ import { loadInstagramConfig } from '../instagram/config.js';
 import { loadThreadsConfig } from '../threads/config.js';
 import { connectFacebook } from '../facebook/setup.js';
 import { connectInstagram } from '../instagram/setup.js';
+import { connectInstagramInBrowser, InstagramLoginError } from '../instagram/browser-login.js';
 import { connectThreads, refreshThreadsToken } from '../threads/setup.js';
 import { connectThreadsInBrowser, ThreadsLoginError } from '../threads/browser-login.js';
 import { resolveLang } from '../lib/lang.js';
@@ -48,6 +49,8 @@ const ko = {
   fbAskPageId: '  Page ID (선택, 엔터 시 자동 조회): ',
   fbPickPage: '\n  어느 페이지를 쓸까? Page ID: ',
 
+  igBrowser: '  브라우저에서 Instagram 로그인과 권한 동의를 완료해주세요. 연결 정보는 자동 저장됩니다.',
+  igLoginFailed: (code: string) => `  Instagram 연결 실패 (${code}). 기존 연결은 보존했습니다.`,
   igHeader: '  ── Instagram ──',
   igHowTo: '  Long-lived 토큰 두 형식 모두 지원 (자동 감지):',
   igIgaa: '   • IGAA… — Instagram Login (Meta 신규, Facebook 페이지 불필요)',
@@ -97,6 +100,8 @@ const en: typeof ko = {
   fbAskPageId: '  Page ID (optional, Enter to look it up): ',
   fbPickPage: '\n  Which page should I use? Page ID: ',
 
+  igBrowser: '  Complete Instagram login and consent in your browser. The connection is saved automatically.',
+  igLoginFailed: (code: string) => `  Instagram connection failed (${code}). The existing connection was preserved.`,
   igHeader: '  ── Instagram ──',
   igHowTo: '  Both long-lived token shapes are supported (auto-detected):',
   igIgaa: '   • IGAA… — Instagram Login (new Meta flow, no Facebook Page needed)',
@@ -185,7 +190,7 @@ async function setupFacebook(profile?: string): Promise<boolean> {
   return result.ok;
 }
 
-async function setupInstagram(profile?: string): Promise<boolean> {
+async function setupInstagram(profile?: string, manualToken = false): Promise<boolean> {
   console.log('');
   console.log(M.igHeader);
   const options = { profile };
@@ -194,6 +199,20 @@ async function setupInstagram(profile?: string): Promise<boolean> {
   const existing = loadInstagramConfig(options);
   if (existing && !(await confirmReconnect('Instagram', existing.username ?? existing.userId))) {
     return true;
+  }
+
+  if (!manualToken) {
+    console.log(M.igBrowser);
+    try {
+      const result = await connectInstagramInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); console.log(M.thResume); } });
+      console.log(indent(result.text));
+      return result.ok;
+    } catch (error) {
+      const code = error instanceof InstagramLoginError ? error.code : 'unavailable';
+      console.error(M.igLoginFailed(code));
+      if (code === 'unavailable' || code === 'configuration') console.error(M.thUnavailable);
+      return false;
+    }
   }
 
   console.log(M.igHowTo);
@@ -305,28 +324,28 @@ async function main() {
   if (target === 'facebook' || target === 'fb') {
     ok = await setupFacebook(profile);
   } else if (target === 'instagram' || target === 'ig') {
-    ok = await setupInstagram(profile);
+    ok = await setupInstagram(profile, manualToken);
   } else if (target === 'threads' || target === 'th') {
     ok = await setupThreads(profile, manualToken);
   } else if (target === 'all' || target === 'meta') {
     const fb = await setupFacebook(profile);
-    const ig = await setupInstagram(profile);
+    const ig = await setupInstagram(profile, manualToken);
     const th = await setupThreads(profile, manualToken);
     ok = fb && ig && th;
   } else {
     const which = await ask(M.which);
     const c = which.toLowerCase();
     if (c === 'f') ok = await setupFacebook(profile);
-    else if (c === 'i') ok = await setupInstagram(profile);
+    else if (c === 'i') ok = await setupInstagram(profile, manualToken);
     else if (c === 't') ok = await setupThreads(profile, manualToken);
     else if (c === 'b') {
       // 기존 b=Facebook+Instagram 동작을 유지한다.
       const fb = await setupFacebook(profile);
-      const ig = await setupInstagram(profile);
+      const ig = await setupInstagram(profile, manualToken);
       ok = fb && ig;
     } else if (c === 'a') {
       const fb = await setupFacebook(profile);
-      const ig = await setupInstagram(profile);
+      const ig = await setupInstagram(profile, manualToken);
       const th = await setupThreads(profile, manualToken);
       ok = fb && ig && th;
     } else {
