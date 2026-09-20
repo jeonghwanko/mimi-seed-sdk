@@ -289,20 +289,23 @@ Instagram 토큰은 여기서 안 통한다.
 
 **발급받기:**
 
-1. developers.facebook.com → 앱 → **Threads API** use case 추가
-2. 권한: **`threads_basic`, `threads_content_publish`**
-3. Threads 로그인으로 authorize → short-lived 토큰을 **long-lived**(약 60일)로 교환
+1. 기본 흐름인 `mimi-seed auth threads`를 실행하고 운영자의 HTTPS 웹 브로커가 연 브라우저에서 Threads 로그인과
+   권한 승인을 완료한다.
+2. 브로커 운영자는 Threads App ID·secret과 앱에 등록한 HTTPS callback URL을 설정·배포해야 한다. SDK가 이
+   비공개 브로커를 배포하거나 설정하지는 않는다.
+3. 브로커가 authorize callback을 토큰으로 교환하므로 기본 흐름에서는 CLI에 토큰을 붙여 넣지 않는다. 반환된
+   계정을 검증하고 실제 만료 시각을 로컬에 저장한다.
 
-**마법사에 넣을 것:** 토큰만. user ID 는 자동 조회된다. 저장 전에 검증한다.
+**고급/수동 흐름:** 헤드리스 또는 브로커를 쓸 수 없는 경우 `mimi-seed auth threads --manual-token`으로 토큰을
+직접 입력할 수 있다. 저장 전에 계정을 검증한다. 두 흐름 모두 `--profile <id>`로 이름 있는 계정을 저장할 수
+있고, 프로젝트는 `.mimi-seed.json`의 `socialProfiles.threads`로 선택한다.
 
-**여러 계정:** `mimi-seed auth threads --profile <id>`로 이름 있는 계정을 저장하고 프로젝트의
-`.mimi-seed.json`에서 `socialProfiles.threads`에 해당 ID를 지정한다. Threads 도구는 프로젝트 매핑을
-자동으로 사용한다.
+**여러 계정:** Threads 도구는 프로젝트 매핑을 자동으로 사용한다.
 
 **토큰 만료 임박:** `mimi-seed auth threads` 또는 `threads_refresh_token`을 실행한다. 기존 long-lived 토큰이
 아직 유효하면 Threads 공식 refresh endpoint로 갱신하고, 응답으로 받은 만료일을 저장한다. `mimi-seed setup`은
-7일 이내 만료되는 토큰을 자동으로 목록에 올린다. 이미 만료·철회된 토큰은 갱신할 수 없으며, 같은 CLI 흐름에서
-새로 발급한 토큰 입력으로 이어진다.
+7일 이내 만료되는 토큰을 자동으로 목록에 올린다. 이미 만료·철회된 토큰을 갱신할 수 없으면 CLI가 브라우저
+흐름으로 이어진다. 직접 새 토큰을 입력해야 할 때만 `--manual-token`을 사용한다.
 
 주의할 점: 이미지·캐러셀 URL 은 **public** 이어야 하고(Graph API 는 로컬 파일 불가), 게시물당 **500자** 제한,
 이미지 게시는 Meta 가 미디어를 처리할 때까지 몇 초 대기한 뒤 발행된다.

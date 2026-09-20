@@ -30,12 +30,8 @@ export function requireThreadsConfig(options: SocialConfigOptions = {}): Threads
   const cfg = loadThreadsConfig(options);
   if (!cfg) {
     const target = resolveSocialConfigTarget('threads', options);
-    const profileHint = target.profile ? `, profile="${target.profile}"` : '';
-    throw new Error(
-      'Threads 설정이 없습니다.\n' +
-      'threads_save_config 도구로 먼저 설정해주세요.\n' +
-      `예: threads_save_config(accessToken="...", userId="..."${profileHint})`,
-    );
+    const profileHint = target.profile ? ` --profile ${target.profile}` : '';
+    throw new Error(`Threads is not connected. Run mimi-seed auth threads${profileHint} to sign in through your browser.`);
   }
   return cfg;
 }

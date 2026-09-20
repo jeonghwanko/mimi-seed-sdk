@@ -14,7 +14,11 @@ export async function connectThreads(
   userId?: string,
   assumeIssuedNow = true,
   options: SocialConfigOptions = {},
+  expiresInSeconds?: number,
 ): Promise<ConnectResult> {
+  if (expiresInSeconds !== undefined && (!Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0 || expiresInSeconds > 5_184_000)) {
+    return { ok: false, text: 'Invalid Threads token lifetime; nothing was saved.' };
+  }
   // 프로필 ID를 네트워크 호출 전에 검증하고, 성공 응답에 실제 저장 대상을 남긴다.
   const target = resolveSocialConfigTarget('threads', options);
   let resolvedUserId = userId;
@@ -35,7 +39,7 @@ export async function connectThreads(
   }
 
   const expiresAt = assumeIssuedNow
-    ? new Date(Date.now() + SIXTY_DAYS_MS).toISOString()
+    ? new Date(Date.now() + (expiresInSeconds === undefined ? SIXTY_DAYS_MS : expiresInSeconds * 1000)).toISOString()
     : undefined;
 
   try {
@@ -53,7 +57,7 @@ export async function connectThreads(
         `   저장 대상: ${socialTargetLabel(target)}`,
         `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
         `   ID: ${account.id}`,
-        expiresAt ? `   토큰 만료(추정): ${expiresAt.slice(0, 10)}` : '',
+        expiresAt ? `   토큰 만료: ${expiresAt.slice(0, 10)}` : '',
       ]
         .filter(Boolean)
         .join('\n'),
@@ -105,7 +109,7 @@ export async function refreshThreadsToken(
       text: [
         '❌ Threads 토큰 자동 갱신 실패 — 기존 설정은 보존했습니다.',
         `   ${(err as Error).message}`,
-        '   복구: mimi-seed auth threads 에서 새 토큰으로 다시 연결하세요.',
+        '   복구: mimi-seed auth threads 로 브라우저에서 다시 로그인하세요.',
       ].join('\n'),
     };
   }

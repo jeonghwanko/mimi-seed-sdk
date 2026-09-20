@@ -23,6 +23,7 @@ import { loadThreadsConfig } from '../threads/config.js';
 import { connectFacebook } from '../facebook/setup.js';
 import { connectInstagram } from '../instagram/setup.js';
 import { connectThreads, refreshThreadsToken } from '../threads/setup.js';
+import { connectThreadsInBrowser, ThreadsLoginError } from '../threads/browser-login.js';
 import { resolveLang } from '../lib/lang.js';
 import { resolveSocialConfigTarget } from './profile-store.js';
 
@@ -56,6 +57,10 @@ const ko = {
   igAskUserId: '  Instagram Business Account ID (선택, 엔터 시 자동 조회): ',
 
   thHeader: '  ── Threads ──',
+  thBrowser: '  🌐 브라우저에서 Threads 로그인과 권한 동의를 완료해주세요. 연결 정보는 자동 저장됩니다.',
+  thUrl: '  브라우저가 열리지 않으면 아래 주소를 직접 열어주세요:',
+  thLoginFailed: (code: string) => `  ❌ ${(({denied:'권한 동의가 취소되었습니다.',timeout:'로그인 대기 시간이 지났습니다. 명령을 다시 실행해주세요.',validation:'Threads 계정을 확인하지 못했습니다. 다시 로그인해주세요.',exchange:'인증을 완료하지 못했습니다. 다시 로그인해주세요.'} as Record<string,string>)[code] ?? 'Threads 연결을 시작하지 못했습니다.')} 기존 연결은 보존했습니다.`,
+  thUnavailable: '  연결 서버가 아직 준비되지 않았거나 접속할 수 없습니다. 운영자에게 문의해주세요. 토큰을 직접 발급받을 필요는 없습니다.',
   thHowTo: '  Threads Graph API long-lived 토큰 발급:',
   thStep1: '   1. developers.facebook.com → 앱 → "Use cases" 에서 Threads API 추가',
   thStep2: '   2. 권한: threads_basic, threads_content_publish',
@@ -63,11 +68,11 @@ const ko = {
   thNote: '  (Instagram 과 **별개 계정·별개 토큰**. userId 는 토큰에서 자동 조회돼. 수명 약 60일.)',
   thAskToken: '  Threads Access Token: ',
   thAskUserId: '  Threads user ID (선택, 엔터 시 자동 조회): ',
-  thExistingAction: '  [Enter/y] 기존 토큰 자동 갱신  [r] 새 토큰으로 재연결  [n] 건너뛰기: ',
+  thExistingAction: '  [Enter/y] 기존 토큰 자동 갱신  [r] 브라우저로 다시 로그인  [n] 건너뛰기: ',
   thRefreshing: '  🔄 기존 Threads 토큰 갱신 중...',
-  thRefreshFallback: '  자동 갱신에 실패했습니다. 새 토큰을 입력해 재연결할 수 있습니다.',
+  thRefreshFallback: '  자동 갱신에 실패했습니다. 브라우저 로그인으로 다시 연결합니다.',
   profile: (id: string) => `  소셜 프로필: ${id}`,
-  invalidArgs: '  사용법: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>]',
+  invalidArgs: '  사용법: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token]',
 };
 
 const en: typeof ko = {
@@ -100,6 +105,10 @@ const en: typeof ko = {
   igAskUserId: '  Instagram Business Account ID (optional, Enter to look it up): ',
 
   thHeader: '  ── Threads ──',
+  thBrowser: '  🌐 Complete Threads login and consent in your browser. Credentials are saved automatically.',
+  thUrl: '  If the browser does not open, open this URL:',
+  thLoginFailed: (code: string) => `  ❌ Threads connection failed (${code}). Existing credentials were preserved.`,
+  thUnavailable: '  The connection service is not ready or reachable. Contact the operator; no manual token is required.',
   thHowTo: '  Get a long-lived Threads Graph API token:',
   thStep1: '   1. developers.facebook.com → your app → add the Threads API use case',
   thStep2: '   2. Permissions: threads_basic, threads_content_publish',
@@ -107,11 +116,11 @@ const en: typeof ko = {
   thNote: '  (A **separate account and token** from Instagram. userId is looked up from the token. ~60 days.)',
   thAskToken: '  Threads Access Token: ',
   thAskUserId: '  Threads user ID (optional, Enter to look it up): ',
-  thExistingAction: '  [Enter/y] refresh current token  [r] reconnect with a new token  [n] skip: ',
+  thExistingAction: '  [Enter/y] refresh current token  [r] sign in again in your browser  [n] skip: ',
   thRefreshing: '  🔄 Refreshing the existing Threads token...',
-  thRefreshFallback: '  Automatic refresh failed. You can reconnect with a new token.',
+  thRefreshFallback: '  Automatic refresh failed. Reconnecting in your browser.',
   profile: (id: string) => `  Social profile: ${id}`,
-  invalidArgs: '  Usage: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>]',
+  invalidArgs: '  Usage: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token]',
 };
 
 const M = resolveLang() === 'en' ? en : ko;
@@ -206,7 +215,7 @@ async function setupInstagram(profile?: string): Promise<boolean> {
   return result.ok;
 }
 
-async function setupThreads(profile?: string): Promise<boolean> {
+async function setupThreads(profile?: string, manualToken = false): Promise<boolean> {
   console.log('');
   console.log(M.thHeader);
   const options = { profile };
@@ -224,6 +233,20 @@ async function setupThreads(profile?: string): Promise<boolean> {
       console.log(indent(refreshed.text));
       if (refreshed.ok) return true;
       console.log(M.thRefreshFallback);
+    }
+  }
+
+  if (!manualToken) {
+    console.log(M.thBrowser);
+    try {
+      const result = await connectThreadsInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); } });
+      console.log(indent(result.text));
+      return result.ok;
+    } catch (error) {
+      const code = error instanceof ThreadsLoginError ? error.code : 'unavailable';
+      console.error(M.thLoginFailed(code));
+      if (code === 'unavailable' || code === 'configuration') console.error(M.thUnavailable);
+      return false;
     }
   }
 
@@ -258,6 +281,7 @@ function indent(text: string): string {
 
 async function main() {
   const args = process.argv.slice(2);
+  const manualToken = args.includes('--manual-token');
   const profileIndex = args.indexOf('--profile');
   const profile = profileIndex >= 0 ? args[profileIndex + 1] : undefined;
   if (profileIndex >= 0 && !profile) {
@@ -265,8 +289,8 @@ async function main() {
     process.exit(1);
   }
   const positional = args.filter((arg, index) =>
-    arg !== '--profile' && (profileIndex < 0 || index !== profileIndex + 1));
-  if (positional.length > 1 || args.some((arg) => arg.startsWith('--') && arg !== '--profile')) {
+    arg !== '--manual-token' && arg !== '--profile' && (profileIndex < 0 || index !== profileIndex + 1));
+  if (positional.length > 1 || args.some((arg) => arg.startsWith('--') && arg !== '--profile' && arg !== '--manual-token')) {
     console.error(M.invalidArgs);
     process.exit(1);
   }
@@ -281,18 +305,18 @@ async function main() {
   } else if (target === 'instagram' || target === 'ig') {
     ok = await setupInstagram(profile);
   } else if (target === 'threads' || target === 'th') {
-    ok = await setupThreads(profile);
+    ok = await setupThreads(profile, manualToken);
   } else if (target === 'all' || target === 'meta') {
     const fb = await setupFacebook(profile);
     const ig = await setupInstagram(profile);
-    const th = await setupThreads(profile);
+    const th = await setupThreads(profile, manualToken);
     ok = fb && ig && th;
   } else {
     const which = await ask(M.which);
     const c = which.toLowerCase();
     if (c === 'f') ok = await setupFacebook(profile);
     else if (c === 'i') ok = await setupInstagram(profile);
-    else if (c === 't') ok = await setupThreads(profile);
+    else if (c === 't') ok = await setupThreads(profile, manualToken);
     else if (c === 'b') {
       // 기존 b=Facebook+Instagram 동작을 유지한다.
       const fb = await setupFacebook(profile);
@@ -301,7 +325,7 @@ async function main() {
     } else if (c === 'a') {
       const fb = await setupFacebook(profile);
       const ig = await setupInstagram(profile);
-      const th = await setupThreads(profile);
+      const th = await setupThreads(profile, manualToken);
       ok = fb && ig && th;
     } else {
       console.log(M.cancelled);

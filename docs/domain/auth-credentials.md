@@ -43,7 +43,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | Default OAuth token in `tokens.json`, or isolated named grants in `google-profiles/<profile>.json`; `ensureFreshAccessToken()` refreshes the selected grant | `auth/google-auth.ts` |
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
-| **Meta social posting** | Long-lived Page/account tokens with a saved expiry estimate; `mimi-seed setup` reconnects expired/expiring tokens | `facebook/`, `instagram/`, `threads/` |
+| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Threads defaults to browser OAuth through an operator-managed HTTPS broker, with manual token entry retained for advanced/headless use | `facebook/`, `instagram/`, `threads/` |
 | **TikTok Business Organic API** | Short-term access token renewed from a refresh token five minutes before expiry | `tiktok-business/auth.ts` |
 
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
@@ -52,6 +52,11 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 - **Project social-profile mapping wins over the legacy default.** If `.mimi-seed.json` declares
   `socialProfiles.facebook`, `.instagram`, or `.threads`, tools resolve only that profile and do not silently fall back to a
   different default account. An explicit MCP `profile` argument wins over the project mapping.
+- **Threads browser OAuth is an operator boundary.** The default `mimi-seed auth threads` flow sends the user through
+  an HTTPS web broker that performs the authorize callback exchange. The operator owns its deployment, Threads App
+  ID/secret, and registered HTTPS callback URL; the SDK does not claim to deploy that broker. `--manual-token` is the
+  advanced fallback. OAuth validates the account and persists the actual returned expiry locally, including for a
+  named `--profile`.
 - The Play SA's **GCP project must have the Android Publisher API enabled**, or every `playstore_*` call returns
   `403` (this is *not* a permissions gap — see [[external-apis]] and [[pitfalls]]).
 - **AI tools** (`generate_release_notes_from_commits`, `generate_review_reply`) and video storyboard generation

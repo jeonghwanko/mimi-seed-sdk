@@ -296,19 +296,23 @@ token — an Instagram token will not work here.
 
 **Get it:**
 
-1. developers.facebook.com → your app → add the **Threads API** use case
-2. Permissions: **`threads_basic`, `threads_content_publish`**
-3. Authorize with Threads login, then exchange the short-lived token for a **long-lived** one (~60 days)
+1. Run `mimi-seed auth threads` (the default flow) and complete Threads login and consent in the browser opened by
+   the operator's HTTPS web broker.
+2. The broker operator must deploy the broker with the Threads App ID and secret, and register its HTTPS callback URL
+   in the Threads app. The SDK does not deploy or configure this private broker.
+3. The broker exchanges the authorization callback for the token; you never paste a token into the CLI in the default
+   flow. The returned account is verified and the actual expiry is saved locally.
 
-**Give it to the wizard:** just the token; the user ID is resolved for you. Verified before saving.
+**Advanced/manual flow:** `mimi-seed auth threads --manual-token` keeps the token-paste path for headless or brokerless
+use. The account is verified before saving. Use `--profile <id>` in either flow to save a named account; the project
+can select it with `.mimi-seed.json` → `socialProfiles.threads`.
 
-**Multiple accounts:** save a named account with `mimi-seed auth threads --profile <id>`. Map a project to it
-with `.mimi-seed.json` → `socialProfiles.threads`. The project mapping is used automatically by Threads tools.
+**Multiple accounts:** the project mapping is used automatically by Threads tools.
 
 **Expiring token:** run `mimi-seed auth threads` or `threads_refresh_token`. While the current long-lived token
-is still valid, Mimi Seed uses Threads' official refresh endpoint and stores the returned expiry. `mimi-seed
-setup` automatically flags tokens with seven days or less remaining. An already expired or revoked token cannot
-be refreshed; the same CLI flow falls back to asking for a newly issued token.
+is still valid, Mimi Seed uses Threads' official refresh endpoint and stores the returned expiry. If refresh cannot
+recover an expired or revoked token, the CLI falls back to the browser flow; use `--manual-token` only when you need
+to provide a replacement directly. `mimi-seed setup` automatically flags tokens with seven days or less remaining.
 
 Notes that bite: image/carousel URLs must be **public** (Graph API can't take local files), each post is capped
 at **500 characters**, and image posts wait for Meta to process the media before publishing (a few seconds).
