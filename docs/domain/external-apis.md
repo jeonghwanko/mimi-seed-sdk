@@ -151,6 +151,18 @@ alone does not prove that an existing client is fixed; smoke-test the actual cal
 Provider references: [pagination](https://developers.google.com/google-ads/api/docs/reporting/paging),
 [release notes](https://developers.google.com/google-ads/api/docs/release-notes).
 
+## Store review retries
+
+Play `submitRelease` and `promoteRelease` replace the target track's release list with the selected
+release on `completed`, including when that version already exists as a draft. Keeping the previous
+completed release alongside it makes Google reject the edit. Non-completed updates preserve other
+releases. Both paths return `changesNotSentForReview`; a committed edit with this flag still needs
+review submission in Play Console and must not be reported as queued for review.
+
+App Store review item discovery must read the version relationship and propagate read failures.
+An existing item is reused instead of posted twice. Submission confirmation remains separate from
+the read-only preview; a repeated call must inspect the existing submission before mutating it.
+
 ## Security note (public repo)
 
 Error messages may include provider reasons — make sure they never echo **credential values, tokens, `.p8`

@@ -531,7 +531,8 @@ export async function submitRelease(
   versionCode: string,
   status: 'completed' | 'draft' | 'inProgress' | 'halted' = 'completed',
 ) {
-  return withEdit(
+  let commitInfo: EditCommitInfo = { changesNotSentForReview: false };
+  const out = await withEdit(
     auth,
     packageName,
     async (editId) => {
@@ -558,11 +559,17 @@ export async function submitRelease(
       }
 
       const previousStatus = target.status;
-      target.status = status;
+      const updatedTarget = { ...target, status };
+      // Full rollout replaces the previous active release in the same edit.
+      // userFraction is only valid for staged/paused rollouts.
+      if (status === 'completed') delete updatedTarget.userFraction;
+      const updatedReleases = status === 'completed'
+        ? [updatedTarget]
+        : releases.map((release) => release === target ? updatedTarget : release);
 
       const updated = await publisher().edits.tracks.update({
         auth, packageName, editId, track,
-        requestBody: { track, releases },
+        requestBody: { track, releases: updatedReleases },
       });
       return {
         track,
@@ -574,7 +581,15 @@ export async function submitRelease(
       };
     },
     true,
+    (info) => { commitInfo = info; },
   );
+  return {
+    ...out,
+    changesNotSentForReview: commitInfo.changesNotSentForReview,
+    nextAction: commitInfo.changesNotSentForReview
+      ? 'Play Console 에서 "변경사항 검토 후 게시"(심사를 위해 전송)를 눌러야 심사가 시작된다.'
+      : undefined,
+  };
 }
 
 // ─── 트랙 간 promote (internal → production 등) ───
@@ -688,11 +703,11 @@ export async function promoteRelease(
       );
 
       let mergedReleases: typeof toReleases;
-      if (existingIdx >= 0) {
+      if (status === 'completed') {
+        mergedReleases = [newRelease];
+      } else if (existingIdx >= 0) {
         mergedReleases = [...toReleases];
         mergedReleases[existingIdx] = newRelease;
-      } else if (status === 'completed') {
-        mergedReleases = [newRelease];
       } else {
         mergedReleases = [...toReleases, newRelease];
       }

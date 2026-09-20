@@ -689,6 +689,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_submit_release',
     [
       'Google Play 트랙의 release status를 변경 — 일반적으로 draft → completed로 바꿔 검토/배포 큐에 진입시킬 때 사용.',
+      'completed 전환은 해당 트랙의 릴리스 목록을 대상 릴리스 하나로 교체한다. changesNotSentForReview=true 응답이면 커밋만 완료된 것이며 Console에서 심사 전송이 필요하다.',
       '⚠️ status="completed"는 비가역에 가까움 (전체 출시 또는 Google 검토 시작). halted로 일시 중단은 가능하나 한 번 라이브된 release는 되돌리기 어려움.',
       'status 옵션: draft(검토 미시작) / inProgress(단계 출시) / completed(전체 출시) / halted(중단).',
       'playstore_check_submission_risks로 사전 점검 권장.',

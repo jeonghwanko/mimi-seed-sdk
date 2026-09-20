@@ -703,7 +703,9 @@ async function getVersionAppAndPlatform(versionId: string): Promise<{ appId: str
   return { appId, platform };
 }
 
-async function findOpenReviewSubmission(appId: string, platform: string): Promise<string | null> {
+async function findOpenReviewSubmission(
+  appId: string, platform: string, versionId: string,
+): Promise<{ id: string; versionAttached: boolean; state?: string } | null> {
   // ASC API는 filter[state]=CREATED를 더 이상 허용하지 않음 (READY_FOR_REVIEW, WAITING_FOR_REVIEW 등만 허용).
   // CREATED 상태 submission은 별도로 조회 불가 → 이미 진행 중인 submission만 재사용.
   // 없으면 submitVersionForReview가 새로 생성.
@@ -711,17 +713,70 @@ async function findOpenReviewSubmission(appId: string, platform: string): Promis
     'filter[app]': appId,
     'filter[platform]': platform,
     'filter[state]': 'READY_FOR_REVIEW,WAITING_FOR_REVIEW,COMPLETING,UNRESOLVED_ISSUES',
-    'limit': '1',
-  });
-  return data?.data?.[0]?.id ?? null;
-}
-
-async function isVersionAttached(submissionId: string, versionId: string): Promise<boolean> {
-  const data = await apiGet(`/reviewSubmissions/${submissionId}/items`, {
     'limit': '50',
   });
-  const items = (data?.data ?? []) as Array<{ relationships?: { appStoreVersion?: { data?: { id?: string } } } }>;
-  return items.some((it) => it?.relationships?.appStoreVersion?.data?.id === versionId);
+  if (data?.links?.next) {
+    throw new Error('reviewSubmission 목록이 여러 페이지야. 기존 버전 묶음을 모두 확인할 수 없어 제출을 중단했어.');
+  }
+  const submissions = (data?.data ?? []) as Array<{
+    id: string;
+    attributes?: { state?: string };
+    relationships?: { appStoreVersionForReview?: { data?: { id?: string } | null } };
+  }>;
+  let reusable: { id: string; versionAttached: boolean; state?: string } | null = null;
+  let staleSubmission: { id: string; versionAttached: boolean; state: string } | null = null;
+  let hasUnrelatedItems = false;
+  for (const sub of submissions) {
+    const { items } = await getReviewSubmissionItems(sub.id);
+    const versionAttached =
+      sub.relationships?.appStoreVersionForReview?.data?.id === versionId ||
+      items.some((item) => item.relationships?.appStoreVersion?.data?.id === versionId);
+    if (versionAttached) {
+      if (sub.attributes?.state === 'UNRESOLVED_ISSUES') {
+        staleSubmission = { id: sub.id, versionAttached: true, state: 'UNRESOLVED_ISSUES' };
+        continue;
+      }
+      if (sub.attributes?.state === 'COMPLETING') {
+        throw new Error(`reviewSubmission ${sub.id} 상태 ${sub.attributes.state}에서 버전 ${versionId}을(를) 재제출할 수 없어. 먼저 묶음 상태를 확인해줘.`);
+      }
+      return { id: sub.id, versionAttached: true, state: sub.attributes?.state };
+    }
+    if (items.length > 0 || sub.relationships?.appStoreVersionForReview?.data?.id) {
+      hasUnrelatedItems = true;
+      continue;
+    }
+    if (!reusable || (sub.attributes?.state === 'READY_FOR_REVIEW' && reusable.state !== 'READY_FOR_REVIEW')) {
+      reusable = { id: sub.id, versionAttached: false, state: sub.attributes?.state };
+    }
+  }
+  if (staleSubmission) return staleSubmission;
+  if (!reusable && hasUnrelatedItems) {
+    throw new Error(`버전 ${versionId}과(와) 무관한 reviewSubmission 항목이 있어 자동 제출을 중단했어. 기존 묶음을 확인해줘.`);
+  }
+  return reusable;
+}
+
+type ReviewSubmissionItem = {
+  id: string;
+  attributes?: { state?: string };
+  relationships?: Record<string, { data?: { type?: string; id?: string } | null }>;
+};
+
+async function getReviewSubmissionItems(submissionId: string): Promise<{
+  items: ReviewSubmissionItem[];
+  included: Array<{ type: string; id: string; attributes?: Record<string, string> }>;
+}> {
+  const data = await apiGet(`/reviewSubmissions/${submissionId}/items`, {
+    include: 'appStoreVersion,inAppPurchaseVersion,subscriptionVersion,subscriptionGroupVersion',
+    limit: '50',
+  });
+  if (!Array.isArray(data?.data)) {
+    throw new Error(`reviewSubmission ${submissionId} 항목 조회 응답에 data 배열이 없어. 제출을 중단했어.`);
+  }
+  if (data?.links?.next) {
+    throw new Error(`reviewSubmission ${submissionId} 항목이 여러 페이지야. 전체 항목을 확인할 수 없어 제출을 중단했어.`);
+  }
+  return { items: (data?.data ?? []) as ReviewSubmissionItem[], included: data?.included ?? [] };
 }
 
 /**
@@ -814,12 +869,23 @@ export async function submitVersionForReview(versionId: string) {
   const { appId, platform } = await getVersionAppAndPlatform(versionId);
 
   // 1. 열린 reviewSubmission이 있으면 재사용, 없으면 새로 생성
-  let submissionId = await findOpenReviewSubmission(appId, platform);
-  let reusedSubmission = Boolean(submissionId);
+  const existing = await findOpenReviewSubmission(appId, platform, versionId);
+  let submissionId = existing?.id;
+  let reusedSubmission = Boolean(existing);
   // findOpenReviewSubmission 은 WAITING_FOR_REVIEW 도 잡아온다. 그 상태의 실제 진행도는
   // API 의 state 필드보다 앞서 있을 수 있어(실측: 이미 심사 큐를 탄 옛 제출), 항목 추가
   // 자체를 거부당하는 경우가 있다 — 아래 recoveredFromStaleSubmission 이 그 케이스다.
   let recoveredFromStaleSubmission = false;
+
+  if (existing?.state === 'UNRESOLVED_ISSUES' && existing.versionAttached) {
+    const released = await releaseVersionFromStaleSubmissions(appId, platform, versionId);
+    if (!released) {
+      throw new Error(`reviewSubmission ${existing.id}의 버전 ${versionId} 항목을 해제하지 못해 제출을 중단했어.`);
+    }
+    recoveredFromStaleSubmission = true;
+    reusedSubmission = false;
+    submissionId = (await findDraftReviewSubmission(appId, platform)) ?? undefined;
+  }
 
   if (!submissionId) {
     submissionId = await createReviewSubmission(appId, platform);
@@ -827,7 +893,7 @@ export async function submitVersionForReview(versionId: string) {
   }
 
   // 2. 버전을 reviewSubmissionItems로 attach (이미 붙어있으면 skip)
-  let alreadyAttached = reusedSubmission ? await isVersionAttached(submissionId, versionId) : false;
+  let alreadyAttached = reusedSubmission && (existing?.versionAttached ?? false);
   if (!alreadyAttached) {
     try {
       await apiPost('/reviewSubmissionItems', {
@@ -868,13 +934,15 @@ export async function submitVersionForReview(versionId: string) {
   }
 
   // 3. PATCH submitted=true → state: CREATED → WAITING_FOR_REVIEW
-  const submitted = await apiPatch(`/reviewSubmissions/${submissionId}`, {
-    data: {
-      type: 'reviewSubmissions',
-      id: submissionId,
-      attributes: { submitted: true },
-    },
-  });
+  const submitted = existing?.versionAttached && existing.state === 'WAITING_FOR_REVIEW'
+    ? { data: { attributes: { state: existing.state } } }
+    : await apiPatch(`/reviewSubmissions/${submissionId}`, {
+      data: {
+        type: 'reviewSubmissions',
+        id: submissionId,
+        attributes: { submitted: true },
+      },
+    });
 
   return {
     submissionId,
@@ -980,9 +1048,20 @@ async function findDraftReviewSubmission(appId: string, platform: string): Promi
     'filter[app]': appId,
     'filter[platform]': platform,
     'filter[state]': 'READY_FOR_REVIEW',
-    'limit': '1',
+    'limit': '50',
   });
-  return data?.data?.[0]?.id ?? null;
+  if (data?.links?.next) {
+    throw new Error('심사 초안 목록이 여러 페이지야. 안전한 빈 초안을 확인할 수 없어 제출을 중단했어.');
+  }
+  const drafts = (data?.data ?? []) as Array<{
+    id: string;
+    relationships?: { appStoreVersionForReview?: { data?: { id?: string } | null } };
+  }>;
+  for (const draft of drafts) {
+    const { items } = await getReviewSubmissionItems(draft.id);
+    if (items.length === 0 && !draft.relationships?.appStoreVersionForReview?.data?.id) return draft.id;
+  }
+  return null;
 }
 
 // ─── 심사 제출 묶음 조회 / 항목 해제 ───
@@ -1031,16 +1110,9 @@ export async function listReviewSubmissions(args: {
   for (const sub of submissions) {
     // 버전만 include 하면 IAP·구독·구독그룹 항목이 전부 "?" 로 남아, 정작 중요한
     // "이 묶음에 상품이 들어갔나"를 이 도구로 판별할 수 없었다 (2026-07-25 실측).
-    const itemsData = await apiGet(`/reviewSubmissions/${sub.id}/items`, {
-      include: 'appStoreVersion,inAppPurchaseV2,subscription,subscriptionGroup',
-      'fields[appStoreVersions]': 'versionString,appVersionState',
-      'fields[inAppPurchases]': 'productId,name,state',
-      'fields[subscriptions]': 'productId,name,state',
-      'fields[subscriptionGroups]': 'referenceName',
-      limit: '50',
-    }).catch(() => null);
+    const itemsData = await getReviewSubmissionItems(sub.id);
     const included = new Map(
-      ((itemsData?.included ?? []) as Array<{
+      (itemsData.included as Array<{
         type: string;
         id: string;
         attributes?: {
@@ -1053,7 +1125,7 @@ export async function listReviewSubmissions(args: {
         };
       }>).map((inc) => [`${inc.type}:${inc.id}`, inc]),
     );
-    const items = ((itemsData?.data ?? []) as Array<{
+    const items = (itemsData.items as Array<{
       id: string;
       attributes?: { state?: string };
       relationships?: Record<string, { data?: { type?: string; id?: string } | null }>;

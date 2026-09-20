@@ -87,6 +87,10 @@ The gate belongs before the tests, not inside the publish.
 
 ## Behavior tests (the rest)
 
+`playstore-release.test.ts` checks full rollout replacement even when a target draft already exists,
+preservation for draft updates, missing targets, commit failures, and manual-review commit fallback.
+`appstore-submit-for-review.test.ts` covers existing review item reuse and item discovery errors.
+
 Everything else is ordinary unit coverage, named after what it protects — `appstore-*`, `playstore-*`,
 `firebase-tools`, `ga4-*`, `googleads`, `gsc-tools`, `admob-tools`, `jenkins-jobs`, `ci-github` / `ci-gitlab`,
 `instagram-api` / `threads-api` / `meta-auth`, `tiktok-business`, `video-tools`, `youtube-publish`, `remote-sync`,
