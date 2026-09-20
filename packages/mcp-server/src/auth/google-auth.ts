@@ -193,7 +193,8 @@ export function startAuth(
   authAttempts.set(profile ?? '', attempt);
 
   const oauth2Client = createOAuth2Client(clientId, clientSecret);
-  const requestedScopes = scopesForDomains(expectedChannelId && options.domains ? [...new Set([...options.domains, 'youtube'] as AuthDomainId[])] : options.domains);
+  const needsYouTubeDomain = expectedChannelId && options.domains && !options.domains.some((id) => id === 'youtube' || id === 'youtube_analytics');
+  const requestedScopes = scopesForDomains(needsYouTubeDomain ? [...new Set([...options.domains!, 'youtube'] as AuthDomainId[])] : options.domains);
   const state = randomUUID();
   const authUrl = oauth2Client.generateAuthUrl({
     state,
@@ -276,7 +277,7 @@ export function startAuth(
           return;
         }
         oauth2Client.setCredentials(tokens);
-        const youtubeChannel = (expectedChannelId || (profile && requestedScopes.some((scope) => scope.includes('/auth/youtube'))))
+        const youtubeChannel = (expectedChannelId || (profile && requestedScopes.some((scope) => scope.includes('/auth/youtube') || scope.includes('/auth/yt-analytics'))))
           ? await verifyYouTubeChannel(oauth2Client, expectedChannelId) : undefined;
         // A fresh login may be another Google account. Never union its scopes with
         // the previous account's grant; Google's response is authoritative.

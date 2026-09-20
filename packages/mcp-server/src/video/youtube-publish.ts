@@ -93,6 +93,7 @@ function safeStatus(video: youtube_v3.Schema$Video) {
     channelId: video.snippet?.channelId ?? null,
     channelTitle: video.snippet?.channelTitle ?? null,
     privacyStatus: video.status?.privacyStatus ?? null,
+    publishAt: video.status?.publishAt ?? null,
     uploadStatus: video.status?.uploadStatus ?? null,
     processingStatus: video.processingDetails?.processingStatus ?? null,
     processingProgress: video.processingDetails?.processingProgress ?? null,

@@ -49,6 +49,8 @@ and BigQuery all ride on the same OAuth token. Start there.
 
 **Unlocks:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`
 
+YouTube Analytics reports use the separate `youtube_analytics` grant. Channel, video-list, and comment reads can use that grant or the existing publishing `youtube` grant; video management writes and comment replies use `youtube`.
+
 **You need first:** a Google account. That's all.
 
 **Get it:** nothing to fetch. You do **not** create a Google Cloud project or an OAuth client — the client is
@@ -258,6 +260,9 @@ seven days or less remaining) and offers to reconnect it.
 <a id="instagram"></a>
 
 ## Instagram
+
+**Browser login (default):** Run `mimi-seed auth instagram` and approve Instagram login in the browser. Mimi Seed verifies the account and saves the returned token lifetime automatically. An operator-managed HTTPS broker must be configured with Instagram-specific app credentials and an approved callback; the SDK does not deploy it. If the broker is unavailable, existing credentials remain unchanged and the CLI does not ask you to paste a token. Use `--manual-token` only for the advanced manual flow.
+
 
 **Unlocks:** `instagram_*` — posting images and carousels.
 

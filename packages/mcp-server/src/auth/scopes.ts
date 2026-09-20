@@ -82,6 +82,14 @@ export const AUTH_DOMAINS = {
     scopes: ['https://www.googleapis.com/auth/youtube.force-ssl'],
     summary: 'youtube_* — 영상 업로드·처리 상태 조회·공개 상태 변경',
   },
+  youtube_analytics: {
+    label: 'YouTube Analytics (read-only)',
+    scopes: [
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/yt-analytics.readonly',
+    ],
+    summary: 'youtube_get_channel·youtube_list_videos·youtube_get_analytics_report — 채널·영상·성과 읽기',
+  },
 } as const satisfies Record<string, AuthDomainDef>;
 
 export type AuthDomainId = keyof typeof AUTH_DOMAINS;

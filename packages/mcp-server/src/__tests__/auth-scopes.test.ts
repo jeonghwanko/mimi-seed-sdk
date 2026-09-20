@@ -30,6 +30,8 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
         'https://www.googleapis.com/auth/analytics.edit',
         'https://www.googleapis.com/auth/analytics.readonly',
         'https://www.googleapis.com/auth/youtube.force-ssl',
+        'https://www.googleapis.com/auth/youtube.readonly',
+        'https://www.googleapis.com/auth/yt-analytics.readonly',
       ].sort(),
     );
   });
@@ -64,12 +66,17 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
       'https://www.googleapis.com/auth/androidpublisher',
       'https://www.googleapis.com/auth/playdeveloperreporting',
     ]);
+    expect(scopesForDomains(['youtube_analytics'])).toEqual([
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/yt-analytics.readonly',
+    ]);
   });
 
   it('domainsForScope: cloud-platform → gcp (INSUFFICIENT_SCOPE 안내에 사용)', () => {
     expect(domainsForScope(CLOUD_PLATFORM_SCOPE)).toEqual(['gcp']);
     expect(domainsForScope('https://www.googleapis.com/auth/analytics.readonly')).toEqual(['ga4']);
     expect(domainsForScope('https://www.googleapis.com/auth/youtube.force-ssl')).toEqual(['youtube']);
+    expect(domainsForScope('https://www.googleapis.com/auth/yt-analytics.readonly')).toEqual(['youtube_analytics']);
     expect(domainsForScope('https://www.googleapis.com/auth/playdeveloperreporting')).toEqual(['playstore']);
     expect(domainsForScope('https://example.com/unknown')).toEqual([]);
   });

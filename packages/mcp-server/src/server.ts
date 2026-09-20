@@ -19,6 +19,7 @@ import { registerGa4Tools } from './registers/ga4.js';
 import { registerJenkinsTools } from './registers/jenkins.js';
 import { registerAndroidTools } from './registers/android.js';
 import { registerVideoTools } from './registers/video.js';
+import { registerYouTubeTools } from './registers/youtube.js';
 import { registerTikTokBusinessTools } from './registers/tiktok.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
@@ -57,6 +58,7 @@ export function buildServer(version: string): McpServer {
   registerJenkinsTools(server);
   registerAndroidTools(server);
   registerVideoTools(server);
+  registerYouTubeTools(server);
   registerTikTokBusinessTools(server);
   registerPrompts(server);
   registerResources(server);

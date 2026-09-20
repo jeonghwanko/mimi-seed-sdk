@@ -19,7 +19,11 @@ export async function connectInstagram(
   userId?: string,
   assumeIssuedNow = true,
   options: SocialConfigOptions = {},
+  expiresInSeconds?: number,
 ): Promise<ConnectResult> {
+  if (expiresInSeconds !== undefined && (!Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0 || expiresInSeconds > 5_184_000)) {
+    return { ok: false, text: 'Invalid Instagram token lifetime; nothing was saved.' };
+  }
   // 프로필 ID를 네트워크 호출 전에 검증하고, 성공 응답에 실제 저장 대상을 남긴다.
   const target = resolveSocialConfigTarget('instagram', options);
   const apiType = detectApiType(accessToken);
@@ -42,7 +46,7 @@ export async function connectInstagram(
   }
 
   const expiresAt = assumeIssuedNow
-    ? new Date(Date.now() + SIXTY_DAYS_MS).toISOString()
+    ? new Date(Date.now() + (expiresInSeconds === undefined ? SIXTY_DAYS_MS : expiresInSeconds * 1000)).toISOString()
     : undefined;
 
   try {

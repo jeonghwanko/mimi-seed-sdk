@@ -9,9 +9,10 @@ const h = vi.hoisted<{
   home: string; callback: unknown; tokenResponse: Record<string, unknown>;
   channelList: ReturnType<typeof vi.fn>; insert: ReturnType<typeof vi.fn>;
   refresh: ReturnType<typeof vi.fn>; clients: FakeClient[];
+  requestedScopes: string[];
 }>(() => ({
   home: '', callback: null, tokenResponse: {},
-  channelList: vi.fn(), insert: vi.fn(), refresh: vi.fn(), clients: [],
+  channelList: vi.fn(), insert: vi.fn(), refresh: vi.fn(), clients: [], requestedScopes: [],
 }));
 class FakeClient {
   credentials: unknown;
@@ -19,7 +20,10 @@ class FakeClient {
   constructor() { h.clients.push(this); }
   setCredentials(tokens: unknown) { this.credentials = tokens; }
   on(_event: string, handler: (tokens: Record<string, unknown>) => void) { this.handler = handler; }
-  generateAuthUrl(options: { state: string }) { return `https://accounts.example.test/auth?state=${options.state}`; }
+  generateAuthUrl(options: { state: string; scope: string[] }) {
+    h.requestedScopes = options.scope;
+    return `https://accounts.example.test/auth?state=${options.state}`;
+  }
   getToken() { return Promise.resolve({ tokens: h.tokenResponse }); }
   refreshAccessToken() { return h.refresh(); }
 }
@@ -50,6 +54,7 @@ beforeEach(async () => {
   // os.tmpdir remains real; no production credential directory is touched.
   h.home = mkdtempSync(path.join(os.tmpdir(), 'mimi-google-profile-'));
   h.clients = [];
+  h.requestedScopes = [];
   h.tokenResponse = { access_token: 'test-access', refresh_token: 'test-refresh', expiry_date: Date.now() + 3600000,
     scope: 'https://www.googleapis.com/auth/youtube.force-ssl' };
   h.channelList.mockResolvedValue({ data: { items: [{ id: channelA, snippet: { title: 'Example A' } }] } });
@@ -72,6 +77,26 @@ async function login(profile?: string, expectedChannelId?: string) {
 }
 
 describe('Google account/channel profiles', () => {
+  it('analytics-only channel login requests read scopes without publishing permission', async () => {
+    h.tokenResponse.scope = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly';
+    const flow = auth.startAuth('example-client', 'example-secret', {
+      profile: 'channel-a', expectedChannelId: channelA, domains: ['youtube_analytics'],
+    });
+    expect(h.requestedScopes).toEqual([
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/yt-analytics.readonly',
+    ]);
+    await callback(flow.url);
+    await flow.wait;
+    expect(auth.getStoredTokens('channel-a')?.youtubeChannel?.id).toBe(channelA);
+  });
+
+  it('a requested missing profile does not fall back to the default login', async () => {
+    await login();
+    const { requireAuth } = await import('../helpers.js');
+    await expect(requireAuth(undefined, 'missing')).rejects.toThrow();
+  });
+
   it('계정별로 저장하고 기본 로그인으로 폴백하지 않으며 공개 목록에는 비밀값이 없다', async () => {
     await login();
     await login('channel-a', channelA);

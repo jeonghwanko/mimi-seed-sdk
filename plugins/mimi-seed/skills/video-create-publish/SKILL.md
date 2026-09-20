@@ -1,6 +1,6 @@
 ---
 name: video-create-publish
-description: Create, render, validate, and optionally publish polished short-form videos and YouTube Shorts with Mimi Seed. Use for story-to-video production, vertical social videos, carousel-to-video adaptations, visual-quality revisions, or YouTube upload/status work where typography, shorts-style burned captions, human-safe cropping, motion design, asset provenance, and publish confirmation matter. Defaults to a zero-API-cost path (agent-authored storyboard via video_save_plan, codex CLI image generation) that runs on subscription tokens only.
+description: Create, render, validate, and optionally publish polished short-form videos and YouTube Shorts with Mimi Seed. Use for story-to-video production, vertical social videos, carousel-to-video adaptations, visual-quality revisions, or YouTube upload/status work. Prefer Runway web video generation with existing subscription credits, with Grok web subscription as the fallback; use an agent-authored storyboard and local rendering.
 ---
 
 # Video Create Publish
@@ -13,7 +13,10 @@ Produce an intentional video rather than a slideshow of generated cards. Preserv
    - Separate create/render from upload/publication; treat public or unlisted upload as irreversible.
    - Load required deferred schemas in one batch, then call `mimi_seed_status`.
    - For production, load `video_save_plan` (or `video_plan_from_story`), research/asset tools actually needed, `video_build_timeline`, `video_render`, `video_job_status`, and `video_validate`.
-   - For YouTube, also load `youtube_upload_video`, `youtube_get_video_status`, `youtube_update_video_privacy`, and `mimi_seed_auth_start`.
+   - For YouTube, also load `youtube_get_content_insights` when planning from channel performance, plus `youtube_upload_video`, `youtube_get_video_status`, `youtube_update_video_privacy`, and `mimi_seed_auth_start`.
+
+   - When using content insights, compare the current and equal-length preceding period, separate facts from hypotheses, and choose one experiment with evidence IDs and a measurable success metric. Treat insufficient data as a blocker to naming a winner; do not infer CTR or retention, and compare upload ages before interpreting view differences.
+   - Save the agent-authored hook/storyboard with `video_save_plan`, recording the evidence rationale in the story or a sidecar production note. The insights read has no AI API cost and does not generate a storyboard.
 
 2. Create the editorial and shot plan — subscription-only by default.
    - Default to the zero-API-cost path: author the storyboard yourself (you are the subscription-billed model) and save it with `video_save_plan`. Call `video_plan_from_story` only when the user explicitly wants it and `ANTHROPIC_API_KEY` is configured — it bills a metered API key.
@@ -21,7 +24,11 @@ Produce an intentional video rather than a slideshow of generated cards. Preserv
    - Plan shots as wide/medium/detail or scene/object/UI beats. Do not reuse one still for several consecutive scenes.
    - Read [references/visual-quality.md](references/visual-quality.md) before selecting fonts, writing captions, cropping people, or adapting carousel art to video.
 
-3. Source assets safely — prefer subscription/free providers.
+3. Source assets — Runway web first, Grok web as the fallback.
+   - For generated video clips, use the user's existing Runway web subscription and available credits by default. Use the existing Grok web subscription when Runway is unavailable, its allowance is exhausted, or a clip does not meet the shot plan. A user's explicit provider choice overrides this default. Do not generate the same shot on both services routinely.
+   - Use the signed-in web UI through available browser tools; inspect the current allowance and any displayed generation cost before submitting. Existing credits may be consumed for an authorized production task. Do not purchase credits, upgrade a plan, enable overage, or silently switch to a metered API. Web subscriptions and API billing are separate. If both existing allowances are unavailable, save the shot prompts and report the blocker.
+   - There is no native Runway/Grok generation adapter in the SDK. Do not invent MCP tool names or treat a web subscription as an API key. When browser access is unavailable, prepare the prompts for the user to generate and export the clips through the selected web service.
+   - Save exported clips under the video project's assets directory and register each with `video_add_local_asset`. Record the actual provider, prompt, available model name, and ownership/license basis in the asset's supported provenance fields (for example, license/attribution) or a sidecar production note. Use `sourceType: "user-owned"` only when the user's rights support it; otherwise use `licensed` with the actual license. Never invent license terms or declare all generated media royalty-free.
    - Treat YouTube research as reference-only metadata, never renderable media. `video_synthesize_research` bills `ANTHROPIC_API_KEY`; on the free path, synthesize the brief yourself.
    - Generated images: `video_generate_image` bills the metered `OPENAI_API_KEY`. On the free path, generate through the local `codex` CLI instead (ChatGPT subscription; its `image_generation` feature is stable):
      `codex exec -s workspace-write -C "<projectDir>" "이미지 생성 도구로 <scene visualPrompt>를 1024x1536 세로 이미지로 생성해 assets/generated/<scene-id>.png 로 저장해줘. 이미지 안에 글자는 넣지 마."`

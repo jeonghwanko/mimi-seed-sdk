@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary)의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
-  "total": 234,
+  "total": 244,
   "domains": {
     "admob": {
       "label": "AdMob",
@@ -381,6 +381,23 @@
         "video_render",
         "video_job_status",
         "video_validate"
+      ]
+    },
+    "youtube": {
+      "label": "YouTube",
+      "credential": "Google OAuth (youtube 또는 youtube_analytics 권한)",
+      "summary": "인증 채널·업로드 영상·YouTube Analytics 기간 리포트 읽기",
+      "tools": [
+        "youtube_get_channel",
+        "youtube_list_videos",
+        "youtube_get_analytics_report",
+        "youtube_update_video_metadata",
+        "youtube_set_thumbnail",
+        "youtube_schedule_video",
+        "youtube_list_comments",
+        "youtube_list_comment_replies",
+        "youtube_reply_comment",
+        "youtube_get_content_insights"
       ]
     }
   }

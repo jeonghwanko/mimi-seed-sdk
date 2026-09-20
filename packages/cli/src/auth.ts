@@ -39,7 +39,7 @@ ${kleur.bold("빌드 / 마케팅:")}
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
   ${kleur.cyan("mimi-seed auth threads")}    Threads 브라우저 로그인
   ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
-  ${kleur.dim("  Instagram/Threads: --profile <id>로 특정 소셜 프로필 저장/갱신. Threads 수동 토큰 입력은 --manual-token")}
+  ${kleur.dim("  Instagram/Threads: --profile <id>로 특정 소셜 프로필 저장/갱신. Instagram/Threads 수동 토큰 입력은 --manual-token")}
 
 ${kleur.bold("전체 상태:")}
   ${kleur.cyan("mimi-seed auth status --all")}  모든 자격증명 보유 여부 한눈에
@@ -79,7 +79,7 @@ ${kleur.bold("Build / marketing:")}
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
   ${kleur.cyan("mimi-seed auth threads")}    Threads (browser login)
   ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
-  ${kleur.dim("  Instagram/Threads: use --profile <id> to save or refresh a named social profile. Threads manual tokens: --manual-token")}
+  ${kleur.dim("  Instagram/Threads: use --profile <id> to save or refresh a named social profile. Instagram/Threads manual tokens: --manual-token")}
 
 ${kleur.bold("Everything at a glance:")}
   ${kleur.cyan("mimi-seed auth status --all")}  which credentials you have

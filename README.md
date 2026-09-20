@@ -439,7 +439,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-## Local MCP Tool List (150+ tools · 21 domains)
+## Local MCP Tool List (150+ tools · 22 domains)
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
 
@@ -466,6 +466,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Auth** | 4 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
 | **Video production** | 15 | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_plan_from_story` · `video_research_youtube` · `video_render` |
+| **YouTube** | 10 | `youtube_get_channel` · `youtube_list_videos` · `youtube_get_analytics_report` · `youtube_get_content_insights` · `youtube_update_video_metadata` · `youtube_set_thumbnail` · `youtube_schedule_video` · `youtube_list_comments` · `youtube_list_comment_replies` · `youtube_reply_comment` |
 
 Full catalog → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · source → [packages/mcp-server](packages/mcp-server)
 
