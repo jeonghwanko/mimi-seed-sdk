@@ -318,7 +318,7 @@ export function registerPlaystoreTools(server: McpServer) {
 
   server.tool(
     'playstore_list_reviews',
-    'Google Play 리뷰 목록 조회',
+    'Google Play 리뷰 목록 조회. developerComment가 null이면 미답변이며, 답변이 있으면 본문과 수정 시각을 반환합니다.',
     { packageName: z.string().describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
