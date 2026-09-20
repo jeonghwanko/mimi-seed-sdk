@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { fetchWithTimeout } from '../lib/http.js';
-import { openPrivateBrowser } from '../auth/browser.js';
+import { openSystemBrowser } from '../auth/browser.js';
 import { connectThreads } from './setup.js';
 import { resolveSocialConfigTarget, type SocialConfigOptions } from '../social/profile-store.js';
 
@@ -86,7 +86,7 @@ export async function connectThreadsInBrowser(options: BrowserLoginOptions = {})
       throw new ThreadsLoginError('configuration');
     }
     options.onUrl?.(authorize.href);
-    try { await (options.openBrowser ?? openPrivateBrowser)(authorize.href); }
+    try { await (options.openBrowser ?? openSystemBrowser)(authorize.href); }
     catch { if (!options.onUrl) throw new ThreadsLoginError('unavailable'); }
     const result = await callback;
     const token = await request('/api/threads-auth/exchange', {...result, codeVerifier: verifier});

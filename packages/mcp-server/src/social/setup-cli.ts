@@ -59,6 +59,7 @@ const ko = {
   thHeader: '  ── Threads ──',
   thBrowser: '  🌐 브라우저에서 Threads 로그인과 권한 동의를 완료해주세요. 연결 정보는 자동 저장됩니다.',
   thUrl: '  브라우저가 열리지 않으면 아래 주소를 직접 열어주세요:',
+  thResume: '  본인 확인 후 Instagram 홈에 머물면, 로그인한 같은 브라우저 창에서 위 주소를 다시 여세요. 이 터미널은 연결 완료까지 열어두세요.',
   thLoginFailed: (code: string) => `  ❌ ${(({denied:'권한 동의가 취소되었습니다.',timeout:'로그인 대기 시간이 지났습니다. 명령을 다시 실행해주세요.',validation:'Threads 계정을 확인하지 못했습니다. 다시 로그인해주세요.',exchange:'인증을 완료하지 못했습니다. 다시 로그인해주세요.'} as Record<string,string>)[code] ?? 'Threads 연결을 시작하지 못했습니다.')} 기존 연결은 보존했습니다.`,
   thUnavailable: '  연결 서버가 아직 준비되지 않았거나 접속할 수 없습니다. 운영자에게 문의해주세요. 토큰을 직접 발급받을 필요는 없습니다.',
   thHowTo: '  Threads Graph API long-lived 토큰 발급:',
@@ -107,6 +108,7 @@ const en: typeof ko = {
   thHeader: '  ── Threads ──',
   thBrowser: '  🌐 Complete Threads login and consent in your browser. Credentials are saved automatically.',
   thUrl: '  If the browser does not open, open this URL:',
+  thResume: '  If verification leaves you on Instagram home, reopen the URL above in that same signed-in browser window. Keep this terminal open until connected.',
   thLoginFailed: (code: string) => `  ❌ Threads connection failed (${code}). Existing credentials were preserved.`,
   thUnavailable: '  The connection service is not ready or reachable. Contact the operator; no manual token is required.',
   thHowTo: '  Get a long-lived Threads Graph API token:',
@@ -239,7 +241,7 @@ async function setupThreads(profile?: string, manualToken = false): Promise<bool
   if (!manualToken) {
     console.log(M.thBrowser);
     try {
-      const result = await connectThreadsInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); } });
+      const result = await connectThreadsInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); console.log(M.thResume); } });
       console.log(indent(result.text));
       return result.ok;
     } catch (error) {

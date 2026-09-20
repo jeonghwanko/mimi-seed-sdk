@@ -1,9 +1,11 @@
+import { openSystemBrowser } from '../auth/browser.js';
 import { request } from 'node:http';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectThreadsInBrowser } from '../threads/browser-login.js';
 import { connectThreads } from '../threads/setup.js';
 import { fetchWithTimeout } from '../lib/http.js';
+vi.mock('../auth/browser.js', () => ({ openSystemBrowser: vi.fn() }));
 vi.mock('../lib/http.js', () => ({ fetchWithTimeout: vi.fn() }));
 vi.mock('../threads/setup.js', () => ({ connectThreads: vi.fn() }));
 const json=(v:unknown,status=200)=>new Response(JSON.stringify(v),{status});
@@ -24,6 +26,12 @@ beforeEach(()=>{
 });
 afterEach(()=>vi.clearAllMocks());
 describe('Threads browser login',()=>{
+ it('uses the existing browser session and saves after the callback',async()=>{
+  vi.mocked(openSystemBrowser).mockImplementation(async()=>{await good();});
+  await connectThreadsInBrowser(opts);
+  expect(openSystemBrowser).toHaveBeenCalledWith('https://broker.example/api/threads-auth/authorize?ticket=example-ticket');
+  expect(connectThreads).toHaveBeenCalledTimes(1);
+ });
  it('정상 승인 후 선택한 프로필과 실제 만료시간을 검증 저장 경로에 전달한다',async()=>{
   await expect(connectThreadsInBrowser({...opts,openBrowser:async()=>{await good();}})).resolves.toEqual({ok:true,text:'connected'});
   expect(connectThreads).toHaveBeenCalledWith('example-token','example-user',true,expect.objectContaining({profile:'example'}),3600);

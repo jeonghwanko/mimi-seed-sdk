@@ -4,3 +4,8 @@ import open, { apps } from 'open';
 export async function openPrivateBrowser(url: string): Promise<void> {
   await open(url, { app: { name: apps.browserPrivate } });
 }
+
+/** Reuse the default browser session for provider login challenges. */
+export async function openSystemBrowser(url: string): Promise<void> {
+  await open(url);
+}
