@@ -94,7 +94,8 @@ export async function connectThreadsInBrowser(options: BrowserLoginOptions = {})
         typeof token.expiresInSeconds !== 'number' || !Number.isFinite(token.expiresInSeconds) || token.expiresInSeconds <= 0 || token.expiresInSeconds > 60 * 24 * 3600) {
       throw new ThreadsLoginError('exchange');
     }
-    const connected = await connectThreads(token.accessToken, token.userId, true, saveOptions, token.expiresInSeconds);
+    // Resolve the canonical account ID from /me: numeric OAuth user_id values can lose precision.
+    const connected = await connectThreads(token.accessToken, undefined, true, saveOptions, token.expiresInSeconds);
     if (!connected.ok) throw new ThreadsLoginError('validation');
     return connected;
   } finally {

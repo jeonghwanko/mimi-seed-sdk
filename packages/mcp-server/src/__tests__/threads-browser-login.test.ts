@@ -34,7 +34,7 @@ describe('Threads browser login',()=>{
  });
  it('정상 승인 후 선택한 프로필과 실제 만료시간을 검증 저장 경로에 전달한다',async()=>{
   await expect(connectThreadsInBrowser({...opts,openBrowser:async()=>{await good();}})).resolves.toEqual({ok:true,text:'connected'});
-  expect(connectThreads).toHaveBeenCalledWith('example-token','example-user',true,expect.objectContaining({profile:'example'}),3600);
+  expect(connectThreads).toHaveBeenCalledWith('example-token',undefined,true,expect.objectContaining({profile:'example'}),3600);
  });
  it('잘못된 state와 경로는 무시하고 정상 콜백만 처리한다',async()=>{
   await connectThreadsInBrowser({...opts,openBrowser:async()=>{expect(await receive({state:'0'.repeat(64)})).toBe(400);expect(await receive({state:start.state},'/wrong')).toBe(404);expect(await good()).toBe(200);}});
