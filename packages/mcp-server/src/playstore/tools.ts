@@ -760,23 +760,23 @@ export async function listReviews(auth: OAuth2Client | JWT, packageName: string)
       developerComment: developerComment
         ? { text: developerComment.text, lastModified: developerComment.lastModified?.seconds }
         : null,
-      comments: r.comments?.flatMap((c) => {
+      comments: r.comments?.map((c) => {
         if (c.userComment) {
-          return [{
+          return {
             text: c.userComment.text,
             starRating: c.userComment.starRating,
             lastModified: c.userComment.lastModified?.seconds,
             deviceMetadata: c.userComment.deviceMetadata?.productName,
-          }];
+          };
         }
         if (c.developerComment) {
-          return [{ developerComment: {
+          return { developerComment: {
             text: c.developerComment.text,
             lastModified: c.developerComment.lastModified?.seconds,
-          } }];
+          } };
         }
-        return [];
-      }),
+        return null;
+      }).filter((c) => c !== null),
     };
   });
 }
