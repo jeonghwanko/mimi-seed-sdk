@@ -90,7 +90,10 @@ CI then, for each package whose `package.json` version is not yet on npm:
 - creates a **GitHub Release** with auto-generated notes (`<package>-v<version>` tag).
 
 If the version already exists it's skipped (idempotent), so version-less pushes (docs, CI)
-are safe. Requires the `NPM_TOKEN` repo secret.
+are safe. Publishing uses npm trusted publishing (OIDC), without an `NPM_TOKEN` secret.
+Both npm packages must trust GitHub repository `jeonghwanko/mimi-seed-sdk`, workflow `ci.yml`.
+CI keeps Node 20/22 for tests and switches to Node 24 (npm 11) for publishing.
+See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
 **Versioning:** bump the **patch** number only unless a maintainer decides otherwise.
 
