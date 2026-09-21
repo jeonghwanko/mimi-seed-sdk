@@ -151,6 +151,24 @@ alone does not prove that an existing client is fixed; smoke-test the actual cal
 Provider references: [pagination](https://developers.google.com/google-ads/api/docs/reporting/paging),
 [release notes](https://developers.google.com/google-ads/api/docs/release-notes).
 
+## Store product creation outcomes
+
+Store catalog writes are owned by `@onesub/providers`. The register handlers use
+`src/lib/store-create-result.ts` to distinguish durable product creation from completed price or
+activation setup. Apple `priceError` is shown verbatim with the created IDs; a missing price marks
+the MCP result `isError` and tells the caller to repair the existing product, not repeat creation.
+The same rule applies to subscription and one-time product creation. Undefined nearest-price
+results must never replace the actual API failure reason.
+
+Google subscription results may include `active` and `activationError`. Only `active: true`
+confirms activation; older provider versions without this field require a status lookup. Failed
+activation preserves the product ID and is reported as an incomplete operation. Provider API fixes
+must be released upstream and installed before rebuilding/restarting the MCP process; changing
+Mimi Seed's output formatting alone does not change an installed provider's request payloads.
+
+Regression coverage: `src/__tests__/store-create-result.test.ts` exercises partial results through
+both the formatter and actual in-memory MCP tool calls without real store writes.
+
 ## Store review retries
 
 Play `submitRelease` and `promoteRelease` replace the target track's release list with the selected

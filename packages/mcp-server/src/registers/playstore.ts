@@ -20,6 +20,7 @@ import * as iam from '../iam/tools.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { googleSubscriptionCreationResult } from '../lib/store-create-result.js';
 
 // 모든 playstore tools 호출을 친절 에러로 감싸는 프록시 — 403(권한)/404/edit 충돌/
 // invalid_grant 를 raw dump 대신 구체적 복구 안내로 변환. args[1] 이 packageName 규약.
@@ -463,22 +464,7 @@ export function registerPlaystoreTools(server: McpServer) {
         ...(args.extraRegions && { extraRegions: args.extraRegions }),
         serviceAccountKey: json,
       });
-      if (!result.success) {
-        return textResult(`❌ 구독 생성 실패: ${result.error}`);
-      }
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ Play 구독 생성 완료`,
-            `productId: ${result.productId}`,
-            `price: ${args.price} ${args.currency} / ${args.period}`,
-            '',
-            'Play Console:',
-            `https://play.google.com/console/u/0/developers/-/app/-/subscriptions?package=${encodeURIComponent(args.packageName)}`,
-          ].join('\n'),
-        }],
-      };
+      return googleSubscriptionCreationResult(result, args);
     },
   );
 
