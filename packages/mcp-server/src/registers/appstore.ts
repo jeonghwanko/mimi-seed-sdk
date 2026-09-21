@@ -18,6 +18,7 @@ import { requireAppStoreCreds } from '../helpers.js';
 import { buildAppStoreReleasePlan } from '../checks/plan.js';
 import { validateAppStoreWhatsNew, formatIssuesForUser } from '../lib/text-validators.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { appleCreationResult } from '../lib/store-create-result.js';
 
 /** ASC 속성값을 한 줄로. 객체가 오면 String() 이 '[object Object]' 를 뱉으므로 JSON 으로. */
 function stringifyAttr(value: unknown): string {
@@ -544,29 +545,7 @@ export function registerAppstoreTools(server: McpServer) {
         issuerId: creds.issuerId,
         privateKey: creds.privateKey,
       });
-      if (!result.success) {
-        const hint = result.errorType === 'DUPLICATE'
-          ? '\n이미 같은 productId가 존재해. App Store Connect에서 확인해줘.'
-          : result.errorType === 'PRICE_NOT_FOUND'
-            ? `\n가장 가까운 가격: ${JSON.stringify(result.priceNearest)}`
-            : '';
-        return textResult(`❌ IAP 생성 실패: ${result.error}${hint}`);
-      }
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ App Store IAP 생성 완료`,
-            `productId: ${result.productId}`,
-            `internalId: ${result.internalId}`,
-            result.priceSet ? `✓ 가격 설정됨` : `⚠ 가격 미설정 (가장 가까운 가격: ${JSON.stringify(result.priceNearest)})`,
-            result.extraRegionsSet?.length ? `✓ 추가 지역: ${result.extraRegionsSet.join(', ')}` : '',
-            '',
-            '스크린샷·리뷰 노트를 추가한 후 App Store Connect에서 심사 제출:',
-            `https://appstoreconnect.apple.com/apps/${args.appId}/distribution/iaps`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return appleCreationResult(result, args.appId, false);
     },
   );
 
@@ -611,30 +590,7 @@ export function registerAppstoreTools(server: McpServer) {
         issuerId: creds.issuerId,
         privateKey: creds.privateKey,
       });
-      if (!result.success) {
-        const hint = result.errorType === 'DUPLICATE'
-          ? '\n이미 같은 productId가 존재해. App Store Connect에서 확인해줘.'
-          : result.errorType === 'PRICE_NOT_FOUND'
-            ? `\n가장 가까운 가격: ${JSON.stringify(result.priceNearest)}`
-            : '';
-        return textResult(`❌ 구독 생성 실패: ${result.error}${hint}`);
-      }
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ App Store 구독 생성 완료`,
-            `productId: ${result.productId}`,
-            `internalId: ${result.internalId}`,
-            result.priceSet ? `✓ 가격 설정됨` : `⚠ 가격 미설정 (가장 가까운 가격: ${JSON.stringify(result.priceNearest)})`,
-            result.extraRegionsSet?.length ? `✓ 추가 지역: ${result.extraRegionsSet.join(', ')}` : '',
-            result.localizationAdded ? '✓ KRW 한국어 로컬라이제이션 추가됨' : '',
-            '',
-            'App Store Connect에서 심사 제출:',
-            `https://appstoreconnect.apple.com/apps/${args.appId}/distribution/subscriptions`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return appleCreationResult(result, args.appId, true);
     },
   );
 
