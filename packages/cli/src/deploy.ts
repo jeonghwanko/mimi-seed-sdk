@@ -1,7 +1,12 @@
 import kleur from "kleur";
 import * as readline from "node:readline";
+import { randomUUID } from "node:crypto";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
+import { consumeDeployStream, DeployStreamError } from "./deploy-stream.js";
+import { findProjectLink, resolveLinkedAppId, validateProjectIdentity } from "./project-link.js";
+import { detectHints } from "./detect.js";
+import { getDeployRun, updateDeployRun, type DeployRunFailureReason } from "./deploy-runs.js";
 import { loadJenkinsConfig, migrateLegacyJenkins, type JenkinsConfig } from "./jenkins-config.js";
 import { runMcpBin } from "./mcp-bin.js";
 import { resolveProjectJenkins, jenkinsJobPath, jenkinsBuildParameters } from "./jenkins-project.js";
@@ -51,6 +56,15 @@ const M = catalog(
     // 서버 스트림
     serverDeployFailed: (status: number, body: string) => `서버 배포 실패 ${status}: ${body}`,
     noSseStream: "SSE 스트림 없음",
+    malformedSse: "서버 배포 응답이 올바르지 않습니다. 웹 콘솔에서 배포 상태를 확인하세요.",
+    incompleteSse: "서버 배포 응답이 완료 전에 끊겼습니다. 웹 콘솔에서 배포 상태를 확인하세요.",
+    deploymentLink: (url: string) => `  웹 배포 기록: ${url}`,
+    runId: (id: string) => `  배포 ID: ${id}`,
+    prepared: (id: string) => `배포 준비 완료. 제출하려면 mimi-seed deploy --resume ${id} --yes`,
+    invalidResume: "--resume은 --skip-build, --prepare-only, --dry-run과 함께 사용할 수 없습니다.",
+    resumeNotReady: "준비 완료 상태의 배포만 재개할 수 있습니다.",
+    runMismatch: "기존 배포 기록의 앱 또는 플랫폼이 현재 요청과 다릅니다.",
+    ciProviderMismatch: "선택한 --ci와 저장된 CI 제공자가 다릅니다. CI 설정을 확인하세요.",
 
     // CI provider 설정 프롬프트
     githubSetupTitle: "GitHub Actions 설정",
@@ -97,7 +111,7 @@ const M = catalog(
     noQueueItem: "  ⚠ Queue item ID를 가져오지 못했습니다. 빌드는 시작됐을 수 있습니다.",
     queueItem: (id: string) => `  Queue item: ${id}`,
     waitingForBuildNumber: "  빌드 번호 대기 중...",
-    noBuildNumber: "  빌드 번호를 가져오지 못했습니다. --skip-build + --version-code 로 재시도 가능.",
+    noBuildNumber: "  빌드 번호를 확인하지 못했습니다. 웹 배포 기록과 Jenkins 실행 결과를 확인한 뒤 조치하세요.",
     buildStarted: (n: number) => `  빌드 #${n} 시작됨. 완료 대기 중...`,
     buildFailed: (result: string) => `빌드 실패: ${result}`,
     jenkinsLink: (url: string) => `  Jenkins: ${url}`,
@@ -121,7 +135,7 @@ const M = catalog(
     confirmCancelled: "취소됨. (--yes 로 확인 생략 가능)",
 
     pipelineStarting: "📡 서버 배포 파이프라인 시작...",
-    done: "완료. Play Console에서 배포 상태를 확인하세요.",
+    done: "배포 파이프라인 완료. 웹 콘솔에서 상태를 확인하세요.",
   },
   {
     missingValue: (option: string) => `Missing value: ${option}`,
@@ -144,6 +158,15 @@ const M = catalog(
     serverDeployFailed: (status: number, body: string) =>
       `Server deploy failed ${status}: ${body}`,
     noSseStream: "No SSE stream",
+    malformedSse: "Invalid server deploy response. Check the deployment in the web console.",
+    incompleteSse: "The server deploy response ended before completion. Check the deployment in the web console.",
+    deploymentLink: (url: string) => `  Web deployment record: ${url}`,
+    runId: (id: string) => `  Deployment ID: ${id}`,
+    prepared: (id: string) => `Deployment ready. Submit with mimi-seed deploy --resume ${id} --yes`,
+    invalidResume: "--resume cannot be combined with --skip-build, --prepare-only, or --dry-run.",
+    resumeNotReady: "Only a ready deployment can be resumed.",
+    runMismatch: "The saved deployment app or platform differs from this request.",
+    ciProviderMismatch: "Selected --ci differs from the configured CI provider. Check the CI configuration.",
 
     // CI provider setup prompts
     githubSetupTitle: "GitHub Actions setup",
@@ -193,7 +216,7 @@ const M = catalog(
     queueItem: (id: string) => `  Queue item: ${id}`,
     waitingForBuildNumber: "  Waiting for the build number...",
     noBuildNumber:
-      "  Could not read the build number. Retry with --skip-build + --version-code.",
+      "  Could not confirm the build number. Check the web deployment record and Jenkins outcome before taking action.",
     buildStarted: (n: number) => `  Build #${n} started. Waiting for it to finish...`,
     buildFailed: (result: string) => `Build failed: ${result}`,
     jenkinsLink: (url: string) => `  Jenkins: ${url}`,
@@ -218,7 +241,7 @@ const M = catalog(
     confirmCancelled: "Cancelled. (use --yes to skip this confirmation)",
 
     pipelineStarting: "📡 Starting the server deploy pipeline...",
-    done: "Done. Check the deploy status in Play Console.",
+    done: "Deploy pipeline complete. Check its status in the web console.",
   },
 );
 
@@ -303,7 +326,7 @@ async function pollBuildComplete(
 
 // ── SSE 스트림 파싱 ──
 
-async function streamDeploy(webBase: string, token: string, body: object): Promise<void> {
+async function streamDeploy(webBase: string, token: string, appId: string, body: object, linkAlreadyPrinted = false): Promise<void> {
   const res = await fetch(`${webBase}/api/deploy`, {
     method: "POST",
     headers: {
@@ -321,38 +344,27 @@ async function streamDeploy(webBase: string, token: string, body: object): Promi
   const reader = res.body?.getReader();
   if (!reader) throw new Error(M().noSseStream);
 
-  const decoder = new TextDecoder();
-  let buf = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const lines = buf.split("\n");
-    buf = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const event = JSON.parse(line.slice(6)) as {
-          phase: string;
-          status: string;
-          message: string;
-        };
-        const icon = PHASE_ICON[event.phase] ?? "▸";
-        const color =
-          event.status === "done" ? kleur.green :
-          event.status === "failed" ? kleur.red :
-          event.status === "skipped" ? kleur.yellow :
-          kleur.dim;
-        log(`  ${icon} ${color(event.message)}`);
-        if (event.phase === "error" || (event.phase === "verify" && event.status === "failed") ||
-            (event.phase === "promote" && event.status === "failed")) {
-          process.exit(1);
-        }
-      } catch {
-        // skip non-JSON
+  let linkPrinted = linkAlreadyPrinted;
+  try {
+    await consumeDeployStream(reader, (event) => {
+      if (event.jobId && !linkPrinted) {
+        const link = new URL(`/apps/${encodeURIComponent(appId)}`, webBase);
+        link.searchParams.set("deployment", event.jobId);
+        log(kleur.dim(M().deploymentLink(link.toString())));
+        linkPrinted = true;
       }
+      const icon = PHASE_ICON[event.phase] ?? "▸";
+      const color = event.status === "done" ? kleur.green :
+        event.status === "failed" ? kleur.red :
+        event.status === "skipped" ? kleur.yellow : kleur.dim;
+      log(`  ${icon} ${color(event.message)}`);
+    });
+  } catch (error) {
+    if (error instanceof DeployStreamError) {
+      if (error.reason === "malformed") throw new Error(M().malformedSse, { cause: error });
+      if (error.reason === "incomplete") throw new Error(M().incompleteSse, { cause: error });
     }
+    throw error;
   }
 }
 
@@ -364,6 +376,7 @@ export const ANDROID_VERSION_CODE_MAX = 2_100_000_000; // 2^31 - 1 (실제 max�
 
 export interface DeployArgs {
   platform: "android" | "ios";
+  platformExplicit: boolean;
   appId?: string;
   versionCode?: number;
   fromRef?: string;
@@ -372,6 +385,8 @@ export interface DeployArgs {
   dryRun: boolean;
   yes: boolean;       // 배포 확인 프롬프트 생략 (--yes/-y)
   skipBuild: boolean;
+  prepareOnly: boolean;
+  resume?: string;
   setupJenkins: boolean;
   setupGithub: boolean;
   setupGitlab: boolean;
@@ -383,10 +398,12 @@ export interface DeployArgs {
 export function parseArgs(argv: string[]): DeployArgs {
   const args: DeployArgs = {
     platform: "android",
+    platformExplicit: false,
     language: "ko-KR",
     dryRun: false,
     yes: false,
     skipBuild: false,
+    prepareOnly: false,
     setupJenkins: false,
     setupGithub: false,
     setupGitlab: false,
@@ -401,7 +418,7 @@ export function parseArgs(argv: string[]): DeployArgs {
       return next;
     };
     switch (option) {
-      case "--platform": case "-p": args.platform = value() as DeployArgs["platform"]; break;
+      case "--platform": case "-p": args.platform = value() as DeployArgs["platform"]; args.platformExplicit = true; break;
       case "--app": args.appId = value(); break;
       case "--version-code": args.versionCode = Number(value()); break;
       case "--from": args.fromRef = value(); break;
@@ -410,6 +427,8 @@ export function parseArgs(argv: string[]): DeployArgs {
       case "--dry-run": args.dryRun = true; break;
       case "--yes": case "-y": args.yes = true; break;
       case "--skip-build": args.skipBuild = true; break;
+      case "--prepare-only": args.prepareOnly = true; break;
+      case "--resume": args.resume = value(); break;
       case "--ci": args.ci = value() as CiKind; break;
       case "--workflow": args.workflow = value(); break;
       case "--ref": args.ref = value(); break;
@@ -426,6 +445,7 @@ export function parseArgs(argv: string[]): DeployArgs {
   }
   if ([args.setupJenkins, args.setupGithub, args.setupGitlab].filter(Boolean).length > 1) throw new Error(M().multipleSetup);
   if (args.dryRun && (args.setupJenkins || args.setupGithub || args.setupGitlab)) throw new Error(M().drySetup);
+  if (args.resume && (args.skipBuild || args.prepareOnly || args.dryRun)) throw new Error(M().invalidResume);
   return args;
 }
 
@@ -473,7 +493,8 @@ export function resolveCi(
 async function runGitProviderBuild(
   cfg: CiProviderConfig,
   args: DeployArgs,
-): Promise<number> {
+  appId: string,
+): Promise<{ runId: number; result: BuildResult }> {
   let runUrl: string;
   let runId: number;
 
@@ -483,7 +504,7 @@ async function runGitProviderBuild(
     }
     log(M().ghTrigger(kleur.cyan(args.workflow), args.ref));
     const inputs: Record<string, string> = {};
-    if (args.appId) inputs.MIMI_APP_ID = args.appId;
+    inputs.MIMI_APP_ID = appId;
     inputs.PLATFORM = args.platform;
     const result = await ghTriggerWorkflow(cfg, args.workflow, args.ref, inputs);
     if (!result) {
@@ -495,7 +516,7 @@ async function runGitProviderBuild(
   } else {
     log(M().glTrigger(args.ref));
     const variables: Record<string, string> = { PLATFORM: args.platform };
-    if (args.appId) variables.MIMI_APP_ID = args.appId;
+    variables.MIMI_APP_ID = appId;
     const result = await glTriggerPipeline(cfg, args.ref, variables);
     runId = result.pipelineId;
     runUrl = result.url;
@@ -516,14 +537,12 @@ async function runGitProviderBuild(
 
   process.stdout.write("\n");
 
-  if (result === "success") {
-    log(kleur.green(M().buildSucceeded(runId)));
-    return runId;
+  if (result === "success") log(kleur.green(M().buildSucceeded(runId)));
+  else {
+    log(kleur.red(M().buildEnded(result)));
+    log(kleur.dim(`  ${runUrl}`));
   }
-  log(kleur.red(M().buildEnded(result)));
-  log(kleur.dim(`  ${runUrl}`));
-  log(kleur.dim(M().alreadyBuiltHint("<N>", args.platform)));
-  process.exit(1);
+  return { runId, result };
 }
 
 // ── 메인 deploy 커맨드 ──
@@ -572,37 +591,88 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
   }
 
   // Confirm before CI, which itself can publish to internal tracks/TestFlight.
-  if (!args.appId) throw new Error(M().noAppId);
+  const resumed = args.resume ? await getDeployRun(cfg.webBase, cfg.token, args.resume) : null;
+  const projectLink = await findProjectLink(process.cwd());
+  const linkedAppId = resolveLinkedAppId(projectLink, cfg.webBase, args.appId);
+  if (projectLink) validateProjectIdentity(projectLink, await detectHints(process.cwd()));
+  const appId = linkedAppId ?? resumed?.appId;
+  if (!appId) throw new Error(M().noAppId);
   if (!args.yes) throw new Error(M().explicitApproval);
-  if (args.skipBuild && !args.versionCode) throw new Error(M().versionCodeUnknown);
+  if (resumed) {
+    if (resumed.status !== "ready") throw new Error(M().resumeNotReady);
+    if (resumed.jobId !== args.resume || resumed.appId !== appId || (args.platformExplicit && resumed.platform !== args.platform) ||
+        (args.versionCode && args.versionCode !== resumed.versionCode)) throw new Error(M().runMismatch);
+    args.platform = resumed.platform;
+    if (!resumed.versionCode) throw new Error(M().versionCodeUnknown);
+  } else if (!args.versionCode) throw new Error(M().versionCodeUnknown);
 
   log(kleur.bold(M().title(args.platform)));
   if (args.dryRun) log(kleur.yellow(M().dryRunNotice));
   log("");
 
-  const versionCode = args.versionCode;
+  const versionCode = args.versionCode ?? resumed?.versionCode ?? undefined;
   let deployBuildNumber: number | undefined;
+  let ciProvider: CiProviderConfig | null = null;
+  let jenkinsCfg: JenkinsConfig | undefined;
+  let jenkinsJobName: string | undefined;
+  let jenkinsParams: Record<string, string> | undefined;
+  let kind: Exclude<CiKind, "auto"> | null = null;
+  if (!resumed && !args.skipBuild) {
+    migrateLegacyJenkins();
+    ciProvider = loadCiProviderConfig();
+    jenkinsCfg = loadJenkinsConfig() ?? undefined;
+    kind = resolveCi(args.ci, jenkinsCfg, ciProvider);
+    if (!["jenkins", "github", "gitlab"].includes(kind)) throw new Error(M().invalidCi);
+    if (kind === "jenkins") {
+      if (!jenkinsCfg?.url || !jenkinsCfg?.token) throw new Error(M().noJenkinsConfig);
+      jenkinsJobName = resolveProjectJenkins(jenkinsCfg, args.platform).job;
+      jenkinsParams = jenkinsBuildParameters(args.platform, args.ref, appId);
+    } else if (!ciProvider) {
+      throw new Error(M().noProviderConfig(kind));
+    } else if (ciProvider.provider !== kind) {
+      throw new Error(M().ciProviderMismatch);
+    } else if (kind === "github" && !args.workflow) {
+      throw new Error(M().workflowRequired);
+    }
+  }
+
+  const runId = resumed?.jobId ?? `run_${randomUUID()}`;
+  const runPayload = { runId, appId, platform: args.platform, fromRef: args.fromRef, toRef: args.toRef };
+  const failRun = async (reason: DeployRunFailureReason): Promise<void> => {
+    await updateDeployRun(cfg.webBase, cfg.token, { action: "failed", ...runPayload, reason });
+  };
+  if (!resumed) {
+    const started = await updateDeployRun(cfg.webBase, cfg.token, {
+      action: "start", ...runPayload, ...(versionCode ? { versionCode } : {}),
+    });
+    if (started.jobId !== runId || started.appId !== appId || started.platform !== args.platform) throw new Error(M().runMismatch);
+  }
+  log(kleur.dim(M().runId(runId)));
+  const recordLink = new URL(`/apps/${encodeURIComponent(appId)}`, cfg.webBase);
+  recordLink.searchParams.set("deployment", runId);
+  log(kleur.dim(M().deploymentLink(recordLink.toString())));
+
+  if (resumed) {
+    await streamDeploy(cfg.webBase, cfg.token, appId, {
+      jobId: runId, appId, platform: args.platform, versionCode,
+      ...(resumed.jenkinsBuildNumber ? { buildNumber: resumed.jenkinsBuildNumber } : {}),
+      fromRef: resumed.fromRef ?? undefined, toRef: resumed.toRef ?? undefined, language: args.language, dryRun: false,
+    }, true);
+    log(kleur.bold(M().done));
+    return;
+  }
 
   // 빌드 단계 (--skip-build 없을 때)
   if (!args.skipBuild) {
-    const ciProvider = loadCiProviderConfig();
-    migrateLegacyJenkins(); // 레거시 config.json.jenkins → jenkins.json (1회성, 있을 때만)
-    const jenkinsCfg = loadJenkinsConfig() ?? undefined;
-    const kind = resolveCi(args.ci, jenkinsCfg, ciProvider);
-    log(kleur.dim(M().ciLine(kind)));
+    await updateDeployRun(cfg.webBase, cfg.token, { action: "building", ...runPayload });
+    log(kleur.dim(M().ciLine(kind!)));
 
     if (kind === "jenkins") {
-      if (!jenkinsCfg?.url || !jenkinsCfg?.token) {
-        log(kleur.yellow(M().noJenkinsConfig));
-        process.exit(1);
-      }
-      const jenkins = jenkinsCfg;
-      const { job: jobName } = resolveProjectJenkins(jenkins, args.platform);
+      const jenkins = jenkinsCfg!;
+      const jobName = jenkinsJobName!;
 
       log(M().jenkinsTrigger(kleur.cyan(jobName)));
-      const buildParams = jenkinsBuildParameters(args.platform, args.ref, args.appId);
-
-      const queueItemId = await triggerBuild(jenkins, jobName, buildParams);
+      const queueItemId = await triggerBuild(jenkins, jobName, jenkinsParams!);
       if (!queueItemId) {
         log(kleur.yellow(M().noQueueItem));
       } else {
@@ -621,50 +691,62 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
 
       if (!buildNumber) {
         log(kleur.yellow(M().noBuildNumber));
-        process.exit(1);
+        throw new Error(M().noBuildNumber);
       }
 
       log(M().buildStarted(buildNumber));
+      await updateDeployRun(cfg.webBase, cfg.token, { action: "building", ...runPayload, buildNumber });
       const result = await pollBuildComplete(jenkins, jobName, buildNumber);
 
       if (result !== "SUCCESS") {
         log(kleur.red(M().buildFailed(result)));
         log(kleur.dim(M().jenkinsLink(`${jenkins.url}/job/${encodeURIComponent(jobName)}/${buildNumber}/`)));
         log(kleur.dim(M().alreadyBuiltHint("<N>", args.platform)));
-        process.exit(1);
+        await failRun("build_failed");
+        throw new Error(M().buildFailed(result));
       }
 
       log(kleur.green(M().buildSucceeded(buildNumber)));
       deployBuildNumber = buildNumber;
 
       if (!versionCode) {
+        await failRun("metadata_missing");
         throw new Error(M().versionCodeUnsuitable("Jenkins", buildNumber) + "\n" + M().recommendationNext);
       }
     } else {
       // GitHub Actions or GitLab CI
-      if (!ciProvider) {
-        log(kleur.red(M().noProviderConfig(kind)));
-        process.exit(1);
+      const build = await runGitProviderBuild(ciProvider!, args, appId);
+      if (build.result !== "success") {
+        if (build.result === "failure" || build.result === "cancelled") await failRun("build_failed");
+        throw new Error(M().buildEnded(build.result));
       }
-      const buildId = await runGitProviderBuild(ciProvider, args);
       if (!versionCode) {
         // GitHub run_id / GitLab pipeline_id는 일반적으로 versionCode 범위(2^31-1)를 초과하거나
         // 빌드 시퀀스와 무관함. 자동 사용은 안전하지 않으므로 차단.
-        log(kleur.red(M().versionCodeUnsuitable(kind, buildId)));
+        log(kleur.red(M().versionCodeUnsuitable(kind!, build.runId)));
         log(kleur.dim(M().recommendation));
         log(kleur.dim(M().recommendationCi));
         log(kleur.dim(M().recommendationNext));
-        process.exit(1);
+        await failRun("metadata_missing");
+        throw new Error(M().versionCodeUnknown);
       }
     }
   }
 
   if (!versionCode) {
     log(kleur.red(M().versionCodeUnknown));
-    process.exit(1);
+    await failRun("metadata_missing");
+    throw new Error(M().versionCodeUnknown);
   }
 
-  const appId = args.appId;
+  await updateDeployRun(cfg.webBase, cfg.token, {
+    action: "ready", ...runPayload, versionCode,
+    ...(deployBuildNumber ? { buildNumber: deployBuildNumber } : {}),
+  });
+  if (args.prepareOnly) {
+    log(kleur.green(M().prepared(runId)));
+    return;
+  }
 
   log("");
   log(M().pipelineStarting);
@@ -672,7 +754,8 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
 
   // Jenkins execution identity and the uploaded artifact version are independent.
 
-  await streamDeploy(cfg.webBase, cfg.token, {
+  await streamDeploy(cfg.webBase, cfg.token, appId, {
+    jobId: runId,
     appId,
     platform: args.platform,
     versionCode,
@@ -681,9 +764,8 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
     toRef: args.toRef,
     language: args.language,
     dryRun: args.dryRun,
-  });
+  }, true);
 
   log("");
   log(kleur.bold(M().done));
-  log(kleur.dim("  https://play.google.com/console/developers"));
 }

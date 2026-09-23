@@ -28,6 +28,7 @@ import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
 import { printMcpSetup, writeCodexMcpConfig, claudeMcpAddCommand } from "./mcp-config.js";
 import { ensureReleaseManifest } from "./release-manifest.js";
+import { linkProject } from "./project-link.js";
 import { catalog, t } from "./i18n.js";
 
 const DEFAULT_WEB_BASE = process.env.MIMI_SEED_WEB_BASE ?? "https://mimi-seed.pryzm.gg";
@@ -172,6 +173,8 @@ ${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 
   --dry-run                    로컬 계획만 출력 (네트워크·빌드·쓰기 없음)
   --yes, -y                    CI 실행·스토어 배포 명시적 승인 (실행 필수)
   --skip-build                 CI 빌드 건너뜀 (--version-code 필수)
+  --prepare-only              빌드·버전 확인 후 웹 기록을 준비 상태로 두고 제출 중단
+  --resume <runId>            준비된 배포를 CI 빌드 없이 이어서 제출
   --ci jenkins|github|gitlab   CI 강제 선택 (기본: auto)
   --workflow <file>            GitHub workflow 파일 (예: deploy.yml)
   --ref <branch|tag>           CI 소스 (기본: main, Jenkins는 브랜치만)
@@ -354,6 +357,8 @@ Options:
   --dry-run                    print a local plan (no network, builds or writes)
   --yes, -y                    explicitly approve CI and store release (required)
   --skip-build                 skip the CI build (--version-code required)
+  --prepare-only              stop after build/version verification with a ready web record
+  --resume <runId>            submit a ready deployment without rebuilding
   --ci jenkins|github|gitlab   force the CI provider (default: auto)
   --workflow <file>            GitHub workflow file (e.g. deploy.yml)
   --ref <branch|tag>           CI source (default: main; Jenkins: branches only)
@@ -440,6 +445,10 @@ async function cmdInit(args: string[]): Promise<void> {
         log(kleur.red(M().syncFailed(result.text)));
       } else {
         for (const line of result.text.split("\n")) log("  " + line);
+        if (hints.length === 1 && (hints[0].packageName || hints[0].bundleId)) {
+          try { await linkProject(cwd, cfg.webBase, cfg.token, hints[0]); }
+          catch (error) { log(kleur.yellow(String(error))); }
+        }
       }
     }
     const manifest = await ensureReleaseManifest(cwd);
@@ -485,6 +494,10 @@ async function cmdInit(args: string[]): Promise<void> {
       log(kleur.red(M().syncFailed(result.text)));
     } else {
       for (const line of result.text.split("\n")) log("  " + line);
+      if (hints.length === 1 && (hints[0].packageName || hints[0].bundleId)) {
+        try { await linkProject(cwd, cfg.webBase, cfg.token, hints[0]); }
+        catch (error) { log(kleur.yellow(String(error))); }
+      }
     }
     log("");
   }
