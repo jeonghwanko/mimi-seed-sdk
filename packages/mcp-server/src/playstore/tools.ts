@@ -752,16 +752,33 @@ export async function promoteRelease(
 
 export async function listReviews(auth: OAuth2Client | JWT, packageName: string) {
   const res = await publisher().reviews.list({ auth, packageName });
-  return (res.data.reviews ?? []).map((r) => ({
-    reviewId: r.reviewId,
-    authorName: r.authorName,
-    comments: r.comments?.map((c) => ({
-      text: c.userComment?.text,
-      starRating: c.userComment?.starRating,
-      lastModified: c.userComment?.lastModified?.seconds,
-      deviceMetadata: c.userComment?.deviceMetadata?.productName,
-    })),
-  }));
+  return (res.data.reviews ?? []).map((r) => {
+    const developerComment = r.comments?.find((c) => c.developerComment)?.developerComment;
+    return {
+      reviewId: r.reviewId,
+      authorName: r.authorName,
+      developerComment: developerComment
+        ? { text: developerComment.text, lastModified: developerComment.lastModified?.seconds }
+        : null,
+      comments: r.comments?.map((c) => {
+        if (c.userComment) {
+          return {
+            text: c.userComment.text,
+            starRating: c.userComment.starRating,
+            lastModified: c.userComment.lastModified?.seconds,
+            deviceMetadata: c.userComment.deviceMetadata?.productName,
+          };
+        }
+        if (c.developerComment) {
+          return { developerComment: {
+            text: c.developerComment.text,
+            lastModified: c.developerComment.lastModified?.seconds,
+          } };
+        }
+        return null;
+      }).filter((c) => c !== null),
+    };
+  });
 }
 
 // ─── 리뷰 답변 ───
