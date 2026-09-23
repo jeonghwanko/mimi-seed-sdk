@@ -19,7 +19,14 @@ describe('배포 안전 경계', () => {
     vi.resetAllMocks();
     vi.useFakeTimers();
     vi.spyOn(process.stdout, 'write').mockReturnValue(true);
-    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, options?: RequestInit) => {
+      if (String(input).endsWith('/api/deploy/runs')) {
+        const body = JSON.parse(String(options?.body));
+        return Response.json({ jobId: body.runId, appId: body.appId, platform: body.platform,
+          status: body.action === 'ready' ? 'ready' : body.action });
+      }
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    }));
     mocks.config.mockResolvedValue({ webBase: 'https://example.com', token: 'test-token' });
     mocks.jenkins.mockReturnValue({ url: 'https://ci.example.com', username: 'test', token: 'test-token' });
     mocks.project.mockReturnValue({ job: 'team/mobile', source: '.mimi-seed.json' });
@@ -46,6 +53,19 @@ describe('배포 안전 경계', () => {
     await expect(cmdDeploy(args)).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
+  it('강제 CI 제공자가 저장된 제공자와 다르면 run 생성 전에 거절한다', async () => {
+    await expect(cmdDeploy(['--yes', '--app', 'example-app', '--version-code', '900',
+      '--ci', 'gitlab'])).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.gl).not.toHaveBeenCalled();
+  });
+  it('저장된 CI 제공자가 알 수 없는 값이면 run 생성 전에 거절한다', async () => {
+    mocks.jenkins.mockReturnValue(null);
+    mocks.ci.mockReturnValue({ provider: 'unknown', owner: 'example', repo: 'app' });
+    await expect(cmdDeploy(['--yes', '--app', 'example-app', '--version-code', '900']))
+      .rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it.each([
     ['--platform', 'both'], ['--ci', 'other'], ['--version-code', 'NaN'], ['--version-code', '0'],
     ['--version-code', '-1'], ['--version-code', '1.5'], ['--version-code', '2100000001'],
@@ -55,38 +75,78 @@ describe('배포 안전 경계', () => {
   });
 
   function mockBuild() {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(new Response('', { status: 201, headers: { Location: 'https://ci.example.com/queue/item/12/' } }))
-      .mockResolvedValueOnce(Response.json({ executable: { number: 41 } }))
-      .mockResolvedValueOnce(Response.json({ building: false, result: 'SUCCESS' }))
-      .mockResolvedValueOnce(new Response('data: {"phase":"done","status":"done","message":"ok"}\n'));
+    const ci = [
+      new Response('', { status: 201, headers: { Location: 'https://ci.example.com/queue/item/12/' } }),
+      Response.json({ executable: { number: 41 } }),
+      Response.json({ building: false, result: 'SUCCESS' }),
+    ];
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request, options?: RequestInit) => {
+      if (String(input).endsWith('/api/deploy/runs')) {
+        const body = JSON.parse(String(options?.body));
+        return Response.json({ jobId: body.runId, appId: body.appId, platform: body.platform,
+          status: body.action === 'ready' ? 'ready' : body.action });
+      }
+      if (String(input).endsWith('/api/deploy')) return new Response('data: {"phase":"done","status":"done","message":"ok"}\n');
+      const next = ci.shift();
+      if (!next) throw new Error(`Unexpected fetch: ${String(input)}`);
+      return next;
+    });
+  }
+  function finishBuildTimers() {
+    vi.useRealTimers();
+    vi.stubGlobal('setTimeout', (callback: () => void) => {
+      queueMicrotask(callback);
+      return 0;
+    });
   }
   it('Jenkins 폴더 경로·플랫폼·브랜치와 실제 versionCode를 독립 전달한다', async () => {
+    finishBuildTimers();
     mockBuild();
-    const run = cmdDeploy(['--yes', '--app', 'example-app', '--ci', 'jenkins', '--platform', 'ios', '--ref', 'release/mobile', '--version-code', '900']);
-    await vi.runAllTimersAsync();
-    await run;
+    await cmdDeploy(['--yes', '--app', 'example-app', '--ci', 'jenkins', '--platform', 'ios', '--ref', 'release/mobile', '--version-code', '900']);
     const calls = vi.mocked(fetch).mock.calls;
-    expect(calls[0][0]).toBe('https://ci.example.com/job/team/job/mobile/buildWithParameters');
-    const params = new URLSearchParams(calls[0][1]?.body as string);
+    const trigger = calls.find(call => String(call[0]).endsWith('/buildWithParameters'))!;
+    expect(trigger[0]).toBe('https://ci.example.com/job/team/job/mobile/buildWithParameters');
+    const params = new URLSearchParams(trigger[1]?.body as string);
     expect(params.get('BUILD_TARGET')).toBe('ios');
     expect(params.get('SRC_GIT_COMMIT')).toBe('release/mobile');
     expect(params.get('ANDROID_PUBLISH_TO_GOOGLEPLAY')).toBe('false');
     expect(params.get('IOS_UPLOAD_TO_TESTFLIGHT')).toBe('true');
-    expect(JSON.parse(calls[3][1]?.body as string)).toMatchObject({ versionCode: 900, buildNumber: 41 });
+    const submit = calls.find(call => String(call[0]).endsWith('/api/deploy'))!;
+    expect(JSON.parse(submit[1]?.body as string)).toMatchObject({ versionCode: 900, buildNumber: 41 });
   });
   it('Jenkins 실행 번호를 스토어 버전으로 대체하지 않고 중단한다', async () => {
+    finishBuildTimers();
     mockBuild();
-    const assertion = expect(cmdDeploy(['--yes', '--app', 'example-app', '--ci', 'jenkins'])).rejects.toThrow(/versionCode/);
-    await vi.runAllTimersAsync();
-    await assertion;
-    expect(fetch).toHaveBeenCalledTimes(3);
+    await expect(cmdDeploy(['--yes', '--app', 'example-app', '--ci', 'jenkins'])).rejects.toThrow(/versionCode/);
+    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/api/deploy'))).toBe(false);
   });
   it('skip-build는 CI 식별자를 만들어내지 않는다', async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response('data: {"phase":"done","status":"done","message":"ok"}\n'));
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request, options?: RequestInit) => {
+      if (String(input).endsWith('/api/deploy/runs')) {
+        const body = JSON.parse(String(options?.body));
+        return Response.json({ jobId: body.runId, appId: body.appId, platform: body.platform,
+          status: body.action === 'ready' ? 'ready' : body.action });
+      }
+      return new Response('data: {"phase":"done","status":"done","message":"ok"}\n');
+    });
     await cmdDeploy(['--yes', '--app', 'example-app', '--skip-build', '--version-code', '900']);
-    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    const submit = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/api/deploy'))!;
+    const body = JSON.parse(submit[1]?.body as string);
     expect(body.versionCode).toBe(900);
     expect(body).not.toHaveProperty('buildNumber');
+  });
+  it.each([
+    ['failure', true], ['timeout', false],
+  ] as const)('GitHub %s 결과는 확정 실패만 failed 기록으로 전환한다', async (result, failed) => {
+    mocks.jenkins.mockReturnValue(null);
+    mocks.gh.mockResolvedValue({ runId: 12, url: 'https://ci.example.com/run/12' });
+    mocks.poll.mockResolvedValue(result);
+    await expect(cmdDeploy(['--yes', '--app', 'example-app', '--ci', 'github',
+      '--workflow', 'deploy.yml', '--version-code', '900'])).rejects.toThrow();
+    const actions = vi.mocked(fetch).mock.calls
+      .filter(call => String(call[0]).endsWith('/api/deploy/runs'))
+      .map(call => JSON.parse(String(call[1]?.body)).action);
+    expect(actions).toEqual(failed ? ['start', 'building', 'failed'] : ['start', 'building']);
+    expect(mocks.gl).not.toHaveBeenCalled();
   });
 });

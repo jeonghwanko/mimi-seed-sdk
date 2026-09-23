@@ -101,6 +101,9 @@ social tokens in its reconnect plan; the setup bin still performs the authoritat
    `MIMI_SEED_TOKEN` short-circuits this.)
 3. **Persist** (`config.ts`): `writeConfig()` stores the PAT prefix + endpoint in `~/.mimi-seed/config.json`.
 4. **Register apps**: `mcpCall()` (`mcp-client.ts`) calls `sync_apps` on the remote MCP with the detected hints.
+   When exactly one app is detected, the CLI resolves its existing remote app ID through the web console and
+   saves a token-free `.mimi-seed-link.json` in the user's project. The CLI adds that file to the project's
+   `.gitignore`. Ambiguous or failed lookups leave the project unlinked; deployment can still use `--app`.
 5. **Scaffold into the *user's* project** (not this SDK repo): `.claude/mimi-seed.md` (Claude Code context),
    `AGENTS.md` (Codex context), and `docs/releases.json` (release-notes SSOT, via
    `release-manifest.ts:ensureReleaseManifest`). Existing files are not overwritten.
@@ -127,8 +130,15 @@ CI build (ci-providers.ts)  →  check (readiness)  →  notes (git → AI)  →
   forces one, and `setup-jenkins|setup-github|setup-gitlab` run interactive config. Git range for notes comes
   from `git.ts`.
 - Dry-run returns a **local execution plan before authentication, config migration, setup, CI, AI or remote
-  deployment calls**. It does not exercise the remote pipeline. Real execution requires an explicit app ID
-  and approval before CI, since a CI job can itself upload to a store. See the CLI help for flags.
+  deployment calls**. It does not exercise the remote pipeline. Real execution requires `--yes` and either
+  `--app` or a matching project link before CI, since a CI job can itself upload to a store. The linked web
+  base and detected app identities must still match the current project. See the CLI help for flags.
+- A real run requires an explicit artifact `--version-code` before CI. The CLI creates a web run record before
+  triggering CI, advances it through building and ready, then submits with the same run ID. It prints the record
+  link as soon as the run exists. `--prepare-only` stops at ready; `--resume <runId> --yes` reads that ready record
+  and submits without building again. A failed or truncated server event stream does not report success.
+- Confirmed CI failure marks the run failed. When a trigger, queue lookup, or poll has an uncertain outcome,
+  the run stays building for manual reconciliation; the CLI does not retry a possibly accepted build.
 - Jenkins credentials stay in the local credential file. Project-specific job selection lives in
   `.mimi-seed.json` under `services.jenkins.jobAndroid` / `jobIos`. A project manifest blocks fallback to a
   global job; invalid/missing mappings fail closed. Its optional controller URL must match the authenticated
@@ -137,9 +147,8 @@ CI build (ci-providers.ts)  →  check (readiness)  →  notes (git → AI)  →
   and selected platform explicitly, disables uploads for the other platform and webfile destinations, and
   disables user-update announcements. Custom Jenkins pipelines must accept this parameter contract.
 - CI execution IDs are **never** store artifact versions. The server's `buildNumber` is the actual Jenkins
-  execution ID, while `versionCode` is an explicitly supplied store artifact version. Without that version,
-  successful CI execution stops before store apply and prints instructions to resume with a verified version.
-  Automatic artifact-version discovery is not implemented; independently verify the uploaded build first.
+  execution ID, while `versionCode` is an explicitly supplied store artifact version. Automatic artifact-version
+  discovery is not implemented; verify the version uploaded to the store independently.
 - The same outcome is reachable as an **MCP tool sequence** (the `deploy` skill / `/mimi-seed:deploy` prompt) —
   see [[skills-plugins]] and [`../agent-guide.md`](../agent-guide.md) §4. Keep the two paths behaviorally in
   sync.
