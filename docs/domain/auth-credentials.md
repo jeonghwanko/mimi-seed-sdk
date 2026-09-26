@@ -80,6 +80,14 @@ mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `
   analytics report requires `youtube_analytics`.
 - Requests are sent with `include_granted_scopes=true`, so a re-login **adds** the new scopes on top of the
   existing grant instead of replacing it. `tokens.json` stores the cumulative granted `scope` string.
+  That holds only for the **same** Google account: choosing a different account in the chooser replaces the
+  grant, and its scopes are never unioned with the previous account's.
+- Every login also requests the non-sensitive identity scopes (`IDENTITY_SCOPES` in `auth/scopes.ts`:
+  `openid` + `userinfo.email`). They are not a domain and gate no tool — they exist so the grant records
+  **which account** it belongs to (`accountEmail`, read from the `id_token`). Grants saved before this field
+  existed are resolved once via tokeninfo by `resolveAccountEmail()` and then persisted. Status surfaces
+  (`mimi_seed_status`, `mimi_seed_auth_status`, `mimi-seed-auth status`, the profile list) show it, because a
+  grant from the wrong account otherwise looks exactly like a healthy one.
 - `requireAuth(<scope>)` in `helpers.ts` pre-flights a tool's required scope against the stored grant and, on
   a miss, tells the user exactly which `--domains <id>` to add. Legacy tokens with no `scope` field are
   assumed to hold every pre-tracking scope (only the GA4 scopes postdate scope tracking) so existing users

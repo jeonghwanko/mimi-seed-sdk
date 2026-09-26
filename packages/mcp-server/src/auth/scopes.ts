@@ -136,6 +136,17 @@ export const ALL_SCOPES: readonly string[] = dedupe(
   DOMAIN_IDS.flatMap((id) => AUTH_DOMAINS[id].scopes),
 );
 
+/**
+ * 모든 로그인에 함께 싣는 계정 식별 스코프 (비민감 — 동의 화면에 "이메일 주소 보기"만 추가).
+ *
+ * 권한 도메인이 아니다 — 어떤 도구도 이걸로 API 를 부르지 않는다. 목적은 "지금 어느 Google
+ * 계정으로 로그인돼 있는가" 를 기록·표시하는 것 하나다. 이게 없으면 다른 계정으로 로그인된
+ * 토큰도 상태 화면에 그냥 "✅ 연결됨" 으로 나오고, 그 계정에 권한이 없는 서비스(AdMob 등)는
+ * 원인 불명의 401 로만 죽는다 (실사고). 도메인 목록(ALL_SCOPES)에 넣지 않는 이유: 도메인
+ * 부여 현황·pre-flight 는 도구 권한만 다뤄야 하고, auth-scopes.test.ts 가 ALL_SCOPES 를 고정한다.
+ */
+export const IDENTITY_SCOPES: readonly string[] = ['openid', 'https://www.googleapis.com/auth/userinfo.email'];
+
 /** 도메인 서브셋 → 요청할 스코프 목록. 미지정/빈 배열이면 전체(기존 동작). */
 export function scopesForDomains(domains?: readonly AuthDomainId[]): string[] {
   if (!domains || domains.length === 0) return [...ALL_SCOPES];

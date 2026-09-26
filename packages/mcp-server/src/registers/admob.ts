@@ -2,7 +2,21 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as admob from '../admob/tools.js';
 import { requireAuth } from '../helpers.js';
+import { resolveAccountEmail } from '../auth/google-auth.js';
+import { friendlyAdmobError } from '../admob/errors.js';
 import { jsonResult } from '../lib/mcp-response.js';
+
+/**
+ * AdMob 호출의 계정 거부(401/403)를 "지금 어느 계정으로 로그인돼 있는지" 와 함께 안내한다.
+ * raw 401 은 토큰이 안 붙은 것처럼 읽혀 SDK 버그로 오진된다 — admob/errors.ts 참고.
+ */
+async function withAdmobErrors<T>(call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } catch (e) {
+    throw friendlyAdmobError(e, await resolveAccountEmail());
+  }
+}
 
 export function registerAdmobTools(server: McpServer) {
   server.tool(
@@ -11,7 +25,7 @@ export function registerAdmobTools(server: McpServer) {
     {},
     async () => {
       const auth = await requireAuth();
-      const accounts = await admob.listAccounts(auth);
+      const accounts = await withAdmobErrors(admob.listAccounts(auth));
       return jsonResult(accounts);
     },
   );
@@ -22,7 +36,7 @@ export function registerAdmobTools(server: McpServer) {
     { accountId: z.string().describe('AdMob 계정 ID (예: accounts/pub-XXXX)') },
     async ({ accountId }) => {
       const auth = await requireAuth();
-      const apps = await admob.listApps(auth, accountId);
+      const apps = await withAdmobErrors(admob.listApps(auth, accountId));
       return jsonResult(apps);
     },
   );
@@ -33,7 +47,7 @@ export function registerAdmobTools(server: McpServer) {
     { accountId: z.string().describe('AdMob 계정 ID') },
     async ({ accountId }) => {
       const auth = await requireAuth();
-      const units = await admob.listAdUnits(auth, accountId);
+      const units = await withAdmobErrors(admob.listAdUnits(auth, accountId));
       return jsonResult(units);
     },
   );
@@ -44,7 +58,7 @@ export function registerAdmobTools(server: McpServer) {
     { accountId: z.string().describe('AdMob 계정 ID') },
     async ({ accountId }) => {
       const auth = await requireAuth();
-      const report = await admob.getTodayEarnings(auth, accountId);
+      const report = await withAdmobErrors(admob.getTodayEarnings(auth, accountId));
       return jsonResult(report);
     },
   );
@@ -63,11 +77,11 @@ export function registerAdmobTools(server: McpServer) {
     },
     async ({ accountId, startYear, startMonth, startDay, endYear, endMonth, endDay }) => {
       const auth = await requireAuth();
-      const report = await admob.getNetworkReport(
+      const report = await withAdmobErrors(admob.getNetworkReport(
         auth, accountId,
         { year: startYear, month: startMonth, day: startDay },
         { year: endYear, month: endMonth, day: endDay },
-      );
+      ));
       return jsonResult(report);
     },
   );
@@ -103,7 +117,7 @@ export function registerAdmobTools(server: McpServer) {
             }],
           };
         }
-        throw err;
+        throw friendlyAdmobError(err, await resolveAccountEmail());
       }
     },
   );
@@ -136,7 +150,7 @@ export function registerAdmobTools(server: McpServer) {
             }],
           };
         }
-        throw err;
+        throw friendlyAdmobError(err, await resolveAccountEmail());
       }
     },
   );

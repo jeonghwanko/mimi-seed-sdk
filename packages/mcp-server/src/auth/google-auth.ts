@@ -9,8 +9,9 @@ import { getMcpOAuthClient } from './constants.js';
 import { AuthError, classifyError, type AuthErrorPayload } from './errors.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
-import { scopesForDomains, type AuthDomainId } from './scopes.js';
+import { scopesForDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.js';
 import { writeCredentialJson } from '../lib/atomic-write.js';
+import { fetchWithTimeout } from '../lib/http.js';
 
 export type { AuthDomainId } from './scopes.js';
 
@@ -44,7 +45,12 @@ export function listGoogleProfiles() {
     .sort().map((file) => {
       const profile = file.slice(0, -5);
       const tokens = readProfile(profile)?.tokens;
-      return { profile, connected: !!tokens?.refresh_token, youtubeChannel: tokens?.youtubeChannel ?? null };
+      return {
+        profile,
+        connected: !!tokens?.refresh_token,
+        accountEmail: tokens?.accountEmail ?? null,
+        youtubeChannel: tokens?.youtubeChannel ?? null,
+      };
     });
 }
 
@@ -56,6 +62,26 @@ export interface StoredTokens {
   expiry_date: number;
   /** 공백 구분 부여 스코프. 신규 도구(GA4 등) pre-flight 스코프 검사에 사용. 구 토큰은 undefined. */
   scope?: string;
+  /**
+   * 이 토큰이 속한 Google 계정 이메일. 로그인 시 id_token 에서 기록하고, 기록 전 토큰은
+   * resolveAccountEmail() 이 tokeninfo 로 한 번 채운다. 표시·오류 안내용이며 인가 판단에 쓰지 않는다.
+   */
+  accountEmail?: string;
+}
+
+/**
+ * id_token(JWT) payload 의 email. 토큰 엔드포인트가 TLS 로 직접 준 값이라 서명 검증 없이
+ * 표시용으로만 읽는다. 형식이 다르거나 email 이 없으면 undefined.
+ */
+export function emailFromIdToken(idToken: string | null | undefined): string | undefined {
+  const payload = idToken?.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { email?: unknown };
+    return typeof json.email === 'string' && json.email ? json.email : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getStoredCredentials(profile?: string): { clientId: string; clientSecret: string } | null {
@@ -194,7 +220,10 @@ export function startAuth(
 
   const oauth2Client = createOAuth2Client(clientId, clientSecret);
   const needsYouTubeDomain = expectedChannelId && options.domains && !options.domains.some((id) => id === 'youtube' || id === 'youtube_analytics');
-  const requestedScopes = scopesForDomains(needsYouTubeDomain ? [...new Set([...options.domains!, 'youtube'] as AuthDomainId[])] : options.domains);
+  const requestedScopes = [...new Set([
+    ...scopesForDomains(needsYouTubeDomain ? [...new Set([...options.domains!, 'youtube'] as AuthDomainId[])] : options.domains),
+    ...IDENTITY_SCOPES,
+  ])];
   const state = randomUUID();
   const authUrl = oauth2Client.generateAuthUrl({
     state,
@@ -289,6 +318,8 @@ export function startAuth(
           scope: tokens.scope ?? requestedScopes.join(' '),
           ...(youtubeChannel && { youtubeChannel }),
         };
+        const accountEmail = emailFromIdToken(tokens.id_token);
+        if (accountEmail) stored.accountEmail = accountEmail;
         if (attempt.status !== 'pending') throw new Error('Login cancelled or timed out; credentials were not saved.');
         saveTokens(stored, profile, { clientId, clientSecret });
 
@@ -447,5 +478,39 @@ export async function ensureFreshAccessToken(marginMs = 300_000, profile?: strin
       tokens,
       error: classifyError(e, { phase: 'refresh' }),
     };
+  }
+}
+
+/**
+ * 저장된 로그인이 어느 Google 계정인지. 로그인 때 기록한 값을 우선 쓰고, 기록이 없는 구 토큰은
+ * tokeninfo 로 한 번 조회해 저장한다(다음부터 네트워크 없음). 조회 실패·email 스코프 미부여면 null —
+ * 상태 표시가 이것 때문에 실패하면 안 되므로 절대 throw 하지 않는다.
+ *
+ * 호출 전에 ensureFreshAccessToken() 으로 access_token 을 갱신해 두는 것이 호출자 책임이다.
+ */
+export async function resolveAccountEmail(profile?: string): Promise<string | null> {
+  const tokens = getStoredTokens(profile);
+  if (!tokens) return null;
+  if (tokens.accountEmail) return tokens.accountEmail;
+  if (!tokens.access_token) return null;
+  try {
+    // 상태 표시용 — 느린 네트워크에서 status 가 매달리지 않게 5초 1회만 시도한다.
+    const res = await fetchWithTimeout(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(tokens.access_token)}`,
+      {},
+      { timeoutMs: 5_000, maxAttempts: 1 },
+    );
+    if (!res.ok) return null;
+    const info = (await res.json()) as { email?: unknown };
+    const email = typeof info.email === 'string' && info.email ? info.email : null;
+    if (!email) return null;
+    // 조회 사이에 다른 계정으로 재로그인됐으면 옛 계정 이메일을 새 토큰에 붙이지 않는다.
+    const current = getStoredTokens(profile);
+    if (current && current.refresh_token === tokens.refresh_token && !current.accountEmail) {
+      saveTokens({ ...current, accountEmail: email }, profile);
+    }
+    return email;
+  } catch {
+    return null;
   }
 }

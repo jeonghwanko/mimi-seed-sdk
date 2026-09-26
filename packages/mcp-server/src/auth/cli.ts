@@ -6,6 +6,7 @@ import {
   listGoogleProfiles,
   getStoredTokens,
   ensureFreshAccessToken,
+  resolveAccountEmail,
   type StoredTokens,
 } from './google-auth.js';
 import { AuthError, type AuthErrorPayload, classifyError } from './errors.js';
@@ -55,6 +56,8 @@ const ko = {
   statusRefreshed: (left: string) => `  ✅ 연결됨 — refresh_token으로 갱신 (${left})`,
   statusExpired: '  ⚠️  토큰 만료 + 자동 갱신 실패',
   statusNone: '  ❌ 연결된 계정 없음.',
+  account: (email: string) => `     계정: ${email}`,
+  accountUnknown: '     계정: (확인 불가 — 재로그인하면 기록됨)',
   grantedDomains: (list: string) => `     권한 도메인: ${list}`,
   missingDomains: (list: string) =>
     `     미부여: ${list} — mimi-seed-auth --domains <id> 로 추가 (기존 권한 유지)`,
@@ -129,6 +132,8 @@ const en: typeof ko = {
   statusRefreshed: (left: string) => `  ✅ Connected — refreshed with refresh_token (${left})`,
   statusExpired: '  ⚠️  Token expired + automatic refresh failed',
   statusNone: '  ❌ No connected account.',
+  account: (email: string) => `     Account: ${email}`,
+  accountUnknown: '     Account: (unknown — re-login records it)',
   grantedDomains: (list: string) => `     Granted domains: ${list}`,
   missingDomains: (list: string) =>
     `     Not granted: ${list} — add with mimi-seed-auth --domains <id> (prior grants are kept)`,
@@ -209,7 +214,10 @@ function printAuthError(p: AuthErrorPayload): void {
 }
 
 /** 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께 출력. */
-function printGrantedDomains(): void {
+async function printGrantedDomains(): Promise<void> {
+  // 어느 Google 계정인지 먼저 — 다른 계정 로그인은 권한 목록만 봐서는 드러나지 않는다.
+  const email = await resolveAccountEmail(profile);
+  err(email ? M.account(email) : M.accountUnknown);
   const channel = getStoredTokens(profile)?.youtubeChannel;
   if (channel) err(`YouTube: ${channel.title} (${channel.id})`);
   const summary = summarizeGrantedDomains(getStoredTokens(profile)?.scope);
@@ -230,12 +238,12 @@ async function cmdStatus(): Promise<number> {
   switch (r.status) {
     case 'fresh':
       err(M.statusFresh(fmtRemaining(r.msUntilExpiry)));
-      printGrantedDomains();
+      await printGrantedDomains();
       err('');
       return 0;
     case 'refreshed':
       err(M.statusRefreshed(fmtRemaining(r.msUntilExpiry)));
-      printGrantedDomains();
+      await printGrantedDomains();
       err('');
       return 0;
     case 'expired_refresh_failed':
@@ -415,7 +423,7 @@ async function cmdLogin(): Promise<number> {
   err('');
   err('');
   err(M.done);
-  printGrantedDomains();
+  await printGrantedDomains();
   err('');
   err(M.nextTitle);
   err(M.nextExample1);

@@ -214,6 +214,12 @@ Google 응답에 access/refresh 토큰이 빠져 있다. `--force` 로 재시도
 **GitHub — 조회는 되는데 워크플로 트리거만 403.** PAT 에 **`workflow`** 스코프가 없다. `repo` 와 `workflow` 를
 둘 다 넣어 재발급하라 ([크리덴셜](credentials.ko.md#ci-github-gitlab)).
 
+**AdMob — 로그인했는데 401 "missing required authentication credential".** 토큰이 안 붙은 것처럼 읽히지만
+토큰도 `admob` 스코프도 정상이다. 지금 로그인한 Google 계정이 어떤 AdMob 계정의 사용자도 아니라는 뜻이다.
+`mimi_seed_status` / `mimi_seed_auth_status` 에 표시된 계정을 확인하고, 다시 로그인하면서 계정 선택 화면에서
+AdMob 계정을 고르라. 계정을 바꾸면 기본 로그인 권한이 통째로 바뀌므로, 계속 쓸 권한 도메인은 같은 로그인에서
+함께 요청해야 한다.
+
 ---
 
 <a id="store-state"></a>
