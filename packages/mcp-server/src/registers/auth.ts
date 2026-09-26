@@ -9,6 +9,7 @@ import {
   ensureFreshAccessToken,
   getTokensLastRefreshMs,
   getStoredTokens,
+  resolveAccountEmail,
 } from '../auth/google-auth.js';
 import { AUTH_DOMAINS, DOMAIN_IDS, summarizeGrantedDomains } from '../auth/scopes.js';
 import { listRegisteredServiceAccounts } from '../auth/playstore-auth.js';
@@ -155,7 +156,9 @@ export function registerAuthTools(server: McpServer) {
       if (oauthResult.status === 'fresh' || oauthResult.status === 'refreshed') {
         const min = Math.round(oauthResult.msUntilExpiry / 60_000);
         const hint = formatLastRefreshHint(getTokensLastRefreshMs());
-        lines.push(`✅ Google OAuth      — 연결됨 (${min}분 남음, ${hint.label})`);
+        // 계정을 함께 보여야 "다른 계정으로 로그인돼 있음" 을 여기서 알아챈다.
+        const account = (await resolveAccountEmail()) ?? '계정 확인 불가 — 재로그인하면 기록됨';
+        lines.push(`✅ Google OAuth      — 연결됨 (${account}, ${min}분 남음, ${hint.label})`);
         if (hint.recommendation) lines.push(`   ${hint.recommendation}`);
       } else {
         lines.push('❌ Google OAuth      — 미연결 → mimi_seed_auth_start');
@@ -402,11 +405,15 @@ export function registerAuthTools(server: McpServer) {
         const client = getAuthenticatedClient(profile);
         const channel = result.tokens.youtubeChannel && client
           ? await verifyYouTubeChannel(client, result.tokens.youtubeChannel.id) : null;
-        return textResult(JSON.stringify({ profile, status: result.status, youtubeChannel: channel, loginAttempt, profiles }));
+        const accountEmail = await resolveAccountEmail(profile);
+        return textResult(JSON.stringify({ profile, status: result.status, accountEmail, youtubeChannel: channel, loginAttempt, profiles }));
       }
       const r = await ensureFreshAccessToken();
       const refreshHint = formatLastRefreshHint(getTokensLastRefreshMs());
-      const refreshLine = `   마지막 갱신: ${refreshHint.label}\nGoogle profiles: ${JSON.stringify(profiles)}`;
+      const accountLine = r.status === 'fresh' || r.status === 'refreshed'
+        ? `   계정: ${(await resolveAccountEmail()) ?? '(확인 불가 — 재로그인하면 기록됨)'}\n`
+        : '';
+      const refreshLine = `${accountLine}   마지막 갱신: ${refreshHint.label}\nGoogle profiles: ${JSON.stringify(profiles)}`;
       const recommendation = refreshHint.recommendation ? `\n\n${refreshHint.recommendation}` : '';
 
       // 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께

@@ -219,6 +219,12 @@ tier yet ([credentials](credentials.md#google-ads)).
 **GitHub — reading works, triggering a workflow 403s.** Your PAT lacks the **`workflow`** scope.
 Reissue it with both `repo` and `workflow` ([credentials](credentials.md#ci-github-gitlab)).
 
+**AdMob — 401 "missing required authentication credential", though you are signed in.** It reads like no
+token was sent, but the token and the `admob` scope are fine: you are signed in as a Google account that is not
+a user of any AdMob account. Check the account shown by `mimi_seed_status` / `mimi_seed_auth_status`, then sign
+in again and pick the AdMob account in the chooser. Switching accounts replaces the default grant, so request
+every domain you still need in that same login.
+
 ---
 
 <a id="store-state"></a>

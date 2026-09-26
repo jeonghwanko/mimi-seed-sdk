@@ -82,9 +82,12 @@ describe('Google account/channel profiles', () => {
     const flow = auth.startAuth('example-client', 'example-secret', {
       profile: 'channel-a', expectedChannelId: channelA, domains: ['youtube_analytics'],
     });
+    // 발행 권한(youtube.force-ssl)은 없고, 계정 식별 스코프만 추가로 붙는다.
     expect(h.requestedScopes).toEqual([
       'https://www.googleapis.com/auth/youtube.readonly',
       'https://www.googleapis.com/auth/yt-analytics.readonly',
+      'openid',
+      'https://www.googleapis.com/auth/userinfo.email',
     ]);
     await callback(flow.url);
     await flow.wait;
@@ -185,5 +188,72 @@ describe('Google account/channel profiles', () => {
     h.channelList.mockResolvedValue({ data: { items: [{ id: channelA }, { id: channelB }] } });
     await expect(uploadYouTubeVideo(client, input)).rejects.toThrow('exactly one');
     expect(h.insert).not.toHaveBeenCalled();
+  });
+});
+
+function idToken(payload: Record<string, unknown>) {
+  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${enc({ alg: 'none' })}.${enc(payload)}.signature`;
+}
+
+describe('로그인 계정 식별 (다른 계정 로그인이 "✅ 연결됨" 뒤에 숨지 않게)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('로그인 시 id_token 의 이메일을 저장하고 프로필 목록에 노출한다', async () => {
+    h.tokenResponse.id_token = idToken({ email: 'owner@example.com' });
+    await login('channel-a', channelA);
+    expect(auth.getStoredTokens('channel-a')?.accountEmail).toBe('owner@example.com');
+    expect(auth.listGoogleProfiles()).toEqual([
+      expect.objectContaining({ profile: 'channel-a', accountEmail: 'owner@example.com' }),
+    ]);
+  });
+
+  it('id_token 이 없거나 깨졌으면 이메일 없이 로그인은 성공한다', async () => {
+    h.tokenResponse.id_token = 'not-a-jwt';
+    await login();
+    expect(auth.getStoredTokens()?.accountEmail).toBeUndefined();
+    expect(auth.emailFromIdToken(undefined)).toBeUndefined();
+  });
+
+  it('기록된 이메일이 있으면 네트워크 없이 그대로 쓴다', async () => {
+    h.tokenResponse.id_token = idToken({ email: 'owner@example.com' });
+    await login();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await auth.resolveAccountEmail()).toBe('owner@example.com');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('기록이 없는 구 토큰은 tokeninfo 로 한 번 조회해 저장한다', async () => {
+    await login();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ email: 'legacy@example.com' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await auth.resolveAccountEmail()).toBe('legacy@example.com');
+    expect(auth.getStoredTokens()?.accountEmail).toBe('legacy@example.com');
+    expect(await auth.resolveAccountEmail()).toBe('legacy@example.com');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('조회 도중 다른 계정으로 재로그인되면 옛 이메일을 새 토큰에 붙이지 않는다', async () => {
+    await login();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => {
+      h.tokenResponse = { ...h.tokenResponse, refresh_token: 'other-grant' };
+      await login();
+      return { ok: true, json: async () => ({ email: 'old@example.com' }) };
+    }));
+    await auth.resolveAccountEmail();
+    expect(auth.getStoredTokens()?.refresh_token).toBe('other-grant');
+    expect(auth.getStoredTokens()?.accountEmail).toBeUndefined();
+  });
+
+  it('조회 실패·email 미부여는 throw 하지 않고 null', async () => {
+    await login();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    expect(await auth.resolveAccountEmail()).toBeNull();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    expect(await auth.resolveAccountEmail()).toBeNull();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    expect(await auth.resolveAccountEmail()).toBeNull();
+    expect(await auth.resolveAccountEmail('missing')).toBeNull();
   });
 });
