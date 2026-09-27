@@ -34,7 +34,7 @@ describe('prompts & resources (boot smoke test)', () => {
   it('agent/guide 리소스가 풀버전 가이드를 서빙한다 (폴백 아님)', async () => {
     await withClient(async (client) => {
       const { contents } = await client.readResource({ uri: 'mimi-seed://agent/guide' });
-      const text = String(contents[0]?.text ?? '');
+      const text = String((contents[0] as { text?: string } | undefined)?.text ?? '');
       // 풀버전(docs/agent-guide.md)에만 있는 신호: 분량 + select: 배치 테이블.
       expect(text.length).toBeGreaterThan(3000);
       expect(text).toContain('select:');
@@ -45,7 +45,7 @@ describe('prompts & resources (boot smoke test)', () => {
   it('tools/catalog 리소스가 manifest 와 일치하는 도메인 인덱스를 서빙한다', async () => {
     await withClient(async (client) => {
       const { contents } = await client.readResource({ uri: 'mimi-seed://tools/catalog' });
-      const catalog = JSON.parse(String(contents[0]?.text ?? '')) as {
+      const catalog = JSON.parse(String((contents[0] as { text?: string } | undefined)?.text ?? '')) as {
         error?: string;
         total: number;
         deferredHint: string;

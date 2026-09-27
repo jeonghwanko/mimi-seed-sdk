@@ -150,7 +150,7 @@ describe('allowReplace=false — 기존 id 는 쓰지 않는다', () => {
 });
 
 describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 confirm', () => {
-  const text = (r: { content: unknown }) => (r.content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n');
+  const text = (r: unknown) => ((r as { content?: unknown }).content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n');
   const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
 
   it('기존 keystore 가 있으면 confirm 없이는 dry-run 만', async () => {

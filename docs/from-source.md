@@ -191,10 +191,12 @@ Inside the package you changed:
 npm run build && npm test
 ```
 
-The CLI additionally needs a real typecheck, because `tsup` does **not** type-check:
+`npm test` already starts with a real typecheck in both packages (tests included) — the CLI's `tsup` build does
+**not** type-check and the MCP server's build skips the test files. To run just that step while iterating:
 
 ```bash
 cd packages/cli && npm run typecheck
+cd packages/mcp-server && npm run typecheck
 ```
 
 Adding or renaming a tool? The inventory is test-enforced — see the tool-registration checklist in

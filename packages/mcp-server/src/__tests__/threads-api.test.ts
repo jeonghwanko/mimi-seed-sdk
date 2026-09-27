@@ -12,7 +12,7 @@ afterEach(() => {
 
 describe('Threads API', () => {
   it('long-lived 토큰을 공식 refresh endpoint로 갱신한다', async () => {
-    const fetchMock = vi.fn(async () => json({
+    const fetchMock = vi.fn<typeof fetch>(async () => json({
       access_token: 'THQVJ_REFRESHED_TOKEN',
       expires_in: 5_184_000,
     }));
@@ -41,7 +41,7 @@ describe('Threads API', () => {
       { id: 'published-1' },
       { permalink: 'https://www.threads.net/@example/post/1' },
     ];
-    const fetchMock = vi.fn(async () => json(responses.shift()));
+    const fetchMock = vi.fn<typeof fetch>(async () => json(responses.shift()));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(postCarousel(
@@ -55,7 +55,7 @@ describe('Threads API', () => {
 
     const calls = fetchMock.mock.calls.map(([input, init]) => ({
       url: String(input),
-      method: (init as RequestInit | undefined)?.method ?? 'GET',
+      method: (init)?.method ?? 'GET',
     }));
     const parentStatusIndex = calls.findIndex(({ url, method }) =>
       method === 'GET' && url.includes('/carousel-1?'));
@@ -75,7 +75,7 @@ describe('Threads API', () => {
       { id: 'published-1' },
       { permalink: 'https://www.threads.net/@example/post/1' },
     ];
-    const fetchMock = vi.fn(async () => json(responses.shift()));
+    const fetchMock = vi.fn<typeof fetch>(async () => json(responses.shift()));
     vi.stubGlobal('fetch', fetchMock);
 
     await postText({ accessToken: 'THQVJ_TOKEN', userId: 'stale-user-id' }, 'hello');
@@ -94,7 +94,7 @@ describe('Threads API', () => {
       { id: 'published-video-1' },
       { permalink: 'https://www.threads.net/@example/post/video-1' },
     ];
-    const fetchMock = vi.fn(async () => json(responses.shift()));
+    const fetchMock = vi.fn<typeof fetch>(async () => json(responses.shift()));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(postVideo(
@@ -108,7 +108,7 @@ describe('Threads API', () => {
     });
 
     const createCall = fetchMock.mock.calls.find(([input, init]) =>
-      (init as RequestInit | undefined)?.method === 'POST'
+      (init)?.method === 'POST'
       && new URL(String(input)).pathname === '/v1.0/me/threads');
     expect(createCall).toBeDefined();
     const body = new URLSearchParams(String((createCall?.[1] as RequestInit).body));

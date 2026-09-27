@@ -18,7 +18,7 @@ const h = await vi.hoisted(async () => {
   return { home: nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'mimi-pkg-home-')) };
 });
 vi.mock('node:os', async (original) => {
-  const actual = await original<typeof import('node:os')>();
+  const actual = await original<typeof import('node:os') & { default: typeof import('node:os') }>();
   return { ...actual, homedir: () => h.home, default: { ...actual.default, homedir: () => h.home } };
 });
 

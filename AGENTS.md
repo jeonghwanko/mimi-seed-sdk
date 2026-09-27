@@ -118,8 +118,9 @@ npm test
 The root `npm test` checks Codex plugin drift and runs both package test suites. The root `npm run build` is a
 bootstrap operation that installs and builds both packages; prefer package-scoped builds during normal edits.
 
-`packages/cli` builds with `tsup`, which does **not** type-check; its `npm test` therefore runs `npm run typecheck`
-(`tsc --noEmit`) before vitest, and you can run that step alone while iterating. To run a
+`packages/cli` builds with `tsup`, which does **not** type-check, and the `packages/mcp-server` build config
+excludes `src/__tests__`; so both packages' `npm test` run `npm run typecheck` (`tsc --noEmit`, tests included —
+mcp-server via `tsconfig.lint.json`) before lint and vitest, and you can run that step alone while iterating. To run a
 single test file: `npx vitest run src/__tests__/<file>.test.ts` from inside the package. Test names and failure
 messages are Korean and usually name the fix; [`docs/domain/testing.md`](docs/domain/testing.md) maps every guard
 to the fact it protects.

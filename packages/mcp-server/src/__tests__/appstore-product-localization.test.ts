@@ -37,7 +37,7 @@ describe('listProductLocalizations', () => {
       'https://api.appstoreconnect.apple.com/v1/subscriptions/123/subscriptionLocalizations?limit=200',
     ],
   ] as const)('%s 은 자기 리소스 경로에서 읽는다', async (productType, expectedUrl) => {
-    const fetchMock = vi.fn(async () => jsonResponse({
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({
       data: [{ id: 'loc-1', attributes: { locale: 'ko', name: '두루마리 10개', description: '설명' } }],
     }));
     vi.stubGlobal('fetch', fetchMock);

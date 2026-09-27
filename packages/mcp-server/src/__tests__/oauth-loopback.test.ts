@@ -14,6 +14,7 @@ interface FakeServer {
   handlers: Record<string, (err: NodeJS.ErrnoException) => void>;
   listenArgs: unknown[];
   closed: boolean;
+  close(): void;
 }
 
 const h = vi.hoisted(() => ({ servers: [] as FakeServer[] }));

@@ -310,7 +310,7 @@ describe('fetchWithTimeout 시간 예산', () => {
   });
 
   it('재시도가 없으면(maxAttempts=1) 예산도 늘어나지 않는다', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response('ok')));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response('ok')));
     vi.stubGlobal('fetch', fetchMock);
 
     await settle(fetchWithTimeout('https://example.test/a', {}, { maxAttempts: 1 }));
