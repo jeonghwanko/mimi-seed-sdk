@@ -26,7 +26,7 @@ vi.mock('node:fs', async (original) => {
   return { ...actual, renameSync, default: { ...actual, renameSync } };
 });
 
-import { RENAME_RETRY_DELAYS_MS, renameWithRetry, writeFileAtomic } from '../lib/atomic-write.js';
+import { RENAME_RETRY_CODES, RENAME_RETRY_DELAYS_MS, renameWithRetry, writeFileAtomic } from '../lib/atomic-write.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-rename-retry-'));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -36,9 +36,24 @@ afterEach(() => { h.failures = 0; });
 const leftovers = () => fs.readdirSync(tmp).filter((f) => f.endsWith('.tmp'));
 
 describe('renameWithRetry', () => {
-  it('일정은 ~1초 이내이고 CLI 사본과 같은 값이다 (10/20/40/80/160/320ms)', () => {
-    expect([...RENAME_RETRY_DELAYS_MS]).toEqual([10, 20, 40, 80, 160, 320]);
-    expect(RENAME_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(1_000);
+  it('일정은 CLI 사본과 같은 값이고 합계 1초다', () => {
+    expect([...RENAME_RETRY_DELAYS_MS]).toEqual([10, 20, 40, 80, 160, 320, 370]);
+    expect(RENAME_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0)).toBe(1_000);
+    expect([...RENAME_RETRY_CODES].sort()).toEqual(['EACCES', 'EBUSY', 'EPERM']);
+  });
+
+  it('write 옵션으로 주입한 rename/sleep 을 writeFileAtomic 이 쓴다', () => {
+    const target = path.join(tmp, 'injected.json');
+    let fails = 2;
+    const rename = vi.fn((from: string, to: string) => {
+      if (fails-- > 0) throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+      fs.renameSync(from, to);
+    });
+    const sleep = vi.fn();
+    writeFileAtomic(target, 'x', { rename, sleep });
+    expect(rename).toHaveBeenCalledTimes(3);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([10, 20]);
+    expect(fs.readFileSync(target, 'utf8')).toBe('x');
   });
 
   it.each(['EPERM', 'EBUSY', 'EACCES'])('%s 는 재시도해 통과하고, 대기 간격이 일정대로다', (code) => {
