@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getAuthHeaders } from './auth.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 const BASE = 'https://api.appstoreconnect.apple.com/v1';
 
@@ -65,7 +66,7 @@ export interface PreviewSetRow {
 /** 로케일의 미리보기 세트 + 각 동영상 상태. 업로드 후 인코딩 확인도 여기서 한다. */
 export async function listPreviewSets(localizationId: string): Promise<PreviewSetRow[]> {
   const data = await req(
-    `/appStoreVersionLocalizations/${localizationId}/appPreviewSets` +
+    `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/appPreviewSets` +
       `?include=appPreviews` +
       `&fields[appPreviewSets]=previewType,appPreviews` +
       `&fields[appPreviews]=fileName,fileSize,assetDeliveryState,previewFrameTimeCode,videoUrl`,
@@ -210,7 +211,7 @@ export async function uploadPreview(args: {
       .on('error', reject);
   });
 
-  const committed: any = await req(`/appPreviews/${previewId}`, {
+  const committed: any = await req(`/appPreviews/${encodePathSegment(previewId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -236,11 +237,11 @@ export async function uploadPreview(args: {
 }
 
 export async function deletePreview(previewId: string): Promise<{ ok: true; id: string }> {
-  await req(`/appPreviews/${previewId}`, { method: 'DELETE' });
+  await req(`/appPreviews/${encodePathSegment(previewId)}`, { method: 'DELETE' });
   return { ok: true, id: previewId };
 }
 
 export async function deletePreviewSet(setId: string): Promise<{ ok: true; id: string }> {
-  await req(`/appPreviewSets/${setId}`, { method: 'DELETE' });
+  await req(`/appPreviewSets/${encodePathSegment(setId)}`, { method: 'DELETE' });
   return { ok: true, id: setId };
 }

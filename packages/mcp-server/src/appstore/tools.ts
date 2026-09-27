@@ -2,6 +2,7 @@ import { getAuthHeaders, getAppStoreCredentials, generateToken } from './auth.js
 import { friendlyAppStoreError } from './errors.js';
 import type { AppStoreProductType } from './http.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 /**
  * App Store Connect API v1 래퍼
@@ -172,7 +173,7 @@ export async function listApps() {
 }
 
 export async function getApp(appId: string) {
-  const data = await apiGet(`/apps/${appId}`, {
+  const data = await apiGet(`/apps/${encodePathSegment(appId)}`, {
     'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
     'include': 'appStoreVersions',
   });
@@ -182,7 +183,7 @@ export async function getApp(appId: string) {
 // ─── 버전 ───
 
 export async function listVersions(appId: string) {
-  const data = await apiGet(`/apps/${appId}/appStoreVersions`, {
+  const data = await apiGet(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
     'fields[appStoreVersions]': 'versionString,appStoreState,releaseType,createdDate',
     'limit': '10',
   });
@@ -257,7 +258,7 @@ export async function createVersion(input: CreateVersionInput) {
  * 편집 가능한 상태(PREPARE_FOR_SUBMISSION / DEVELOPER_REJECTED / REJECTED 등)에서만 통한다.
  */
 export async function updateVersionString(versionId: string, versionString: string) {
-  const patched = await apiPatch(`/appStoreVersions/${versionId}`, {
+  const patched = await apiPatch(`/appStoreVersions/${encodePathSegment(versionId)}`, {
     data: {
       type: 'appStoreVersions',
       id: versionId,
@@ -275,7 +276,7 @@ export async function updateVersionString(versionId: string, versionString: stri
 
 export async function attachBuildToVersion(versionId: string, buildId: string) {
   // /relationships/build 엔드포인트는 204 No Content 반환
-  await apiPatch(`/appStoreVersions/${versionId}/relationships/build`, {
+  await apiPatch(`/appStoreVersions/${encodePathSegment(versionId)}/relationships/build`, {
     data: { type: 'builds', id: buildId },
   });
   return { versionId, buildId, ok: true };
@@ -338,7 +339,7 @@ export async function attachLatestValidBuild(
 // ─── 로컬라이제이션 (메타데이터) ───
 
 export async function getVersionLocalizations(versionId: string) {
-  const data = await apiGet(`/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
+  const data = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionLocalizations`, {
     'fields[appStoreVersionLocalizations]': 'locale,description,keywords,promotionalText,whatsNew',
   });
   return (data.data ?? []).map((l: any) => ({
@@ -373,7 +374,7 @@ export async function updateVersionLocalization(
       attributes: fields,
     },
   };
-  const res = await apiPatch(`/appStoreVersionLocalizations/${localizationId}`, body);
+  const res = await apiPatch(`/appStoreVersionLocalizations/${encodePathSegment(localizationId)}`, body);
   return res.data ?? res;
 }
 
@@ -415,7 +416,7 @@ export async function updateReviewNotes(
   // 1. 기존 reviewDetail 조회 — 404면 신규 생성, 그 외 에러는 throw
   let reviewDetailId: string | null = null;
   try {
-    const existing = await apiGet(`/appStoreVersions/${versionId}/appStoreReviewDetail`, {
+    const existing = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreReviewDetail`, {
       'fields[appStoreReviewDetails]': 'notes,contactFirstName,contactLastName,contactPhone,contactEmail',
     });
     reviewDetailId = existing?.data?.id ?? null;
@@ -424,7 +425,7 @@ export async function updateReviewNotes(
   }
 
   if (reviewDetailId) {
-    const updated = await apiPatch(`/appStoreReviewDetails/${reviewDetailId}`, {
+    const updated = await apiPatch(`/appStoreReviewDetails/${encodePathSegment(reviewDetailId)}`, {
       data: { type: 'appStoreReviewDetails', id: reviewDetailId, attributes: { notes } },
     });
     return {
@@ -456,7 +457,7 @@ export async function getReviewNotes(
   versionId: string,
 ): Promise<{ reviewDetailId: string | null; notes: string | null; contactEmail: string | null }> {
   try {
-    const data = await apiGet(`/appStoreVersions/${versionId}/appStoreReviewDetail`, {
+    const data = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreReviewDetail`, {
       'fields[appStoreReviewDetails]': 'notes,contactEmail,demoAccountName,demoAccountRequired',
     });
     return {
@@ -492,7 +493,7 @@ export async function listBuilds(appId: string) {
 // ─── TestFlight 베타 그룹 ───
 
 export async function listBetaGroups(appId: string) {
-  const data = await apiGet(`/apps/${appId}/betaGroups`, {
+  const data = await apiGet(`/apps/${encodePathSegment(appId)}/betaGroups`, {
     'fields[betaGroups]': 'name,isInternalGroup,publicLink,publicLinkEnabled',
   });
   return (data.data ?? []).map((g: any) => ({
@@ -511,7 +512,7 @@ export async function listBetaGroups(appId: string) {
 const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
 
 export async function getAppInfo(appId: string) {
-  const data = await apiGet(`/apps/${appId}/appInfos`, {
+  const data = await apiGet(`/apps/${encodePathSegment(appId)}/appInfos`, {
     'fields[appInfos]': 'state,appStoreAgeRating,brazilAgeRating',
   });
   return (data.data ?? []).map((i: any) => ({
@@ -537,7 +538,7 @@ export interface AppInfoLocalizationFields {
 }
 
 async function findEditableAppInfoId(appId: string): Promise<{ appInfoId: string; state: string }> {
-  const data = await apiGet(`/apps/${appId}/appInfos`, {
+  const data = await apiGet(`/apps/${encodePathSegment(appId)}/appInfos`, {
     'fields[appInfos]': 'state',
     'limit': '10',
   });
@@ -553,7 +554,7 @@ async function findEditableAppInfoId(appId: string): Promise<{ appInfoId: string
 
 export async function listAppInfoLocalizations(appId: string, locale?: string) {
   const { appInfoId, state } = await findEditableAppInfoId(appId);
-  const data = await apiGet(`/appInfos/${appInfoId}/appInfoLocalizations`, {
+  const data = await apiGet(`/appInfos/${encodePathSegment(appInfoId)}/appInfoLocalizations`, {
     'fields[appInfoLocalizations]': 'locale,name,subtitle,privacyPolicyUrl,privacyPolicyText',
     'limit': '200',
   });
@@ -576,7 +577,7 @@ export async function updateAppInfoLocalization(localizationId: string, fields: 
   if (Object.keys(attributes).length === 0) {
     throw new Error('수정할 필드가 없어 (name / subtitle / privacyPolicyUrl / privacyPolicyText 중 하나 이상).');
   }
-  return apiPatch(`/appInfoLocalizations/${localizationId}`, {
+  return apiPatch(`/appInfoLocalizations/${encodePathSegment(localizationId)}`, {
     data: {
       type: 'appInfoLocalizations',
       id: localizationId,
@@ -641,7 +642,7 @@ export async function listCustomerReviews(
   if (opts.territory) params['filter[territory]'] = opts.territory;
   if (opts.rating != null) params['filter[rating]'] = String(opts.rating);
 
-  const data = await apiGet(`/apps/${appId}/customerReviews`, params);
+  const data = await apiGet(`/apps/${encodePathSegment(appId)}/customerReviews`, params);
 
   // include로 가져온 답변 매핑
   const responses = new Map<string, any>();
@@ -691,7 +692,7 @@ export async function createReviewResponse(reviewId: string, responseBody: strin
 // 참고: https://developer.apple.com/documentation/appstoreconnectapi/submit-an-app-for-review
 
 async function getVersionAppAndPlatform(versionId: string): Promise<{ appId: string; platform: string }> {
-  const data = await apiGet(`/appStoreVersions/${versionId}`, {
+  const data = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}`, {
     'fields[appStoreVersions]': 'platform,app',
     'include': 'app',
   });
@@ -766,7 +767,7 @@ async function getReviewSubmissionItems(submissionId: string): Promise<{
   items: ReviewSubmissionItem[];
   included: Array<{ type: string; id: string; attributes?: Record<string, string> }>;
 }> {
-  const data = await apiGet(`/reviewSubmissions/${submissionId}/items`, {
+  const data = await apiGet(`/reviewSubmissions/${encodePathSegment(submissionId)}/items`, {
     include: 'appStoreVersion,inAppPurchaseVersion,subscriptionVersion,subscriptionGroupVersion',
     limit: '50',
   });
@@ -800,7 +801,7 @@ export async function buildSubmitForReviewPreview(versionId: string): Promise<{
   const { appId, platform } = await getVersionAppAndPlatform(versionId);
 
   // 버전 메타: versionString + state
-  const versionData = await apiGet(`/appStoreVersions/${versionId}`, {
+  const versionData = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}`, {
     'fields[appStoreVersions]': 'versionString,appStoreState',
   }).catch(() => null);
   const versionString: string | undefined = versionData?.data?.attributes?.versionString;
@@ -808,7 +809,7 @@ export async function buildSubmitForReviewPreview(versionId: string): Promise<{
 
   // attached build
   let attachedBuild: { id: string; buildNumber?: string; uploadedDate?: string; processingState?: string } | undefined;
-  const build = await apiGet(`/appStoreVersions/${versionId}/build`, {
+  const build = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/build`, {
     'fields[builds]': 'version,uploadedDate,processingState',
   }).catch(() => null);
   if (build?.data?.id) {
@@ -936,7 +937,7 @@ export async function submitVersionForReview(versionId: string) {
   // 3. PATCH submitted=true → state: CREATED → WAITING_FOR_REVIEW
   const submitted = existing?.versionAttached && existing.state === 'WAITING_FOR_REVIEW'
     ? { data: { attributes: { state: existing.state } } }
-    : await apiPatch(`/reviewSubmissions/${submissionId}`, {
+    : await apiPatch(`/reviewSubmissions/${encodePathSegment(submissionId)}`, {
       data: {
         type: 'reviewSubmissions',
         id: submissionId,
@@ -1203,7 +1204,7 @@ export async function addVersionToReviewSubmission(args: {
   });
 
   // 제출 전에 몇 개가 들어있는지 보여준다 — 첫 심사에서 "상품이 빠졌는지"를 눈으로 확인해야 한다.
-  const items = await apiGet(`/reviewSubmissions/${submissionId}/items`, { limit: '50' }).catch(
+  const items = await apiGet(`/reviewSubmissions/${encodePathSegment(submissionId)}/items`, { limit: '50' }).catch(
     () => null,
   );
   return {
@@ -1233,7 +1234,7 @@ async function releaseVersionFromStaleSubmissions(
   const stale = (data?.data ?? []) as Array<{ id: string }>;
   let released = 0;
   for (const sub of stale) {
-    const items = await apiGet(`/reviewSubmissions/${sub.id}/items`, { limit: '50' }).catch(() => null);
+    const items = await apiGet(`/reviewSubmissions/${encodePathSegment(sub.id)}/items`, { limit: '50' }).catch(() => null);
     const rows = (items?.data ?? []) as Array<{
       id: string;
       relationships?: { appStoreVersion?: { data?: { id?: string } } };
@@ -1287,7 +1288,7 @@ export async function cancelVersionReview(versionId: string): Promise<{
   // "큐 진입 후에는 웹에서만 취소 가능" 이라는 잘못된 통설이 굳어 있었다.
   // 실제로는 WAITING_FOR_REVIEW 에서도 canceled:true 가 통한다 (2026-07-25 실측):
   //   200 → state: CANCELING → (수십 초) → COMPLETE, 항목은 REMOVED, 버전은 편집 가능 복귀.
-  const patched = await apiPatch(`/reviewSubmissions/${submissionId}`, {
+  const patched = await apiPatch(`/reviewSubmissions/${encodePathSegment(submissionId)}`, {
     data: {
       type: 'reviewSubmissions',
       id: submissionId,
@@ -1433,7 +1434,7 @@ export async function createInAppPurchase(
   const iapId: string = created?.data?.id;
   if (!iapId) throw new Error(`IAP 생성 응답에 id 없음: ${JSON.stringify(created)}`);
 
-  const consoleUrl = `https://appstoreconnect.apple.com/apps/${input.appId}/distribution/iaps/${iapId}`;
+  const consoleUrl = `https://appstoreconnect.apple.com/apps/${encodePathSegment(input.appId)}/distribution/iaps/${encodePathSegment(iapId)}`;
   const summary: CreatedIapSummary = {
     iapId,
     productId: input.productId,
@@ -1466,7 +1467,7 @@ export async function createInAppPurchase(
   // 3) priceSchedule (territory pricePoint 매칭 후 생성)
   try {
     const matched = await findClosestPricePoint(
-      `/inAppPurchases/${iapId}/pricePoints`,
+      `/inAppPurchases/${encodePathSegment(iapId)}/pricePoints`,
       baseTerritory,
       input.priceUsd,
     );
@@ -1546,7 +1547,7 @@ async function findOrCreateSubscriptionGroup(
   referenceName: string,
 ): Promise<string> {
   // 기존 그룹 검색
-  const existing = await apiGet(`/apps/${appId}/subscriptionGroups`, {
+  const existing = await apiGet(`/apps/${encodePathSegment(appId)}/subscriptionGroups`, {
     'fields[subscriptionGroups]': 'referenceName',
     'limit': '200',
   });
@@ -1645,7 +1646,7 @@ export async function createAutoRenewableSubscription(
     throw new Error(`subscription 생성 응답에 id 없음: ${JSON.stringify(created)}`);
   }
 
-  const consoleUrl = `https://appstoreconnect.apple.com/apps/${input.appId}/distribution/subscriptions/${subscriptionId}`;
+  const consoleUrl = `https://appstoreconnect.apple.com/apps/${encodePathSegment(input.appId)}/distribution/subscriptions/${encodePathSegment(subscriptionId)}`;
   const summary: CreatedSubscriptionSummary = {
     subscriptionId,
     groupId,
@@ -1679,7 +1680,7 @@ export async function createAutoRenewableSubscription(
   // 4) price (subscriptionPrices — IAP의 priceSchedule보다 단순)
   try {
     const matched = await findClosestPricePoint(
-      `/subscriptions/${subscriptionId}/pricePoints`,
+      `/subscriptions/${encodePathSegment(subscriptionId)}/pricePoints`,
       baseTerritory,
       input.priceUsd,
     );

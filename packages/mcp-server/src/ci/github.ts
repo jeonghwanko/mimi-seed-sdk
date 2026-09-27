@@ -1,5 +1,6 @@
 import type { CiConfig, NormalizedBuild } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 function base(cfg: CiConfig) {
   // GitHub Enterprise: host = https://github.example.com → API base = https://github.example.com/api/v3
@@ -28,7 +29,7 @@ async function ghFetch(cfg: CiConfig, endpoint: string, options?: RequestInit) {
 }
 
 export async function listWorkflows(cfg: CiConfig) {
-  const data = await ghFetch(cfg, `/repos/${cfg.owner}/${cfg.repo}/actions/workflows`);
+  const data = await ghFetch(cfg, `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/workflows`);
   return (data.workflows as any[]).map((w: any) => ({
     id: w.id,
     name: w.name,
@@ -46,7 +47,7 @@ export async function triggerBuild(
 ): Promise<NormalizedBuild | null> {
   const wfId = /^\d+$/.test(workflow) ? Number(workflow) : workflow;
   const startTime = new Date();
-  await ghFetch(cfg, `/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/dispatches`, {
+  await ghFetch(cfg, `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/workflows/${encodePathSegment(wfId)}/dispatches`, {
     method: 'POST',
     body: JSON.stringify({ ref, inputs }),
   });
@@ -57,7 +58,7 @@ export async function triggerBuild(
 }
 
 export async function getBuildStatus(cfg: CiConfig, runId: string | number): Promise<NormalizedBuild> {
-  const data = await ghFetch(cfg, `/repos/${cfg.owner}/${cfg.repo}/actions/runs/${runId}`);
+  const data = await ghFetch(cfg, `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/runs/${encodePathSegment(runId)}`);
   return normalize(data);
 }
 
@@ -69,16 +70,16 @@ export async function listRecentBuilds(
   let endpoint: string;
   if (workflow) {
     const wfId = /^\d+$/.test(workflow) ? Number(workflow) : workflow;
-    endpoint = `/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/runs?per_page=${limit}`;
+    endpoint = `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/workflows/${encodePathSegment(wfId)}/runs?per_page=${limit}`;
   } else {
-    endpoint = `/repos/${cfg.owner}/${cfg.repo}/actions/runs?per_page=${limit}`;
+    endpoint = `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/runs?per_page=${limit}`;
   }
   const data = await ghFetch(cfg, endpoint);
   return (data.workflow_runs as any[]).map(normalize);
 }
 
 export async function cancelBuild(cfg: CiConfig, runId: string | number): Promise<void> {
-  await ghFetch(cfg, `/repos/${cfg.owner}/${cfg.repo}/actions/runs/${runId}/cancel`, {
+  await ghFetch(cfg, `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/runs/${encodePathSegment(runId)}/cancel`, {
     method: 'POST',
   });
 }

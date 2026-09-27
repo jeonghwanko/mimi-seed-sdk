@@ -7,6 +7,7 @@
 // Play 쪽 대응물(데이터 안전 CSV)은 playstore/tools.ts 에 있다 — 자격증명 계통이 달라서 파일을 나눴다.
 
 import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 /** Apple 이 쓰는 빈도 척도. 필드마다 같은 enum 을 쓴다. */
 export type Frequency = 'NONE' | 'INFREQUENT_OR_MILD' | 'FREQUENT_OR_INTENSE' | 'INFREQUENT' | 'FREQUENT';
@@ -39,7 +40,7 @@ async function send<T>(
 async function resolveAppInfoId(appId: string): Promise<string> {
   const data = await get<{ data?: Array<{ id: string; attributes?: Record<string, string> }> }>(
     V1_BASE,
-    `/apps/${appId}/appInfos`,
+    `/apps/${encodePathSegment(appId)}/appInfos`,
     { 'fields[appInfos]': 'state' },
   );
   const infos = data.data ?? [];
@@ -62,7 +63,7 @@ export async function getAgeRating(appId: string): Promise<{
   try {
     const data = await get<{ data?: { id: string; attributes?: AgeRatingDeclaration } | null }>(
       V1_BASE,
-      `/appInfos/${appInfoId}/ageRatingDeclaration`,
+      `/appInfos/${encodePathSegment(appInfoId)}/ageRatingDeclaration`,
     );
     return {
       appInfoId,
@@ -101,7 +102,7 @@ export async function updateAgeRating(args: {
     );
   }
 
-  await send(V1_BASE, 'PATCH', `/ageRatingDeclarations/${current.declarationId}`, {
+  await send(V1_BASE, 'PATCH', `/ageRatingDeclarations/${encodePathSegment(current.declarationId)}`, {
     data: { type: 'ageRatingDeclarations', id: current.declarationId, attributes },
   });
 
@@ -142,7 +143,7 @@ export async function declareEncryption(args: {
   if (!declarationId) throw new Error(`수출 규정 선언 생성 응답에 id 가 없다: ${JSON.stringify(created)}`);
 
   if (buildIds.length > 0) {
-    await send(V1_BASE, 'POST', `/appEncryptionDeclarations/${declarationId}/relationships/builds`, {
+    await send(V1_BASE, 'POST', `/appEncryptionDeclarations/${encodePathSegment(declarationId)}/relationships/builds`, {
       data: buildIds.map((id) => ({ type: 'builds', id })),
     });
   }
@@ -180,7 +181,7 @@ export async function getAvailability(args: {
   const { appId, includeTerritories = false, limit = 200 } = args;
   const av = await get<{ data?: { id: string; attributes?: { availableInNewTerritories?: boolean } } | null }>(
     V1_BASE,
-    `/apps/${appId}/appAvailabilityV2`,
+    `/apps/${encodePathSegment(appId)}/appAvailabilityV2`,
   );
   const availabilityId = av.data?.id;
   if (!availabilityId) {
@@ -189,7 +190,7 @@ export async function getAvailability(args: {
 
   const rows = await get<{
     data?: Array<{ id: string; attributes?: { available?: boolean; releaseDate?: string; preOrderEnabled?: boolean } }>;
-  }>(V2_BASE, `/appAvailabilities/${availabilityId}/territoryAvailabilities`, {
+  }>(V2_BASE, `/appAvailabilities/${encodePathSegment(availabilityId)}/territoryAvailabilities`, {
     limit: String(Math.min(limit, 200)),
   });
 
@@ -227,7 +228,7 @@ export async function setTerritoryAvailability(args: {
       continue;
     }
     try {
-      await send(V1_BASE, 'PATCH', `/territoryAvailabilities/${t.id}`, {
+      await send(V1_BASE, 'PATCH', `/territoryAvailabilities/${encodePathSegment(t.id)}`, {
         data: { type: 'territoryAvailabilities', id: t.id, attributes },
       });
       results.push({ id: t.id, ok: true });

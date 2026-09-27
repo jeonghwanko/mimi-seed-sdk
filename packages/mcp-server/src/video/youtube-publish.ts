@@ -5,6 +5,7 @@ import { google, type youtube_v3 } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { friendlyGoogleError } from '../lib/google-errors.js';
 import { validateVideo } from './render.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 export const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 
@@ -99,8 +100,8 @@ function safeStatus(video: youtube_v3.Schema$Video) {
     processingProgress: video.processingDetails?.processingProgress ?? null,
     madeForKids: video.status?.madeForKids ?? null,
     containsSyntheticMedia: video.status?.containsSyntheticMedia ?? null,
-    watchUrl: video.id ? `https://youtu.be/${video.id}` : null,
-    studioUrl: video.id ? `https://studio.youtube.com/video/${video.id}/edit` : null,
+    watchUrl: video.id ? `https://youtu.be/${encodePathSegment(video.id)}` : null,
+    studioUrl: video.id ? `https://studio.youtube.com/video/${encodePathSegment(video.id)}/edit` : null,
   };
 }
 

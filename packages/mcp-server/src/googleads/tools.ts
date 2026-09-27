@@ -2,6 +2,7 @@ import type { OAuth2Client } from 'google-auth-library';
 import type { GoogleAdsConfig } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { googleAdsError } from './errors.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 // Google Ads API는 ~13개월 주기로 sunset (항상 최신 3개 major만 유지).
 // v24 = 2026-06 기준 현행 major. 새 major 출시 시 갱신 필요.
@@ -66,7 +67,7 @@ async function search(
   query: string,
 ): Promise<any[]> {
   const accessToken = await getAccessToken(auth);
-  const url = `${BASE}/customers/${cfg.customerId}/googleAds:search`;
+  const url = `${BASE}/customers/${encodePathSegment(cfg.customerId)}/googleAds:search`;
 
   const all: any[] = [];
   let pageToken: string | undefined;

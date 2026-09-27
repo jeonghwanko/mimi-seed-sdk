@@ -1,5 +1,6 @@
 import type { CiConfig, NormalizedBuild } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 function base(cfg: CiConfig) {
   return `${cfg.host ?? 'https://gitlab.com'}/api/v4`;
@@ -72,7 +73,7 @@ export async function triggerBuild(
 }
 
 export async function getBuildStatus(cfg: CiConfig, pipelineId: string | number): Promise<NormalizedBuild> {
-  const data = await glFetch(cfg, `/projects/${projectId(cfg)}/pipelines/${pipelineId}`);
+  const data = await glFetch(cfg, `/projects/${projectId(cfg)}/pipelines/${encodePathSegment(pipelineId)}`);
   return normalize(data);
 }
 
@@ -88,7 +89,7 @@ export async function listRecentBuilds(
 }
 
 export async function cancelBuild(cfg: CiConfig, pipelineId: string | number): Promise<void> {
-  await glFetch(cfg, `/projects/${projectId(cfg)}/pipelines/${pipelineId}/cancel`, {
+  await glFetch(cfg, `/projects/${projectId(cfg)}/pipelines/${encodePathSegment(pipelineId)}/cancel`, {
     method: 'POST',
   });
 }

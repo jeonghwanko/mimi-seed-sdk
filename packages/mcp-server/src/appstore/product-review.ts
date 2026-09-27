@@ -6,6 +6,7 @@ import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow } from './http.js';
 export type { AppStoreProductType } from './http.js';
 import type { AppStoreProductType } from './http.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 interface UploadOperation {
   method: string;
@@ -60,7 +61,7 @@ export async function updateProductReviewNote(args: {
   const authHeaders = await authHeadersOrThrow();
   const result = await apiRequest<{
     data?: { attributes?: { state?: string } };
-  }>(resource.base, `${resource.path}/${internalId}`, authHeaders, {
+  }>(resource.base, `${resource.path}/${encodePathSegment(internalId)}`, authHeaders, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -125,7 +126,7 @@ async function findExistingReviewScreenshotId(
   try {
     const res = await apiRequest<{ data?: { id?: string } | null }>(
       product.base,
-      `${product.path}/${internalId}/appStoreReviewScreenshot`,
+      `${product.path}/${encodePathSegment(internalId)}/appStoreReviewScreenshot`,
       authHeaders,
       { method: 'GET' },
     );
@@ -182,7 +183,7 @@ export async function uploadProductReviewScreenshot(args: {
   if (replace) {
     const existing = await findExistingReviewScreenshotId(internalId, productType, authHeaders);
     if (existing) {
-      await apiRequest(V1_BASE, `${resource.path}/${existing}`, authHeaders, { method: 'DELETE' });
+      await apiRequest(V1_BASE, `${resource.path}/${encodePathSegment(existing)}`, authHeaders, { method: 'DELETE' });
       replacedId = existing;
     }
   }
@@ -206,7 +207,7 @@ export async function uploadProductReviewScreenshot(args: {
   const screenshotId = reserved.data.id;
   const operations = reserved.data.attributes?.uploadOperations ?? [];
   if (operations.length === 0) {
-    await apiRequest(V1_BASE, `${resource.path}/${screenshotId}`, authHeaders, {
+    await apiRequest(V1_BASE, `${resource.path}/${encodePathSegment(screenshotId)}`, authHeaders, {
       method: 'DELETE',
     }).catch(() => undefined);
     throw new Error('uploadOperations가 비어있음 — Apple API 응답 형식 확인 필요.');
@@ -214,7 +215,7 @@ export async function uploadProductReviewScreenshot(args: {
 
   try {
     await uploadChunks(buffer, operations);
-    await apiRequest(V1_BASE, `${resource.path}/${screenshotId}`, authHeaders, {
+    await apiRequest(V1_BASE, `${resource.path}/${encodePathSegment(screenshotId)}`, authHeaders, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -227,7 +228,7 @@ export async function uploadProductReviewScreenshot(args: {
     });
   } catch (error) {
     // 완료되지 않은 reservation이 남지 않도록 best-effort 정리.
-    await apiRequest(V1_BASE, `${resource.path}/${screenshotId}`, authHeaders, {
+    await apiRequest(V1_BASE, `${resource.path}/${encodePathSegment(screenshotId)}`, authHeaders, {
       method: 'DELETE',
     }).catch(() => undefined);
     throw error;
@@ -238,7 +239,7 @@ export async function uploadProductReviewScreenshot(args: {
   try {
     const confirmed = await apiRequest<ReviewScreenshotResponse>(
       V1_BASE,
-      `${resource.path}/${screenshotId}`,
+      `${resource.path}/${encodePathSegment(screenshotId)}`,
       authHeaders,
       { method: 'GET' },
     );

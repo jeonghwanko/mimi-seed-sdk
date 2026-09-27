@@ -1,6 +1,7 @@
 import type { FacebookConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 const BASE = 'https://graph.facebook.com/v21.0';
 
@@ -56,7 +57,7 @@ async function fbGet(pageAccessToken: string, endpoint: string, params: Record<s
 }
 
 export async function getPage(cfg: FacebookConfig): Promise<FacebookPage> {
-  const data = await fbGet(cfg.pageAccessToken, `/${cfg.pageId}`, {
+  const data = await fbGet(cfg.pageAccessToken, `/${encodePathSegment(cfg.pageId)}`, {
     fields: 'id,name,category,followers_count,fan_count',
   });
   return data as unknown as FacebookPage;
@@ -64,7 +65,7 @@ export async function getPage(cfg: FacebookConfig): Promise<FacebookPage> {
 
 // Step 1: upload photo as unpublished, returns photo ID
 async function uploadUnpublishedPhoto(cfg: FacebookConfig, imageUrl: string): Promise<string> {
-  const result = await fbPost(cfg.pageAccessToken, `/${cfg.pageId}/photos`, {
+  const result = await fbPost(cfg.pageAccessToken, `/${encodePathSegment(cfg.pageId)}/photos`, {
     url: imageUrl,
     published: 'false',
   });
@@ -72,7 +73,7 @@ async function uploadUnpublishedPhoto(cfg: FacebookConfig, imageUrl: string): Pr
 }
 
 export async function postPhoto(cfg: FacebookConfig, imageUrl: string, caption: string): Promise<PostResult> {
-  const result = await fbPost(cfg.pageAccessToken, `/${cfg.pageId}/photos`, {
+  const result = await fbPost(cfg.pageAccessToken, `/${encodePathSegment(cfg.pageId)}/photos`, {
     url: imageUrl,
     message: caption,
     published: 'true',
@@ -80,7 +81,7 @@ export async function postPhoto(cfg: FacebookConfig, imageUrl: string, caption: 
   const postId = result.post_id as string | undefined ?? result.id as string;
   let permalink: string | undefined;
   try {
-    const info = await fbGet(cfg.pageAccessToken, `/${postId}`, { fields: 'permalink_url' });
+    const info = await fbGet(cfg.pageAccessToken, `/${encodePathSegment(postId)}`, { fields: 'permalink_url' });
     permalink = info.permalink_url as string | undefined;
   } catch { /* best-effort */ }
   return { id: postId, permalink };
@@ -104,7 +105,7 @@ export async function postMultiPhoto(
 
   // Step 2: create feed post with all photos attached
   const attachedMedia = photoIds.map(id => JSON.stringify({ media_fbid: id }));
-  const result = await fbPost(cfg.pageAccessToken, `/${cfg.pageId}/feed`, {
+  const result = await fbPost(cfg.pageAccessToken, `/${encodePathSegment(cfg.pageId)}/feed`, {
     message: caption,
     attached_media: `[${attachedMedia.join(',')}]`,
   });
@@ -112,7 +113,7 @@ export async function postMultiPhoto(
 
   let permalink: string | undefined;
   try {
-    const info = await fbGet(cfg.pageAccessToken, `/${postId}`, { fields: 'permalink_url' });
+    const info = await fbGet(cfg.pageAccessToken, `/${encodePathSegment(postId)}`, { fields: 'permalink_url' });
     permalink = info.permalink_url as string | undefined;
   } catch { /* best-effort */ }
 

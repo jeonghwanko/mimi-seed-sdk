@@ -1,6 +1,7 @@
 import type { InstagramConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 // 두 가지 Meta API:
 //   IGAA... = Instagram API with Instagram Login (2024 신규) — graph.instagram.com
@@ -68,7 +69,7 @@ export async function getAccount(cfg: InstagramConfig): Promise<InstagramAccount
   const fields = cfg.accessToken.startsWith('IGAA')
     ? 'id,username,account_type,followers_count,media_count'
     : 'id,username,name,profile_picture_url,account_type,followers_count,media_count';
-  return igFetch<InstagramAccount>(cfg.accessToken, `/${cfg.userId}`, {
+  return igFetch<InstagramAccount>(cfg.accessToken, `/${encodePathSegment(cfg.userId)}`, {
     fields,
     access_token: cfg.accessToken,
   });
@@ -117,7 +118,7 @@ async function waitForContainer(cfg: InstagramConfig, containerId: string): Prom
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const { status_code, status } = await igFetch<{ status_code?: string; status?: string }>(
       cfg.accessToken,
-      `/${containerId}`,
+      `/${encodePathSegment(containerId)}`,
       { fields: 'status_code,status', access_token: cfg.accessToken },
     );
     const current = status_code ?? status;
@@ -134,7 +135,7 @@ async function fetchPermalink(cfg: InstagramConfig, mediaId: string): Promise<st
   try {
     const meta = await igFetch<{ permalink: string }>(
       cfg.accessToken,
-      `/${mediaId}`,
+      `/${encodePathSegment(mediaId)}`,
       { fields: 'permalink', access_token: cfg.accessToken },
     );
     return meta.permalink;
@@ -151,7 +152,7 @@ export async function postImage(
   // Step 1: image container 생성
   const container = await igFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/media`,
+    `/${encodePathSegment(cfg.userId)}/media`,
     { image_url: imageUrl, caption, access_token: cfg.accessToken },
     'POST',
   );
@@ -159,7 +160,7 @@ export async function postImage(
   // Step 2: publish
   const published = await igFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/media_publish`,
+    `/${encodePathSegment(cfg.userId)}/media_publish`,
     { creation_id: container.id, access_token: cfg.accessToken },
     'POST',
   );
@@ -184,7 +185,7 @@ export async function postCarousel(
   for (const url of imageUrls) {
     const child = await igFetch<{ id: string }>(
       cfg.accessToken,
-      `/${cfg.userId}/media`,
+      `/${encodePathSegment(cfg.userId)}/media`,
       { image_url: url, is_carousel_item: 'true', access_token: cfg.accessToken },
       'POST',
     );
@@ -196,7 +197,7 @@ export async function postCarousel(
   // Step 2: carousel container 생성
   const carousel = await igFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/media`,
+    `/${encodePathSegment(cfg.userId)}/media`,
     {
       media_type: 'CAROUSEL',
       children: childIds.join(','),
@@ -211,7 +212,7 @@ export async function postCarousel(
   // Step 3: publish
   const published = await igFetch<{ id: string }>(
     cfg.accessToken,
-    `/${cfg.userId}/media_publish`,
+    `/${encodePathSegment(cfg.userId)}/media_publish`,
     { creation_id: carousel.id, access_token: cfg.accessToken },
     'POST',
   );

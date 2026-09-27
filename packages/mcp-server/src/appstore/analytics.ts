@@ -4,6 +4,7 @@ import { getReportsAuthHeaders } from './auth.js';
 import { V1_BASE, apiRequest, authHeadersOrThrow } from './http.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { parseTsv, type ReportRow } from './sales.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 interface JsonApiRow<T> {
   id: string;
@@ -149,7 +150,7 @@ export function selectLatestInstanceRows(
 
 async function rowsForReport(reportId: string): Promise<ReportRow[]> {
   const instances = await reportGet<{ data?: Array<JsonApiRow<AnalyticsInstanceAttributes>> }>(
-    `/analyticsReports/${reportId}/instances`,
+    `/analyticsReports/${encodePathSegment(reportId)}/instances`,
     { 'filter[granularity]': 'WEEKLY', limit: '200' },
   );
   const latest = (instances.data ?? [])
@@ -159,7 +160,7 @@ async function rowsForReport(reportId: string): Promise<ReportRow[]> {
   const batches: Array<{ processingDate: string; rows: ReportRow[] }> = [];
   for (const instance of latest) {
     const segments = await reportGet<{ data?: Array<JsonApiRow<AnalyticsSegmentAttributes>> }>(
-      `/analyticsReportInstances/${instance.id}/segments`,
+      `/analyticsReportInstances/${encodePathSegment(instance.id)}/segments`,
       { limit: '200' },
     );
     const rows: ReportRow[] = [];
@@ -326,7 +327,7 @@ export async function getWeeklyInsight(input: {
   confirmCreate?: boolean;
 }) {
   const requests = await reportGet<{ data?: Array<JsonApiRow<AnalyticsRequestAttributes>> }>(
-    `/apps/${input.appId}/analyticsReportRequests`,
+    `/apps/${encodePathSegment(input.appId)}/analyticsReportRequests`,
     { 'filter[accessType]': 'ONGOING', limit: '10' },
   );
   const active = (requests.data ?? []).find((row) => !row.attributes?.stoppedDueToInactivity);
@@ -353,7 +354,7 @@ export async function getWeeklyInsight(input: {
   }
 
   const reports = await reportGet<{ data?: Array<JsonApiRow<AnalyticsReportAttributes>> }>(
-    `/analyticsReportRequests/${active.id}/reports`,
+    `/analyticsReportRequests/${encodePathSegment(active.id)}/reports`,
     { limit: '200' },
   );
   const { engagement, downloads, purchases } = selectWeeklyAnalyticsReports(reports.data ?? []);
