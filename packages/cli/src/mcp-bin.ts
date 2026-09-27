@@ -9,7 +9,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { t } from "./i18n.js";
+import { fileURLToPath } from "node:url";
+import { catalog, t } from "./i18n.js";
 import { resolveLang } from "./settings.js";
 // tsup 이 빌드 시점에 JSON 을 번들에 인라인한다 — 배포된 dist 도 런타임에 package.json 을 찾지 않는다.
 import { version as CLI_VERSION } from "../package.json";
@@ -106,19 +107,61 @@ function windowsNodeTarget(command: string, shimPath: string | null): string | n
  * bin 인자·파일 형식을 가진 서버와 짝지어졌다. 고정하면 짝이 없을 때 npx 가 "버전 없음"으로
  * 즉시 실패한다 — 조용히 엉뚱한 서버를 돌리는 것보다 낫다.
  *
- * MIMI_SEED_FORCE_NPX 는 "레지스트리 배포판을 써라" 는 개발자용 스위치라 `@latest` 를 유지한다.
- * 전역 `npm link` 가 걸려 있으면 버전 없는 스펙도 PATH 의 **링크된** bin 을 먼저 집어서 결국
- * 체크아웃 코드를 실행한다 (실측으로 확인) — 태그를 붙여야 진짜 배포판을 받아온다.
+ * 예외 두 가지는 `@latest`:
+ *  - MIMI_SEED_FORCE_NPX — "레지스트리 배포판을 써라" 는 개발자용 스위치. 전역 `npm link` 가 걸려
+ *    있으면 버전 없는 스펙도 PATH 의 **링크된** bin 을 먼저 집어서 결국 체크아웃 코드를 실행한다
+ *    (실측으로 확인) — 태그를 붙여야 진짜 배포판을 받아온다.
+ *  - 소스 체크아웃에서 실행 중(`fromSource`) — 작업 트리의 버전은 보통 아직 npm 에 없어서
+ *    (`version:set` 직후, 릴리스 전) 고정 스펙은 ETARGET 으로 실패한다. 이때는 한 줄 경고와 함께
+ *    `@latest` 로 물러난다. npm 에서 설치한 CLI 는 언제나 `node_modules` 아래에서 돈다.
+ *
+ * MCP **서버 등록** 스펙(`mcp-restart.ts` 의 fallback, `init --local` 안내)은 일부러 `@latest` 다.
+ * 그건 사용자가 한 번 등록해 두고 계속 쓰는 장기 설정이라 CLI 버전에 묶으면 CLI 를 올릴 때마다
+ * 등록이 낡는다. 반면 여기는 **이 CLI 가 지금 호출하는** 일회성 setup bin 이라 짝이 맞아야 한다.
  */
-export function npxPackageSpec(env: NodeJS.ProcessEnv = process.env, version: string = CLI_VERSION): string {
-  return env.MIMI_SEED_FORCE_NPX ? `${MCP_PKG}@latest` : `${MCP_PKG}@${version}`;
+export function npxPackageSpec(
+  env: NodeJS.ProcessEnv = process.env,
+  version: string = CLI_VERSION,
+  fromSource: boolean = runningFromSource(),
+): string {
+  if (env.MIMI_SEED_FORCE_NPX || fromSource) return `${MCP_PKG}@latest`;
+  return `${MCP_PKG}@${version}`;
 }
+
+/**
+ * 이 CLI 가 npm 설치본이 아니라 소스 체크아웃(`npm run dev`, `node packages/cli/dist/…`,
+ * `npm link`)에서 도는가. npm 으로 설치한 패키지는 전역·로컬·npx 캐시 어디든 경로에
+ * `node_modules` 가 있다. `npm link` 는 심볼릭 링크라 모듈 URL 이 실제 체크아웃 경로로 풀린다.
+ */
+export function runningFromSource(moduleUrl: string = import.meta.url): boolean {
+  try {
+    const segments = fileURLToPath(moduleUrl).split(/[\\/]+/);
+    return !segments.includes("node_modules");
+  } catch {
+    return false;
+  }
+}
+
+const M = catalog(
+  {
+    sourceFallback: (spec: string) =>
+      `  ⚠ 소스 체크아웃에서 실행 중 — 이 버전의 MCP 서버는 npm 에 없을 수 있어 ${spec} 를 씁니다.\n`,
+  },
+  {
+    sourceFallback: (spec: string) =>
+      `  ⚠ Running from a source checkout — this version of the MCP server may not be on npm, using ${spec}.\n`,
+  },
+);
 
 /** setup bin 실행. stdio inherit 이라 대화형 프롬프트가 그대로 사용자에게 보인다. */
 export async function runMcpBin(bin: McpBin, extraArgs: string[] = []): Promise<number> {
   const localPath = resolveOnPath(bin);
   const cmd = localPath ? bin : "npx";
-  const args = localPath ? extraArgs : ["-y", npxPackageSpec(), bin, ...extraArgs];
+  const spec = npxPackageSpec();
+  if (!localPath && !process.env.MIMI_SEED_FORCE_NPX && runningFromSource()) {
+    process.stderr.write(M().sourceFallback(spec));
+  }
+  const args = localPath ? extraArgs : ["-y", spec, bin, ...extraArgs];
 
   return new Promise((resolve) => {
     // Windows에서는 .cmd shim이 가리키는 JS를 node로 직접 실행한다. shell:true로 사용자 입력(--path 등)을 넘기면
