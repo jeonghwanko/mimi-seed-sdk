@@ -28,6 +28,49 @@ export interface AtomicWriteOptions {
   mode?: number;
   /** 상위 디렉터리를 만들 때 쓸 권한. 이미 있으면 건드리지 않는다. */
   dirMode?: number;
+  /** 테스트용 주입 지점 — 기본은 fs.renameSync. */
+  rename?: (from: string, to: string) => void;
+  /** 테스트용 주입 지점 — 기본은 동기 대기. */
+  sleep?: (ms: number) => void;
+}
+
+// ── Windows rename 재시도 ──
+//
+// Windows 에서 rename 은 대상 파일을 **누군가 열고 있으면**(백신 검사, 검색 인덱서, OneDrive 동기화,
+// 다른 프로세스의 짧은 읽기) EPERM / EBUSY / EACCES 로 실패한다. truncate-then-write 하던 옛
+// writeFileSync 는 그 상황에서도 성공했으므로, 재시도 없이 원자적 쓰기로 바꾸면 회귀다. 잠금은 보통
+// 수십 ms 안에 풀리므로 graceful-fs 처럼 짧게 여러 번, 총 ~1초 안에서 다시 시도한다.
+//
+// ⚠ mcp-server 의 src/lib/atomic-write.ts 도 **같은 코드·같은 스케줄**을 쓴다. 두 사본은 서로를
+// import 할 수 없으니(패키지 경계) 한쪽을 바꾸면 다른 쪽도 같이 바꾼다.
+
+/** 재시도할 rename 오류 코드 — 다른 프로세스의 핸들 때문에 생기는 일시적 실패만. */
+export const RENAME_RETRY_CODES: ReadonlySet<string> = new Set(["EPERM", "EBUSY", "EACCES"]);
+/** 각 재시도 전 대기(ms). 합계 1000ms — 그 뒤에도 잠겨 있으면 진짜 실패로 본다. */
+export const RENAME_RETRY_DELAYS_MS: readonly number[] = [10, 20, 40, 80, 160, 320, 370];
+
+/** 동기 writer 안에서 이벤트 루프 없이 기다린다 (Atomics.wait — 바쁜 대기 없이 스레드만 재운다). */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** rename + 일시적 잠금 재시도. 재시도할 수 없는 오류나 스케줄 소진 시 마지막 오류를 던진다. */
+export function renameWithRetry(
+  from: string,
+  to: string,
+  rename: (from: string, to: string) => void = renameSync,
+  sleep: (ms: number) => void = sleepSync,
+): void {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!code || !RENAME_RETRY_CODES.has(code) || attempt >= RENAME_RETRY_DELAYS_MS.length) throw error;
+      sleep(RENAME_RETRY_DELAYS_MS[attempt]);
+    }
+  }
 }
 
 export function writeFileAtomic(filePath: string, contents: string, options: AtomicWriteOptions = {}): void {
@@ -43,7 +86,7 @@ export function writeFileAtomic(filePath: string, contents: string, options: Ato
     });
     // writeFileSync 의 mode 는 umask 로 깎이고 파일이 이미 있으면 무시된다 — 명시적으로 못 박는다.
     if (options.mode !== undefined && process.platform !== "win32") chmodSync(tempPath, options.mode);
-    renameSync(tempPath, filePath);
+    renameWithRetry(tempPath, filePath, options.rename, options.sleep);
   } catch (error) {
     try {
       unlinkSync(tempPath);

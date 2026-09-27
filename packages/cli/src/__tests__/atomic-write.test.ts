@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import {
   CREDENTIAL_DIR_MODE,
   CREDENTIAL_FILE_MODE,
+  RENAME_RETRY_CODES,
+  RENAME_RETRY_DELAYS_MS,
+  renameWithRetry,
   writeCredentialJson,
   writeFileAtomic,
   writeJsonAtomic,
@@ -64,6 +67,71 @@ describe('원자적 쓰기 (CLI)', () => {
     fs.writeFileSync(target, '{}', { mode: 0o644 });
     writeCredentialJson(target, { token: 'x' });
     expect(fs.statSync(target).mode & 0o777).toBe(CREDENTIAL_FILE_MODE);
+  });
+});
+
+// Windows 는 대상 파일을 다른 프로세스(백신·인덱서·OneDrive·짧은 읽기)가 열고 있으면 rename 이
+// EPERM/EBUSY/EACCES 로 실패한다. 옛 writeFileSync 는 그때도 성공했으므로 재시도가 없으면 회귀다.
+describe('rename 재시도 (Windows 잠금)', () => {
+  const locked = (code: string) => Object.assign(new Error(`${code}: operation not permitted, rename`), { code });
+
+  /** 처음 n번은 code 로 실패하고, 그 뒤엔 진짜 rename 을 한다. */
+  function flakyRename(n: number, code = 'EPERM') {
+    let calls = 0;
+    const rename = (from: string, to: string) => {
+      calls += 1;
+      if (calls <= n) throw locked(code);
+      fs.renameSync(from, to);
+    };
+    return { rename, calls: () => calls };
+  }
+
+  it.each(['EPERM', 'EBUSY', 'EACCES'])('%s 로 몇 번 실패해도 결국 쓴다 (스케줄대로 기다리며)', (code) => {
+    const target = path.join(tmp, 'ci.json');
+    const flaky = flakyRename(3, code);
+    const waits: number[] = [];
+
+    writeFileAtomic(target, 'hello', { rename: flaky.rename, sleep: (ms) => waits.push(ms) });
+
+    expect(fs.readFileSync(target, 'utf8')).toBe('hello');
+    expect(flaky.calls()).toBe(4);
+    expect(waits).toEqual(RENAME_RETRY_DELAYS_MS.slice(0, 3));
+  });
+
+  it('재시도 예산은 총 ~1초로 유한하다', () => {
+    const total = RENAME_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThanOrEqual(500);
+    expect(total).toBeLessThanOrEqual(1_000);
+  });
+
+  it('끝내 잠겨 있으면 마지막 오류를 던지고, 기존 파일과 temp 정리는 지킨다', () => {
+    const target = path.join(tmp, 'config.json');
+    writeCredentialJson(target, { token: 'keep-me' });
+    const flaky = flakyRename(Number.POSITIVE_INFINITY);
+    const waits: number[] = [];
+
+    expect(() => writeFileAtomic(target, 'new', { rename: flaky.rename, sleep: (ms) => waits.push(ms) }))
+      .toThrow(/EPERM/);
+
+    expect(flaky.calls()).toBe(RENAME_RETRY_DELAYS_MS.length + 1);
+    expect(waits).toEqual([...RENAME_RETRY_DELAYS_MS]);
+    expect(JSON.parse(fs.readFileSync(target, 'utf8'))).toEqual({ token: 'keep-me' });
+    expect(fs.readdirSync(tmp).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('잠금이 아닌 오류(ENOENT 등)는 재시도하지 않는다', () => {
+    let calls = 0;
+    const rename = () => { calls += 1; throw locked('ENOENT'); };
+    expect(() => renameWithRetry('a', 'b', rename, () => {})).toThrow(/ENOENT/);
+    expect(calls).toBe(1);
+    expect(RENAME_RETRY_CODES.has('ENOENT')).toBe(false);
+  });
+
+  it('기본 대기(sleepSync)는 실제로 기다린다', () => {
+    const started = Date.now();
+    const flaky = flakyRename(1);
+    writeFileAtomic(path.join(tmp, 's.json'), 'x', { rename: flaky.rename });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(RENAME_RETRY_DELAYS_MS[0] - 2);
   });
 });
 
