@@ -28,7 +28,7 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 Google Play 도구로 스토�
 
 호출 전 schema 로드:
 ```
-ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release")
+ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release")
 ```
 
 인앱 상품·리뷰·통계까지 다룰 때 추가로:
@@ -44,10 +44,13 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
 3. 누락분 업로드:
    - 텍스트: `playstore_update_listing` (title ≤30 / short ≤80 / full ≤4000)
    - 이미지: `playstore_upload_image` (아래 표의 imageType·해상도 준수)
-   - 노트: `playstore_update_latest_release_notes`
-4. 출시/승격은 **사용자 승인 후**:
+   - 노트: `playstore_update_release_notes` (versionCode 생략 = 트랙 최신 릴리스, `syncTracks` 로 다른 트랙 동시 반영)
+4. 출시/승격은 **preview → 사용자 승인 → confirm** 순서:
    - 같은 트랙 출시: `playstore_submit_release`
    - 트랙 간 승격: `playstore_promote_release` (fromTrack→toTrack, versionCode)
+   - 먼저 `confirm` 없이 호출하면 서버가 아무것도 바꾸지 않고 dry-run preview 를 돌려준다. 그 내용을 사용자에게
+     보여 명시 승인을 받은 뒤 같은 인자 + `confirm: true` 로 재호출한다 (`status="draft"` 는 확인 없이 실행).
+   - `playstore_replace_images` / `playstore_delete_all_images` / `playstore_reply_review` 도 같은 확인 절차를 거친다.
 
 ## 인앱 상품 · 구독
 

@@ -274,7 +274,7 @@ git 커밋 내역 → 사용자 친화적 릴리즈 노트 → 스토어 자동 
 ```
 
 `friendly` · `professional` · `empathetic` · `brief` 4가지 톤.  
-생성 후 `playstore_reply_review`로 바로 게시.
+생성 후 `playstore_reply_review`로 게시 — 첫 호출(`confirm` 없음)은 dry-run preview 만 돌려주고, `confirm: true` 로 다시 호출해야 실제로 게시된다.
 
 > 생성 답변은 초안입니다. 게시 전 반드시 검토하세요.
 
@@ -512,6 +512,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | `OPENAI_API_KEY` | `video_generate_image`의 장면 이미지 생성 (선택) |
 | `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 `PATH`에 없을 때 지정하는 선택적 절대경로 |
 | `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선 |
+| `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | 로컬 MCP 전용: 노출할 도구 영역만 고른다 (`playstore,appstore` 같은 도메인 키 쉼표 구분, 또는 그룹 `store` · `google` · `social` · `media` · `build` · `all`). 미지정 = 전체. `auth`·`checks` 는 항상 켜지고, 모르는 키는 경고 후 무시. 도구 lazy-load 가 없는 클라이언트에서 도구 목록을 줄일 때 쓴다 ([에이전트 가이드](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 자체 Google OAuth 클라이언트 사용. 미지정 시 로그인 때 웹 콘솔에서 받아온다 — 오프라인·폐쇄망·자체호스팅이면 지정할 것 ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
 
 ---

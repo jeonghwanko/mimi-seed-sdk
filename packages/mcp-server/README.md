@@ -247,7 +247,7 @@ git 커밋 내역을 Claude가 사용자 친화적인 릴리즈 노트로 변환
 tone 옵션: `friendly`(친근) / `professional`(정중) / `empathetic`(공감) / `brief`(간결)
 
 > ⚠ AI 생성 답변은 초안입니다. 게시 전 반드시 검토하세요.  
-> 답변 게시는 `playstore_reply_review` 도구를 사용하세요.
+> 답변 게시는 `playstore_reply_review` 도구를 사용하세요 — `confirm` 없이 부르면 dry-run preview 만 돌아오고, `confirm: true` 로 다시 불러야 게시됩니다.
 
 ---
 
@@ -262,7 +262,7 @@ tone 옵션: `friendly`(친근) / `professional`(정중) / `empathetic`(공감) 
 Claude가 연쇄 호출:
 
 - `iam_create_service_account("my-project", "onesub-play-verifier", "onesub Play verifier")`
-- `iam_create_key("onesub-play-verifier@my-project.iam.gserviceaccount.com")` → JSON 반환
+- `iam_create_key("onesub-play-verifier@my-project.iam.gserviceaccount.com")` → 먼저 dry-run preview, 사용자 승인 후 `confirm: true` 로 재호출하면 JSON 반환
 - `playstore_verify_service_account(<json>, "com.yourapp.id")` → 아직 Play Console 권한이 없어서 403 반환 기대
 
 그 다음 **Play Console에서 수동으로** (또는 별도 androidpublisher.users API 호출):
@@ -286,6 +286,7 @@ Claude가 연쇄 호출:
 | `PEXELS_API_KEY` | Pexels 스톡 영상 검색 (선택) |
 | `OPENAI_API_KEY` | 장면 이미지 생성 (선택) |
 | `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 PATH에 없을 때 실행 파일 경로 (선택) |
+| `MIMI_SEED_TOOLSETS` / `MIMI_SEED_TOOLSETS_EXCLUDE` | 노출할 도구 영역만 고른다 — 도메인 키(`playstore,appstore` …) 또는 그룹 `store` · `google` · `social` · `media` · `build` · `all` 쉼표 구분. 미지정 = 전체. `auth`·`checks` 는 항상 켜짐, 모르는 키는 stderr 경고 후 무시 (선택) |
 
 ---
 

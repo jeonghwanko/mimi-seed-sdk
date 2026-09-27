@@ -66,7 +66,9 @@ implementation here; describe only the public boundary to the web console.
    then run `npm run release-doctor:sync`.
 4. Keep register files thin: schemas and MCP handlers live in `registers/`; business logic lives in the domain's
    `tools.ts` or focused module. A **new** register module is wired into `packages/mcp-server/src/server.ts`
-   (`buildServer`), not `src/index.ts`.
+   (`buildServer`), not `src/index.ts`. Tools register through the `ToolRegistrar` (`lib/tool-registrar.ts`);
+   a tool's read / write / destructive classification lives in `tool-manifest.json` and drives its annotations
+   and confirm guard.
 5. Preserve ESM conventions: TypeScript source imports use `.js` specifiers. Tool names are `snake_case`, files
    are `kebab-case`, and domain directories are lowercase.
 6. This is a public repository. Never commit, print, or document secrets, real app/account identifiers, local

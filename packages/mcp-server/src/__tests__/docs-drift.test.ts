@@ -121,9 +121,11 @@ describe('docs/agent-guide.md `select:` 배치 ↔ tool-manifest.json', () => {
     ),
   );
   const registered = Object.values(manifest.domains).flatMap((d) => d.tools);
+  // 폐기 예정 별칭은 등록은 되지만 배치로 안내하지 않는다 — 에이전트는 정식 이름을 써야 한다.
+  const deprecated = new Set(Object.keys(manifest.deprecated ?? {}));
 
-  it('등록된 모든 도구가 최소 하나의 배치에 들어 있다', () => {
-    const missing = registered.filter((t) => !batched.has(t));
+  it('등록된 모든 도구가 최소 하나의 배치에 들어 있다 (폐기 예정 별칭 제외)', () => {
+    const missing = registered.filter((t) => !deprecated.has(t) && !batched.has(t));
     expect(
       missing,
       `agent-guide §0 의 select: 배치에 없는 도구 — 알맞은 행에 추가하세요: ${missing.join(', ')}`,
@@ -134,6 +136,13 @@ describe('docs/agent-guide.md `select:` 배치 ↔ tool-manifest.json', () => {
     const known = new Set(registered);
     const ghosts = [...batched].filter((t) => !known.has(t));
     expect(ghosts, `등록되지 않은 이름이 배치에 있습니다: ${ghosts.join(', ')}`).toEqual([]);
+  });
+
+  it('배치가 폐기 예정 별칭 대신 정식 이름을 쓴다', () => {
+    const stale = [...batched]
+      .filter((t) => deprecated.has(t))
+      .map((t) => `${t} → ${manifest.deprecated![t]}`);
+    expect(stale, `폐기 예정 별칭이 배치에 있습니다 — 정식 이름으로 바꾸세요: ${stale.join(', ')}`).toEqual([]);
   });
 });
 

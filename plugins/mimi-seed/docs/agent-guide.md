@@ -50,11 +50,11 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | First contact / "what's connected?" | `select:mimi_seed_status,mimi_seed_auth_status,mimi_seed_auth_start,mimi_seed_remote_sync_credentials` |
 | Release readiness (either store) | `select:release_status,playstore_check_submission_risks,appstore_check_submission_risks,screenshot_validate` |
 | Android Billing compliance | `select:android_check_billing_compliance,playstore_check_submission_risks` |
-| Play Store release | `select:playstore_get_app,playstore_list_tracks,playstore_update_release_notes,playstore_update_latest_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release` |
+| Play Store release | `select:playstore_get_app,playstore_list_tracks,playstore_update_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release` |
 | Play Store listing + images | `select:playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_upload_image,playstore_list_images,playstore_replace_images,playstore_delete_all_images` |
 | Play Store reviews + stats | `select:playstore_list_reviews,playstore_reply_review,playstore_get_statistics,generate_review_reply` |
 | Play Store IAP / subscriptions | `select:playstore_list_products,playstore_list_inapp_products,playstore_list_subscriptions,playstore_create_onetime_product,playstore_create_subscription,playstore_update_product,playstore_update_product_listing,playstore_update_subscription_listing,playstore_update_product_state,playstore_delete_product` |
-| App Store / TestFlight | `select:appstore_list_apps,appstore_verify_credentials,appstore_get_app,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_build,appstore_attach_latest_build,appstore_list_beta_groups,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
+| App Store / TestFlight | `select:appstore_list_apps,appstore_verify_credentials,appstore_get_app,appstore_list_versions,appstore_create_version,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_build,appstore_list_beta_groups,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release` |
 | App Store release control (after approval) | `select:appstore_release_status,appstore_release_version,appstore_update_release_type,appstore_phased_release,appstore_list_versions` |
 | Pre-submission declarations (both stores) | `select:appstore_get_age_rating,appstore_update_age_rating,appstore_declare_encryption,appstore_get_availability,appstore_set_territory_availability,playstore_upload_data_safety` |
 | TestFlight external testing | `select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers,appstore_list_beta_groups,appstore_list_builds` |
@@ -180,6 +180,25 @@ Notes that matter in practice:
   **3 hours** per call; set `MIMI_SEED_UPLOAD_TIMEOUT_MS` (milliseconds, positive integer) in the MCP server's
   environment to change it for very large files or slow links.
 
+### Server configuration — limiting the tool surface (`MIMI_SEED_TOOLSETS`)
+
+Clients without lazy tool loading pay for every tool schema in context, and some cap the number of tools.
+The server can expose only the domains a project needs — set these in the MCP server's `env`:
+
+| Variable | Meaning |
+|----------|---------|
+| `MIMI_SEED_TOOLSETS` | Comma-separated domain keys from `mimi-seed://tools/catalog` (`playstore`, `appstore`, `firebase`, …) and/or groups: `store` (playstore · appstore · android · ai), `google` (firebase · admob · iam · billing · bigquery · ga4 · gsc · googleads), `social` (facebook · instagram · threads · tiktok · youtube), `media` (video · youtube), `build` (ci · jenkins · android), `all`. Unset = everything (default). |
+| `MIMI_SEED_TOOLSETS_EXCLUDE` | Same syntax; removed from the include set. |
+
+`auth` and `checks` are always on. Unknown keys are ignored with a warning on stderr (and if no include key is
+valid, everything stays on). `mimi_seed_status` prints the active toolsets on its second line — if a tool you
+expect is missing from the deferred list, check that line before concluding the tool doesn't exist.
+
+```json
+{ "mcpServers": { "mimi-seed": { "command": "npx", "args": ["-y", "@yoonion/mimi-seed-mcp"],
+  "env": { "MIMI_SEED_TOOLSETS": "store,build" } } } }
+```
+
 ---
 
 ## 3. Tool catalog (by domain)
@@ -189,8 +208,8 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 
 | Domain | Representative tools |
 |--------|----------------------|
-| **Google Play** | `playstore_get_app` · `playstore_get_listing` · `playstore_update_listing` · `playstore_list_tracks` · `playstore_update_latest_release_notes` · `playstore_promote_release` · `playstore_submit_release` · `playstore_upload_image` · `playstore_replace_images` · `playstore_check_submission_risks` · `playstore_get_statistics` · `playstore_reply_review` · `playstore_register_service_account` |
-| **App Store Connect** | `appstore_list_apps` · `appstore_list_versions` · `appstore_create_version` · `appstore_update_whats_new` · `appstore_update_localization` · `appstore_list_builds` · `appstore_attach_latest_build` · `appstore_upload_screenshot` · `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_list_beta_groups` · `appstore_reply_review` · `appstore_get_weekly_insight` |
+| **Google Play** | `playstore_get_app` · `playstore_get_listing` · `playstore_update_listing` · `playstore_list_tracks` · `playstore_update_release_notes` · `playstore_promote_release` · `playstore_submit_release` · `playstore_upload_image` · `playstore_replace_images` · `playstore_check_submission_risks` · `playstore_get_statistics` · `playstore_reply_review` · `playstore_register_service_account` |
+| **App Store Connect** | `appstore_list_apps` · `appstore_list_versions` · `appstore_create_version` · `appstore_update_whats_new` · `appstore_update_localization` · `appstore_list_builds` · `appstore_attach_build` · `appstore_upload_screenshot` · `appstore_submit_for_review` · `appstore_cancel_review` · `appstore_list_beta_groups` · `appstore_reply_review` · `appstore_get_weekly_insight` |
 | **Firebase** | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_get_remote_config_overview` · `firebase_list_*_apps` |
 | **AdMob** | `admob_create_app` · `admob_create_ad_unit` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (**GitHub Actions / GitLab only**) |
@@ -214,14 +233,16 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 ### Play Store release / promote
 1. `playstore_list_tracks` — see current track/version state.
 2. `playstore_check_submission_risks` (or `playstore_plan_release`) — surface blockers.
-3. Write missing listing/notes (`playstore_update_listing`, `playstore_update_latest_release_notes`, `playstore_upload_image`).
-4. `playstore_promote_release` / `playstore_submit_release` — **confirm first** (see §5).
+3. Write missing listing/notes (`playstore_update_listing`, `playstore_update_release_notes` — omit `versionCode` for the latest release, `playstore_upload_image`).
+4. `playstore_promote_release` / `playstore_submit_release` **without** `confirm` → show the returned dry-run preview to the user →
+   after an explicit go-ahead, call again with the same arguments plus `confirm: true` (see §5). `status="draft"` runs without confirm.
 
 ### App Store TestFlight → review
 1. `appstore_list_apps` → `appstore_list_versions` (or `appstore_create_version`).
-2. `appstore_list_builds` → `appstore_attach_latest_build` (only `processingState=VALID`).
+2. `appstore_list_builds` → `appstore_attach_build` (omit `buildId` to attach the latest `processingState=VALID` build).
 3. `appstore_update_whats_new`, screenshots if needed.
-4. `appstore_check_submission_risks` → `appstore_submit_for_review` — **confirm first**.
+4. `appstore_check_submission_risks` → `appstore_submit_for_review` without `confirm` (dry-run preview) → user approves →
+   same call with `confirm: true`.
 
 ### Service account key → Play / Jenkins (secrets stay on disk)
 1. `iam_create_service_account` (or reuse one) → `iam_create_key`. The key is written to
@@ -286,14 +307,30 @@ contact sheet; codec validation alone is not a quality pass.
 
 ## 5. Safety — irreversible actions need explicit confirmation
 
-Never run these without the user's go-ahead in the same turn:
+Every tool marked **D** in the [tool catalog](domain/tool-catalog.md) — submit/promote/release, deletes,
+public posts and review replies, IAM keys and bindings, Jenkins job overwrites, beta invites — is
+**confirm-gated by the server**, and its MCP annotations say `destructiveHint: true`. Call order:
+
+1. Call the tool **without** `confirm`. Nothing changes; it returns a dry-run preview (the generic one starts
+   with `🛑 DRY-RUN` and lists the arguments; some tools show the current remote state instead).
+2. Show that preview to the user and get an explicit go-ahead **in the same turn**.
+3. Call again with the **same arguments** plus `confirm: true`.
+
+A few tools use a more specific flag instead of `confirm`: `tiktok_business_publish_video` (`confirmPublish`),
+`youtube_upload_video` / `youtube_update_video_privacy` (`confirmVisible`, only for public/unlisted).
+Conditional gates: `playstore_submit_release` / `playstore_promote_release` with `status="draft"` and
+`appstore_phased_release` with `pause`/`resume`/`enable`/`status` run without confirmation.
+
+Never pass `confirm: true` on the first call, and never retry an uncertain public write automatically.
 
 | Action | Why |
 |--------|-----|
 | `playstore_submit_release` / `playstore_promote_release` with `status=completed` | Starts Google review / full rollout. Near-irreversible. |
-| `appstore_submit_for_review` | Submits to Apple review. |
-| `appstore_delete_screenshot_set`, `playstore_delete_all_images` | Deletes assets. |
+| `appstore_submit_for_review`, `appstore_release_version` | Submits to Apple review / publishes immediately. |
+| `appstore_delete_screenshot_set`, `playstore_delete_all_images`, `playstore_replace_images` | Deletes assets. |
 | `playstore_delete_product`, `jenkins_delete_credential`, `firebase_delete_*_app` | Destructive. |
+| `facebook_post_*`, `instagram_post_*`, `threads_post*`, `*_reply_review`, `youtube_reply_comment` | Public, outward-facing. |
+| `iam_create_key`, `iam_add_iam_policy_binding` | Issues a permanent credential / changes project IAM. |
 
 General rules:
 - Run `*_check_submission_risks` / `*_plan_release` **before** submitting, and show

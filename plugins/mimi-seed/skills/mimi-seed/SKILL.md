@@ -65,6 +65,9 @@ Apple P8 키와 Play 서비스 계정 JSON이 원격 워크스페이스에 암�
 ## 안전 규칙
 
 - 비가역 작업(`playstore_submit_release`/`promote_release` `status=completed`, `appstore_submit_for_review`, 스크린샷 셋 삭제, 상품/크리덴셜 삭제)은 **같은 턴에서 명시 승인** 없이는 실행하지 않는다.
+- 카탈로그 **D** 도구(위 작업 + 공개 게시·리뷰 답글·IAM 키/바인딩·Jenkins 잡 덮어쓰기 등)는 서버가 확인을 강제한다:
+  먼저 `confirm` 없이 호출 → 돌아온 dry-run preview 를 사용자에게 보여 승인 → 같은 인자 + `confirm: true` 로 재호출.
+  첫 호출에 `confirm: true` 를 넣지 않는다.
 - `mimi_seed_remote_sync_credentials(confirm=true)`는 비밀값을 외부에 저장하는 작업이므로 같은 턴의 명시 승인 없이는 실행하지 않는다.
 - 반복 작업 중에는 `status=draft`를 쓰고, `completed` 전환은 명시 요청 시에만.
 - 파일은 절대경로로 전달하고, 이미지 바이트를 대화 컨텍스트에 싣지 않는다.

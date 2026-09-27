@@ -38,20 +38,40 @@ They are not in a parent/child relationship — see the transport split below an
 Every domain follows the same three-layer shape:
 
 ```
-mcp-server/src/server.ts   buildServer(version)   ← the single assembly point
-  └─ registerXxxTools(server)            ← registers/<domain>.ts
-       server.tool(name, description, zodSchema, handler)
-         └─ handler calls <domain>/tools.ts   ← implementation (API calls)
-              └─ googleapis / ASC REST client  ← external-apis.md
+mcp-server/src/server.ts   buildServer(version, { env })   ← the single assembly point
+  └─ createToolRegistrar(McpServer, manifest, toolsets)     ← lib/tool-registrar.ts
+       └─ registerXxxTools(registrar)        ← registers/<domain>.ts
+            server.tool(name, description, zodSchema, handler)   (same call shape, registrar underneath)
+              └─ McpServer.registerTool(name, { title, description, inputSchema, annotations }, handler)
+              └─ handler calls <domain>/tools.ts   ← implementation (API calls)
+                   └─ googleapis / ASC REST client  ← external-apis.md
 ```
 
 - **`server.ts`** — not `index.ts` — constructs the one `McpServer({ name: 'mimi-seed-local', version })`
-  (version read at runtime from `package.json` so it never drifts) and calls every `registerXxxTools(server)`
-  functions plus `registerPrompts(server)` and `registerResources(server)`. A **new register module must be
-  added here**; `index.ts` only picks a run mode and hands `buildServer()` a transport. `tool-manifest.test.ts`
-  boots this same function, so a module that never got wired shows up as missing tools rather than silence.
-- Each `registers/<domain>.ts` declares tools with `server.tool(...)`. Input validation is **zod** schemas;
-  there is no separate schema file.
+  (version read at runtime from `package.json` so it never drifts), wraps it in the **tool registrar**, and
+  calls every `registerXxxTools(registrar)` plus `registerPrompts(server)` and `registerResources(server)`
+  (prompts/resources use `McpServer` directly). A **new register module must be added here**; `index.ts` only
+  picks a run mode and hands `buildServer()` a transport. `tool-manifest.test.ts` boots this same function, so
+  a module that never got wired shows up as missing tools rather than silence.
+- Each `registers/<domain>.ts` declares tools with `server.tool(...)` — but `server` is a `ToolRegistrar`, not
+  the SDK's deprecated `McpServer.tool`. Input validation is **zod** schemas; there is no separate schema file.
+
+### The tool registrar (`lib/tool-registrar.ts`)
+
+Everything that is policy rather than behavior is attached at registration time from `tool-manifest.json`, so
+register files stay thin and no tool can opt out by accident:
+
+| Concern | Manifest input | What the registrar does |
+|---|---|---|
+| Annotations + title | per-domain `write` / `destructive` / `local` / `idempotent` | `readOnlyHint` (neither list), `destructiveHint` (**D**), `idempotentHint` (reads + listed writes), `openWorldHint` (not `local`); a readable `title` from the name |
+| Confirm guard | `destructive` | a **D** tool whose schema has no `confirm` / `confirmPublish` / `confirmVisible` gets an injected `confirm` flag; calls without `confirm: true` return a `🛑 DRY-RUN` preview and never reach the handler. Tools with their own flag keep their richer preview. Conditional gates (`status="draft"` on submit/promote) live in `CONFIRM_REQUIRED_WHEN` |
+| Toolsets | top-level `toolsets`, `alwaysOn` | `MIMI_SEED_TOOLSETS` / `MIMI_SEED_TOOLSETS_EXCLUDE` (resolved by `lib/toolsets.ts`) decide which domains register at all; default is every domain; `auth` + `checks` are always on; `mimi_seed_status` prints the active set |
+| Deprecated aliases | top-level `deprecated: { old: new }` | the old name is registered with the canonical schema and handler, description prefixed `[DEPRECATED — use <new>; removed in the next minor release]`; it stays in its domain's `tools` so counts stay coherent |
+| Inventory | `domains.<d>.tools` | an unknown name **throws** — the manifest is the complete list |
+
+Why a registrar instead of editing 200+ call sites: the classification has one owner (the manifest, mirrored
+by the catalog's **W**/**D** markers and test-enforced), and a new destructive tool is guarded the moment it is
+classified — nobody has to remember to hand-write a preview branch.
 - Business logic lives in sibling folders (`playstore/tools.ts`, `appstore/tools.ts`, …), not in the register
   file. The register file is the thin "surface"; `tools.ts` is the "engine".
 - Responses go through `lib/mcp-response.ts`: `jsonResult(value)` for structured output, `textResult(str | lines)`

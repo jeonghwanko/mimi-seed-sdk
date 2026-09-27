@@ -26,15 +26,21 @@
 1. **Implement** in `mcp-server/src/<domain>/tools.ts`. Resolve credentials through the existing gate
    (`requireAuth` / `requirePlayStoreAuth` / `requireAppStoreCreds`) and wrap provider calls in the matching
    friendly-error translator — [[external-apis]].
-2. **Register** in `mcp-server/src/registers/<domain>.ts` with `server.tool(name, description, zodSchema, handler)`.
+2. **Register** in `mcp-server/src/registers/<domain>.ts` with `server.tool(name, description, zodSchema, handler)`
+   (`server` is the `ToolRegistrar` — never call `McpServer.tool`/`registerTool` directly).
    Keep the handler thin: validate → call `tools.ts` → format the response.
-   *New domain?* also add `registerXxxTools(server)` to **`src/server.ts`** — `index.ts` is only the stdio entry
+   *New domain?* also add `registerXxxTools(registrar)` to **`src/server.ts`** — `index.ts` is only the stdio entry
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
-3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`.
-   A new domain also needs `label` / `credential` / `summary`; the `mimi-seed://tools/catalog` resource serves
-   that file verbatim.
+3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then
+   **classify** it: `write` (changes state), `destructive` (irreversible / outward-facing / deletes or overwrites —
+   the registrar confirm-gates it), `local` (no external service), `idempotent` (a write that is safe to repeat).
+   Unlisted = read-only. An unclassified-but-registered name throws at boot. A new domain also needs `label` /
+   `credential` / `summary` (the `mimi-seed://tools/catalog` resource serves that file verbatim) and, if it fits
+   one, a `toolsets` group.
+   *Renaming?* keep the old name for one minor release: leave it in `tools` with the same classification and add
+   `"deprecated": { "<old>": "<new>" }` — the registrar registers the alias; remove its own `server.tool` call.
 4. **Catalog doc** — [[tool-catalog]]: add the backticked tool name to its domain section, mark **W** (write) or
-   **D** (destructive), and update the "Counts by domain" row **and** the title total.
+   **D** (destructive) exactly as in the manifest, and update the "Counts by domain" row **and** the title total.
 5. **README count columns** — the tool-list table in `README.md`, `README.ko.md`, **and** the published
    `packages/mcp-server/README.md`. All three are test-enforced (each row is matched to its domain by the tool
    names it lists, so keep one domain per row).
@@ -48,7 +54,9 @@
    [`CHANGELOG.md`](../../CHANGELOG.md) (added / renamed `old` → `new` / removed). A rename or removal breaks every
    prompt, skill, and `select:` batch that still names the old tool, so it must be spelled out, not implied.
 
-**Guards:** `tool-manifest.test.ts` (server ↔ manifest) · `docs-drift.test.ts` (manifest ↔ catalog ↔ READMEs) ·
+**Guards:** `tool-manifest.test.ts` (server ↔ manifest, classification lists, live annotations) ·
+`docs-drift.test.ts` (manifest ↔ catalog counts **and W/D markers** ↔ READMEs, batches) ·
+`destructive-confirm.test.ts` (every **D** tool previews without `confirm`) ·
 `prompts-resources.test.ts` (agent-guide copy) · `npm run plugin:check`.
 **Verify:** `npm run build && npm test` in `packages/mcp-server`, then root `npm test`.
 

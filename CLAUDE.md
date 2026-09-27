@@ -37,6 +37,8 @@ index below is imported automatically; the linked docs are **not**, so `Read` th
    `npm run release-doctor:sync`; never hand-edit the mirror.
 3. **Register files stay thin** — name, description, zod schema, thin handler in `registers/<domain>.ts`; API
    logic in `<domain>/tools.ts`. A *new* register module is wired into `src/server.ts`, not `src/index.ts`.
+   Tools register through the `ToolRegistrar` (`lib/tool-registrar.ts`); a tool's read / write / destructive
+   classification lives in `tool-manifest.json` and drives its annotations and confirm guard.
 4. **One writer per credential file.** The package that validates a credential owns writing it (`ci.json` is the
    documented exception). Two writers always drift.
 5. **ESM conventions**: `.ts` sources import with `.js` specifiers; tools are `snake_case`, files `kebab-case`,
