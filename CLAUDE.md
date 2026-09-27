@@ -45,10 +45,11 @@ index below is imported automatically; the linked docs are **not**, so `Read` th
    domain folders lowercase.
 6. **User-facing CLI text goes through `catalog(ko, en)`** — a bare Korean literal fails `i18n-coverage.test.ts`.
 7. **Don't hard-code tool or domain counts in prose** — write "150+" and name the domains instead of counting
-   them. Exact counts live only in `tool-manifest.json`, `docs/domain/tool-catalog.md`, and the README count
-   columns (all test-enforced); a guard rejects them anywhere else.
-8. **Editing `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`** → `npm run plugin:sync`, then
-   commit the regenerated `plugins/mimi-seed/`. Never hand-edit that folder.
+   them. Exact counts live only in `tool-manifest.json` and the blocks generated from it (`docs/domain/tool-catalog.md`,
+   the README tool tables — `npm run plugin:sync` rewrites them); a guard rejects them anywhere else.
+8. **Editing `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, `LICENSE`, or `tool-manifest.json`** →
+   `npm run plugin:sync`, then commit what it regenerated (`<!-- generated:… -->` doc blocks, `plugins/mimi-seed/`).
+   Never hand-edit either.
 9. **Version numbers** belong to the root `package.json` (`npm run version:set`) — never write one into a doc.
 10. Keep Claude Code and Codex guidance equivalent where the behavior is (`CLAUDE.md` ↔ `AGENTS.md`,
     `.claude-plugin/` ↔ `.codex-plugin/`).

@@ -58,12 +58,12 @@ npm run build && npm test
    module must also be wired into `src/server.ts`), then update
    `packages/mcp-server/tool-manifest.json` — the boot smoke test
    (`src/__tests__/tool-manifest.test.ts`) diffs the live registration list against the
-   manifest and fails `npm test` on any mismatch. Refresh the per-domain list in
-   [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md), and add a test where it
-   makes sense (see `src/__tests__/`). Don't hard-code exact tool counts in prose — the
+   manifest and fails `npm test` on any mismatch. Then run `npm run plugin:sync` at the root: it regenerates the
+   tool catalog, the README tool tables, and the agent-guide `select:` batches from the manifest (never edit
+   inside a `<!-- generated:… -->` block — labels, notes, and batch placement live in `scripts/docs-spec.mjs`).
+   Add a test where it makes sense (see `src/__tests__/`). Don't hard-code exact tool counts in prose — the
    manifest is the single source of truth (see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8).
-   The full step list — including the README count columns and when to re-run `npm run plugin:sync` — is
-   [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
+   The full step list is [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
 6. User-visible change? Add a bullet to `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) (tool additions,
    renames, and removals go under its `Tool changes` heading).
 7. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run

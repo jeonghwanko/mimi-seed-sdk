@@ -57,6 +57,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (internal; the tool list, names, and schemas are otherwise unchanged).
 - **Agents must now preview then confirm** destructive calls (see `Tool changes` for the list). Skills, the
   agent guide, and the `review-inbox` prompt describe the new call order.
+- Contributors: the tool catalog, the README tool tables, and the agent-guide `select:` batches are now generated
+  from `tool-manifest.json` by `npm run plugin:sync` (`scripts/gen-docs.mjs`) instead of being edited by hand.
 
 ### Deprecated
 
