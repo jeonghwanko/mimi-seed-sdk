@@ -53,7 +53,7 @@
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## Google Play — `registers/playstore.ts` (39) · impl `playstore/tools.ts`
+## Google Play — `registers/playstore.ts` (39) · impl `playstore/*.ts`
 
 - Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
@@ -80,7 +80,7 @@
   `purchaseOptions` 포함 — 구매 옵션 활성화 토글의 입력) are **not** duplicates; both stay.
 
 <!-- generated:catalog-domain:appstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## App Store Connect — `registers/appstore.ts` (64) · impl `appstore/tools.ts`
+## App Store Connect — `registers/appstore.ts` (64) · impl `appstore/*.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·

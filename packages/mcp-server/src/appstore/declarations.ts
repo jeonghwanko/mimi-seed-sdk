@@ -4,7 +4,7 @@
 //   수출 규정 (appEncryptionDeclarations)    : 앱 단위로 만들고 빌드에 붙인다
 //   판매 지역 (appAvailabilityV2 / territoryAvailabilities): 지역별 available·출시일
 //
-// Play 쪽 대응물(데이터 안전 CSV)은 playstore/tools.ts 에 있다 — 자격증명 계통이 달라서 파일을 나눴다.
+// Play 쪽 대응물(데이터 안전 CSV)은 playstore/data-safety.ts 에 있다 — 자격증명 계통이 달라서 파일을 나눴다.
 
 import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 import { encodePathSegment } from '../lib/url-path.js';

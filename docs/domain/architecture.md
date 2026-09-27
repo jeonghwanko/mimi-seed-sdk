@@ -73,7 +73,11 @@ Why a registrar instead of editing 200+ call sites: the classification has one o
 by the catalog's **W**/**D** markers and test-enforced), and a new destructive tool is guarded the moment it is
 classified — nobody has to remember to hand-write a preview branch.
 - Business logic lives in sibling folders (`playstore/tools.ts`, `appstore/tools.ts`, …), not in the register
-  file. The register file is the thin "surface"; `tools.ts` is the "engine". File IO (reading a CSV or a key
+  file. The register file is the thin "surface"; `tools.ts` is the "engine". The two biggest domains split
+  their engine into cohesive modules (`appstore/{client,apps,versions,review-submission,products}.ts`,
+  `playstore/{edits,statistics,listing,releases,images,reviews,products,recovery,data-safety,service-account}.ts`)
+  and keep `tools.ts` as a re-export barrel, because registers, `checks/*`, and tests import and `vi.mock` that
+  path. File IO (reading a CSV or a key
   file the caller named) belongs to the domain module too — e.g. `playstore/data-safety.ts`,
   `android/playstore-sa.ts`.
 - Responses go through `lib/mcp-response.ts`: `jsonResult(value)` for structured output, `textResult(str | lines)`

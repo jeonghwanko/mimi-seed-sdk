@@ -130,9 +130,9 @@ export const catalog = {
    * `impl`: 섹션 제목의 "· impl `…`" 부분.
    */
   sections: {
-    playstore: { impl: 'playstore/tools.ts' },
+    playstore: { impl: 'playstore/*.ts' },
     appstore: {
-      impl: 'appstore/tools.ts',
+      impl: 'appstore/*.ts',
       layout: [
         'R',
         { label: '분석/매출', tools: ['appstore_get_sales_report', 'appstore_get_finance_report'] },

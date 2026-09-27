@@ -97,7 +97,7 @@ const GOOGLE_DIRS = ['admob', 'bigquery', 'billing', 'firebase', 'ga4', 'gsc', '
 const GOOGLE_ALLOWED: Array<{ file: string; expr: string; why: string }> = [
   { file: 'firebase/remote-config.ts', expr: 'encodedProject', why: 'encodePathSegment() 결과 (raw REST, googleapis 아님)' },
   { file: 'firebase/remote-config.ts', expr: 'encodedNamespace', why: 'encodePathSegment() 결과 (raw REST, googleapis 아님)' },
-  { file: 'playstore/tools.ts', expr: 'resource', why: 'metricSet enum 에서 고른 고정 리소스명' },
+  { file: 'playstore/statistics.ts', expr: 'resource', why: 'metricSet enum 에서 고른 고정 리소스명' },
   { file: 'playstore/messages.ts', expr: 'packageName', why: '사람용 안내문의 로컬 저장 경로 표시 (API 리소스 이름 아님, 스키마에서 이미 검증된 패키지명)' },
 ];
 const GOOGLE_INTERPOLATION = /\/\$\{(?!resourceSegment\(|encodePathSegment\(|encodeURIComponent\()([^}]*)\}/g;
