@@ -28,7 +28,7 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 Google Play 도구로 스토�
 
 호출 전 schema 로드:
 ```
-ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release")
+ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release,playstore_replace_images,playstore_delete_all_images,playstore_upload_data_safety")
 ```
 
 인앱 상품·리뷰·통계까지 다룰 때 추가로:
@@ -70,6 +70,10 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
 설치·평점 추이는 `playstore_get_statistics`로 읽는다.
 
 ## 출시 후 긴급 복구
+
+```
+ToolSearch(query="select:playstore_list_recovery_actions,playstore_create_recovery_action,playstore_deploy_recovery_action,playstore_cancel_recovery_action")
+```
 
 이미 배포된 앱이 치명적으로 망가졌을 때만 쓴다. `playstore_list_recovery_actions`로 현황을 보고,
 `playstore_create_recovery_action`으로 DRAFT를 만든 뒤(대상: allUsers 또는 versionCodes/versionRange —

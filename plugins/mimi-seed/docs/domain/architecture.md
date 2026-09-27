@@ -173,8 +173,9 @@ Registered in `mcp-server/src/resources.ts` and `prompts.ts`:
 
 - **Resources** — `mimi-seed://auth/status` (Google OAuth freshness as JSON), `mimi-seed://agent/guide`
   (the full `docs/agent-guide.md`, served from the committed copy `packages/mcp-server/assets/agent-guide.md`
-  — refreshed by `npm run plugin:sync`), and `mimi-seed://tools/catalog` (runtime capability index served
-  verbatim from `tool-manifest.json`, which carries per-domain `label`/`credential`/`summary` metadata).
+  — refreshed by `npm run plugin:sync`), and `mimi-seed://tools/catalog` (runtime capability index built
+  from `tool-manifest.json` — per-domain `label`/`credential`/`summary`, the `write`/`destructive` lists, and
+  deprecated aliases — filtered to the tools this server actually registered under `MIMI_SEED_TOOLSETS`).
 - **Prompts → slash commands** — `getting-started`, `deploy`, `health`, `review-inbox`, surfaced in MCP
   clients as `/mimi-seed:<name>`. More in [[skills-plugins]].
 

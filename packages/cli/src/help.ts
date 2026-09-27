@@ -132,6 +132,7 @@ ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed mcp")}         Claude/Codex MCP 연결 안내 및 Codex 설정 쓰기
   ${kleur.cyan("mimi-seed restart")}     MCP 서버 프로세스 재시작 (기본: mimi-seed)
   ${kleur.cyan("mimi-seed logout")}      로컬 설정 삭제
+  ${kleur.cyan("mimi-seed --version")}   설치된 CLI 버전 출력
 
 ${kleur.dim("각 명령 상세 옵션:")} ${kleur.cyan("mimi-seed <command> --help")}
 
@@ -267,6 +268,7 @@ ${kleur.bold("Commands:")}
   ${kleur.cyan("mimi-seed mcp")}         Claude/Codex MCP setup instructions and Codex config writing
   ${kleur.cyan("mimi-seed restart")}     restart the MCP server process (default: mimi-seed)
   ${kleur.cyan("mimi-seed logout")}      delete the local config
+  ${kleur.cyan("mimi-seed --version")}   print the installed CLI version
 
 ${kleur.dim("Per-command options:")} ${kleur.cyan("mimi-seed <command> --help")}
 

@@ -1,11 +1,21 @@
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
-import { jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
+import {
+  jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig, type JenkinsConfig,
+} from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
 import * as jobs from '../jenkins/jobs.js';
 import { textResult } from '../lib/mcp-response.js';
 import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from '../android/keystore-store.js';
-import { existingCredentialPreview, jenkinsConfiguredLines, jenkinsNotConfiguredLines } from '../jenkins/messages.js';
+import {
+  ambiguousDefaultIdNote, existingCredentialPreview, jenkinsConfiguredLines, jenkinsNotConfiguredLines,
+} from '../jenkins/messages.js';
+
+/** 기존 id 교체 dry-run — 무엇을 덮어쓰게 되는지(id·종류·설명)와 모호한 기본 id 경고를 싣는다. */
+async function existingPreview(cfg: JenkinsConfig, id: string, requested: creds.CredentialKind) {
+  const note = ambiguousDefaultIdNote(id);
+  return textResult(existingCredentialPreview(id, await creds.inspectCredential(cfg, id), requested, note ? [note] : []));
+}
 
 export function registerJenkinsTools(server: ToolRegistrar) {
   // ── 0. 상태 확인 (항상 첫 번째로 호출) ─────────────────────────────────────
@@ -105,7 +115,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const value = resolveSecretInput({ secret, secretFile: secret_file, secretField: secret_field });
       const cfg = requireJenkinsConfig();
       const result = await creds.upsertSecretText(cfg, id, value, description ?? '', { allowReplace: confirm === true });
-      if (result === 'exists') return textResult(existingCredentialPreview(id));
+      if (result === 'exists') return existingPreview(cfg, id, creds.KIND_STRING);
       return textResult(`✅ Jenkins credential ${result}: \`${id}\``);
     },
   );
@@ -137,7 +147,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const result = await creds.upsertSecretFile(cfg, id, keystore, file_name, description ?? '', {
         allowReplace: confirm === true,
       });
-      if (result === 'exists') return textResult(existingCredentialPreview(id));
+      if (result === 'exists') return existingPreview(cfg, id, creds.KIND_FILE);
       return textResult(`✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`);
     },
   );

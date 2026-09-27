@@ -72,7 +72,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   registerYouTubeTools(registrar);
   registerTikTokBusinessTools(registrar);
   registerPrompts(server);
-  registerResources(server);
+  registerResources(server, { manifest, toolsets });
 
   return server;
 }

@@ -21,6 +21,7 @@ import { cmdRestart } from "./mcp-restart.js";
 import { printMcpSetup, writeCodexMcpConfig, claudeMcpAddCommand } from "./mcp-config.js";
 import { printCommandHelp, printHelp } from "./help.js";
 import { catalog, t } from "./i18n.js";
+import { version as CLI_VERSION } from "../package.json";
 
 // 이 파일에서만 쓰는 문구. 공통 문구(common.error 등)는 i18n.ts 의 t() 에 있다.
 const M = catalog(
@@ -142,6 +143,12 @@ enabled = true`);
 async function main(): Promise<void> {
   const cmd = process.argv[2];
   const restArgs = process.argv.slice(3);
+
+  // `mimi-seed --version` / `-v` / `version` — 버전만 찍고 0 으로 끝난다 (다른 인자는 보지 않는다).
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") {
+    log(CLI_VERSION);
+    return;
+  }
 
   // 명령별 --help / -h. auth 는 cmdAuth 가 자체 상세 help 를 출력하므로 위임.
   if (cmd && cmd !== "auth" && (restArgs.includes("--help") || restArgs.includes("-h"))) {

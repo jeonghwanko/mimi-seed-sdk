@@ -408,8 +408,9 @@ Available in any MCP client as native slash commands:
 - `/mimi-seed:review-inbox` — fetch unanswered reviews → draft replies
 
 MCP resources: `mimi-seed://auth/status` (live token state) · `mimi-seed://agent/guide`
-(this guide, served over MCP) · `mimi-seed://tools/catalog` (the full tool inventory by
-domain, with the credential each domain needs — read it to answer "what can Mimi Seed do?").
+(this guide, served over MCP) · `mimi-seed://tools/catalog` (the tools this server registered,
+by domain — filtered by `MIMI_SEED_TOOLSETS` — with write / destructive markers, deprecated aliases, and the
+credential each domain needs; read it to answer "what can Mimi Seed do?").
 
 ---
 

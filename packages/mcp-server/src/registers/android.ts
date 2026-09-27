@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
@@ -5,10 +6,10 @@ import { requirePlayStoreAuth } from '../helpers.js';
 import { getServiceAccountJson } from '../auth/playstore-auth.js';
 import { getAppDetails } from '../playstore/tools.js';
 import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
-import { persistGeneratedKeystore } from '../android/keystore-store.js';
+import { keystoresDir, persistGeneratedKeystore } from '../android/keystore-store.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
-import { upsertSecretFile } from '../jenkins/credentials.js';
-import { existingCredentialPreview } from '../jenkins/messages.js';
+import { inspectCredential, KIND_FILE, upsertSecretFile } from '../jenkins/credentials.js';
+import { ambiguousDefaultIdNote, existingCredentialPreview } from '../jenkins/messages.js';
 import { loadPlayServiceAccountForUpload } from '../android/playstore-sa.js';
 import {
   existingAppSigningPlanLines, newAppSigningPlanLines, keytoolMissingLines, keystoreGeneratedLines,
@@ -78,7 +79,9 @@ export function registerAndroidTools(server: ToolRegistrar) {
         : '⚠️  Jenkins 미설정 — jenkins_status 호출 후 jenkins_save_config로 먼저 설정하세요.';
 
       if (appStatus === 'existing') {
-        return textResult(existingAppSigningPlanLines(package_name, prefix, jenkinsStatus));
+        return textResult(
+          existingAppSigningPlanLines(package_name, prefix, jenkinsStatus, path.join(keystoresDir(), package_name)),
+        );
       }
 
       // 신규 앱 또는 미확인
@@ -91,6 +94,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
         jenkinsConfigured: Boolean(jenkinsCfg),
         keytoolOk: isKeytoolAvailable(),
         projectId: project_id,
+        keystoreDir: path.join(keystoresDir(), package_name),
       }));
     },
   );
@@ -151,10 +155,21 @@ export function registerAndroidTools(server: ToolRegistrar) {
       const cfg = requireJenkinsConfig();
       // jenkins_upload_keystore / jenkins_create_credential 와 같은 규칙: 새 id 는 바로 만들고,
       // 이미 있는 id 를 교체하는 것만 confirm 을 요구한다 (예전엔 말없이 덮어썼다).
-      const result = await upsertSecretFile(cfg, credential_id, saBase64, `${package_name}-sa.json`, '', {
+      // 설명에 패키지명을 남긴다 — 기본 id 가 마지막 세그먼트만 써서 다른 앱과 겹쳐도 다음 dry-run 이 누구 것인지 보여준다.
+      const description = `Play Store service account for ${package_name}`;
+      const result = await upsertSecretFile(cfg, credential_id, saBase64, `${package_name}-sa.json`, description, {
         allowReplace: confirm === true,
       });
-      if (result === 'exists') return textResult(existingCredentialPreview(credential_id));
+      if (result === 'exists') {
+        const notes: string[] = [];
+        if (credentialIdInput === undefined) {
+          notes.push(
+            ambiguousDefaultIdNote(credential_id) ??
+              `ℹ️ "${credential_id}" 는 credential_id 를 생략해 ${package_name} 의 마지막 세그먼트로 만든 기본 id 다 — 같은 마지막 세그먼트를 가진 다른 앱도 이 id 를 쓴다.`,
+          );
+        }
+        return textResult(existingCredentialPreview(credential_id, await inspectCredential(cfg, credential_id), KIND_FILE, notes));
+      }
 
       return textResult(playServiceAccountUploadedLines({
         result, credentialId: credential_id, clientEmail: sa.clientEmail, rawLength: sa.raw.length,

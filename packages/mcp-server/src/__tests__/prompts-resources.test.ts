@@ -42,32 +42,97 @@ describe('prompts & resources (boot smoke test)', () => {
     });
   });
 
-  it('tools/catalog 리소스가 manifest 와 일치하는 도메인 인덱스를 서빙한다', async () => {
-    await withClient(async (client) => {
+  type Catalog = {
+    error?: string;
+    total: number;
+    manifestTotal: number;
+    toolsets: { all: boolean; enabled: string[]; include: string[]; exclude: string[] };
+    deferredHint: string;
+    deprecated: Record<string, string>;
+    domains: {
+      id: string;
+      label: string;
+      credential: string;
+      summary: string;
+      toolCount: number;
+      tools: string[];
+      write: string[];
+      destructive: string[];
+    }[];
+  };
+
+  async function readCatalog(env: NodeJS.ProcessEnv): Promise<{ catalog: Catalog; registered: string[] }> {
+    return withClient(async (client) => {
       const { contents } = await client.readResource({ uri: 'mimi-seed://tools/catalog' });
-      const catalog = JSON.parse(String((contents[0] as { text?: string } | undefined)?.text ?? '')) as {
-        error?: string;
-        total: number;
-        deferredHint: string;
-        domains: { id: string; label: string; credential: string; summary: string; toolCount: number; tools: string[] }[];
-      };
-      expect(catalog.error, '정상 설치에서 카탈로그가 degraded 페이로드를 서빙함').toBeUndefined();
-      expect(catalog.total).toBe(manifest.total);
-      expect(catalog.deferredHint).toContain('ToolSearch');
+      const catalog = JSON.parse(String((contents[0] as { text?: string } | undefined)?.text ?? '')) as Catalog;
+      const registered = (await client.listTools()).tools.map((t) => t.name);
+      return { catalog, registered };
+    }, { env });
+  }
 
-      const catalogIds = catalog.domains.map((d) => d.id).sort();
-      expect(catalogIds).toEqual(Object.keys(manifest.domains).sort());
+  /** 카탈로그가 말하는 도구 = 서버에 실제 등록된 도구 (정식 + 별칭). */
+  function expectMatchesRegistered(catalog: Catalog, registered: string[]) {
+    const listed = [...catalog.domains.flatMap((d) => d.tools), ...Object.keys(catalog.deprecated)];
+    expect(listed.sort()).toEqual([...registered].sort());
+    expect(catalog.total).toBe(registered.length);
+  }
 
-      // 메타데이터는 manifest 가 SSOT — 리소스는 그대로 서빙해야 한다.
-      for (const domain of catalog.domains) {
-        const entry = manifest.domains[domain.id];
-        expect(domain.label).toBe(entry.label);
-        expect(domain.credential).toBe(entry.credential);
-        expect(domain.summary).toBe(entry.summary);
-        expect(domain.toolCount).toBe(entry.tools.length);
-        expect(domain.tools).toEqual(entry.tools);
-      }
-    });
+  it('tools/catalog 리소스가 manifest 와 일치하는 도메인 인덱스를 서빙한다 (MIMI_SEED_TOOLSETS 미설정)', async () => {
+    const { catalog, registered } = await readCatalog({});
+    expect(catalog.error, '정상 설치에서 카탈로그가 degraded 페이로드를 서빙함').toBeUndefined();
+    expect(catalog.total).toBe(manifest.total);
+    expect(catalog.manifestTotal).toBe(manifest.total);
+    expect(catalog.toolsets.all).toBe(true);
+    expect(catalog.deferredHint).toContain('ToolSearch');
+    expectMatchesRegistered(catalog, registered);
+
+    const catalogIds = catalog.domains.map((d) => d.id).sort();
+    expect(catalogIds).toEqual(Object.keys(manifest.domains).sort());
+
+    // 폐기 예정 별칭은 일반 도구 목록이 아니라 deprecated 에만 나온다.
+    expect(catalog.deprecated).toEqual(manifest.deprecated ?? {});
+    const aliases = new Set(Object.keys(manifest.deprecated ?? {}));
+
+    // 메타데이터·분류는 manifest 가 SSOT — 리소스는 그대로 서빙해야 한다.
+    for (const domain of catalog.domains) {
+      const entry = manifest.domains[domain.id];
+      expect(domain.label).toBe(entry.label);
+      expect(domain.credential).toBe(entry.credential);
+      expect(domain.summary).toBe(entry.summary);
+      expect(domain.tools).toEqual(entry.tools.filter((t) => !aliases.has(t)));
+      expect(domain.toolCount).toBe(domain.tools.length);
+      expect([...domain.write].sort()).toEqual((entry.write ?? []).filter((t) => !aliases.has(t)).sort());
+      expect([...domain.destructive].sort()).toEqual((entry.destructive ?? []).filter((t) => !aliases.has(t)).sort());
+    }
+    const playstore = catalog.domains.find((d) => d.id === 'playstore')!;
+    expect(playstore.destructive).toContain('playstore_submit_release');
+    expect(playstore.tools).not.toContain('playstore_update_latest_release_notes');
+  });
+
+  it('tools/catalog 는 MIMI_SEED_TOOLSETS 로 켜진 도구만 서빙한다', async () => {
+    const { catalog, registered } = await readCatalog({ MIMI_SEED_TOOLSETS: 'store' });
+    expect(catalog.error).toBeUndefined();
+    expect(catalog.total).toBeLessThan(manifest.total);
+    expect(catalog.manifestTotal).toBe(manifest.total);
+    expect(catalog.toolsets.all).toBe(false);
+    expect(catalog.toolsets.include).toEqual(['store']);
+    expect(new Set(catalog.toolsets.enabled)).toEqual(new Set([...manifest.toolsets!.store, ...manifest.alwaysOn!]));
+    expectMatchesRegistered(catalog, registered);
+
+    const ids = catalog.domains.map((d) => d.id);
+    expect(ids).toContain('playstore');
+    expect(ids).not.toContain('youtube');
+    expect(ids).not.toContain('firebase');
+  });
+
+  it('tools/catalog 는 다른 도메인 소속 도구(alsoInToolsets)와 EXCLUDE 도 레지스트라와 같게 판정한다', async () => {
+    const jenkins = await readCatalog({ MIMI_SEED_TOOLSETS: 'jenkins' });
+    expectMatchesRegistered(jenkins.catalog, jenkins.registered);
+    expect(jenkins.catalog.domains.find((d) => d.id === 'android')?.tools).toEqual(['jenkins_upload_playstore_sa']);
+
+    const excluded = await readCatalog({ MIMI_SEED_TOOLSETS_EXCLUDE: 'playstore' });
+    expectMatchesRegistered(excluded.catalog, excluded.registered);
+    expect(excluded.catalog.deprecated).not.toHaveProperty('playstore_update_latest_release_notes');
   });
 
   it('온보딩 표면이 이름을 대는 도구가 전부 manifest 에 실존한다 (리네임 드리프트 가드)', async () => {

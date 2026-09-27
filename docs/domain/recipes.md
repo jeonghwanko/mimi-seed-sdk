@@ -36,7 +36,7 @@
    the registrar confirm-gates it; list it in `ownGate` only if its own `confirm` flag covers every destructive
    path), `local` (no external service), `idempotent` (a write that is safe to repeat).
    Unlisted = read-only. An unclassified-but-registered name throws at boot. A new domain also needs `label` /
-   `credential` / `summary` (the `mimi-seed://tools/catalog` resource serves that file verbatim) and, if it fits
+   `credential` / `summary` (the `mimi-seed://tools/catalog` resource serves them, filtered to the active toolsets) and, if it fits
    one, a `toolsets` group.
    *Renaming?* keep the old name for one minor release: leave it in `tools` with the same classification and add
    `"deprecated": { "<old>": "<new>" }` — the registrar registers the alias; remove its own `server.tool` call.

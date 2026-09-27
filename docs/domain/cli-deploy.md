@@ -27,6 +27,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `mcp` | `mcp-config.ts` | print / write Claude Code & Codex MCP registration |
 | `restart` | `mcp-restart.ts` | terminate a registered local stdio process, then print client-specific recovery. It falls back to the package marker for Codex plugin-only installs. Claude Code may reconnect on the next call; a closed Codex transport requires a new thread/client reload because the CLI cannot reattach the current thread |
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
+| `--version` / `-v` / `version` | `index.ts` (`main`) | print the CLI's `package.json` version and exit 0 |
 
 Per-command options are the SSOT in the `usage.<command>` entries of the `catalog(ko, en)` block in
 `help.ts` — that string is exactly what `mimi-seed <cmd> --help` prints (`printCommandHelp`), and the one-line
