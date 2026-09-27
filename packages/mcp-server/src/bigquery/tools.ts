@@ -7,6 +7,57 @@ export type BigQueryAuthClient = OAuth2Client | JWT;
 
 const bq = () => google.bigquery('v2');
 
+// ─── 읽기 전용 가드 ───
+//
+// bigquery_run_query 는 "SELECT 실행" 도구로 노출되고 readOnlyHint 를 단다. 그런데 BigQuery
+// jobs.query 에는 읽기 전용 모드가 없어서, 막지 않으면 DELETE / DROP TABLE / MERGE / 스크립트가
+// 그대로 실행된다. BigQuery 의 DML·DDL·스크립트 문장은 전부 자기 키워드로 시작하므로
+// "주석·리터럴을 걷어낸 단일 문장이 SELECT 또는 WITH 로 시작" 이면 데이터를 바꿀 수 없다.
+
+/** 주석(--, #, /* *\/)과 문자열·식별자 리터럴을 공백으로 치환한다 (키워드 검사가 속지 않게). */
+function stripSqlNoise(sql: string): string {
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    const c = sql[i];
+    const next = sql[i + 1];
+    if ((c === '-' && next === '-') || c === '#') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      out += ' ';
+    } else if (c === '/' && next === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      i = end === -1 ? sql.length : end + 2;
+      out += ' ';
+    } else if (c === "'" || c === '"' || c === '`') {
+      const triple = c !== '`' && sql.startsWith(c.repeat(3), i);
+      const close = triple ? c.repeat(3) : c;
+      i += close.length;
+      while (i < sql.length && !sql.startsWith(close, i)) i += sql[i] === '\\' ? 2 : 1;
+      i += close.length;
+      out += ' x ';
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+/** SELECT/WITH 단일 문장이 아니면 throw — API 를 부르기 전에 막는다. */
+export function assertSelectOnlyQuery(query: string): void {
+  const body = stripSqlNoise(query).trim().replace(/;\s*$/, '').trim();
+  if (body.includes(';')) {
+    throw new Error('bigquery_run_query 는 단일 SELECT 문만 실행한다 — 여러 문장(스크립트)은 허용하지 않음.');
+  }
+  const first = /^[(\s]*([a-z_]+)/i.exec(body)?.[1]?.toUpperCase();
+  if (first !== 'SELECT' && first !== 'WITH') {
+    throw new Error(
+      `bigquery_run_query 는 읽기 전용이다 — SELECT / WITH 로 시작하는 쿼리만 허용 (받은 문장: ${first ?? '(비어 있음)'}). ` +
+        'DML/DDL 은 BigQuery 콘솔이나 bq CLI 에서 직접 실행할 것.',
+    );
+  }
+}
+
 // ─── 쿼리 실행 ───
 
 /** 첫 jobs.query 가 미완료로 돌아왔을 때 getQueryResults 로 더 기다리는 총 시간 상한. */
