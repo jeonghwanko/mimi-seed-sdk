@@ -4,6 +4,7 @@ import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import { extractHttpStatus } from '../lib/google-errors.js';
 import { collectPages } from '../lib/paginate.js';
+import { GOOGLEAPIS_MEDIA_OPTIONS } from '../lib/google-timeouts.js';
 
 export type PlayImageType =
   | 'featureGraphic'
@@ -451,7 +452,7 @@ export async function uploadImage(
           mimeType: mimeTypeFor(filePath),
           body: fs.createReadStream(filePath),
         },
-      });
+      }, GOOGLEAPIS_MEDIA_OPTIONS);
       return res.data.image;
     },
     true,
@@ -506,7 +507,7 @@ export async function replaceImages(
             mimeType: mimeTypeFor(filePath),
             body: fs.createReadStream(filePath),
           },
-        });
+        }, GOOGLEAPIS_MEDIA_OPTIONS);
         uploaded.push(res.data.image ?? {});
       }
       return { imageType, count: uploaded.length, uploaded };

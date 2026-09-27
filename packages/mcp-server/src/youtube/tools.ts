@@ -1,6 +1,7 @@
 import type { OAuth2Client } from 'google-auth-library';
 import { google } from '../lib/googleapis-lite.js';
 import { friendlyGoogleError, googleErrorDetail } from '../lib/google-errors.js';
+import { GOOGLEAPIS_MEDIA_OPTIONS } from '../lib/google-timeouts.js';
 import { verifyYouTubeChannel } from '../auth/youtube-channel.js';
 import { createReadStream, openSync, readSync, closeSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -105,7 +106,7 @@ export async function setYouTubeThumbnail(auth: OAuth2Client, input: SetYouTubeT
   try {
     const response = await google.youtube({ version: 'v3', auth }).thumbnails.set({
       videoId: input.videoId, media: { mimeType: file.mimeType, body: createReadStream(input.filePath) },
-    });
+    }, GOOGLEAPIS_MEDIA_OPTIONS);
     return { status: 'updated' as const, ...preview, thumbnails: response.data.items ?? [] };
   } catch (error) { throw youtubeError(error); }
 }
