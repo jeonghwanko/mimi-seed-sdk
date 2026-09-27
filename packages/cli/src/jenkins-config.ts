@@ -5,10 +5,15 @@
 // jenkins_* 도구가 "미설정"이라 답했다. 이 모듈이 그 이중화를 봉합한다.
 //
 // CLI 는 이 파일을 **읽기만** 한다. 쓰기는 mimi-seed-jenkins-auth bin(= mcp-server)이 소유한다.
+// 유일한 예외가 아래 `migrateLegacyJenkins` — CLI 가 예전에 config.json 에 써 둔 값을 옮기는
+// 1회성 이관이고, jenkins.json 이 **없을 때만** 만든다(정본을 덮어쓰지 않는다). 새 값을 받아
+// 검증하는 writer 가 아니므로 "자격증명 하나당 writer 하나" 규칙의 두 번째 writer 가 아니다.
+// 셸아웃으로 대체할 수 없는 이유: setup bin 은 대화형 전용이라 이관할 값을 넘길 방법이 없다.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { writeCredentialJson } from "./lib/atomic-write.js";
 
 const CONFIG_DIR = path.join(os.homedir(), ".mimi-seed");
 const JENKINS_PATH = path.join(CONFIG_DIR, "jenkins.json");
@@ -66,16 +71,13 @@ export function migrateLegacyJenkins(home = os.homedir()): boolean {
     ...(j.jobIos ? { jobIos: j.jobIos } : {}),
   };
 
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  // mode 를 생성 시점에 준다 — 나중에 chmod 하면 그 사이 world-readable 창이 열린다.
-  fs.writeFileSync(jenkinsPath, JSON.stringify(migrated, null, 2), { mode: 0o600 });
+  // 둘 다 원자적 0600. jenkins.json 은 처음 나타나는 순간부터 0600 이고, config.json 은
+  // Mimi Seed PAT 를 들고 있어 truncate 중에 죽으면 토큰이 통째로 날아가므로 temp + rename.
+  // (예전 고정 temp 이름 `config.json.tmp` 는 동시 실행 두 개가 서로의 temp 를 덮어썼다.)
+  writeCredentialJson(jenkinsPath, migrated);
 
-  // config.json 은 Mimi Seed PAT 를 들고 있다. writeFileSync 는 먼저 truncate 하므로
-  // 그 사이에 죽으면 토큰이 통째로 날아간다 — temp + rename 으로 원자적으로 바꾼다.
   delete legacy.jenkins;
-  const tmp = `${legacyPath}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(legacy, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, legacyPath);
+  writeCredentialJson(legacyPath, legacy);
 
   return true;
 }

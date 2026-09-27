@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { catalog } from "./i18n.js";
 import { fetchWithTimeout } from "./lib/http.js";
+import { writeCredentialJson } from "./lib/atomic-write.js";
 
 const CI_CONFIG_PATH = path.join(os.homedir(), ".mimi-seed", "ci.json");
 
@@ -63,17 +64,14 @@ export function normalizeHost(host?: string): string | undefined {
   return withScheme.replace(/\/+$/, "");
 }
 
+/**
+ * ci.json 저장 — CLI 가 소유하는 유일한 외부 자격증명 파일(문서화된 예외, docs/domain/pitfalls.md §12).
+ * PAT 가 들어 있으므로 원자적 0600 쓰기: 중간에 끊겨도 잘린 JSON 이 남지 않는다.
+ */
 export function saveCiProviderConfig(cfg: CiProviderConfig): void {
-  const dir = path.dirname(CI_CONFIG_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  }
   const normalized: CiProviderConfig = { ...cfg, host: normalizeHost(cfg.host) };
   if (!normalized.host) delete normalized.host;
-  fs.writeFileSync(CI_CONFIG_PATH, JSON.stringify(normalized, null, 2));
-  if (process.platform !== "win32") {
-    fs.chmodSync(CI_CONFIG_PATH, 0o600);
-  }
+  writeCredentialJson(CI_CONFIG_PATH, normalized);
 }
 
 /**
