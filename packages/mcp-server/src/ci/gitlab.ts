@@ -1,15 +1,7 @@
 import type { CiConfig, NormalizedBuild } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
-
-function base(cfg: CiConfig) {
-  return `${cfg.host ?? 'https://gitlab.com'}/api/v4`;
-}
-
-// GitLab accepts both numeric project ID and "namespace%2Frepo" path
-function projectId(cfg: CiConfig) {
-  return encodeURIComponent(`${cfg.owner}/${cfg.repo}`);
-}
+import { gitlabApiBase, gitlabProjectId } from '#core/ci.js';
 
 function headers(token: string): Record<string, string> {
   return {
@@ -19,7 +11,8 @@ function headers(token: string): Record<string, string> {
 }
 
 async function glFetch(cfg: CiConfig, endpoint: string, options?: RequestInit) {
-  const res = await fetchWithTimeout(`${base(cfg)}${endpoint}`, {
+  // base URL · 프로젝트 id 규칙은 CLI 의 배포 경로와 공유한다(#core/ci.js).
+  const res = await fetchWithTimeout(`${gitlabApiBase(cfg)}${endpoint}`, {
     ...options,
     headers: { ...headers(cfg.token), ...(options?.headers ?? {}) },
   });
@@ -61,8 +54,8 @@ interface GlPipeline {
 
 export async function listWorkflows(cfg: CiConfig): Promise<GitLabWorkflowInfo> {
   const [schedules, triggers] = await Promise.all([
-    glFetch(cfg, `/projects/${projectId(cfg)}/pipeline_schedules`),
-    glFetch(cfg, `/projects/${projectId(cfg)}/triggers`),
+    glFetch(cfg, `/projects/${gitlabProjectId(cfg)}/pipeline_schedules`),
+    glFetch(cfg, `/projects/${gitlabProjectId(cfg)}/triggers`),
   ]);
   return {
     schedules: (schedules as GlPipelineSchedule[]).map((s) => ({
@@ -89,7 +82,7 @@ export async function triggerBuild(
   const body: Record<string, unknown> = { ref };
   if (vars.length > 0) body.variables = vars;
 
-  const data = await glFetch(cfg, `/projects/${projectId(cfg)}/pipeline`, {
+  const data = await glFetch(cfg, `/projects/${gitlabProjectId(cfg)}/pipeline`, {
     method: 'POST',
     body: JSON.stringify(body),
   });
@@ -97,7 +90,7 @@ export async function triggerBuild(
 }
 
 export async function getBuildStatus(cfg: CiConfig, pipelineId: string | number): Promise<NormalizedBuild> {
-  const data = await glFetch(cfg, `/projects/${projectId(cfg)}/pipelines/${encodePathSegment(pipelineId)}`);
+  const data = await glFetch(cfg, `/projects/${gitlabProjectId(cfg)}/pipelines/${encodePathSegment(pipelineId)}`);
   return normalize(data);
 }
 
@@ -106,14 +99,14 @@ export async function listRecentBuilds(
   ref?: string,
   limit = 10,
 ): Promise<NormalizedBuild[]> {
-  let endpoint = `/projects/${projectId(cfg)}/pipelines?per_page=${limit}&order_by=id&sort=desc`;
+  let endpoint = `/projects/${gitlabProjectId(cfg)}/pipelines?per_page=${limit}&order_by=id&sort=desc`;
   if (ref) endpoint += `&ref=${encodeURIComponent(ref)}`;
   const data = await glFetch(cfg, endpoint);
   return (data as GlPipeline[]).map(normalize);
 }
 
 export async function cancelBuild(cfg: CiConfig, pipelineId: string | number): Promise<void> {
-  await glFetch(cfg, `/projects/${projectId(cfg)}/pipelines/${encodePathSegment(pipelineId)}/cancel`, {
+  await glFetch(cfg, `/projects/${gitlabProjectId(cfg)}/pipelines/${encodePathSegment(pipelineId)}/cancel`, {
     method: 'POST',
   });
 }
