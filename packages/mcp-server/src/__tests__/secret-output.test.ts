@@ -22,7 +22,7 @@ const h = await vi.hoisted(async () => {
 const mocks = vi.hoisted(() => ({ keysCreate: vi.fn(), spawnSync: vi.fn(), upsertSecretText: vi.fn(), upsertSecretFile: vi.fn() }));
 
 vi.mock('node:os', async (original) => {
-  const actual = await original<typeof import('node:os')>();
+  const actual = await original<typeof import('node:os') & { default: typeof import('node:os') }>();
   return { ...actual, homedir: () => h.home, default: { ...actual.default, homedir: () => h.home } };
 });
 vi.mock('node:child_process', async (original) => {
@@ -167,6 +167,7 @@ describe('키/keystore 경로 입력 — 봉쇄', () => {
     expect(text).not.toContain('PRIVATE KEY');
     expect(mocks.upsertSecretFile).toHaveBeenCalledWith(
       expect.anything(), 'app-playstore-sa', Buffer.from(keyJson).toString('base64'), 'com.example.app-sa.json',
+      '', { allowReplace: false },
     );
   });
 });

@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import type { AscListDocument, AscResource, AscToMany } from './types.js';
 
 /**
  * App Store Connect API — Screenshot upload
@@ -42,7 +43,7 @@ async function authHeadersOrThrow(): Promise<Record<string, string>> {
   return headers;
 }
 
-async function req<T = any>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
+async function req<T = unknown>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
   const headers = await authHeadersOrThrow();
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${BASE}${pathOrUrl}`;
   const res = await fetchWithTimeout(url, {
@@ -59,19 +60,30 @@ async function req<T = any>(pathOrUrl: string, init: RequestInit = {}): Promise<
 
 // ─── 조회 ───
 
+interface ScreenshotAttributes {
+  fileName?: string;
+  fileSize?: number;
+  assetDeliveryState?: { state?: string };
+  imageAsset?: unknown;
+}
+
 export async function listScreenshotSets(localizationId: string) {
-  const data = await req(
+  const data = await req<AscListDocument<
+    { screenshotDisplayType?: string },
+    { appScreenshots?: AscToMany },
+    AscResource<ScreenshotAttributes>
+  > | null>(
     `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/appScreenshotSets` +
       `?include=appScreenshots` +
       `&fields[appScreenshotSets]=screenshotDisplayType,appScreenshots` +
       `&fields[appScreenshots]=fileName,fileSize,assetDeliveryState,imageAsset`,
   );
   const included = data?.included ?? [];
-  return (data?.data ?? []).map((s: any) => ({
+  return (data?.data ?? []).map((s) => ({
     id: s.id,
     displayType: s.attributes?.screenshotDisplayType,
-    screenshots: (s.relationships?.appScreenshots?.data ?? []).map((ref: any) => {
-      const inc = included.find((i: any) => i.type === 'appScreenshots' && i.id === ref.id);
+    screenshots: (s.relationships?.appScreenshots?.data ?? []).map((ref) => {
+      const inc = included.find((i) => i.type === 'appScreenshots' && i.id === ref.id);
       return {
         id: ref.id,
         fileName: inc?.attributes?.fileName,
@@ -87,7 +99,7 @@ export async function listScreenshotSets(localizationId: string) {
 
 async function ensureScreenshotSet(localizationId: string, displayType: string): Promise<string> {
   const existing = await listScreenshotSets(localizationId);
-  const match = existing.find((s: any) => s.displayType === displayType);
+  const match = existing.find((s) => s.displayType === displayType);
   if (match) return match.id;
 
   const body = {
@@ -101,12 +113,12 @@ async function ensureScreenshotSet(localizationId: string, displayType: string):
       },
     },
   };
-  const created: any = await req('/appScreenshotSets', {
+  const created = await req<{ data: { id: string } }>('/appScreenshotSets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return created.data.id as string;
+  return created.data.id;
 }
 
 // ─── 청크 업로드 ───
@@ -148,7 +160,7 @@ export async function uploadScreenshot(
   const screenshotSetId = await ensureScreenshotSet(localizationId, displayType);
 
   // reserve
-  const reserved: any = await req('/appScreenshots', {
+  const reserved = await req<{ data: { id: string; attributes?: { uploadOperations?: UploadOperation[] } } }>('/appScreenshots', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -161,7 +173,7 @@ export async function uploadScreenshot(
       },
     }),
   });
-  const screenshotId = reserved.data.id as string;
+  const screenshotId = reserved.data.id;
   const ops: UploadOperation[] = reserved.data.attributes?.uploadOperations ?? [];
   if (ops.length === 0) {
     throw new Error('uploadOperations가 비어있음 — Apple API 응답 형식 확인 필요.');

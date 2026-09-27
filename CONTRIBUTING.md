@@ -29,7 +29,8 @@ source here — don't move it back into the web repo.
 
 ## Development setup
 
-Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22).
+Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22). The dev toolchain (eslint, vitest) needs
+**20.19 or newer** within the 20.x line — the published packages still run on any Node 20.
 
 ```bash
 npm run setup     # installs + builds both packages, npm links them, registers the MCP server
@@ -50,8 +51,9 @@ npm run build && npm test
 1. Branch off `main`.
 2. Keep changes scoped to one package where possible.
 3. **Build + test must pass** (`npm run build && npm test` in the affected package). The
-   mcp-server also type-checks via `tsc`; the CLI builds with `tsup`, which does not type-check — its
-   `npm test` runs `npm run typecheck` first, and you can run `npm run typecheck` alone while iterating.
+   Both packages' `npm test` run `npm run typecheck` first, test files included (the CLI builds with `tsup`,
+   which does not type-check; the mcp-server build config excludes `src/__tests__`, so its typecheck uses
+   `tsconfig.lint.json`). You can run `npm run typecheck` alone while iterating.
 4. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`,
    `chore:`, `docs:`…). Release notes are auto-generated from commit messages.
 5. Adding/changing an MCP tool? Register it in `registers/<domain>.ts` (a **new** register

@@ -1,15 +1,20 @@
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
-import { existsSync, readFileSync } from 'node:fs';
 import { requirePlayStoreAuth } from '../helpers.js';
-import { getServiceAccountJson, serviceAccountPathForPackage } from '../auth/playstore-auth.js';
+import { getServiceAccountJson } from '../auth/playstore-auth.js';
 import { getAppDetails } from '../playstore/tools.js';
 import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
 import { persistGeneratedKeystore } from '../android/keystore-store.js';
-import { readServiceAccountKeyFile } from '../iam/key-files.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
 import { upsertSecretFile } from '../jenkins/credentials.js';
+import { existingCredentialPreview } from '../jenkins/messages.js';
+import { loadPlayServiceAccountForUpload } from '../android/playstore-sa.js';
+import {
+  existingAppSigningPlanLines, newAppSigningPlanLines, keytoolMissingLines, keystoreGeneratedLines,
+  playServiceAccountMissingLines, playServiceAccountUploadedLines,
+} from '../android/messages.js';
+import { textResult } from '../lib/mcp-response.js';
 
 /**
  * Jenkins credential id 접두사를 패키지명/앱 이름에서 만든다.
@@ -73,75 +78,20 @@ export function registerAndroidTools(server: ToolRegistrar) {
         : '⚠️  Jenkins 미설정 — jenkins_status 호출 후 jenkins_save_config로 먼저 설정하세요.';
 
       if (appStatus === 'existing') {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `📦 ${package_name} — **기존 앱** (Play Console에 이미 존재)`,
-              '',
-              '기존 upload keystore와 비밀번호가 있어야 합니다.',
-              '분실한 경우 새 앱으로 다시 등록하거나 Play App Signing으로 마이그레이션해야 합니다.',
-              '',
-              `Jenkins: ${jenkinsStatus}`,
-              '',
-              '── 필요한 정보 ──────────────────────────────────',
-              '사용자에게 아래 항목을 확인하세요:',
-              '  1. upload.jks / upload.keystore 파일 경로 (base64로 변환 필요)',
-              '  2. store password',
-              '  3. key alias',
-              '  4. key password',
-              '  5. Play Store SA JSON 파일 (없으면 setup_playstore_connection으로 생성)',
-              '',
-              '── 등록 순서 ─────────────────────────────────────',
-              `  1. jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_base64=..., file_name="upload.jks")`,
-              `  2. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
-              `  3. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
-              `  4. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
-              `  5. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-playstore-sa")`,
-              `     └ SA JSON이 없으면 먼저: setup_playstore_connection(packageName="${package_name}", projectId="...")`,
-            ].join('\n'),
-          }],
-        };
+        return textResult(existingAppSigningPlanLines(package_name, prefix, jenkinsStatus));
       }
 
       // 신규 앱 또는 미확인
-      const keytoolOk = isKeytoolAvailable();
-      const appLabel = appStatus === 'new' ? '**신규 앱**' : '**신규 앱으로 처리** (Play Console 확인 불가)';
-
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `📦 ${package_name} — ${appLabel}`,
-            playNote ? `   ${playNote}` : '',
-            '',
-            `Jenkins: ${jenkinsStatus}`,
-            `keytool(Java JDK): ${keytoolOk ? '✅ 설치됨 — 자동 생성 가능' : '❌ 미설치 — android_generate_keystore 호출 불가, 수동 생성 필요'}`,
-            '',
-            '── 신규 앱 설정 순서 ─────────────────────────────',
-            jenkinsCfg ? '' : '  0. jenkins_status → jenkins_save_config (Jenkins 먼저 설정)',
-            keytoolOk
-              ? `  1. android_generate_keystore(app_name="${prefix}") → keystore + 비밀번호를 ~/.mimi-seed/keystores/ 에 파일로 생성`
-              : '  1. ⚠️  수동 keystore 생성 후 base64로 인코딩해서 제공 (keytool -genkeypair ...)',
-            keytoolOk
-              ? `  2~5. android_generate_keystore 응답의 경로로 jenkins_upload_keystore(keystore_path=…) + jenkins_create_credential(secret_file=…, secret_field=storePassword|keyAlias|keyPassword) — id 는 "${prefix}-android-keystore" / "-store-password" / "-key-alias" / "-key-password"`
-              : `  2. jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_base64=..., file_name="upload.jks")`,
-            ...(keytoolOk ? [] : [
-              `  3. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
-              `  4. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
-              `  5. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
-            ]),
-            project_id
-              ? `  6. setup_playstore_connection(packageName="${package_name}", projectId="${project_id}")`
-              : `  6. setup_playstore_connection(packageName="${package_name}", projectId="<GCP 프로젝트 ID>")`,
-            '     └ GCP 프로젝트 ID를 모르면 사용자에게 확인하세요.',
-            `  7. jenkins_upload_playstore_sa(package_name="${package_name}", credential_id="${prefix}-playstore-sa")`,
-            '  8. Play Console에서 서비스 계정 초대 (수동, 1회)',
-            '     → Play Console → 사용자 및 권한 → SA 이메일 → 릴리즈 관리자 권한 부여',
-            '  9. 첫 AAB 빌드 후 Play Console에 내부 테스트용으로 수동 업로드 (신규 앱 첫 번째만)',
-          ].filter((l) => l !== undefined).join('\n'),
-        }],
-      };
+      return textResult(newAppSigningPlanLines({
+        packageName: package_name,
+        prefix,
+        appStatus,
+        playNote,
+        jenkinsStatus,
+        jenkinsConfigured: Boolean(jenkinsCfg),
+        keytoolOk: isKeytoolAvailable(),
+        projectId: project_id,
+      }));
     },
   );
 
@@ -161,46 +111,10 @@ export function registerAndroidTools(server: ToolRegistrar) {
     },
     async ({ app_name, org, country }) => {
       const prefix = credentialPrefix(app_name);
-      if (!isKeytoolAvailable()) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              '❌ keytool이 설치되지 않았습니다.',
-              '',
-              'Java JDK를 설치하면 keytool이 포함됩니다:',
-              '  macOS: brew install openjdk',
-              '  Ubuntu: sudo apt install default-jdk',
-              '  Windows: https://adoptium.net/',
-              '',
-              '설치 후 다시 android_generate_keystore를 호출하세요.',
-            ].join('\n'),
-          }],
-        };
-      }
+      if (!isKeytoolAvailable()) return textResult(keytoolMissingLines());
 
       const saved = persistGeneratedKeystore(generateKeystore({ appName: app_name, org, country }), prefix);
-
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ Android upload keystore 생성 완료 — 비밀번호와 keystore 는 파일로만 저장했습니다 (응답에 싣지 않음).',
-            '',
-            `keystore:     ${saved.keystorePath} (0600)`,
-            `비밀번호 파일: ${saved.secretsPath} (0600 — keyAlias / storePassword / keyPassword)`,
-            `keyAlias:     ${saved.keyAlias}`,
-            '',
-            '🔒 분실하면 앱 서명을 영구히 잃습니다. 위 폴더를 비밀번호 관리자 등 안전한 곳에 백업하세요.',
-            '',
-            '── 다음 단계 — 값을 복사하지 말고 경로를 넘기세요 ──',
-            `  jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_path="${saved.keystorePath}", file_name="upload.jks")`,
-            `  jenkins_create_credential(id="${prefix}-android-store-password", secret_file="${saved.secretsPath}", secret_field="storePassword")`,
-            `  jenkins_create_credential(id="${prefix}-android-key-alias",      secret_file="${saved.secretsPath}", secret_field="keyAlias")`,
-            `  jenkins_create_credential(id="${prefix}-android-key-password",   secret_file="${saved.secretsPath}", secret_field="keyPassword")`,
-          ].join('\n'),
-        }],
-      };
+      return textResult(keystoreGeneratedLines(prefix, saved));
     },
   );
 
@@ -213,6 +127,8 @@ export function registerAndroidTools(server: ToolRegistrar) {
       '~/.mimi-seed/play-service-accounts/{package_name}.json 을 읽어 base64로 변환 후 등록합니다.',
       'iam_create_key 로 막 발급한 키를 올리려면 service_account_json_path 에 그 경로(~/.mimi-seed/keys/ 안)를 넘기세요.',
       'setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요.',
+      '새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 SA JSON 을 되돌릴 수 없게 교체하므로',
+      'confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.',
     ].join(' '),
     {
       package_name: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
@@ -223,52 +139,26 @@ export function registerAndroidTools(server: ToolRegistrar) {
         .string()
         .optional()
         .describe('선택 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 생략하면 패키지별 등록 SA 사용'),
+      confirm: z.boolean().optional().describe('같은 id 가 이미 있을 때만 필요. true 면 기존 SA JSON 을 교체'),
     },
-    async ({ package_name, credential_id: credentialIdInput, service_account_json_path }) => {
+    async ({ package_name, credential_id: credentialIdInput, service_account_json_path, confirm }) => {
       const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-playstore-sa`;
-      const saPath = service_account_json_path ?? serviceAccountPathForPackage(package_name);
-      if (!service_account_json_path && !existsSync(saPath)) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `❌ ${package_name} 서비스 계정 JSON이 없습니다.`,
-              `   경로: ${saPath}`,
-              '',
-              '먼저 setup_playstore_connection을 호출해 서비스 계정을 생성하세요.',
-            ].join('\n'),
-          }],
-        };
-      }
+      const sa = loadPlayServiceAccountForUpload(package_name, service_account_json_path);
+      if (!sa.found) return textResult(playServiceAccountMissingLines(package_name, sa.path));
 
-      const saJsonRaw = service_account_json_path
-        ? readServiceAccountKeyFile(service_account_json_path)
-        : readFileSync(saPath, 'utf-8');
-      let clientEmail = '(파싱 실패)';
-      try {
-        clientEmail = (JSON.parse(saJsonRaw) as { client_email?: string }).client_email ?? clientEmail;
-      } catch { /* ignore */ }
-
-      const saBase64 = Buffer.from(saJsonRaw, 'utf-8').toString('base64');
+      const saBase64 = Buffer.from(sa.raw, 'utf-8').toString('base64');
 
       const cfg = requireJenkinsConfig();
-      const result = await upsertSecretFile(cfg, credential_id, saBase64, `${package_name}-sa.json`);
+      // jenkins_upload_keystore / jenkins_create_credential 와 같은 규칙: 새 id 는 바로 만들고,
+      // 이미 있는 id 를 교체하는 것만 confirm 을 요구한다 (예전엔 말없이 덮어썼다).
+      const result = await upsertSecretFile(cfg, credential_id, saBase64, `${package_name}-sa.json`, '', {
+        allowReplace: confirm === true,
+      });
+      if (result === 'exists') return textResult(existingCredentialPreview(credential_id));
 
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ Play Store SA JSON → Jenkins ${result}: \`${credential_id}\``,
-            `   서비스 계정: ${clientEmail}`,
-            `   파일 크기:  ${saJsonRaw.length}자`,
-            '',
-            '다음 단계:',
-            '  Play Console → 설정 → 사용자 및 권한 → 서비스 계정에서',
-            `  ${clientEmail} 를 찾아 "릴리즈 관리자" 권한을 부여하세요.`,
-            '  (수동 1회 작업)',
-          ].join('\n'),
-        }],
-      };
+      return textResult(playServiceAccountUploadedLines({
+        result, credentialId: credential_id, clientEmail: sa.clientEmail, rawLength: sa.raw.length,
+      }));
     },
   );
 }

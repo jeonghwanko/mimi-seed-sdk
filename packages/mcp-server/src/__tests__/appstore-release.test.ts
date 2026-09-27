@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { JsonApiRequestBody } from './helpers.js';
 
 // 심사 통과 이후의 출시 제어. 네트워크 없이 **어떤 요청을 만드는지**만 검증한다.
 //
@@ -17,7 +18,8 @@ const { requestRelease, updateReleaseType, setPhasedRelease, getReleaseStatus } 
   '../appstore/release.js'
 );
 
-type Call = { url: string; method: string; body?: any };
+// body 는 요청에 본문이 있을 때만 채워진다 — 테스트는 본문이 있는 호출만 되읽는다.
+type Call = { url: string; method: string; body: JsonApiRequestBody };
 let calls: Call[] = [];
 
 /** 경로별 응답을 지정하는 최소 fetch 스텁. */

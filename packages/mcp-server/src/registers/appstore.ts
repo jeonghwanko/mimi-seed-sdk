@@ -18,8 +18,11 @@ import {
 import { requireAppStoreCreds } from '../helpers.js';
 import { buildAppStoreReleasePlan } from '../checks/plan.js';
 import { validateAppStoreWhatsNew, formatIssuesForUser } from '../lib/text-validators.js';
-import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { jsonResult, textResult, errorResult } from '../lib/mcp-response.js';
 import { appleCreationResult } from '../lib/store-create-result.js';
+import {
+  reviewSubmissionsText, submitForReviewDryRunText, releaseStatusText, betaStatusText,
+} from '../appstore/messages.js';
 
 /** ASC 속성값을 한 줄로. 객체가 오면 String() 이 '[object Object]' 를 뱉으므로 JSON 으로. */
 function stringifyAttr(value: unknown): string {
@@ -69,31 +72,21 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         // 키가 유효할 때만 물어본다 — 인증 자체가 깨졌으면 403/401 구분이 무의미하다.
         const reports = await appstoreSales.probeReportsAccess();
         const reportsIcon = reports.status === 'ok' ? '✓' : reports.status === 'forbidden' ? '✗' : '·';
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              '✓ App Store Connect 인증 유효',
-              r.appCount != null ? `   접근 가능 앱: ${r.appCount}개` : '',
-              r.firstApp ? `   예: ${r.firstApp.name ?? r.firstApp.id}` : '',
-              `${reportsIcon} 매출 리포트: ${reports.detail}`,
-              reports.status === 'forbidden'
-                ? '   → 키 롤은 나중에 못 바꾸는 경우가 있다. 그때는 위 롤로 새 키를 발급해 다시 등록할 것.'
-                : '',
-            ].filter(Boolean).join('\n'),
-          }],
-        };
+        return textResult([
+          '✓ App Store Connect 인증 유효',
+          r.appCount != null ? `   접근 가능 앱: ${r.appCount}개` : '',
+          r.firstApp ? `   예: ${r.firstApp.name ?? r.firstApp.id}` : '',
+          `${reportsIcon} 매출 리포트: ${reports.detail}`,
+          reports.status === 'forbidden'
+            ? '   → 키 롤은 나중에 못 바꾸는 경우가 있다. 그때는 위 롤로 새 키를 발급해 다시 등록할 것.'
+            : '',
+        ].filter(Boolean));
       }
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✗ 검증 실패 (stage: ${r.stage}${r.httpStatus ? `, HTTP ${r.httpStatus}` : ''})`,
-            '',
-            r.message,
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `✗ 검증 실패 (stage: ${r.stage}${r.httpStatus ? `, HTTP ${r.httpStatus}` : ''})`,
+        '',
+        r.message,
+      ]);
     },
   );
 
@@ -156,14 +149,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         earliestReleaseDate,
         buildId,
       });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ 버전 ${versionString} (${platform}) 생성됨${buildId ? ` + 빌드 ${buildId} 연결됨` : ''}.\n\n${JSON.stringify(result, null, 2)}`,
-          },
-        ],
-      };
+      return textResult(`✅ 버전 ${versionString} (${platform}) 생성됨${buildId ? ` + 빌드 ${buildId} 연결됨` : ''}.\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -186,30 +172,13 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       // 빈 문자열도 '지정됨' 으로 본다 — 병합 전처럼 API 가 거부하게 두고, 최신 빌드로 몰래 바꿔 붙이지 않는다.
       if (buildId !== undefined) {
         if (minBuildNumber !== undefined) {
-          return {
-            content: [{ type: 'text', text: '❌ minBuildNumber 는 buildId 생략(최신 VALID 빌드 자동 선택) 시에만 쓸 수 있다 — API 호출 안 함.' }],
-            isError: true,
-          };
+          return errorResult('❌ minBuildNumber 는 buildId 생략(최신 VALID 빌드 자동 선택) 시에만 쓸 수 있다 — API 호출 안 함.');
         }
         const result = await appstore.attachBuildToVersion(versionId, buildId);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `✅ 빌드 ${buildId}가 버전 ${versionId}에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`,
-            },
-          ],
-        };
+        return textResult(`✅ 빌드 ${buildId}가 버전 ${versionId}에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`);
       }
       const result = await appstore.attachLatestValidBuild(versionId, { minBuildNumber });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ 최신 VALID 빌드 #${result.buildNumber} (id=${result.attachedBuildId}) 가 버전 ${versionId} 에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`,
-          },
-        ],
-      };
+      return textResult(`✅ 최신 VALID 빌드 #${result.buildNumber} (id=${result.attachedBuildId}) 가 버전 ${versionId} 에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`);
     },
   );
 
@@ -246,13 +215,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       if (typeof cleaned.whatsNew === 'string') {
         const validation = validateAppStoreWhatsNew(cleaned.whatsNew);
         if (!validation.ok) {
-          return {
-            content: [{
-              type: 'text',
-              text: `❌ whatsNew 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`,
-            }],
-            isError: true,
-          };
+          return errorResult(`❌ whatsNew 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
         }
       }
       const result = await appstore.updateVersionLocalization(localizationId, cleaned);
@@ -325,13 +288,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       // ── 사전 lint — Apple 409 INVALID_CHARACTERS 등 round-trip 낭비 차단.
       const validation = validateAppStoreWhatsNew(whatsNew);
       if (!validation.ok) {
-        return {
-          content: [{
-            type: 'text',
-            text: `❌ What's New 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`,
-          }],
-          isError: true,
-        };
+        return errorResult(`❌ What's New 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
       }
       const result = await appstore.updateVersionWhatsNew(versionId, locale, { whatsNew });
       return textResult(`✅ ${locale} 로캘의 What's New가 업데이트됐어.\n\n${JSON.stringify(result, null, 2)}`);
@@ -630,17 +587,12 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         productType,
         reviewNote,
       });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✓ App Review 노트 수정 완료',
-            `productId: ${productId}`,
-            `internalId: ${result.internalId}`,
-            result.state ? `state: ${result.state}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✓ App Review 노트 수정 완료',
+        `productId: ${productId}`,
+        `internalId: ${result.internalId}`,
+        result.state ? `state: ${result.state}` : '',
+      ].filter(Boolean));
     },
   );
 
@@ -706,19 +658,14 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         name,
         description,
       });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ 현지화 ${result.created ? '생성' : '수정'} 완료`,
-            `productId: ${productId}`,
-            `locale: ${result.locale}`,
-            result.name ? `name: ${result.name}` : '',
-            result.description ? `description: ${result.description}` : '',
-            result.state ? `state: ${result.state}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✓ 현지화 ${result.created ? '생성' : '수정'} 완료`,
+        `productId: ${productId}`,
+        `locale: ${result.locale}`,
+        result.name ? `name: ${result.name}` : '',
+        result.description ? `description: ${result.description}` : '',
+        result.state ? `state: ${result.state}` : '',
+      ].filter(Boolean));
     },
   );
 
@@ -751,21 +698,16 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         filePath,
         replace,
       });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✓ App Review 스크린샷 업로드 완료',
-            `productId: ${productId}`,
-            `internalId: ${result.internalId}`,
-            `screenshotId: ${result.id}`,
-            result.replacedId ? `교체됨 (이전 screenshotId: ${result.replacedId})` : '',
-            `file: ${result.fileName} (${result.fileSize} bytes)`,
-            result.state ? `state: ${result.state}` : '',
-            result.verified ? '✓ commit 후 조회 확인' : '⚠ commit은 성공했지만 후속 조회는 확인하지 못함',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✓ App Review 스크린샷 업로드 완료',
+        `productId: ${productId}`,
+        `internalId: ${result.internalId}`,
+        `screenshotId: ${result.id}`,
+        result.replacedId ? `교체됨 (이전 screenshotId: ${result.replacedId})` : '',
+        `file: ${result.fileName} (${result.fileSize} bytes)`,
+        result.state ? `state: ${result.state}` : '',
+        result.verified ? '✓ commit 후 조회 확인' : '⚠ commit은 성공했지만 후속 조회는 확인하지 못함',
+      ].filter(Boolean));
     },
   );
 
@@ -798,19 +740,14 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         internalId: product.internalId,
         productType,
       });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✓ 상품 심사 제출 완료 (Apple 심사 대기)',
-            `productId: ${productId}`,
-            `endpoint: ${result.endpoint}`,
-            result.submissionId ? `submissionId: ${result.submissionId}` : '',
-            '',
-            '앱 버전과는 별개의 단독 제출이다. 버전 제출은 appstore_submit_for_review.',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✓ 상품 심사 제출 완료 (Apple 심사 대기)',
+        `productId: ${productId}`,
+        `endpoint: ${result.endpoint}`,
+        result.submissionId ? `submissionId: ${result.submissionId}` : '',
+        '',
+        '앱 버전과는 별개의 단독 제출이다. 버전 제출은 appstore_submit_for_review.',
+      ].filter(Boolean));
     },
   );
 
@@ -831,38 +768,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ appId, platform, limit }) => {
       const result = await appstore.listReviewSubmissions({ appId, platform, limit });
-      const lines: string[] = [`심사 제출 묶음 ${result.submissions.length}건 (${result.platform})`];
-      for (const sub of result.submissions) {
-        lines.push('');
-        lines.push(`● ${sub.id}`);
-        lines.push(`  state: ${sub.state ?? '?'}  submitted: ${sub.submittedDate ?? '(미제출)'}`);
-        if (sub.items.length === 0) {
-          lines.push('  items: (없음)');
-        }
-        // 항목 종류별 요약. 상품이 몇 개 들어갔는지가 첫 심사에서 가장 중요한 정보다.
-        const kinds = new Map<string, number>();
-        for (const item of sub.items) {
-          const k = item.targetType ?? 'unknown';
-          kinds.set(k, (kinds.get(k) ?? 0) + 1);
-        }
-        lines.push(
-          `  항목 ${sub.items.length}개` +
-          (kinds.size ? ` — ${[...kinds].map(([k, n]) => `${k} ${n}`).join(', ')}` : ''),
-        );
-        if (sub.items.length === 0) {
-          lines.push('  items: (없음)');
-        }
-        for (const item of sub.items) {
-          const target = item.versionString
-            ? `${item.targetType} ${item.versionString} (${item.appVersionState ?? '?'})`
-            : item.label
-              ? `${item.targetType} ${item.label}${item.targetState ? ` (${item.targetState})` : ''}`
-              : `${item.targetType ?? '?'} ${item.targetId ?? ''}`;
-          lines.push(`  - item ${item.id}`);
-          lines.push(`    state: ${item.state ?? '?'} → ${target}`);
-        }
-      }
-      return textResult(lines.join('\n'));
+      return textResult(reviewSubmissionsText(result));
     },
   );
 
@@ -877,17 +783,12 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ itemId }) => {
       const result = await appstore.removeReviewSubmissionItem(itemId);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✓ 묶음에서 항목 제거됨',
-            `itemId: ${result.itemId}`,
-            result.state ? `state: ${result.state}` : '',
-            '항목이 버전이었다면 이제 다른 묶음에 붙일 수 있다 (appstore_submit_for_review).',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✓ 묶음에서 항목 제거됨',
+        `itemId: ${result.itemId}`,
+        result.state ? `state: ${result.state}` : '',
+        '항목이 버전이었다면 이제 다른 묶음에 붙일 수 있다 (appstore_submit_for_review).',
+      ].filter(Boolean));
     },
   );
 
@@ -906,19 +807,14 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ submissionId, versionId }) => {
       const result = await appstore.addVersionToReviewSubmission({ submissionId, versionId });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✓ 묶음에 앱 버전 추가됨',
-            `submissionId: ${result.submissionId}`,
-            `versionId: ${result.versionId}`,
-            result.itemId ? `itemId: ${result.itemId}` : '',
-            `현재 묶음 항목 수: ${result.itemCount}개`,
-            '제출 전 항목 수를 확인할 것 — 첫 심사라면 상품들이 함께 들어 있어야 한다.',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✓ 묶음에 앱 버전 추가됨',
+        `submissionId: ${result.submissionId}`,
+        `versionId: ${result.versionId}`,
+        result.itemId ? `itemId: ${result.itemId}` : '',
+        `현재 묶음 항목 수: ${result.itemCount}개`,
+        '제출 전 항목 수를 확인할 것 — 첫 심사라면 상품들이 함께 들어 있어야 한다.',
+      ].filter(Boolean));
     },
   );
 
@@ -935,18 +831,13 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ versionId, versionString }) => {
       const result = await appstore.updateVersionString(versionId, versionString);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✓ 버전 문자열 변경 완료',
-            `versionId: ${result.versionId}`,
-            `versionString: ${result.versionString}`,
-            result.state ? `state: ${result.state}` : '',
-            '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_build — buildId 생략 시 최신 VALID 빌드).',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✓ 버전 문자열 변경 완료',
+        `versionId: ${result.versionId}`,
+        `versionString: ${result.versionString}`,
+        result.state ? `state: ${result.state}` : '',
+        '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_build — buildId 생략 시 최신 VALID 빌드).',
+      ].filter(Boolean));
     },
   );
 
@@ -1020,7 +911,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ appId, versionString }) => {
       const text = await buildAppStoreReleasePlan({ appId, versionString });
-      return { content: [{ type: 'text', text }] };
+      return textResult(text);
     },
   );
 
@@ -1044,31 +935,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       if (!confirm) {
         // ── dry-run preview — versionString·빌드·whatsNew 발췌를 사용자에게 보여주고 재호출 유도.
         const preview = await appstore.buildSubmitForReviewPreview(versionId);
-        const lines: string[] = [];
-        lines.push('🛑 심사 제출 dry-run — 아직 실제 제출 안 함.');
-        lines.push('');
-        lines.push(`  versionId    : ${preview.versionId}`);
-        lines.push(`  versionString: ${preview.versionString ?? '(조회 실패)'}`);
-        lines.push(`  state        : ${preview.state ?? '(조회 실패)'}`);
-        lines.push(`  appId        : ${preview.appId}`);
-        lines.push(`  platform     : ${preview.platform}`);
-        if (preview.attachedBuild) {
-          lines.push(`  attachedBuild: #${preview.attachedBuild.buildNumber ?? '?'} (id=${preview.attachedBuild.id}, state=${preview.attachedBuild.processingState ?? '?'})`);
-        } else {
-          lines.push(`  attachedBuild: ⚠️ 미연결 — appstore_attach_build 필요 (buildId 생략 = 최신 VALID 빌드)`);
-        }
-        if (preview.whatsNewByLocale.length === 0) {
-          lines.push(`  whatsNew     : ⚠️ 등록된 로컬라이제이션 없음`);
-        } else {
-          lines.push(`  whatsNew     :`);
-          for (const wn of preview.whatsNewByLocale) {
-            lines.push(`    [${wn.locale}] (${wn.length}자) "${wn.excerpt}"`);
-          }
-        }
-        lines.push('');
-        lines.push('실제 제출하려면 같은 versionId 로 `confirm: true` 옵션을 추가해 재호출하세요.');
-        lines.push('⚠️ 제출 후엔 cancel_review 가 큐 진입(WAITING_FOR_REVIEW) 시점에 막힐 수 있어요 (실측: 1.4.2→3, 1.4.5→6).');
-        return textResult(lines.join('\n'));
+        return textResult(submitForReviewDryRunText(preview));
       }
       const result = await appstore.submitVersionForReview(versionId);
       return textResult(`✅ 버전 ${versionId} 심사 제출 완료 (state: ${result.state}). App Store Connect에서 진행 상태 확인 가능.\n\n${JSON.stringify(result, null, 2)}`);
@@ -1090,18 +957,13 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ versionId }) => {
       const result = await appstore.cancelVersionReview(versionId);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 심사 철회 완료`,
-            `  submissionId: ${result.submissionId}`,
-            `  ${result.previousState} → ${result.newState}`,
-            `  버전 ${result.versionId}이(가) PREPARE_FOR_SUBMISSION 상태로 복귀됨.`,
-            `  메타데이터/빌드 수정 후 appstore_submit_for_review로 재제출 가능.`,
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 심사 철회 완료`,
+        `  submissionId: ${result.submissionId}`,
+        `  ${result.previousState} → ${result.newState}`,
+        `  버전 ${result.versionId}이(가) PREPARE_FOR_SUBMISSION 상태로 복귀됨.`,
+        `  메타데이터/빌드 수정 후 appstore_submit_for_review로 재제출 가능.`,
+      ]);
     },
   );
 
@@ -1122,22 +984,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ versionId }) => {
       const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
-      const lines = [
-        `버전 ${version.versionString ?? version.versionId}`,
-        `  상태: ${version.state ?? '알 수 없음'}${note ? ` — ${note}` : ''}`,
-        `  출시 방식: ${version.releaseType ?? '(미지정 — Apple 기본값)'}`,
-      ];
-      if (version.earliestReleaseDate) lines.push(`  예약 시각: ${version.earliestReleaseDate}`);
-      if (phased) {
-        lines.push(
-          `  단계적 출시: ${phased.state ?? '?'}` +
-            (phased.currentDayNumber ? ` (${phased.currentDayNumber}일째/7일)` : '') +
-            (phased.startDate ? ` · 시작 ${phased.startDate}` : ''),
-        );
-      } else {
-        lines.push('  단계적 출시: 꺼짐');
-      }
-      return textResult(lines.join('\n'));
+      return textResult(releaseStatusText({ version, phased, note }));
     },
   );
 
@@ -1158,34 +1005,24 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       if (!confirm) {
         const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
         const ready = version.state === 'PENDING_DEVELOPER_RELEASE';
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              '🛑 출시 dry-run — 아직 출시하지 않았다.',
-              `  버전: ${version.versionString ?? versionId}`,
-              `  상태: ${version.state ?? '알 수 없음'}${note ? ` — ${note}` : ''}`,
-              phased ? `  단계적 출시: ${phased.state ?? '?'}` : '  단계적 출시: 꺼짐',
-              '',
-              ready
-                ? '실제 출시하려면 confirm: true 로 다시 호출. 실행 즉시 공개된다.'
-                : '지금은 출시할 수 없는 상태다. PENDING_DEVELOPER_RELEASE 여야 한다.',
-            ].join('\n'),
-          }],
-        };
+        return textResult([
+          '🛑 출시 dry-run — 아직 출시하지 않았다.',
+          `  버전: ${version.versionString ?? versionId}`,
+          `  상태: ${version.state ?? '알 수 없음'}${note ? ` — ${note}` : ''}`,
+          phased ? `  단계적 출시: ${phased.state ?? '?'}` : '  단계적 출시: 꺼짐',
+          '',
+          ready
+            ? '실제 출시하려면 confirm: true 로 다시 호출. 실행 즉시 공개된다.'
+            : '지금은 출시할 수 없는 상태다. PENDING_DEVELOPER_RELEASE 여야 한다.',
+        ]);
       }
       const after = await appstoreRelease.requestRelease(versionId);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 출시 요청 전송',
-            `  버전: ${after.versionString ?? versionId}`,
-            `  상태: ${after.state ?? '조회 실패'}`,
-            'App Store 반영에는 보통 수십 분~수 시간이 걸린다. appstore_release_status 로 확인.',
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 출시 요청 전송',
+        `  버전: ${after.versionString ?? versionId}`,
+        `  상태: ${after.state ?? '조회 실패'}`,
+        'App Store 반영에는 보통 수십 분~수 시간이 걸린다. appstore_release_status 로 확인.',
+      ]);
     },
   );
 
@@ -1210,18 +1047,13 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ versionId, releaseType, earliestReleaseDate }) => {
       const after = await appstoreRelease.updateReleaseType({ versionId, releaseType, earliestReleaseDate });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 출시 방식 변경',
-            `  버전: ${after.versionString ?? versionId}`,
-            `  출시 방식: ${after.releaseType ?? releaseType}`,
-            after.earliestReleaseDate ? `  예약 시각: ${after.earliestReleaseDate}` : '',
-            `  상태: ${after.state ?? '알 수 없음'}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 출시 방식 변경',
+        `  버전: ${after.versionString ?? versionId}`,
+        `  출시 방식: ${after.releaseType ?? releaseType}`,
+        after.earliestReleaseDate ? `  예약 시각: ${after.earliestReleaseDate}` : '',
+        `  상태: ${after.state ?? '알 수 없음'}`,
+      ].filter(Boolean));
     },
   );
 
@@ -1251,34 +1083,24 @@ export function registerAppstoreTools(server: ToolRegistrar) {
           action === 'status'
             ? '단계적 출시 상태'
             : `🛑 ${action} dry-run — 아직 실행하지 않았다.`;
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              header,
-              `  버전: ${version.versionString ?? versionId} (${version.state ?? '?'}${note ? ` — ${note}` : ''})`,
-              phased
-                ? `  단계적 출시: ${phased.state ?? '?'}` +
-                  (phased.currentDayNumber ? ` (${phased.currentDayNumber}일째/7일)` : '')
-                : '  단계적 출시: 꺼짐',
-              action === 'status'
-                ? ''
-                : '실행하려면 confirm: true 로 다시 호출. 남은 사용자 전체에게 즉시 공개된다.',
-            ].filter(Boolean).join('\n'),
-          }],
-        };
+        return textResult([
+          header,
+          `  버전: ${version.versionString ?? versionId} (${version.state ?? '?'}${note ? ` — ${note}` : ''})`,
+          phased
+            ? `  단계적 출시: ${phased.state ?? '?'}` +
+              (phased.currentDayNumber ? ` (${phased.currentDayNumber}일째/7일)` : '')
+            : '  단계적 출시: 꺼짐',
+          action === 'status'
+            ? ''
+            : '실행하려면 confirm: true 로 다시 호출. 남은 사용자 전체에게 즉시 공개된다.',
+        ].filter(Boolean));
       }
 
       const { phased } = await appstoreRelease.setPhasedRelease({ versionId, action });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 단계적 출시: ${action}`,
-            phased ? `  현재 상태: ${phased.state ?? '?'}` : '  단계적 출시 제거됨 (전체 공개)',
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 단계적 출시: ${action}`,
+        phased ? `  현재 상태: ${phased.state ?? '?'}` : '  단계적 출시 제거됨 (전체 공개)',
+      ]);
     },
   );
 
@@ -1296,16 +1118,11 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     async ({ appId }) => {
       const { appInfoId, declarationId, declaration } = await appstoreDeclarations.getAgeRating(appId);
       const filled = Object.entries(declaration).filter(([, v]) => v !== undefined && v !== null);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `연령 등급 선언 (appInfo ${appInfoId}${declarationId ? ` · declaration ${declarationId}` : ' · 선언 없음'})`,
-            ...filled.map(([k, v]) => `  ${k}: ${v}`),
-            filled.length === 0 ? '  (아직 답변된 항목 없음)' : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `연령 등급 선언 (appInfo ${appInfoId}${declarationId ? ` · declaration ${declarationId}` : ' · 선언 없음'})`,
+        ...filled.map(([k, v]) => `  ${k}: ${v}`),
+        filled.length === 0 ? '  (아직 답변된 항목 없음)' : '',
+      ].filter(Boolean));
     },
   );
 
@@ -1368,15 +1185,10 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       const changed = Object.keys(declaration).filter(
         (k) => (declaration as Record<string, unknown>)[k] !== undefined,
       );
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 연령 등급 갱신 (${changed.length}개 항목) — declaration ${declarationId}`,
-            ...changed.map((k) => `  ${k}: ${String(after[k])}`),
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 연령 등급 갱신 (${changed.length}개 항목) — declaration ${declarationId}`,
+        ...changed.map((k) => `  ${k}: ${String(after[k])}`),
+      ]);
     },
   );
 
@@ -1401,18 +1213,13 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ appId, buildIds, ...attrs }) => {
       const r = await appstoreDeclarations.declareEncryption({ appId, buildIds, ...attrs });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 수출 규정 선언 생성',
-            `  declarationId: ${r.declarationId}`,
-            `  상태: ${r.state ?? '(응답에 없음)'}`,
-            `  연결된 빌드: ${r.attachedBuilds}개`,
-            r.state === 'IN_REVIEW' ? '  Apple 검토 중 — 승인되면 빌드에 반영된다.' : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 수출 규정 선언 생성',
+        `  declarationId: ${r.declarationId}`,
+        `  상태: ${r.state ?? '(응답에 없음)'}`,
+        `  연결된 빌드: ${r.attachedBuilds}개`,
+        r.state === 'IN_REVIEW' ? '  Apple 검토 중 — 승인되면 빌드에 반영된다.' : '',
+      ].filter(Boolean));
     },
   );
 
@@ -1471,37 +1278,27 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ territories, confirm }) => {
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `🛑 dry-run — ${territories.length}개 지역, 아직 바꾸지 않았다.`,
-              ...territories.map(
-                (t) =>
-                  `  ${t.id}: ` +
-                  [
-                    t.available === undefined ? '' : `판매=${t.available}`,
-                    t.releaseDate ? `출시일=${t.releaseDate}` : '',
-                    t.preOrderEnabled === undefined ? '' : `사전주문=${t.preOrderEnabled}`,
-                  ].filter(Boolean).join(' · '),
-              ),
-              '',
-              '실행하려면 confirm: true 로 다시 호출.',
-            ].join('\n'),
-          }],
-        };
+        return textResult([
+          `🛑 dry-run — ${territories.length}개 지역, 아직 바꾸지 않았다.`,
+          ...territories.map(
+            (t) =>
+              `  ${t.id}: ` +
+              [
+                t.available === undefined ? '' : `판매=${t.available}`,
+                t.releaseDate ? `출시일=${t.releaseDate}` : '',
+                t.preOrderEnabled === undefined ? '' : `사전주문=${t.preOrderEnabled}`,
+              ].filter(Boolean).join(' · '),
+          ),
+          '',
+          '실행하려면 confirm: true 로 다시 호출.',
+        ]);
       }
       const results = await appstoreDeclarations.setTerritoryAvailability({ territories });
       const ok = results.filter((r) => r.ok).length;
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `지역 변경: 성공 ${ok} / 실패 ${results.length - ok}`,
-            ...results.filter((r) => !r.ok).map((r) => `  ✗ ${r.id}: ${r.error}`),
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `지역 변경: 성공 ${ok} / 실패 ${results.length - ok}`,
+        ...results.filter((r) => !r.ok).map((r) => `  ✗ ${r.id}: ${r.error}`),
+      ]);
     },
   );
 
@@ -1523,25 +1320,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ buildId, appId }) => {
       const s = await testflight.getBetaStatus({ buildId, appId });
-      const lines = [
-        `빌드 ${buildId}`,
-        `  내부 상태: ${s.internalState ?? '?'}`,
-        `  외부 상태: ${s.externalState ?? '?'}${s.note ? ` — ${s.note}` : ''}`,
-        s.submissionState ? `  베타 심사 제출: ${s.submissionState}` : '  베타 심사 제출: 없음',
-        `  What to Test: ${s.whatsToTestLocales.length ? s.whatsToTestLocales.join(', ') : '❌ 비어 있음 (외부 배포 필수)'}`,
-        `  자동 알림: ${s.autoNotifyEnabled === undefined ? '?' : s.autoNotifyEnabled}`,
-      ];
-      if (s.reviewDetail) {
-        lines.push(
-          s.reviewDetail.complete
-            ? '  베타 심사 정보: ✅ 채워짐'
-            : `  베타 심사 정보: ❌ 누락 — ${s.reviewDetail.missing.join(', ')}`,
-        );
-      }
-      if (s.testInfoLocales) {
-        lines.push(`  테스트 정보 로케일: ${s.testInfoLocales.length ? s.testInfoLocales.join(', ') : '❌ 없음'}`);
-      }
-      return textResult(lines.join('\n'));
+      return textResult(betaStatusText(buildId, s));
     },
   );
 
@@ -1566,15 +1345,9 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     async ({ appId, ...fields }) => {
       const r = await testflight.updateBetaReviewDetail({ appId, fields });
       const changed = Object.keys(fields).filter((k) => (fields as Record<string, unknown>)[k] !== undefined);
-      return {
-        content: [{
-          type: 'text',
-          // 비밀번호는 값을 되읽어 출력하지 않는다 — 채워졌는지만 알린다.
-          text: [`✅ 베타 심사 정보 갱신 (${r.id})`, ...changed.map((k) =>
-            k === 'demoAccountPassword' ? '  demoAccountPassword: (설정됨)' : `  ${k}: ${stringifyAttr(r.attributes[k])}`,
-          )].join('\n'),
-        }],
-      };
+      return textResult([`✅ 베타 심사 정보 갱신 (${r.id})`, ...changed.map((k) =>
+        k === 'demoAccountPassword' ? '  demoAccountPassword: (설정됨)' : `  ${k}: ${stringifyAttr(r.attributes[k])}`,
+      )]);
     },
   );
 
@@ -1641,32 +1414,22 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         if (s.reviewDetail && !s.reviewDetail.complete) {
           blockers.push(`베타 심사 정보 누락: ${s.reviewDetail.missing.join(', ')}`);
         }
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              '🛑 베타 심사 제출 dry-run — 아직 제출하지 않았다.',
-              `  빌드: ${buildId} (${s.externalState ?? '?'})`,
-              blockers.length ? '  블로커:' : '  블로커 없음.',
-              ...blockers.map((b) => `    - ${b}`),
-              '',
-              blockers.length ? '위 항목을 먼저 해결할 것.' : '제출하려면 confirm: true 로 다시 호출.',
-            ].join('\n'),
-          }],
-        };
+        return textResult([
+          '🛑 베타 심사 제출 dry-run — 아직 제출하지 않았다.',
+          `  빌드: ${buildId} (${s.externalState ?? '?'})`,
+          blockers.length ? '  블로커:' : '  블로커 없음.',
+          ...blockers.map((b) => `    - ${b}`),
+          '',
+          blockers.length ? '위 항목을 먼저 해결할 것.' : '제출하려면 confirm: true 로 다시 호출.',
+        ]);
       }
       const r = await testflight.submitBetaReview(buildId);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 베타 심사 제출',
-            `  submissionId: ${r.submissionId}`,
-            `  상태: ${r.state ?? '(응답에 없음)'}`,
-            '진행 상황은 appstore_beta_status 로 확인.',
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 베타 심사 제출',
+        `  submissionId: ${r.submissionId}`,
+        `  상태: ${r.state ?? '(응답에 없음)'}`,
+        '진행 상황은 appstore_beta_status 로 확인.',
+      ]);
     },
   );
 
@@ -1685,20 +1448,15 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ groupId, buildId, action, confirm }) => {
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `🛑 dry-run — 아직 실행하지 않았다.`,
-              `  그룹 ${groupId} ${action === 'add' ? '←' : '↛'} 빌드 ${buildId}`,
-              action === 'add'
-                ? '  외부 그룹이면 이 순간 테스터에게 배포된다.'
-                : '  테스터는 이 빌드를 더 이상 설치할 수 없게 된다.',
-              '',
-              '실행하려면 confirm: true 로 다시 호출.',
-            ].join('\n'),
-          }],
-        };
+        return textResult([
+          `🛑 dry-run — 아직 실행하지 않았다.`,
+          `  그룹 ${groupId} ${action === 'add' ? '←' : '↛'} 빌드 ${buildId}`,
+          action === 'add'
+            ? '  외부 그룹이면 이 순간 테스터에게 배포된다.'
+            : '  테스터는 이 빌드를 더 이상 설치할 수 없게 된다.',
+          '',
+          '실행하려면 confirm: true 로 다시 호출.',
+        ]);
       }
       const r = await testflight.setBetaGroupBuild({ groupId, buildId, action });
       return textResult(`✅ 그룹 ${r.groupId} ${r.action === 'add' ? '에 빌드 추가' : '에서 빌드 제거'} — ${r.buildId}`);
@@ -1728,29 +1486,19 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ groupId, testers, confirm }) => {
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              `🛑 dry-run — ${testers.length}명, 아직 초대하지 않았다.`,
-              ...testers.map((t) => `  ${t.email}`),
-              '',
-              '실행하려면 confirm: true 로 다시 호출. 초대 메일이 즉시 발송된다.',
-            ].join('\n'),
-          }],
-        };
+        return textResult([
+          `🛑 dry-run — ${testers.length}명, 아직 초대하지 않았다.`,
+          ...testers.map((t) => `  ${t.email}`),
+          '',
+          '실행하려면 confirm: true 로 다시 호출. 초대 메일이 즉시 발송된다.',
+        ]);
       }
       const results = await testflight.addBetaTesters({ groupId, testers });
       const ok = results.filter((r) => r.ok).length;
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `테스터 초대: 성공 ${ok} / 실패 ${results.length - ok}`,
-            ...results.filter((r) => !r.ok).map((r) => `  ✗ ${r.email}: ${r.error}`),
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `테스터 초대: 성공 ${ok} / 실패 ${results.length - ok}`,
+        ...results.filter((r) => !r.ok).map((r) => `  ✗ ${r.email}: ${r.error}`),
+      ]);
     },
   );
 
@@ -1836,19 +1584,14 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     },
     async ({ localizationId, previewType, filePath, previewFrameTimeCode }) => {
       const r = await previews.uploadPreview({ localizationId, previewType, filePath, previewFrameTimeCode });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 미리보기 업로드 완료 (인코딩 대기)',
-            `  id: ${r.id}`,
-            `  파일: ${r.fileName} (${(r.fileSize / 1024 / 1024).toFixed(1)} MB)`,
-            `  타입: ${r.previewType}`,
-            `  상태: ${r.state ?? '처리 중'}`,
-            'Apple 인코딩이 끝나야 노출된다 — appstore_list_previews 로 상태를 확인할 것.',
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 미리보기 업로드 완료 (인코딩 대기)',
+        `  id: ${r.id}`,
+        `  파일: ${r.fileName} (${(r.fileSize / 1024 / 1024).toFixed(1)} MB)`,
+        `  타입: ${r.previewType}`,
+        `  상태: ${r.state ?? '처리 중'}`,
+        'Apple 인코딩이 끝나야 노출된다 — appstore_list_previews 로 상태를 확인할 것.',
+      ]);
     },
   );
 
@@ -1866,14 +1609,9 @@ export function registerAppstoreTools(server: ToolRegistrar) {
     async ({ previewId, setId, confirm }) => {
       if (!previewId && !setId) throw new Error('previewId 또는 setId 중 하나는 필요하다.');
       if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: previewId
-              ? `🛑 dry-run — 미리보기 ${previewId} 를 삭제할 참이다. confirm: true 로 다시 호출.`
-              : `🛑 dry-run — 세트 ${setId} 와 그 안의 동영상 전부를 삭제할 참이다. confirm: true 로 다시 호출.`,
-          }],
-        };
+        return textResult(previewId
+          ? `🛑 dry-run — 미리보기 ${previewId} 를 삭제할 참이다. confirm: true 로 다시 호출.`
+          : `🛑 dry-run — 세트 ${setId} 와 그 안의 동영상 전부를 삭제할 참이다. confirm: true 로 다시 호출.`);
       }
       const r = previewId
         ? await previews.deletePreview(previewId)

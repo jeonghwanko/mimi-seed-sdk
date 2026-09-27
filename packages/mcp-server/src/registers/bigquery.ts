@@ -2,7 +2,7 @@ import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as bigquery from '../bigquery/tools.js';
 import { requireBigQueryAuth, resolveBigQueryAuth, type BigQueryAuth } from '../auth/bigquery-auth.js';
-import { jsonResult } from '../lib/mcp-response.js';
+import { jsonResult, errorResult } from '../lib/mcp-response.js';
 
 /**
  * BigQuery 에러를 사람이 읽을 수 있게 가공.
@@ -54,10 +54,6 @@ function describeBqError(e: unknown, auth: BigQueryAuth, projectId: string): str
   return `❌ BigQuery 오류: ${msg}`;
 }
 
-function errResult(text: string) {
-  return { content: [{ type: 'text' as const, text }], isError: true };
-}
-
 export function registerBigqueryTools(server: ToolRegistrar) {
   server.tool(
     'bigquery_run_query',
@@ -75,14 +71,14 @@ export function registerBigqueryTools(server: ToolRegistrar) {
       try {
         bigquery.assertSelectOnlyQuery(query);
       } catch (e) {
-        return errResult(`❌ ${e instanceof Error ? e.message : String(e)}`);
+        return errorResult(`❌ ${e instanceof Error ? e.message : String(e)}`);
       }
       const auth = requireBigQueryAuth();
       try {
         const result = await bigquery.runQuery(auth.client, projectId, query, maxResults ?? 1000);
         return jsonResult(result);
       } catch (e) {
-        return errResult(describeBqError(e, auth, projectId));
+        return errorResult(describeBqError(e, auth, projectId));
       }
     },
   );
@@ -99,7 +95,7 @@ export function registerBigqueryTools(server: ToolRegistrar) {
         const datasets = await bigquery.listDatasets(auth.client, projectId);
         return jsonResult(datasets);
       } catch (e) {
-        return errResult(describeBqError(e, auth, projectId));
+        return errorResult(describeBqError(e, auth, projectId));
       }
     },
   );
@@ -117,7 +113,7 @@ export function registerBigqueryTools(server: ToolRegistrar) {
         const tables = await bigquery.listTables(auth.client, projectId, datasetId);
         return jsonResult(tables);
       } catch (e) {
-        return errResult(describeBqError(e, auth, projectId));
+        return errorResult(describeBqError(e, auth, projectId));
       }
     },
   );
@@ -136,7 +132,7 @@ export function registerBigqueryTools(server: ToolRegistrar) {
         const schema = await bigquery.getTableSchema(auth.client, projectId, datasetId, tableId);
         return jsonResult(schema);
       } catch (e) {
-        return errResult(describeBqError(e, auth, projectId));
+        return errorResult(describeBqError(e, auth, projectId));
       }
     },
   );
@@ -148,39 +144,17 @@ export function registerBigqueryTools(server: ToolRegistrar) {
     async () => {
       const auth = resolveBigQueryAuth();
       if (!auth) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  authenticated: false,
-                  hint: 'mimi-seed-bigquery-auth (서비스 계정) 또는 mimi-seed-auth (OAuth) 로 인증 필요',
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
+        return jsonResult({
+          authenticated: false,
+          hint: 'mimi-seed-bigquery-auth (서비스 계정) 또는 mimi-seed-auth (OAuth) 로 인증 필요',
+        });
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                authenticated: true,
-                source: auth.source,
-                clientEmail: auth.clientEmail,
-                serviceAccountProjectId: auth.projectId,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
-      };
+      return jsonResult({
+        authenticated: true,
+        source: auth.source,
+        clientEmail: auth.clientEmail,
+        serviceAccountProjectId: auth.projectId,
+      });
     },
   );
 }

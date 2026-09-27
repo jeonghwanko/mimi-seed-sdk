@@ -104,11 +104,14 @@
         "jenkins_upload_playstore_sa"
       ],
       "write": [
-        "android_generate_keystore",
+        "android_generate_keystore"
+      ],
+      "destructive": [
         "jenkins_upload_playstore_sa"
       ],
-      "destructive": [],
-      "ownGate": [],
+      "ownGate": [
+        "jenkins_upload_playstore_sa"
+      ],
       "local": [
         "android_generate_keystore"
       ],

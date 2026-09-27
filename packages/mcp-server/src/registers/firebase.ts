@@ -5,31 +5,14 @@ import * as firebaseRaw from '../firebase/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { friendlyGoogleError } from '../lib/google-errors.js';
+import { wrapDomain } from '../lib/wrap-domain.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
 import { getRemoteConfigOverview } from '../firebase/remote-config.js';
 
 // 모든 firebase tools 호출을 친절 에러로 감싸는 프록시 — 17개 핸들러에 개별
 // try/catch 없이 raw GaxiosError(API 미활성화/프로젝트 없음/billing/권한)를
 // "다음에 뭘 할지" 메시지로 변환. 비-Promise 반환은 그대로 통과.
-const firebase: typeof firebaseRaw = new Proxy(firebaseRaw, {
-  get(target, prop, receiver) {
-    const orig = Reflect.get(target, prop, receiver);
-    if (typeof orig !== 'function') return orig;
-    return (...args: unknown[]) => {
-      try {
-        const out = (orig as (...a: unknown[]) => unknown)(...args);
-        if (out && typeof (out as { then?: unknown }).then === 'function') {
-          return (out as Promise<unknown>).catch((err) => {
-            throw friendlyGoogleError(err);
-          });
-        }
-        return out;
-      } catch (err) {
-        throw friendlyGoogleError(err);
-      }
-    };
-  },
-});
+const firebase = wrapDomain(firebaseRaw, (err) => friendlyGoogleError(err));
 
 export function registerFirebaseTools(server: ToolRegistrar) {
   server.tool(
@@ -98,24 +81,17 @@ export function registerFirebaseTools(server: ToolRegistrar) {
       // 프로젝트 생성은 Cloud Resource Manager 라 firebase 스코프만으로는 안 된다.
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const project = await firebase.createProject(auth, projectId, displayName, { parent });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✓ Firebase 프로젝트 생성 완료: \`${project.projectId}\``,
-              '',
-              `**displayName**: ${project.displayName}`,
-              `**projectNumber**: ${project.projectNumber}`,
-              '',
-              '다음 단계:',
-              `1. firebase_create_android_app("${project.projectId}", packageName, displayName)`,
-              `2. firebase_create_ios_app("${project.projectId}", bundleId, displayName)`,
-              '3. firebase_get_android_config / firebase_get_ios_config 로 설정 파일 다운로드',
-            ].join('\n'),
-          },
-        ],
-      };
+      return textResult([
+        `✓ Firebase 프로젝트 생성 완료: \`${project.projectId}\``,
+        '',
+        `**displayName**: ${project.displayName}`,
+        `**projectNumber**: ${project.projectNumber}`,
+        '',
+        '다음 단계:',
+        `1. firebase_create_android_app("${project.projectId}", packageName, displayName)`,
+        `2. firebase_create_ios_app("${project.projectId}", bundleId, displayName)`,
+        '3. firebase_get_android_config / firebase_get_ios_config 로 설정 파일 다운로드',
+      ]);
     },
   );
 

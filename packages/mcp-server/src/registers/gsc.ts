@@ -99,17 +99,12 @@ export function registerGscTools(server: ToolRegistrar) {
         rowLimit,
         type,
       });
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            period: { startDate, endDate },
-            dimensions: dims ?? [],
-            summary: gsc.summarizeRows(rows),
-            rows,
-          }, null, 2),
-        }],
-      };
+      return jsonResult({
+        period: { startDate, endDate },
+        dimensions: dims ?? [],
+        summary: gsc.summarizeRows(rows),
+        rows,
+      });
     },
   );
 }

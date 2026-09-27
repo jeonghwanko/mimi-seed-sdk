@@ -2,6 +2,7 @@ import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { generateReleaseNotesFromCommits, formatGeneratedNotes } from '../ai/notes.js';
 import { generateReviewReply, formatReviewReply } from '../ai/review.js';
+import { textResult } from '../lib/mcp-response.js';
 
 export function registerAiTools(server: ToolRegistrar) {
   server.tool(
@@ -30,7 +31,7 @@ export function registerAiTools(server: ToolRegistrar) {
         locales: locales ?? [],
       });
       const text = formatGeneratedNotes(result);
-      return { content: [{ type: 'text', text }] };
+      return textResult(text);
     },
   );
 
@@ -62,7 +63,7 @@ export function registerAiTools(server: ToolRegistrar) {
         developerName,
       });
       const text = formatReviewReply(result);
-      return { content: [{ type: 'text', text }] };
+      return textResult(text);
     },
   );
 }

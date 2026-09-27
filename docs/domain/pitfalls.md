@@ -188,6 +188,10 @@ id 가 이미 있으면 갱신한다 — 그런데 종류(Secret text vs Secret 
   흔들리지 않는다. 메타데이터를 못 읽으면 막지 않는다 — 부재를 이유로 정상 작업을 차단하지 않는다.
 - Play SA 기본 id 는 `<앱>-playstore-sa` 다. 무엇을 담는지가 이름에 드러나야 범용 이름과 부딪히지 않는다.
 
+같은 종류끼리의 교체도 되돌릴 수 없으므로 세 도구 모두 **새 id 는 바로 만들고, 이미 있는 id 는
+`confirm: true` 가 있어야 교체**한다 (없으면 "이미 존재" dry-run — manifest `ownGate`).
+`jenkins_upload_playstore_sa` 만 한동안 말없이 덮어썼다가 같은 규칙으로 맞췄다.
+
 새 credential 도구를 만든다면 upsert 전에 같은 검사를 붙일 것 (`jenkins-credentials.test.ts`).
 
 

@@ -29,7 +29,7 @@ vi.mock('../appstore/tools.js', async (importOriginal) => ({
 
 import { withClient } from './helpers.js';
 
-const textOf = (r: { content: unknown }) => (r.content as Array<{ text?: string }>).map((c) => c.text ?? '').join('\n');
+const textOf = (r: unknown) => ((r as { content?: unknown }).content as Array<{ text?: string }>).map((c) => c.text ?? '').join('\n');
 
 beforeEach(() => {
   vi.clearAllMocks();

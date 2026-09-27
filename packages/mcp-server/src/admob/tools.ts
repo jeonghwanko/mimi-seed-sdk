@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import type { admob_v1, admob_v1beta } from 'googleapis/build/src/apis/admob/index.js';
 import { resourceName } from '../lib/resource-id.js';
 
 /**
@@ -25,7 +26,7 @@ export async function listAccounts(auth: OAuth2Client) {
 
 export async function listApps(auth: OAuth2Client, accountId: string) {
   const admobApi = google.admob('v1');
-  const all: any[] = [];
+  const all: admob_v1.Schema$App[] = [];
   let pageToken: string | undefined;
 
   do {
@@ -52,7 +53,7 @@ export async function listApps(auth: OAuth2Client, accountId: string) {
 
 export async function listAdUnits(auth: OAuth2Client, accountId: string) {
   const admobApi = google.admob('v1');
-  const all: any[] = [];
+  const all: admob_v1.Schema$AdUnit[] = [];
   let pageToken: string | undefined;
 
   do {
@@ -154,8 +155,8 @@ export async function createApp(
   appStoreId?: string,
 ) {
   // v1beta — 대부분 계정에서 403. Google Account Manager 승인 필요.
-  const admobBeta = google.admob('v1beta' as any) as any;
-  const requestBody: Record<string, unknown> = { platform };
+  const admobBeta = google.admob('v1beta');
+  const requestBody: admob_v1beta.Schema$App = { platform };
   // manualAppInfo.displayName 은 writable(사용자 제공, AdMob UI 표시명) — linking 후에도 유지된다.
   // linkedAppInfo.displayName 은 output-only(스토어 표시명)라 보내도 무시되므로, store 링크엔 appStoreId 만 넣는다.
   requestBody.manualAppInfo = { displayName };
@@ -179,7 +180,7 @@ export async function createAdUnit(
   displayName: string,
   adFormat: AdFormat,
 ) {
-  const admobBeta = google.admob('v1beta' as any) as any;
+  const admobBeta = google.admob('v1beta');
   const res = await admobBeta.accounts.adUnits.create({
     auth,
     parent: resourceName(accountId, 'accounts', 'AdMob 계정 ID'),

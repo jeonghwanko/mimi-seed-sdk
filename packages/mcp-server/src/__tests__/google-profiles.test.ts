@@ -3,12 +3,12 @@ import type { ReadStream } from 'node:fs';
 import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 const h = vi.hoisted<{
   home: string; callback: unknown; tokenResponse: Record<string, unknown>;
   channelList: ReturnType<typeof vi.fn>; insert: ReturnType<typeof vi.fn>;
-  refresh: ReturnType<typeof vi.fn>; clients: FakeClient[];
+  refresh: Mock<() => Promise<unknown>>; clients: FakeClient[];
   requestedScopes: string[];
 }>(() => ({
   home: '', callback: null, tokenResponse: {},
@@ -28,7 +28,7 @@ class FakeClient {
   refreshAccessToken() { return h.refresh(); }
 }
 vi.mock('node:os', async (original) => {
-  const actual = await original<typeof import('node:os')>();
+  const actual = await original<typeof import('node:os') & { default: typeof import('node:os') }>();
   return { ...actual, default: { ...actual.default, homedir: () => h.home } };
 });
 vi.mock('../lib/googleapis-lite.js', () => ({ google: {

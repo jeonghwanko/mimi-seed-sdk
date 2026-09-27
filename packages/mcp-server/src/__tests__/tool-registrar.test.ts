@@ -50,7 +50,7 @@ async function boot(register: (r: ToolRegistrar) => void, env: NodeJS.ProcessEnv
   return { client, close: async () => { await client.close(); await server.close(); } };
 }
 
-const ok = (text: string) => async () => ({ content: [{ type: 'text' as const, text }] });
+const ok = (text: string) => async (_args?: Record<string, unknown>) => ({ content: [{ type: 'text' as const, text }] });
 
 describe('annotations — manifest 분류에서 파생', () => {
   const index = buildToolIndex(manifest);

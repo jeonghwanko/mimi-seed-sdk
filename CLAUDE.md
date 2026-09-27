@@ -77,7 +77,7 @@ internals; examples use placeholders (`com.example.app`, `<packageName>`). See t
 
 ```bash
 npm run build && npm test      # inside the package you changed
-npm run typecheck              # packages/cli only — tsup does not type-check (its `npm test` runs this first)
+npm run typecheck              # both packages, tests included — each `npm test` runs this first (tsup and the mcp-server build config skip tests)
 npm run plugin:check           # docs / skills / manifests / versions
 npm test                       # root: plugin drift + both package suites
 ```

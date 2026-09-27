@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import type { JsonApiRequestBody } from './helpers.js';
 
 // 미리보기 동영상 업로드. 스크린샷과 같은 4단계지만 파일이 크다는 게 차이다.
 //
@@ -18,7 +19,8 @@ vi.mock('../appstore/auth.js', () => ({
 
 const previews = await import('../appstore/previews.js');
 
-type Call = { url: string; method: string; body?: any; bodyLength?: number };
+// body 는 JSON 본문일 때만 채워진다 — 테스트는 JSON 본문이 있는 호출만 되읽는다.
+type Call = { url: string; method: string; body: JsonApiRequestBody; bodyLength?: number };
 let calls: Call[] = [];
 let tmpDir: string;
 let videoPath: string;

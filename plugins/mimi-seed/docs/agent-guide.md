@@ -326,8 +326,9 @@ setup, beta invites — is
 
 Some **D** tools gate themselves (`ownGate` in the manifest) and ask for confirmation only on the dangerous
 path: `tiktok_business_publish_video` uses `confirmPublish`; `appstore_phased_release` runs
-`pause`/`resume`/`enable`/`status` directly; `jenkins_create_credential` / `jenkins_upload_keystore` create a
-**new** id directly but return a dry-run when the id already exists (replacing it needs `confirm: true`).
+`pause`/`resume`/`enable`/`status` directly; `jenkins_create_credential` / `jenkins_upload_keystore` /
+`jenkins_upload_playstore_sa` create a **new** id directly but return a dry-run when the id already exists
+(replacing it needs `confirm: true`).
 There is no argument-based exemption otherwise — `playstore_submit_release` / `playstore_promote_release` need
 `confirm: true` even with `status="draft"`. `youtube_upload_video` / `youtube_update_video_privacy` are writes,
 not **D** (private is reversible), but public/unlisted still needs `confirmVisible: true`.

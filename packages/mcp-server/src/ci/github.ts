@@ -28,12 +28,35 @@ async function ghFetch(cfg: CiConfig, endpoint: string, options?: RequestInit) {
   return JSON.parse(body);
 }
 
+/** GitHub REST 응답 중 이 모듈이 읽는 필드 (Actions workflows / workflow runs). */
+interface GhWorkflow {
+  id: number;
+  name: string;
+  path: string;
+  state: string;
+  html_url: string;
+}
+
+interface GhWorkflowRun {
+  id: number;
+  name?: string;
+  path?: string;
+  workflow_id?: number;
+  status: string;
+  conclusion: string | null;
+  head_branch: string;
+  head_sha?: string;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function listWorkflows(cfg: CiConfig) {
   const data = await ghFetch(cfg, `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/workflows`);
-  return (data.workflows as any[]).map((w: any) => ({
+  return (data.workflows as GhWorkflow[]).map((w) => ({
     id: w.id,
     name: w.name,
-    file: (w.path as string).replace('.github/workflows/', ''),
+    file: w.path.replace('.github/workflows/', ''),
     state: w.state,
     url: w.html_url,
   }));
@@ -75,7 +98,7 @@ export async function listRecentBuilds(
     endpoint = `/repos/${encodePathSegment(cfg.owner)}/${encodePathSegment(cfg.repo)}/actions/runs?per_page=${limit}`;
   }
   const data = await ghFetch(cfg, endpoint);
-  return (data.workflow_runs as any[]).map(normalize);
+  return (data.workflow_runs as GhWorkflowRun[]).map(normalize);
 }
 
 export async function cancelBuild(cfg: CiConfig, runId: string | number): Promise<void> {
@@ -84,14 +107,14 @@ export async function cancelBuild(cfg: CiConfig, runId: string | number): Promis
   });
 }
 
-function normalize(r: any): NormalizedBuild {
+function normalize(r: GhWorkflowRun): NormalizedBuild {
   return {
     id: r.id,
     name: r.name,
-    workflow: (r.path as string | undefined)?.replace('.github/workflows/', '') ?? String(r.workflow_id),
+    workflow: r.path?.replace('.github/workflows/', '') ?? String(r.workflow_id),
     status: normalizeStatus(r.status, r.conclusion),
     branch: r.head_branch,
-    commit: (r.head_sha as string | undefined)?.slice(0, 7),
+    commit: r.head_sha?.slice(0, 7),
     url: r.html_url,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

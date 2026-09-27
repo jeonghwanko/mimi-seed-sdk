@@ -159,6 +159,8 @@ const SELF_GUARDED: Record<string, RegExp | 'needs-read'> = {
   // 설정이 없으면 존재 확인(읽기) 전에 멈춘다. 기존 id 교체 경로는 jenkins-credentials.test.ts 가 다룬다.
   jenkins_create_credential: /Jenkins 설정이 없습니다/,
   jenkins_upload_keystore: /Jenkins 설정이 없습니다/,
+  // 빈 HOME 에는 올릴 SA 파일이 없어 Jenkins 에 닿기 전에 멈춘다. 교체 경로는 jenkins-credentials.test.ts.
+  jenkins_upload_playstore_sa: /서비스 계정 JSON이 없습니다/,
   youtube_reply_comment: 'needs-read',
 };
 const NEEDS_AUTH = /인증|UNAUTHENTICATED|mimi-seed-auth/i;

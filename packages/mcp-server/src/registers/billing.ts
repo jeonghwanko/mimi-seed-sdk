@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as billing from '../billing/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
-import { jsonResult } from '../lib/mcp-response.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 
 export function registerBillingTools(server: ToolRegistrar) {
   server.tool(
@@ -119,23 +119,16 @@ export function registerBillingTools(server: ToolRegistrar) {
         thresholds,
         quotaProjectId,
       });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              '✓ 예산 생성 완료',
-              '',
-              `**name**: \`${budget.name}\``,
-              `**displayName**: ${budget.displayName}`,
-              `**범위**: ${budget.projects.length ? budget.projects.join(', ') : '결제 계정 전체'}`,
-              `**알림 임계**: ${budget.thresholds.map((t) => `${Math.round(t * 100)}%`).join(' / ')}`,
-              '',
-              '⚠️ 이 예산은 **알림만** 한다 — 임계를 넘어도 지출은 계속된다.',
-            ].join('\n'),
-          },
-        ],
-      };
+      return textResult([
+        '✓ 예산 생성 완료',
+        '',
+        `**name**: \`${budget.name}\``,
+        `**displayName**: ${budget.displayName}`,
+        `**범위**: ${budget.projects.length ? budget.projects.join(', ') : '결제 계정 전체'}`,
+        `**알림 임계**: ${budget.thresholds.map((t) => `${Math.round(t * 100)}%`).join(' / ')}`,
+        '',
+        '⚠️ 이 예산은 **알림만** 한다 — 임계를 넘어도 지출은 계속된다.',
+      ]);
     },
   );
 }

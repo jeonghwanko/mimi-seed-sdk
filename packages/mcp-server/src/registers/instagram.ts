@@ -44,19 +44,14 @@ export function registerInstagramTools(server: ToolRegistrar) {
       const cfg = requireInstagramConfig({ profile });
       const account = await api.getAccount(cfg);
 
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `@${account.username}${account.name ? ` (${account.name})` : ''}`,
-            `   ID: ${account.id}`,
-            account.account_type ? `   타입: ${account.account_type}` : '',
-            account.followers_count !== undefined ? `   팔로워: ${account.followers_count.toLocaleString()}` : '',
-            account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
-            `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth instagram')}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `@${account.username}${account.name ? ` (${account.name})` : ''}`,
+        `   ID: ${account.id}`,
+        account.account_type ? `   타입: ${account.account_type}` : '',
+        account.followers_count !== undefined ? `   팔로워: ${account.followers_count.toLocaleString()}` : '',
+        account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
+        `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth instagram')}`,
+      ].filter(Boolean));
     },
   );
 
@@ -76,16 +71,11 @@ export function registerInstagramTools(server: ToolRegistrar) {
     async ({ imageUrl, caption, profile }) => {
       const cfg = requireInstagramConfig({ profile });
       const result = await api.postImage(cfg, imageUrl, caption);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 게시 완료`,
-            `   media_id: ${result.id}`,
-            result.permalink ? `   URL: ${result.permalink}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 게시 완료`,
+        `   media_id: ${result.id}`,
+        result.permalink ? `   URL: ${result.permalink}` : '',
+      ].filter(Boolean));
     },
   );
 
@@ -105,16 +95,11 @@ export function registerInstagramTools(server: ToolRegistrar) {
     async ({ imageUrls, caption, profile }) => {
       const cfg = requireInstagramConfig({ profile });
       const result = await api.postCarousel(cfg, imageUrls, caption);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 캐러셀 ${imageUrls.length}장 게시 완료`,
-            `   media_id: ${result.id}`,
-            result.permalink ? `   URL: ${result.permalink}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 캐러셀 ${imageUrls.length}장 게시 완료`,
+        `   media_id: ${result.id}`,
+        result.permalink ? `   URL: ${result.permalink}` : '',
+      ].filter(Boolean));
     },
   );
 }

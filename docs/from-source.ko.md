@@ -23,7 +23,8 @@
 
 ## 1. 사전 조건
 
-- **Node 20+.** `.nvmrc` 가 SSOT 다 — 리포 루트에서 `nvm use`.
+- **Node 20+.** `.nvmrc` 가 SSOT 다 — 리포 루트에서 `nvm use`. 소스에서 빌드·테스트하려면 20.x 중
+  **20.19 이상**이 필요하다 (eslint·vitest 요구사항).
 - Git.
 - Android 서명을 건드릴 때**만** JDK(`keytool`).
 
@@ -187,10 +188,12 @@ npm run dev -- setup     # 또는 packages/cli 안에서
 npm run build && npm test
 ```
 
-CLI 는 타입체크를 따로 돌려야 한다. `tsup` 은 타입을 **검사하지 않는다**:
+`npm test` 는 두 패키지 모두 진짜 타입체크(테스트 포함)부터 돌린다 — CLI 의 `tsup` 빌드는 타입을 **검사하지
+않고**, MCP 서버 빌드는 테스트 파일을 빼기 때문이다. 작업 중에 그 단계만 돌리려면:
 
 ```bash
 cd packages/cli && npm run typecheck
+cd packages/mcp-server && npm run typecheck
 ```
 
 도구를 추가·개명하는가? 인벤토리는 테스트로 강제된다 — [`../CONTRIBUTING.md`](../CONTRIBUTING.md) 의 도구 등록

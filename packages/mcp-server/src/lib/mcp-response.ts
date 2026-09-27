@@ -5,8 +5,8 @@
 // 그 껍데기가 register 를 두껍게 만들어 "register 는 얇게" 규칙이 지켜지는지
 // 눈으로 확인할 수 없게 했다.
 //
-// 의도적으로 두 개만 둔다. 줄 배열을 어떻게 합칠지(빈 줄을 남길지 `.filter(Boolean)`
-// 으로 버릴지)는 **호출부의 의미**다 — 헬퍼가 대신 정하면 빈 줄을 의도한 곳과
+// 합치는 헬퍼는 textResult 하나다 (errorResult 는 거기에 isError 만 덧붙인다).
+// 줄 배열을 어떻게 합칠지(빈 줄을 남길지 `.filter(Boolean)` 으로 버릴지)는 **호출부의 의미**다 — 헬퍼가 대신 정하면 빈 줄을 의도한 곳과
 // 조건부 줄을 버리려는 곳이 조용히 뒤바뀐다. 그래서 합치는 것까지만 돕고
 // 필터링은 호출부에 남긴다.
 
@@ -27,4 +27,12 @@ export function textResult(text: string | readonly string[]): CallToolResult {
   return {
     content: [{ type: 'text', text: typeof text === 'string' ? text : text.join('\n') }],
   };
+}
+
+/**
+ * `isError: true` 가 붙은 텍스트 응답 — 호출 전 검증 실패처럼 "API 를 부르지 않고 거절"한
+ * 경우. 합치는 규칙은 textResult 와 같다.
+ */
+export function errorResult(text: string | readonly string[]): CallToolResult {
+  return { ...textResult(text), isError: true };
 }

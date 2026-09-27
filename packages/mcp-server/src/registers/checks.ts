@@ -6,7 +6,7 @@ import { validateAppStoreScreenshots, validatePlayStoreScreenshots, formatValida
 import { requireAuth, requirePlayStoreAuth } from '../helpers.js';
 import * as appstore from '../appstore/tools.js';
 import * as playstore from '../playstore/tools.js';
-import { jsonResult } from '../lib/mcp-response.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 import { checkBillingCompliance } from '../checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
@@ -43,7 +43,7 @@ export function registerChecksTools(server: ToolRegistrar) {
       const auth = await requireAuth();
       const risks = await checkPlayStoreRisks(auth, packageName, language ?? 'ko-KR');
       const text = formatRisks(risks, 'Google Play');
-      return { content: [{ type: 'text', text }] };
+      return textResult(text);
     },
   );
 
@@ -67,7 +67,7 @@ export function registerChecksTools(server: ToolRegistrar) {
         socialMediaAgeRestricted,
       });
       const text = formatRisks(risks, 'App Store');
-      return { content: [{ type: 'text', text }] };
+      return textResult(text);
     },
   );
 
@@ -92,11 +92,11 @@ export function registerChecksTools(server: ToolRegistrar) {
       if (plat === 'ios') {
         const results = validateAppStoreScreenshots(filePaths, displayType);
         const text = formatValidationResults(results, 'App Store');
-        return { content: [{ type: 'text', text }] };
+        return textResult(text);
       } else {
         const results = validatePlayStoreScreenshots(filePaths, imageType ?? 'phoneScreenshots');
         const text = formatValidationResults(results, 'Google Play');
-        return { content: [{ type: 'text', text }] };
+        return textResult(text);
       }
     },
   );

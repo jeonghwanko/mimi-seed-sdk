@@ -45,3 +45,18 @@ export async function withoutBackoff<T>(run: () => Promise<T>): Promise<T> {
     vi.useRealTimers();
   }
 }
+
+/**
+ * 모킹한 fetch 가 받은 App Store Connect JSON:API 요청 본문 — 테스트가 되읽는 모양.
+ *
+ * 단건 쓰기(`data` 가 객체)와 관계 교체(`data` 가 ref 배열)가 둘 다 온다. 테스트는 배열
+ * 쪽을 `toEqual` 로만 비교하므로 객체 모양으로 선언해 둔다 (값을 꺼내 쓰는 쪽이 객체다).
+ */
+export interface JsonApiRequestBody {
+  data: {
+    type?: string;
+    id?: string;
+    attributes: Record<string, unknown>;
+    relationships: Record<string, { data: { type: string; id: string } }>;
+  };
+}

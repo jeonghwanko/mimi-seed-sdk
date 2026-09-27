@@ -14,7 +14,7 @@ npm test                                   # root: plugin:check → mcp-server s
 
 # While working — inside the package you changed
 npm run build && npm test                  # packages/mcp-server (tsc) or packages/cli (tsup)
-npm run typecheck                          # packages/cli only (tsup does not type-check) — its `npm test` runs this first
+npm run typecheck                          # both packages, tests included — each `npm test` runs this first
 npm run lint                               # eslint, correctness rules only — both packages' `npm test` run this
 
 # One file / one case (vitest, run from the package directory)
@@ -69,11 +69,14 @@ before changing any assertion.
 | `mcp-server/…/ai-model-parity.test.ts` | one Claude model constant per package, both equal, no literals left anywhere | hard-code a model id, or bump only one package | edit `ai/client.ts` `AI_MODEL` and `cli/src/ai-model.ts` `CLI_AI_MODEL` together |
 | `mcp-server/…/jenkins-credentials.test.ts` | credential upsert refuses to overwrite an id that exists with a **different kind** | add a credential tool that upserts by id without checking `_class` — a Secret text holding an app key is silently replaced by a file ([[pitfalls]]) | read the existing kind first, or pick an id that says what it holds |
 | `mcp-server/…/ai-parity.test.ts` | the language-independent contract shared by the duplicated AI generators: sentiment keywords, tone/sentiment key sets, `max_tokens` | change a classifier keyword or token budget in one package only — the same review then gets a different tone, or one path truncates | mirror it ([[architecture]] on why the duplication is deliberate) |
+| `npm run typecheck` (both packages, first step of each `npm test`) | the source **and the tests** type-check — CLI via `tsc --noEmit`, mcp-server via `tsc --noEmit -p tsconfig.lint.json` (its build config excludes `src/__tests__`) | write a test whose mock types don't line up (`mock.calls[0][0]` on a parameterless `vi.fn`, a `callTool` result read as if it always had `content`) — vitest runs it anyway | type the mock (`vi.fn<typeof fetch>(…)`) or narrow the value |
 
 The compiler is a guard too: `catalog<T>(ko, en: NoInfer<T>)` makes a **missing English key a build error**, and
 ESM/NodeNext makes a missing `.js` import specifier fail the published build ([[pitfalls]] §11). For the CLI the
 compiler only counts if you *run* it — `tsup` strips types without checking them, so `packages/cli`'s `npm test`
-runs `npm run typecheck` (`tsc --noEmit`) first.
+runs `npm run typecheck` (`tsc --noEmit`) first. The mcp-server build (`tsc`) excludes `src/__tests__`, and vitest
+does not type-check, so its `npm test` also runs `npm run typecheck` (`tsc --noEmit -p tsconfig.lint.json`, which
+includes the tests) — before that step existed, test files had type errors nobody saw.
 
 ESLint is the third static gate, wired into both packages' `npm test`. It carries **no formatting rules on
 purpose**: reformatting 27k lines would rewrite every file in one commit and destroy `git blame`, and in this
@@ -81,6 +84,9 @@ repo the comments carry the "why" and the incident dates, so blame is a real ass
 (`no-floating-promises`, `await-thenable`, `no-misused-promises`) are the point — this codebase is almost all
 async, and a missing `await` looks like success. They lint through `tsconfig.lint.json`, not the build config:
 the latter excludes `src/__tests__`, which had left the test files with **no type checking at all**.
+In `packages/mcp-server` a hand-written `any` is also an error (`no-explicit-any`): declare the fields you read
+(e.g. `appstore/types.ts` for ASC JSON:API shapes) or take `unknown` and narrow. The implicit `any` that
+`res.json()` returns is still allowed — the `no-unsafe-*` rules stay off.
 
 ### Where each guard actually runs in CI
 

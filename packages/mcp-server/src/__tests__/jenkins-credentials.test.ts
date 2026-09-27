@@ -150,7 +150,7 @@ describe('allowReplace=false — 기존 id 는 쓰지 않는다', () => {
 });
 
 describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 confirm', () => {
-  const text = (r: { content: unknown }) => (r.content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n');
+  const text = (r: unknown) => ((r as { content?: unknown }).content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n');
   const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
 
   it('기존 keystore 가 있으면 confirm 없이는 dry-run 만', async () => {
@@ -198,6 +198,50 @@ describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 conf
     await withClient(async (client) => {
       const r = await client.callTool({ name: 'jenkins_create_credential', arguments: { id: 'my-app-new', secret: 's' } });
       expect(text(r)).toContain('created');
+    });
+  });
+
+  // jenkins_upload_playstore_sa 는 예전에 같은 id 의 SA 파일을 말없이 교체했다 — 다른 두 도구와 같은 규칙.
+  describe('jenkins_upload_playstore_sa', () => {
+    let home: string;
+    let saved: { HOME?: string; USERPROFILE?: string };
+    let saPath: string;
+    beforeEach(() => {
+      home = mkdtempSync(path.join(os.tmpdir(), 'mimi-seed-jenkins-sa-'));
+      saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+      process.env.HOME = home;
+      process.env.USERPROFILE = home;
+      mkdirSync(path.join(home, '.mimi-seed', 'keys'), { recursive: true });
+      saPath = path.join(home, '.mimi-seed', 'keys', 'sa.json');
+      writeFileSync(saPath, JSON.stringify({ client_email: 'ci@example.iam.gserviceaccount.com' }));
+    });
+    afterEach(() => {
+      process.env.HOME = saved.HOME;
+      process.env.USERPROFILE = saved.USERPROFILE;
+      rmSync(home, { recursive: true, force: true });
+    });
+    const args = () => ({ package_name: 'com.example.app', service_account_json_path: saPath });
+
+    it('기존 id 면 confirm 없이는 dry-run 만, confirm: true 면 교체', async () => {
+      arrange({ _class: FILE_CLASS });
+      await withClient(async (client) => {
+        const r = await client.callTool({ name: 'jenkins_upload_playstore_sa', arguments: args() });
+        expect(text(r)).toMatch(/dry-run[\s\S]*app-playstore-sa[\s\S]*이미 존재/);
+        expect(posted()).toBe(false);
+
+        const ok = await client.callTool({ name: 'jenkins_upload_playstore_sa', arguments: { ...args(), confirm: true } });
+        expect(text(ok)).toContain('Jenkins updated');
+        expect(posted()).toBe(true);
+      });
+    });
+
+    it('새 id 는 confirm 없이 생성된다', async () => {
+      arrange(null);
+      await withClient(async (client) => {
+        const r = await client.callTool({ name: 'jenkins_upload_playstore_sa', arguments: args() });
+        expect(text(r)).toContain('Jenkins created');
+        expect(posted()).toBe(true);
+      });
     });
   });
 });

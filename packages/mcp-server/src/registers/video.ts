@@ -25,10 +25,7 @@ import {
   updateYouTubeVideoPrivacy,
   uploadYouTubeVideo,
 } from '../video/youtube-publish.js';
-
-function text(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
-}
+import { jsonResult } from '../lib/mcp-response.js';
 
 const absolutePath = z.string().min(1).describe('절대경로. 상대경로는 허용하지 않습니다.');
 const httpUrl = z.string().url().refine((value) => {
@@ -63,7 +60,7 @@ export function registerVideoTools(server: ToolRegistrar) {
     },
     async (input) => {
       const auth = await requireAuth(YOUTUBE_SCOPE, input.profile);
-      return text(await uploadYouTubeVideo(auth, input));
+      return jsonResult(await uploadYouTubeVideo(auth, input));
     },
   );
 
@@ -76,7 +73,7 @@ export function registerVideoTools(server: ToolRegistrar) {
     },
     async ({ videoId, profile }) => {
       const auth = await requireAuth(YOUTUBE_SCOPE, profile);
-      return text(await getYouTubeVideoStatus(auth, videoId));
+      return jsonResult(await getYouTubeVideoStatus(auth, videoId));
     },
   );
 
@@ -94,7 +91,7 @@ export function registerVideoTools(server: ToolRegistrar) {
     },
     async (input) => {
       const auth = await requireAuth(YOUTUBE_SCOPE, input.profile);
-      return text(await updateYouTubeVideoPrivacy(auth, input));
+      return jsonResult(await updateYouTubeVideoPrivacy(auth, input));
     },
   );
 
@@ -115,7 +112,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       style: z.string().max(10_000).optional().describe('시각 스타일과 톤'),
       overwrite: z.boolean().default(false).describe('기존 메타데이터를 .history에 보관하고 새 프로젝트로 덮어쓸지 여부'),
     },
-    async (input) => text(await planStory(input)),
+    async (input) => jsonResult(await planStory(input)),
   );
 
   server.tool(
@@ -144,7 +141,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       style: z.string().max(10_000).optional().describe('시각 스타일과 톤'),
       overwrite: z.boolean().default(false).describe('기존 메타데이터를 .history에 보관하고 새 프로젝트로 덮어쓸지 여부'),
     },
-    async (input) => text(savePlan(input)),
+    async (input) => jsonResult(savePlan(input)),
   );
 
   server.tool(
@@ -163,7 +160,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       creativeCommonsOnly: z.boolean().default(false).describe('Creative Commons 표시 영상만 검색'),
       order: z.enum(['relevance', 'viewCount', 'date']).default('relevance').describe('유사도/조회수/최신순 정렬'),
     },
-    async (input) => text(await researchYouTube(input)),
+    async (input) => jsonResult(await researchYouTube(input)),
   );
 
   server.tool(
@@ -182,7 +179,7 @@ export function registerVideoTools(server: ToolRegistrar) {
         notes: z.string().min(1).max(10_000).describe('사용자/에이전트가 직접 관찰한 훅·장면·템포 메모'),
       })).max(20).optional(),
     },
-    async (input) => text(await synthesizeResearch(input)),
+    async (input) => jsonResult(await synthesizeResearch(input)),
   );
 
   server.tool(
@@ -198,7 +195,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       orientation: z.enum(['landscape', 'portrait', 'square']).optional(),
       perQuery: z.number().int().min(1).max(15).default(5),
     },
-    async (input) => text(await searchStock(input)),
+    async (input) => jsonResult(await searchStock(input)),
   );
 
   server.tool(
@@ -221,8 +218,8 @@ export function registerVideoTools(server: ToolRegistrar) {
     },
     async ({ projectDir, selections, confirm }) => {
       loadProject(projectDir);
-      if (!confirm) return text({ confirmed: false, action: 'download', count: selections.length, selections });
-      return text(await downloadStockAssets(projectDir, selections));
+      if (!confirm) return jsonResult({ confirmed: false, action: 'download', count: selections.length, selections });
+      return jsonResult(await downloadStockAssets(projectDir, selections));
     },
   );
 
@@ -244,8 +241,8 @@ export function registerVideoTools(server: ToolRegistrar) {
     },
     async ({ confirm, ...input }) => {
       loadProject(input.projectDir);
-      if (!confirm) return text({ confirmed: false, action: 'generate_image', ...input });
-      return text(await generateImage(input));
+      if (!confirm) return jsonResult({ confirmed: false, action: 'generate_image', ...input });
+      return jsonResult(await generateImage(input));
     },
   );
 
@@ -265,7 +262,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       author: z.string().optional(),
       attribution: z.string().optional(),
     },
-    async (input) => text(addLocalAsset(input)),
+    async (input) => jsonResult(addLocalAsset(input)),
   );
 
   server.tool(
@@ -297,7 +294,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       }).optional().describe('자막 스타일. 생략하면 쇼츠 기본 스타일'),
     },
     async ({ projectDir, scenes, audioAssetId, captionStyle }) =>
-      text(buildTimeline(projectDir, scenes, audioAssetId, captionStyle)),
+      jsonResult(buildTimeline(projectDir, scenes, audioAssetId, captionStyle)),
   );
 
   server.tool(
@@ -318,7 +315,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       const project = loadProject(input.projectDir);
       const timeline = loadTimeline(input.projectDir);
       if (!confirm) {
-        return text({
+        return jsonResult({
           confirmed: false,
           action: 'render',
           title: project.title,
@@ -327,7 +324,7 @@ export function registerVideoTools(server: ToolRegistrar) {
           outputFileName: input.outputFileName,
         });
       }
-      return text(await startRender(input));
+      return jsonResult(await startRender(input));
     },
   );
 
@@ -338,7 +335,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       projectDir: absolutePath,
       jobId: z.string().uuid(),
     },
-    async ({ projectDir, jobId }) => text(getRenderJob(projectDir, jobId)),
+    async ({ projectDir, jobId }) => jsonResult(getRenderJob(projectDir, jobId)),
   );
 
   server.tool(
@@ -348,6 +345,6 @@ export function registerVideoTools(server: ToolRegistrar) {
       filePath: absolutePath,
     },
     // ffmpegPath 는 받지 않는다 — 임의 실행 파일 실행 통로였다. MIMI_SEED_FFPROBE_PATH / PATH 만 쓴다.
-    async ({ filePath }) => text(await validateVideo(filePath)),
+    async ({ filePath }) => jsonResult(await validateVideo(filePath)),
   );
 }

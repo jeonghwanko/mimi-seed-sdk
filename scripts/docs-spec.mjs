@@ -130,9 +130,9 @@ export const catalog = {
    * `impl`: 섹션 제목의 "· impl `…`" 부분.
    */
   sections: {
-    playstore: { impl: 'playstore/tools.ts' },
+    playstore: { impl: 'playstore/*.ts' },
     appstore: {
-      impl: 'appstore/tools.ts',
+      impl: 'appstore/*.ts',
       layout: [
         'R',
         { label: '분석/매출', tools: ['appstore_get_sales_report', 'appstore_get_finance_report'] },
@@ -239,6 +239,7 @@ export const catalog = {
     threads_post_carousel: 'public; 2–20',
     // Build / CI / signing
     jenkins_upload_keystore: '새 id 는 바로 생성, 기존 id 교체만 confirm',
+    jenkins_upload_playstore_sa: '새 id 는 바로 생성, 기존 id 교체만 confirm',
     jenkins_create_job: '`overwrite=true` replaces',
     jenkins_update_job: 'replaces config.xml',
     // Cross-cutting

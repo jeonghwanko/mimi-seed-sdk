@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as iam from '../iam/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
-import { jsonResult } from '../lib/mcp-response.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 
 export function registerIamTools(server: ToolRegistrar) {
   server.tool(
@@ -33,24 +33,17 @@ export function registerIamTools(server: ToolRegistrar) {
     async ({ projectId, accountId, displayName }) => {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const account = await iam.createServiceAccount(auth, projectId, accountId, displayName);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              '✓ 서비스 계정 생성 완료',
-              '',
-              `**email**: \`${account.email}\``,
-              `**displayName**: ${account.displayName}`,
-              `**uniqueId**: \`${account.uniqueId}\``,
-              '',
-              '다음 단계:',
-              `1. \`iam_create_key("${account.email}")\` — JSON 키 발급`,
-              `2. \`playstore_verify_service_account\` 로 Play Console 권한까지 확인 (Play Console에서 수동으로 이메일 초대 + 'View financial data' 권한 부여는 별도)`,
-            ].join('\n'),
-          },
-        ],
-      };
+      return textResult([
+        '✓ 서비스 계정 생성 완료',
+        '',
+        `**email**: \`${account.email}\``,
+        `**displayName**: ${account.displayName}`,
+        `**uniqueId**: \`${account.uniqueId}\``,
+        '',
+        '다음 단계:',
+        `1. \`iam_create_key("${account.email}")\` — JSON 키 발급`,
+        `2. \`playstore_verify_service_account\` 로 Play Console 권한까지 확인 (Play Console에서 수동으로 이메일 초대 + 'View financial data' 권한 부여는 별도)`,
+      ]);
     },
   );
 
@@ -81,29 +74,22 @@ export function registerIamTools(server: ToolRegistrar) {
     async ({ serviceAccount }) => {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const key = await iam.createServiceAccountKeyFile(auth, serviceAccount);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              '✓ 새 키 발급 완료 — 개인키는 파일로만 저장했습니다 (응답에 싣지 않음).',
-              '',
-              `**keyId**: \`${key.keyId}\``,
-              `**clientEmail**: \`${key.clientEmail}\``,
-              `**projectId**: \`${key.projectId}\``,
-              `**저장 경로**: \`${key.path}\` (0600)`,
-              '',
-              '다음 단계 — JSON 을 복사하지 말고 경로를 넘기세요:',
-              `- 로컬 등록: \`playstore_register_service_account(packageName, serviceAccountJsonPath="${key.path}")\``,
-              `- Jenkins 업로드: \`jenkins_upload_playstore_sa(package_name, service_account_json_path="${key.path}")\``,
-              '- 서버 env(예: onesub `GOOGLE_SERVICE_ACCOUNT_KEY`)에 넣을 때는 사용자가 터미널에서 직접:',
-              '```bash',
-              `jq -c . "${key.path}"`,
-              '```',
-            ].join('\n'),
-          },
-        ],
-      };
+      return textResult([
+        '✓ 새 키 발급 완료 — 개인키는 파일로만 저장했습니다 (응답에 싣지 않음).',
+        '',
+        `**keyId**: \`${key.keyId}\``,
+        `**clientEmail**: \`${key.clientEmail}\``,
+        `**projectId**: \`${key.projectId}\``,
+        `**저장 경로**: \`${key.path}\` (0600)`,
+        '',
+        '다음 단계 — JSON 을 복사하지 말고 경로를 넘기세요:',
+        `- 로컬 등록: \`playstore_register_service_account(packageName, serviceAccountJsonPath="${key.path}")\``,
+        `- Jenkins 업로드: \`jenkins_upload_playstore_sa(package_name, service_account_json_path="${key.path}")\``,
+        '- 서버 env(예: onesub `GOOGLE_SERVICE_ACCOUNT_KEY`)에 넣을 때는 사용자가 터미널에서 직접:',
+        '```bash',
+        `jq -c . "${key.path}"`,
+        '```',
+      ]);
     },
   );
 
@@ -124,16 +110,9 @@ export function registerIamTools(server: ToolRegistrar) {
     async ({ projectId, member, role }) => {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const result = await iam.addProjectIamPolicyBinding(auth, projectId, member, role);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: result.added
-              ? `✓ 바인딩 추가: \`${member}\` → \`${role}\``
-              : `• 이미 존재: \`${member}\` → \`${role}\` (no-op)`,
-          },
-        ],
-      };
+      return textResult(result.added
+        ? `✓ 바인딩 추가: \`${member}\` → \`${role}\``
+        : `• 이미 존재: \`${member}\` → \`${role}\` (no-op)`);
     },
   );
 }

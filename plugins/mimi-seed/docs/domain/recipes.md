@@ -180,7 +180,7 @@ dist-tags; stable versions alone update `latest`. Batch routine fixes before a s
 
 ```bash
 npm run build && npm test      # inside the package you changed
-npm run typecheck              # packages/cli only — tsup does not type-check (its `npm test` runs this first)
+npm run typecheck              # both packages, tests included — each `npm test` runs this first
 npm run plugin:check           # if you touched docs/, skills/, tool-manifest.json, plugin manifests, or versions
 npm test                       # root: plugin drift + both suites (the full gate)
 ```

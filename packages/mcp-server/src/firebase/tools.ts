@@ -377,8 +377,8 @@ export async function enableCommonServices(auth: OAuth2Client, projectId: string
     try {
       await enableService(auth, projectId, svc);
       results.push({ service: svc, status: 'enabled' });
-    } catch (err: any) {
-      results.push({ service: svc, status: 'error', message: err.message });
+    } catch (err) {
+      results.push({ service: svc, status: 'error', message: (err as { message?: unknown }).message });
     }
   }
   return results;
