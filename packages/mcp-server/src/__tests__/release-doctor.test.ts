@@ -331,6 +331,237 @@ describe('Release Doctor local scan', () => {
     expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM' }));
   });
 
+  describe('iOS Xcode / SDK 업로드 최소 요건', () => {
+    const iosProject = {
+      'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
+    };
+
+    it('CI가 최소 기준보다 낮은 Xcode를 고정하면 블로커로 보고한다', async () => {
+      const root = await fixture({
+        ...iosProject,
+        '.github/workflows/ios.yml': [
+          'jobs:',
+          '  build:',
+          '    runs-on: macos-15',
+          '    steps:',
+          '      - uses: maxim-lobanov/setup-xcode@v1',
+          '        with:',
+          "          xcode-version: '16.4'",
+        ].join('\n'),
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'IOS_XCODE_BELOW_MINIMUM',
+        severity: 'blocker',
+        file: '.github/workflows/ios.yml',
+        sourceUrl: 'https://developer.apple.com/news/?id=ueeok6yw',
+      }));
+    });
+
+    it('같은 Xcode 16도 2026-04-28 이전에는 당시 기준(Xcode 16)을 충족한다', async () => {
+      const root = await fixture({ ...iosProject, '.xcode-version': '16.4\n' });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-03-01T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'IOS_XCODE_OK',
+        severity: 'info',
+        sourceUrl: 'https://developer.apple.com/news/?id=9s0rgdy9',
+      }));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_BELOW_MINIMUM' }));
+    });
+
+    it.each([
+      ['.xcode-version', '26.2\n'],
+      ['fastlane/Fastfile', 'lane :release do\n  xcodes(version: "26.2", select_for_current_build_only: true)\nend'],
+      ['Jenkinsfile', "environment { DEVELOPER_DIR = '/Applications/Xcode_26.2.app/Contents/Developer' }"],
+      ['codemagic.yaml', 'workflows:\n  ios:\n    environment:\n      xcode: 26.2\n'],
+      ['eas.json', JSON.stringify({ build: { production: { ios: { image: 'macos-sequoia-15.6-xcode-26.2' } } } })],
+    ])('%s의 Xcode 고정값을 해석한다', async (file, text) => {
+      const root = await fixture({ ...iosProject, [file]: text });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_OK', file }));
+    });
+
+    it('베타 Xcode는 기준을 충족해도 App Store 제출에는 정식/RC가 필요함을 알린다', async () => {
+      const root = await fixture({
+        ...iosProject,
+        '.github/workflows/ios.yml': 'runs-on: macos-26\nsteps:\n  - run: sudo xcode-select -s /Applications/Xcode_27.0_beta.app',
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+      const finding = report.findings.find((row) => row.code === 'IOS_XCODE_OK');
+
+      expect(finding?.detail).toContain('Release Candidate');
+      expect(finding?.ko?.detail).toContain('TestFlight');
+    });
+
+    it('EAS 이미지 별칭과 기본 runner처럼 버전이 없는 근거는 확인 요청(info)으로 남긴다', async () => {
+      const root = await fixture({
+        ...iosProject,
+        'eas.json': JSON.stringify({
+          build: {
+            development: { developmentClient: true, distribution: 'internal', ios: { image: 'macos-sonoma-14.6-xcode-16.1' } },
+            production: { ios: { image: 'latest' } },
+          },
+        }),
+        '.github/workflows/ios.yml': 'jobs:\n  build:\n    runs-on: macos-latest\n',
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+      const finding = report.findings.find((row) => row.code === 'IOS_XCODE_UNRESOLVED');
+
+      expect(finding).toMatchObject({ severity: 'info' });
+      expect(finding?.detail).toContain('build.production.ios.image: latest');
+      expect(finding?.detail).toContain('runs-on: macos-latest');
+      expect(finding?.detail).toContain('Release Candidate');
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_BELOW_MINIMUM' }));
+    });
+
+    it('Xcode 근거가 전혀 없으면 무엇을 확인할지 알려준다', async () => {
+      const root = await fixture(iosProject);
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'IOS_XCODE_UNRESOLVED',
+        severity: 'info',
+        action: expect.stringContaining('xcodebuild -version'),
+      }));
+      expect(report.counts.blocker).toBe(0);
+    });
+
+    it('정책표가 오래되면 판정 대신 갱신 경고를 낸다', async () => {
+      const root = await fixture({ ...iosProject, '.xcode-version': '15.4\n' });
+
+      const report = await scanReleaseDoctor(root, new Date('2027-04-01T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'IOS_SDK_POLICY_REFRESH_REQUIRED',
+        severity: 'warning',
+      }));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_BELOW_MINIMUM' }));
+    });
+
+    it('iOS가 없는 저장소에는 Xcode 결과를 내지 않는다', async () => {
+      const root = await fixture({
+        'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 36 } }',
+        '.xcode-version': '15.4\n',
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings.map((row) => row.code).filter((code) => code.startsWith('IOS_'))).toEqual([]);
+    });
+  });
+
+  describe('FCM 레거시 API', () => {
+    const androidProject = {
+      'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 36 } }',
+    };
+
+    it('종료된 fcm/send 호출은 경고로 보고한다', async () => {
+      const root = await fixture({
+        ...androidProject,
+        'server/push.ts': "await fetch('https://fcm.googleapis.com/fcm/send', { method: 'POST' });",
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'FCM_LEGACY_SEND_API',
+        severity: 'warning',
+        file: 'server/push.ts',
+      }));
+    });
+
+    it('Instance ID 직접 호출과 *Legacy 토픽 메서드는 종료일 전까지 info로 알린다', async () => {
+      const root = await fixture({
+        ...androidProject,
+        'functions/src/topics.js': [
+          "await fetch('https://iid.googleapis.com/iid/v1:batchAdd', {});",
+          "await admin.messaging().subscribeToTopicLegacy(tokens, 'news');",
+        ].join('\n'),
+      });
+
+      const before = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+      expect(before.findings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'FCM_INSTANCE_ID_API', severity: 'info' }),
+        expect.objectContaining({ code: 'FCM_LEGACY_TOPIC_METHODS', severity: 'info' }),
+      ]));
+
+      const after = await scanReleaseDoctor(root, new Date('2027-09-29T00:00:00Z'));
+      expect(after.findings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'FCM_INSTANCE_ID_API', severity: 'warning', title: expect.stringContaining('decommissioned') }),
+        expect.objectContaining({ code: 'FCM_LEGACY_TOPIC_METHODS', severity: 'warning' }),
+      ]));
+    });
+
+    it('firebase-admin 14.5 미만 선언은 업그레이드가 마이그레이션임을 info로 알린다', async () => {
+      const root = await fixture({
+        ...androidProject,
+        'functions/package.json': JSON.stringify({ dependencies: { 'firebase-admin': '^13.4.0' } }),
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+      const finding = report.findings.find((row) => row.code === 'FIREBASE_ADMIN_LEGACY_TOPIC_TRANSPORT');
+
+      expect(finding).toMatchObject({ severity: 'info', file: 'functions/package.json' });
+      expect(finding?.title).not.toMatch(/break/i);
+      expect(finding?.action).toContain('Upgrading firebase-admin to 14.5.0');
+    });
+
+    it('설치된 firebase-admin이 14.5 이상이면 선언 범위가 낮아도 보고하지 않는다', async () => {
+      const root = await fixture({
+        ...androidProject,
+        'functions/package.json': JSON.stringify({ dependencies: { 'firebase-admin': '^14.0.0' } }),
+        'functions/node_modules/firebase-admin/package.json': JSON.stringify({ name: 'firebase-admin', version: '14.5.0' }),
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'FIREBASE_ADMIN_LEGACY_TOPIC_TRANSPORT' }));
+    });
+
+    it('FCM v1과 최신 firebase-admin만 쓰는 코드는 FCM 결과를 내지 않는다', async () => {
+      const root = await fixture({
+        ...androidProject,
+        'functions/package.json': JSON.stringify({ dependencies: { 'firebase-admin': '^14.5.0' } }),
+        'functions/src/push.ts': [
+          "await fetch('https://fcm.googleapis.com/v1/projects/my-app/messages:send', {});",
+          "await admin.messaging().subscribeToTopic(tokens, 'news');",
+        ].join('\n'),
+        // Test and vendored trees are outside the shipped push code.
+        'functions/tests/legacy-send.test.ts': "nock('https://fcm.googleapis.com').post('/fcm/send');",
+        'vendor/old-sdk/push.php': "curl('https://fcm.googleapis.com/fcm/send');",
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings.map((row) => row.code).filter((code) => /^(?:FCM_|FIREBASE_ADMIN_)/.test(code))).toEqual([]);
+    });
+  });
+
+  it('새 iOS·FCM 결과를 한국어와 영어로 렌더링한다', async () => {
+    const root = await fixture({
+      'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
+      '.xcode-version': '16.4\n',
+      'server/push.py': "requests.post('https://fcm.googleapis.com/fcm/send', json=payload)",
+    });
+    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+    const ko = renderReleaseDoctor(report, 'ko');
+    const en = renderReleaseDoctor(report, 'en');
+    expect(ko).toContain('App Store Connect 업로드 최소 기준 미달');
+    expect(ko).toContain('종료된 레거시 FCM 발송 엔드포인트');
+    expect(en).toContain('below the App Store Connect upload minimum');
+    expect(en).toContain('Source: https://firebase.google.com/docs/cloud-messaging/send/v1-api');
+  });
+
   it('CLI와 직접 bin이 공유하는 보고서 렌더러를 한국어와 영어로 출력한다', async () => {
     const root = await fixture({
       'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 35 } }',
