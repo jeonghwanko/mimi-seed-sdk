@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
  *  2. 두 패키지는 core 를 `#core/<path>.js` 로만 부른다. `../../core/src/…` 같은 상대 경로는
  *     mcp-server 의 dist 에서 패키지 밖을 가리키게 된다.
  *  3. 그 `#core/…` 가 실제 core 파일을 가리킨다.
- *  4. 배선: mcp-server 는 `imports` 로 dist/core 를 가리키고 빌드가 core 를 먼저 컴파일한다.
+ *  4. core 에는 fetch 가 없다 — 네트워크 정책(타임아웃·재시도·현지화된 에러)은 패키지마다 다르다.
+ *  5. 배선: mcp-server 는 `imports` 로 dist/core 를 가리키고 빌드가 core 를 먼저 컴파일한다.
  *     어느 package.json 도 미배포 패키지(@mimi-seed/core)를 dependency 로 두지 않는다.
  */
 
@@ -59,6 +60,11 @@ describe('packages/core 경계', () => {
       }
     }
     expect(offenders, `core 는 의존성 0 이어야 한다(설치되지 않으므로 npm 패키지를 못 찾는다): ${offenders.join(', ')}`).toEqual([]);
+  });
+
+  it('core 는 네트워크를 직접 부르지 않는다 (타임아웃·재시도 정책은 각 패키지의 lib/http.ts 몫)', () => {
+    const offenders = coreFiles.filter((file) => /\bfetch\s*\(/.test(readFileSync(file, 'utf8'))).map(rel);
+    expect(offenders).toEqual([]);
   });
 
   it('두 패키지는 core 를 #core/<path>.js 로만 부르고, 그 파일이 실제로 있다', () => {
