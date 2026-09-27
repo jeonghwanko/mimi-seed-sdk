@@ -16,10 +16,23 @@ import { HTTP_TIMEOUT_MS } from './http.js';
 export const GOOGLEAPIS_TIMEOUT_MS = HTTP_TIMEOUT_MS;
 
 /**
- * 미디어 업로드(Play 이미지, YouTube 영상·썸네일) 호출부가 per-call 로 넘기는 상한.
+ * 미디어 업로드(Play 이미지, YouTube 영상·썸네일) 호출부가 per-call 로 넘기는 기본 상한 — 3시간.
  * 기본 60초로는 큰 영상이 중간에 끊긴다 — 목적은 "빨리 실패"가 아니라 "무한 대기 금지".
+ * main 에는 상한이 아예 없었으므로, 느린 회선의 대용량 업로드를 끊지 않도록 넉넉하게 잡고
+ * `MIMI_SEED_UPLOAD_TIMEOUT_MS` 로 바꿀 수 있게 한다.
  */
-export const GOOGLEAPIS_MEDIA_TIMEOUT_MS = 30 * 60_000;
+export const GOOGLEAPIS_MEDIA_TIMEOUT_MS = 3 * 60 * 60_000;
+export const UPLOAD_TIMEOUT_ENV = 'MIMI_SEED_UPLOAD_TIMEOUT_MS';
+
+/** 환경변수가 양의 정수(ms)면 그 값, 아니면 기본 3시간. 호출 시점마다 읽는다. */
+export function mediaUploadTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[UPLOAD_TIMEOUT_ENV]?.trim();
+  if (raw && /^\d+$/.test(raw)) {
+    const value = Number(raw);
+    if (Number.isSafeInteger(value) && value > 0) return value;
+  }
+  return GOOGLEAPIS_MEDIA_TIMEOUT_MS;
+}
 
 /**
  * Play `edits.commit` 용. 커밋은 서버가 edit 전체를 검증·반영하느라 60초를 넘기기도 하고,
@@ -28,8 +41,10 @@ export const GOOGLEAPIS_MEDIA_TIMEOUT_MS = 30 * 60_000;
 export const GOOGLEAPIS_COMMIT_TIMEOUT_MS = 5 * 60_000;
 export const GOOGLEAPIS_COMMIT_OPTIONS = Object.freeze({ timeout: GOOGLEAPIS_COMMIT_TIMEOUT_MS });
 
-/** 미디어 업로드 호출의 두 번째 인자로 넘긴다: `api.upload(params, GOOGLEAPIS_MEDIA_OPTIONS)`. */
-export const GOOGLEAPIS_MEDIA_OPTIONS = Object.freeze({ timeout: GOOGLEAPIS_MEDIA_TIMEOUT_MS });
+/** 미디어 업로드 호출의 두 번째 인자로 넘긴다: `api.upload(params, mediaUploadOptions())`. */
+export function mediaUploadOptions(): { timeout: number } {
+  return { timeout: mediaUploadTimeoutMs() };
+}
 
 /**
  * googleapis-common 은 요청마다 `context.google._options`(전역) → API 별 → 호출별 순서로

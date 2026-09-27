@@ -4,7 +4,7 @@ import path from 'node:path';
 import { google, type youtube_v3 } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { friendlyGoogleError } from '../lib/google-errors.js';
-import { GOOGLEAPIS_MEDIA_OPTIONS } from '../lib/google-timeouts.js';
+import { mediaUploadOptions } from '../lib/google-timeouts.js';
 import { validateVideo } from './render.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
@@ -164,7 +164,7 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
         mimeType: file.mimeType,
         body: createReadStream(input.filePath),
       },
-    }, GOOGLEAPIS_MEDIA_OPTIONS);
+    }, mediaUploadOptions());
     const videoId = response.data.id;
     if (!videoId) throw new Error('YouTube 업로드 응답에 videoId가 없습니다.');
     return {

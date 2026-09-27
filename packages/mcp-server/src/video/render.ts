@@ -187,7 +187,7 @@ async function verifyExecutable(command: string): Promise<void> {
   try {
     await execFileAsync(command, ['-version'], { timeout: 10_000, windowsHide: true });
   } catch (error) {
-    throw new Error(`FFmpeg를 실행할 수 없습니다: ${command}\nFFmpeg를 설치하거나 ffmpegPath를 지정하세요.`, { cause: error });
+    throw new Error(`FFmpeg를 실행할 수 없습니다: ${command}\nFFmpeg를 설치해 PATH 에 두거나 MIMI_SEED_FFMPEG_PATH (ffprobe 는 MIMI_SEED_FFPROBE_PATH) 환경변수에 절대경로를 지정하세요. / Install FFmpeg on PATH or set MIMI_SEED_FFMPEG_PATH (and MIMI_SEED_FFPROBE_PATH) to its absolute path.`, { cause: error });
   }
 }
 

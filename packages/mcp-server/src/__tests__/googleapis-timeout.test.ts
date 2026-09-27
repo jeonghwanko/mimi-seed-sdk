@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { google } from '../lib/googleapis-lite.js';
 import {
   GOOGLEAPIS_DEFAULT_OPTIONS,
   GOOGLEAPIS_MEDIA_TIMEOUT_MS,
   GOOGLEAPIS_TIMEOUT_MS,
+  mediaUploadOptions,
+  mediaUploadTimeoutMs,
 } from '../lib/google-timeouts.js';
 import { HTTP_TIMEOUT_MS } from '../lib/http.js';
 
@@ -22,6 +24,22 @@ describe('googleapis 기본 타임아웃', () => {
     expect(GOOGLEAPIS_DEFAULT_OPTIONS.timeout).toBeGreaterThan(0);
     expect(google._options).toBe(GOOGLEAPIS_DEFAULT_OPTIONS);
     expect(GOOGLEAPIS_MEDIA_TIMEOUT_MS).toBeGreaterThan(GOOGLEAPIS_TIMEOUT_MS);
+  });
+
+  // 회귀 리뷰: main 에는 업로드 상한이 없었다 — 30분 상한은 느린 회선의 큰 영상을 끊었다.
+  it('미디어 업로드 기본 상한은 3시간이고 MIMI_SEED_UPLOAD_TIMEOUT_MS 로 바꿀 수 있다', () => {
+    expect(GOOGLEAPIS_MEDIA_TIMEOUT_MS).toBe(3 * 60 * 60_000);
+    expect(mediaUploadTimeoutMs({})).toBe(GOOGLEAPIS_MEDIA_TIMEOUT_MS);
+    expect(mediaUploadTimeoutMs({ MIMI_SEED_UPLOAD_TIMEOUT_MS: '21600000' })).toBe(21_600_000);
+    for (const bad of ['', '0', '-5', 'abc', '1e9', '1.5']) {
+      expect(mediaUploadTimeoutMs({ MIMI_SEED_UPLOAD_TIMEOUT_MS: bad }), bad).toBe(GOOGLEAPIS_MEDIA_TIMEOUT_MS);
+    }
+    vi.stubEnv('MIMI_SEED_UPLOAD_TIMEOUT_MS', '12345');
+    try {
+      expect(mediaUploadOptions()).toEqual({ timeout: 12_345 });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('재시도 횟수가 제한돼 있다 (타임아웃 × 재시도로 대기가 부풀지 않게)', () => {

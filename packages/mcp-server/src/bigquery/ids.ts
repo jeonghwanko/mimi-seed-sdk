@@ -9,8 +9,8 @@
 
 const MAX_ID_LENGTH = 1024;
 
-/** 프로젝트 ID: 소문자·숫자·하이픈, 선택적으로 `example.com:` 도메인 접두사. */
-const PROJECT_ID = /^(?:[a-z0-9][a-z0-9.-]*:)?[a-z][a-z0-9-]*$/;
+/** 프로젝트 ID: 소문자·숫자·하이픈(선택적 `example.com:` 도메인 접두사), 또는 숫자 프로젝트 번호(GA4 BigQuery 링크가 `projects/<번호>` 로 돌려준다). */
+const PROJECT_ID = /^(?:(?:[a-z0-9][a-z0-9.-]*:)?[a-z][a-z0-9-]*|[0-9]+)$/;
 /** 데이터셋 ID: 영문자·숫자·밑줄. */
 const DATASET_ID = /^[A-Za-z0-9_]+$/;
 /**

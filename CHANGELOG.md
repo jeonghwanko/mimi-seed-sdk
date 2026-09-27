@@ -60,7 +60,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `bigquery_run_query` waits up to 2 more minutes for a query that misses the 30 s window and, if it still has not
   finished, says so with `jobComplete: false` and the `jobId` instead of returning an empty result.
 - Google API calls made through `googleapis` now have a 60 s timeout with bounded retries (Play `edits.commit`
-  5 min, media uploads 30 min), so a hung connection can no longer freeze a tool call indefinitely.
+  5 min, media uploads 3 h — override with `MIMI_SEED_UPLOAD_TIMEOUT_MS`), so a hung connection can no longer
+  freeze a tool call indefinitely.
 - On Windows, credential writes retry briefly (up to 1 s) when antivirus, the search indexer, OneDrive, or another
   mimi-seed process holds the file open, instead of failing with `EPERM`.
 - `CALLBACK_PORT_IN_USE` names the loopback address that is taken and how to find the process holding it.
@@ -81,7 +82,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   and `android_generate_keystore` saves the keystore and its passwords under `~/.mimi-seed/keystores/` (both
   `0600`), and keytool receives passwords through environment variables instead of the command line. The
   `playstore_upload_data_safety` preview no longer echoes CSV content.
-- `bigquery_run_query` enforces read-only: a dry run rejects anything that is not a single `SELECT`.
+- `bigquery_run_query` enforces read-only: a dry run rejects anything that is not a single `SELECT`. BigQuery
+  ids follow BigQuery's own naming rules (Unicode/space table names and numeric project numbers are accepted).
 - The Google login callback listens only on `127.0.0.1` and `::1` instead of every network interface.
 - FFmpeg can no longer be pointed at an arbitrary program from a tool call; it is configured only by
   `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` / `PATH`.

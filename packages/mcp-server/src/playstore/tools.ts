@@ -6,7 +6,7 @@ import { extractHttpStatus } from '../lib/google-errors.js';
 import { collectPagesUpTo } from '../lib/paginate.js';
 import { guardDotSegmentParams } from '../lib/resource-id.js';
 import { GOOGLEAPIS_COMMIT_OPTIONS } from '../lib/google-timeouts.js';
-import { GOOGLEAPIS_MEDIA_OPTIONS } from '../lib/google-timeouts.js';
+import { mediaUploadOptions } from '../lib/google-timeouts.js';
 
 export type PlayImageType =
   | 'featureGraphic'
@@ -455,7 +455,7 @@ export async function uploadImage(
           mimeType: mimeTypeFor(filePath),
           body: fs.createReadStream(filePath),
         },
-      }, GOOGLEAPIS_MEDIA_OPTIONS);
+      }, mediaUploadOptions());
       return res.data.image;
     },
     true,
@@ -510,7 +510,7 @@ export async function replaceImages(
             mimeType: mimeTypeFor(filePath),
             body: fs.createReadStream(filePath),
           },
-        }, GOOGLEAPIS_MEDIA_OPTIONS);
+        }, mediaUploadOptions());
         uploaded.push(res.data.image ?? {});
       }
       return { imageType, count: uploaded.length, uploaded };

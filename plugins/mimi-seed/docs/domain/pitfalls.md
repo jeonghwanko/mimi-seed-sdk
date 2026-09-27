@@ -283,7 +283,8 @@ any absolute path).
 timeout by default — the same "hung socket blocks a stdio tool forever" defect. `lib/google-timeouts.ts` sets a
 60 s default and bounded retries through `google._options` in `googleapis-lite.ts` (googleapis-common merges
 `context.google._options` into every request made as `google.<api>(…)`). Media uploads pass
-`GOOGLEAPIS_MEDIA_OPTIONS` per call so large files are not cut off. If you ever call a googleapis constructor
+`mediaUploadOptions()` per call — 3 hours by default, overridable with `MIMI_SEED_UPLOAD_TIMEOUT_MS` — so large
+files on slow links are not cut off (main had no cap at all; a 30 min cap was a regression). If you ever call a googleapis constructor
 another way (not as a method of the `google` lite object), the default is lost — `googleapis-timeout.test.ts`
 checks the real request options.
 

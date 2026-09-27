@@ -97,7 +97,15 @@ describe('googleapis 호출 — 요청 전에 막힌다', { timeout: 60_000 }, (
     },
   );
 
-  it.each(['My-Project', 'proj/x', '../p', 'example.com:../p'])('bigquery 프로젝트 ID %j 거부', async (projectId) => {
+  // GA4 BigQuery 링크는 프로젝트를 `projects/<번호>` 로 돌려준다 — 숫자 프로젝트 번호도 유효하다.
+  it.each(['123456789012', 'my-project', 'example.com:my-project'])('bigquery 프로젝트 ID %j 허용', async (projectId) => {
+    const { auth, request } = fakeAuth();
+    await listTables(auth, projectId, 'analytics_123456789');
+    expect(new URL(request.mock.calls[0][0].url).pathname)
+      .toBe(`/bigquery/v2/projects/${projectId}/datasets/analytics_123456789/tables`);
+  });
+
+  it.each(['My-Project', 'proj/x', '../p', 'example.com:../p', '123/456', '12 34'])('bigquery 프로젝트 ID %j 거부', async (projectId) => {
     const { auth } = fakeAuth();
     await expect(listTables(auth, projectId, 'ds')).rejects.toThrow(/프로젝트 ID/);
   });

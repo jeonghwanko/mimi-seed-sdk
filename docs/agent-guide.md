@@ -176,6 +176,9 @@ Notes that matter in practice:
   `YOUTUBE_API_KEY` (reference research), `PEXELS_API_KEY` (licensed stock search), and
   `OPENAI_API_KEY` (generated images). Rendering needs FFmpeg on `PATH` or
   `MIMI_SEED_FFMPEG_PATH`.
+- Google API calls time out after 60 s by default. Media uploads (YouTube video/thumbnail, Play images) get
+  **3 hours** per call; set `MIMI_SEED_UPLOAD_TIMEOUT_MS` (milliseconds, positive integer) in the MCP server's
+  environment to change it for very large files or slow links.
 
 ---
 
