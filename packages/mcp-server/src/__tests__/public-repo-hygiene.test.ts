@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
-const SCAN_ROOTS = ['packages/cli/src', 'packages/mcp-server/src', 'docs', 'skills'];
+const SCAN_ROOTS = ['packages/cli/src', 'packages/mcp-server/src', 'packages/core/src', 'docs', 'skills'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git']);
 const SCAN_EXTENSIONS = ['.ts', '.md', '.json'];
 

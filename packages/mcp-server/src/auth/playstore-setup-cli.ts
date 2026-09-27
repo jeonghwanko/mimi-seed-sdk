@@ -2,7 +2,7 @@
 import { saveServiceAccountJson, getServiceAccountJson } from './playstore-auth.js';
 import readline from 'node:readline';
 import fs from 'node:fs';
-import { resolveLang } from '../lib/lang.js';
+import { resolveLang } from '#core/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
 const ko = {

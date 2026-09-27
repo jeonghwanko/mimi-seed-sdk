@@ -1,4 +1,5 @@
 {
+  "//": "#core/* = packages/core 공유 소스. tsup(esbuild)·tsx·tsc 가 이 paths 를 읽어 소스를 직접 번들한다 — 배포본에는 #core 지정자가 남지 않는다. vitest 는 vitest.config.ts 의 alias 로 같은 매핑을 한다.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -9,7 +10,8 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": { "#core/*": ["../core/src/*"] }
   },
   "include": ["src/**/*"]
 }

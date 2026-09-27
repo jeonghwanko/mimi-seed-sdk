@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialJson } from '#core/atomic-write.js';
 
 export interface TikTokBusinessConfig {
   clientId: string;

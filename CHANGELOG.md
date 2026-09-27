@@ -18,6 +18,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **Contributors:** code the CLI and the MCP server both need now lives once in `packages/core`, private,
+  dependency-free source that each package compiles into its own output (the CLI bundles it, the MCP server
+  emits it to `dist/core/`). This covers Release Doctor, the `.mimi-seed.json` reader, the output-language rule,
+  atomic credential writes, the AI model id and generator contract, the endpoint-label/timeout helpers, and the
+  `ci.json` / `jenkins.json` shapes. Removed with the copies: the CLI's Release Doctor mirror,
+  `scripts/sync-release-doctor.mjs` with its `release-doctor:sync` / `release-doctor:check` scripts, and the
+  `manifest-schema-parity`, `rename-retry-parity`, and `ai-parity` tests. `core-boundary.test.ts` guards the new
+  package. Nothing changes for users: both npm packages still install on their own, and the MCP tarball only
+  gains `dist/core/`. The Release Doctor files and a few `lib/` modules moved there from their old `dist/` paths.
+
 ### Removed
 
 - The deprecated aliases announced in 0.20.0 are gone: `playstore_update_latest_release_notes` (use

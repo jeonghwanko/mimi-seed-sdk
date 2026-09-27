@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalog, t } from "./i18n.js";
-import { resolveLang } from "./settings.js";
+import { resolveLang } from "#core/lang.js";
 // tsup 이 빌드 시점에 JSON 을 번들에 인라인한다 — 배포된 dist 도 런타임에 package.json 을 찾지 않는다.
 import { version as CLI_VERSION } from "../package.json";
 

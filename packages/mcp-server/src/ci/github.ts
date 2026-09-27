@@ -1,26 +1,13 @@
 import type { CiConfig, NormalizedBuild } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
-
-function base(cfg: CiConfig) {
-  // GitHub Enterprise: host = https://github.example.com → API base = https://github.example.com/api/v3
-  if (cfg.host) return `${cfg.host.replace(/\/$/, '')}/api/v3`;
-  return 'https://api.github.com';
-}
-
-function headers(token: string): Record<string, string> {
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'Content-Type': 'application/json',
-  };
-}
+import { githubApiBase, githubHeaders } from '#core/ci.js';
 
 async function ghFetch(cfg: CiConfig, endpoint: string, options?: RequestInit) {
-  const res = await fetchWithTimeout(`${base(cfg)}${endpoint}`, {
+  // base URL · 헤더 규칙은 CLI 의 배포 경로와 공유한다(#core/ci.js) — 검증과 실제 호출이 같은 URL 을 만든다.
+  const res = await fetchWithTimeout(`${githubApiBase(cfg)}${endpoint}`, {
     ...options,
-    headers: { ...headers(cfg.token), ...(options?.headers ?? {}) },
+    headers: { ...githubHeaders(cfg.token), ...(options?.headers ?? {}) },
   });
   if (res.status === 204) return null;
   const body = await res.text();

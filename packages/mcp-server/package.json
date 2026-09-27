@@ -3,6 +3,9 @@
   "version": "0.20.0",
   "description": "Mimi Seed MCP server — Firebase + AdMob + Google Play + App Store management for Claude Code / Codex / Cursor / any MCP client.",
   "type": "module",
+  "imports": {
+    "#core/*": "./dist/core/*"
+  },
   "bin": {
     "mimi-seed-mcp": "dist/index.js",
     "mimi-seed-auth": "dist/auth/cli.js",
@@ -27,14 +30,15 @@
   ],
   "scripts": {
     "report:googleads": "node scripts/googleads-report.mjs",
-    "build": "tsc",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.core.json && tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "auth": "tsx src/auth/cli.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.lint.json",
+    "typecheck": "tsc --noEmit -p tsconfig.lint.json && tsc -p ../core",
     "test": "npm run typecheck && npm run lint && vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "node ../../scripts/sync-agent-guide.mjs --check && tsc",
-    "lint": "eslint .",
+    "prepublishOnly": "node ../../scripts/sync-agent-guide.mjs --check && npm run build",
+    "lint": "eslint . ../core",
     "coverage": "vitest run --coverage"
   },
   "keywords": [

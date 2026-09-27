@@ -12,7 +12,7 @@ import {
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CREDENTIAL_DIR_MODE, CREDENTIAL_FILE_MODE, writeJsonAtomic } from '../lib/atomic-write.js';
+import { CREDENTIAL_DIR_MODE, CREDENTIAL_FILE_MODE, writeJsonAtomic } from '#core/atomic-write.js';
 import { validateVideo } from '../video/render.js';
 import { TikTokApiError, getPublishStatus, getVideoSettings, publishVideo } from './api.js';
 import { ensureTikTokPublishConfig } from './auth.js';

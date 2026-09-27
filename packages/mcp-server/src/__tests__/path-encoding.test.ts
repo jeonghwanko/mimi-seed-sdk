@@ -36,8 +36,7 @@ const PROVIDER_DIRS = [
 
 /** 경로 삽입이지만 인코딩하면 안 되거나 이미 인코딩된 값. 사유를 남길 것. */
 const ALLOWED: Array<{ file: string; expr: string; why: string }> = [
-  { file: 'ci/gitlab.ts', expr: 'cfg.repo', why: '`encodeURIComponent(`${owner}/${repo}`)` 안쪽 — 통째로 인코딩된다' },
-  { file: 'ci/gitlab.ts', expr: 'projectId(cfg)', why: 'projectId() 가 이미 인코딩한 값을 돌려준다' },
+  { file: 'ci/gitlab.ts', expr: 'gitlabProjectId(cfg)', why: 'gitlabProjectId() (#core/ci.js) 가 이미 인코딩한 값을 돌려준다' },
   { file: 'jenkins/http.ts', expr: 'suffix', why: '호출부가 만든 고정 경로 접미사 (잡 경로는 세그먼트별로 인코딩)' },
   { file: 'jenkins/http.ts', expr: "segments.map((s) => `job/${encodeURIComponent(s)", why: '세그먼트별 인코딩' },
   { file: 'instagram/api.ts', expr: 'parsed.error.error_subcode', why: '에러 메시지 문자열이지 URL 이 아니다' },

@@ -19,11 +19,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "prebuild": "node ../../scripts/sync-release-doctor.mjs --check",
     "build": "tsup",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "pretest": "node ../../scripts/sync-release-doctor.mjs --check",
     "test": "npm run typecheck && npm run lint && vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

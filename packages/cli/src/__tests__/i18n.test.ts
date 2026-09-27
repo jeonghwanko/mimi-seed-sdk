@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveLang, isLangUnset, readSettings, writeSettings, DEFAULT_LANG } from '../settings.js';
+import { resolveLang, DEFAULT_LANG } from '#core/lang.js';
+import { isLangUnset, readSettings, writeSettings } from '../settings.js';
 import { t } from '../i18n.js';
 import { CREDENTIALS, credLabel, credObtain } from '../credentials.js';
 

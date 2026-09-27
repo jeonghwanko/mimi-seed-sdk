@@ -1,13 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
- * mcp-server 가 호출하는 Claude 모델의 SSOT — ai/*, video/* 가 모두 이 값을 쓴다.
- *
- * 예전엔 두 패키지 6개 파일에 리터럴로 흩어져 있어서, 모델 교체가 6곳 수정 + 가드 0 이었다.
- * CLI 쪽 쌍둥이 상수는 `packages/cli/src/ai-model.ts` 이고, 두 값의 일치는
- * `__tests__/ai-model-parity.test.ts` 가 강제한다.
+ * Claude 모델 id — ai/*, video/* 가 모두 이 이름으로 쓴다. 값은 CLI 와 공유하는 packages/core 의
+ * `#core/ai.js` 한 곳에 있다(예전엔 두 패키지에 쌍둥이 상수가 있고 parity 테스트가 비교했다).
  */
-export const AI_MODEL = 'claude-haiku-4-5-20251001';
+export { AI_MODEL } from '#core/ai.js';
 
 export const LOCALE_NAMES: Record<string, string> = {
   'ko': '한국어', 'ko-KR': '한국어',

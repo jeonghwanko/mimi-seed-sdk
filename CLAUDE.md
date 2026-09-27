@@ -32,9 +32,10 @@ index below is imported automatically; the linked docs are **not**, so `Read` th
 
 1. **Code is the SSOT**; these docs mirror it. On a conflict, believe the code and fix the doc — the drift map in
    the ontology index says which facts are test-enforced and which are hand-synced.
-2. **Stay in the owning package.** The two packages are not a workspace and never import each other. The CLI's
-   `src/checks` Release Doctor files are generated mirrors: edit the MCP source, then run
-   `npm run release-doctor:sync`; never hand-edit the mirror.
+2. **Stay in the owning package.** The two packages are not a workspace and never import each other. Code both
+   need lives once in `packages/core` (private, never published, dependency-free) and is imported as
+   `#core/<path>.js` — the CLI bundles it, mcp-server compiles it into `dist/core`. Never copy code between the
+   packages; move it into core ([`recipes.md`](docs/domain/recipes.md) §8), then build + test **both** packages.
 3. **Register files stay thin** — name, description, zod schema, thin handler in `registers/<domain>.ts`; API
    logic in `<domain>/tools.ts`. A *new* register module is wired into `src/server.ts`, not `src/index.ts`.
    Tools register through the `ToolRegistrar` (`lib/tool-registrar.ts`); a tool's read / write / destructive

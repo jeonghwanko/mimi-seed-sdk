@@ -33,8 +33,9 @@ changes.
 
 | Path | Owner / purpose |
 |---|---|
-| `packages/cli/` | `mimi-seed`: onboarding, local/CI orchestration, remote HTTP MCP setup; bundles the generated Release Doctor mirror |
+| `packages/cli/` | `mimi-seed`: onboarding, local/CI orchestration, remote HTTP MCP setup |
 | `packages/mcp-server/` | `@yoonion/mimi-seed-mcp`: local stdio MCP, domain tools, auth setup binaries |
+| `packages/core/` | Private, never-published shared source both packages compile in (Release Doctor, `.mimi-seed.json` reader, atomic writes, AI contract, …); imported as `#core/<path>.js` |
 | `skills/` | Claude Code and Codex skill sources |
 | `.codex-plugin/`, `.mcp.json` | Codex plugin and MCP registration sources |
 | `.agents/plugins/marketplace.json` | Codex marketplace manifest |
@@ -61,9 +62,10 @@ implementation here; describe only the public boundary to the web console.
    lock files unless the task requires it.
 2. Treat code as the final source of truth. Use the SSOT and drift table in the domain index before updating a
    mirrored document.
-3. Keep changes in the owning package. The two packages are not a workspace and do not import each other. The
-   CLI's `src/checks` Release Doctor files are generated mirrors of the MCP sources; edit the MCP source,
-   then run `npm run release-doctor:sync`.
+3. Keep changes in the owning package. The two packages are not a workspace and do not import each other. Code
+   both need lives once in `packages/core` (dependency-free, imported as `#core/<path>.js`; the CLI bundles it,
+   mcp-server compiles it into `dist/core`). Never copy code between the packages — move it into core
+   (`docs/domain/recipes.md` §8), then build and test both packages.
 4. Keep register files thin: schemas and MCP handlers live in `registers/`; business logic lives in the domain's
    `tools.ts` or focused module. A **new** register module is wired into `packages/mcp-server/src/server.ts`
    (`buildServer`), not `src/index.ts`. Tools register through the `ToolRegistrar` (`lib/tool-registrar.ts`);
@@ -92,8 +94,8 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
 - Keep English and `.ko` onboarding documents structurally equivalent when changing user-facing guidance.
 - Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, `LICENSE`, or `tool-manifest.json` require
   `npm run plugin:sync`. Commit what it regenerated (generated doc blocks, `plugins/mimi-seed/`); do not hand-edit it.
-- Do not hand-edit the CLI Release Doctor mirror. `npm run release-doctor:check` enforces byte equality with the
-  MCP-owned source and `npm run release-doctor:sync` refreshes it.
+- `packages/core` may import only `node:` builtins and its own files, and never calls `fetch`;
+  `core-boundary.test.ts` enforces it, because the installed packages have no `node_modules` for core.
 
 ## Verification
 

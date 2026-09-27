@@ -12,7 +12,7 @@ import {
   writeCredentialJson,
   writeFileAtomic,
   writeJsonAtomic,
-} from '../lib/atomic-write.js';
+} from '#core/atomic-write.js';
 
 // CLI 판 atomic-write 가드. mcp-server 의 같은 이름 테스트와 같은 규칙을 CLI 쪽 writer 에 건다.
 // 잘린 JSON 은 이 저장소의 모든 reader 가 `null` 로 삼키므로 "이유 없이 로그아웃됨" 으로만 보인다.
@@ -122,7 +122,7 @@ describe('rename 재시도 (Windows 잠금)', () => {
   it('잠금이 아닌 오류(ENOENT 등)는 재시도하지 않는다', () => {
     let calls = 0;
     const rename = () => { calls += 1; throw locked('ENOENT'); };
-    expect(() => renameWithRetry('a', 'b', rename, () => {})).toThrow(/ENOENT/);
+    expect(() => renameWithRetry('a', 'b', { rename, sleep: () => {} })).toThrow(/ENOENT/);
     expect(calls).toBe(1);
     expect(RENAME_RETRY_CODES.has('ENOENT')).toBe(false);
   });
@@ -136,7 +136,7 @@ describe('rename 재시도 (Windows 잠금)', () => {
 });
 
 describe('CLI 자격증명 writer 가드', () => {
-  /** lib/atomic-write.ts 로 ~/.mimi-seed 아래 파일을 쓰는 모듈 전부. */
+  /** #core/atomic-write.js 로 ~/.mimi-seed 아래 파일을 쓰는 모듈 전부. */
   const CREDENTIAL_WRITERS = [
     'ci-providers.ts', // ci.json — CLI 가 소유하는 문서화된 예외 (pitfalls §12)
     'config.ts', // config.json — Mimi Seed PAT, `mimi-seed init`
@@ -157,7 +157,7 @@ describe('CLI 자격증명 writer 가드', () => {
     expect(touchesStore.length).toBeGreaterThanOrEqual(CREDENTIAL_WRITERS.length);
 
     const offenders = touchesStore.filter((f) => /\bwriteFile(Sync)?\s*\(/.test(read(f)));
-    expect(offenders, `raw writeFile — lib/atomic-write.ts 의 writeCredentialJson 을 쓰세요: ${offenders.join(', ')}`)
+    expect(offenders, `raw writeFile — #core/atomic-write.js 의 writeCredentialJson 을 쓰세요: ${offenders.join(', ')}`)
       .toEqual([]);
   });
 

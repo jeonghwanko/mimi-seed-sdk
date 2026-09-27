@@ -3,7 +3,8 @@ import path from "node:path";
 import os from "node:os";
 import { catalog } from "./i18n.js";
 import { fetchWithTimeout } from "./lib/http.js";
-import { writeCredentialJson } from "./lib/atomic-write.js";
+import { writeCredentialJson } from "#core/atomic-write.js";
+import { githubApiBase, githubHeaders, gitlabApiBase, gitlabProjectId, type CiConfig } from "#core/ci.js";
 
 const CI_CONFIG_PATH = path.join(os.homedir(), ".mimi-seed", "ci.json");
 
@@ -27,20 +28,15 @@ const M = catalog(
   },
 );
 
-export type CiProvider = "github" | "gitlab";
-
-export interface CiProviderConfig {
-  provider: CiProvider;
-  token: string;
-  owner: string;
-  repo: string;
-  host?: string; // GitHub Enterprise / GitLab self-hosted
-}
+// ci.json 의 모양과 base URL 규칙은 mcp-server 의 ci_* 도구와 공유한다 (#core/ci.js) — 두 패키지가
+// 모두 쓰는 파일이라, 여기서 검증한 설정을 MCP 도구가 다른 URL 로 조립하면 안 된다.
+export type { CiProvider } from "#core/ci.js";
+export type CiProviderConfig = CiConfig;
 
 export function loadCiProviderConfig(): CiProviderConfig | null {
   try {
     const cfg = JSON.parse(fs.readFileSync(CI_CONFIG_PATH, "utf-8")) as CiProviderConfig;
-    // 읽을 때도 정규화한다 — 손으로 적었거나 구버전이 저장한 host 도 ghBase/glBase 가
+    // 읽을 때도 정규화한다 — 손으로 적었거나 구버전이 저장한 host 도 githubApiBase/gitlabApiBase 가
     // 항상 유효한 URL 을 만들 수 있게 (write 경로에만 의존하지 않는다).
     const host = normalizeHost(cfg.host);
     return host ? { ...cfg, host } : { ...cfg, host: undefined };
@@ -53,7 +49,7 @@ export function loadCiProviderConfig(): CiProviderConfig | null {
  * host 를 **한 번만** 정규화한다: 스킴 보정 + 끝 슬래시 제거.
  *
  * 사용자는 프롬프트에 `ghe.corp.com` 처럼 스킴 없이, 또는 `https://ghe.corp.com/` 처럼 끝
- * 슬래시를 달아 적는다. 정규화 없이 저장하면 `ghBase()` 가 `ghe.corp.com/api/v3` 를 만들어
+ * 슬래시를 달아 적는다. 정규화 없이 저장하면 `githubApiBase()` 가 `ghe.corp.com/api/v3` 를 만들어
  * fetch 가 `Invalid URL` 로 죽거나, `//api/v3` 로 404 가 난다 — 검증은 통과했는데 배포에서
  * 터지는 최악의 조합이다. 저장 경로에서 한 번 고정하면 읽는 쪽은 신경 쓸 필요가 없다.
  */
@@ -90,7 +86,7 @@ export async function verifyCiToken(
 
   try {
     if (probe.provider === "github") {
-      const res = await fetchWithTimeout(`${ghBase(probe)}/user`, {
+      const res = await fetchWithTimeout(`${githubApiBase(probe)}/user`, {
         headers: { Authorization: `Bearer ${probe.token}`, Accept: "application/vnd.github+json" },
       });
       if (!res.ok) {
@@ -106,7 +102,7 @@ export async function verifyCiToken(
       return { ok: true, login: user.login };
     }
 
-    const res = await fetchWithTimeout(`${glBase(probe)}/user`, { headers: { "PRIVATE-TOKEN": probe.token } });
+    const res = await fetchWithTimeout(`${gitlabApiBase(probe)}/user`, { headers: { "PRIVATE-TOKEN": probe.token } });
     if (!res.ok) {
       return { ok: false, reason: M().badToken("GitLab", res.status) };
     }
@@ -121,20 +117,6 @@ export type BuildResult = "success" | "failure" | "cancelled" | "timeout";
 
 // ── GitHub Actions ──
 
-function ghBase(cfg: CiProviderConfig): string {
-  if (cfg.host) return `${cfg.host.replace(/\/$/, "")}/api/v3`;
-  return "https://api.github.com";
-}
-
-function ghHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "Content-Type": "application/json",
-  };
-}
-
 export async function ghTriggerWorkflow(
   cfg: CiProviderConfig,
   workflow: string,
@@ -144,10 +126,10 @@ export async function ghTriggerWorkflow(
   const startTime = new Date();
   const wfId = /^\d+$/.test(workflow) ? Number(workflow) : workflow;
   const dispatchRes = await fetchWithTimeout(
-    `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/dispatches`,
+    `${githubApiBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/dispatches`,
     {
       method: "POST",
-      headers: ghHeaders(cfg.token),
+      headers: githubHeaders(cfg.token),
       body: JSON.stringify({ ref, inputs }),
     },
   );
@@ -156,8 +138,8 @@ export async function ghTriggerWorkflow(
   }
   await new Promise((r) => setTimeout(r, 3000));
   const runsRes = await fetchWithTimeout(
-    `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/runs?per_page=5`,
-    { headers: ghHeaders(cfg.token) },
+    `${githubApiBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/runs?per_page=5`,
+    { headers: githubHeaders(cfg.token) },
   );
   if (!runsRes.ok) return null;
   const data = (await runsRes.json()) as { workflow_runs: any[] };
@@ -182,8 +164,8 @@ export async function ghPollRun(
     let res: Response;
     try {
       res = await fetchWithTimeout(
-        `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/runs/${runId}`,
-        { headers: ghHeaders(cfg.token) },
+        `${githubApiBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/runs/${runId}`,
+        { headers: githubHeaders(cfg.token) },
       );
     } catch {
       consecutiveErrors++;
@@ -209,14 +191,6 @@ export async function ghPollRun(
 
 // ── GitLab CI ──
 
-function glBase(cfg: CiProviderConfig): string {
-  return `${cfg.host ?? "https://gitlab.com"}/api/v4`;
-}
-
-function glProjectId(cfg: CiProviderConfig): string {
-  return encodeURIComponent(`${cfg.owner}/${cfg.repo}`);
-}
-
 export async function glTriggerPipeline(
   cfg: CiProviderConfig,
   ref: string,
@@ -225,7 +199,7 @@ export async function glTriggerPipeline(
   const vars = Object.entries(variables).map(([key, value]) => ({ key, value }));
   const body: Record<string, unknown> = { ref };
   if (vars.length > 0) body.variables = vars;
-  const res = await fetchWithTimeout(`${glBase(cfg)}/projects/${glProjectId(cfg)}/pipeline`, {
+  const res = await fetchWithTimeout(`${gitlabApiBase(cfg)}/projects/${gitlabProjectId(cfg)}/pipeline`, {
     method: "POST",
     headers: { "PRIVATE-TOKEN": cfg.token, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -249,7 +223,7 @@ export async function glPollPipeline(
     let res: Response;
     try {
       res = await fetchWithTimeout(
-        `${glBase(cfg)}/projects/${glProjectId(cfg)}/pipelines/${pipelineId}`,
+        `${gitlabApiBase(cfg)}/projects/${gitlabProjectId(cfg)}/pipelines/${pipelineId}`,
         { headers: { "PRIVATE-TOKEN": cfg.token } },
       );
     } catch {

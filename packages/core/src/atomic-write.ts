@@ -8,6 +8,11 @@
 //
 // temp 파일에 다 쓴 뒤 rename(2) 하면 교체가 원자적이다 — 읽는 쪽은 항상 옛 내용 아니면
 // 새 내용을 보고, 그 중간은 존재하지 않는다.
+//
+// CLI 와 mcp-server 가 **이 한 구현**을 쓴다. 예전엔 패키지마다 사본이 있었고, Windows 재시도
+// 스케줄이 갈라지지 않게 rename-retry-parity 테스트가 두 사본의 리터럴을 비교했다 — 같은
+// tokens.json 을 두고 한쪽만 잠금 경합에서 살아남는 상황을 막으려고. 이제 갈라질 사본이 없다.
+// 어느 모듈이 이 writer 를 거쳐야 하는지는 각 패키지의 atomic-write.test.ts 가 강제한다.
 
 import { chmodSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -39,10 +44,7 @@ export interface AtomicWriteOptions {
  * 왜: Windows 는 다른 프로세스가 대상 파일을 열고 있으면(백신·검색 인덱서·OneDrive, 또는
  * tokens.json 을 읽는 중인 다른 mimi-seed 프로세스) rename 을 EPERM/EBUSY/EACCES 로 거절한다.
  * 그 핸들은 보통 수십~수백 ms 안에 닫히므로, 짧게 물러났다 다시 시도하면 대부분 통과한다.
- *
- * ⚠️ CLI 쪽 원자적 쓰기 사본(packages/cli)과 **이름·값이 완전히 같아야 한다**
- * (RENAME_RETRY_CODES / RENAME_RETRY_DELAYS_MS / renameWithRetry). 한쪽을 바꾸면 다른 쪽도 맞출 것 —
- * 두 패키지는 서로 import 하지 않으므로 이 상수가 유일한 동기화 지점이다.
+ * 동기 writer 안에서 기다리므로 총합(1초)이 곧 최악의 블로킹 시간이다 — 늘리지 말 것.
  */
 export const RENAME_RETRY_DELAYS_MS = [10, 20, 40, 80, 160, 320, 370] as const;
 /** 재시도할 오류 코드. ENOENT 등은 잠금이 아니라 진짜 실패이므로 즉시 던진다. */

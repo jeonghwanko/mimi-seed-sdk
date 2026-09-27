@@ -1,10 +1,10 @@
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
-import { renderReleaseDoctor } from "./checks/release-doctor-render.js";
-import { scanReleaseDoctor } from "./checks/release-doctor.js";
+import { renderReleaseDoctor } from "#core/checks/release-doctor-render.js";
+import { scanReleaseDoctor } from "#core/checks/release-doctor.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
-import { resolveLang } from "./settings.js";
+import { resolveLang } from "#core/lang.js";
 import { telemetryNotice, usageRun } from "./telemetry.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.

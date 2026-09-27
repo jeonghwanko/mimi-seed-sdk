@@ -5,7 +5,8 @@
 
 import kleur from "kleur";
 import { t } from "./i18n.js";
-import { isLang, resolveLang, writeSettings } from "./settings.js";
+import { isLang, resolveLang } from "#core/lang.js";
+import { writeSettings } from "./settings.js";
 
 function log(msg: string): void {
   process.stdout.write(msg + "\n");

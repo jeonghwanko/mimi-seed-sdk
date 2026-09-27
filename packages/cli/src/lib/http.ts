@@ -7,8 +7,9 @@
 //
 // mcp-server 의 lib/http.ts 와 같은 역할이지만 일부러 더 작다: 재시도는 없다. CLI 의 호출은
 // 사람이 앞에 앉아 있고, 재시도가 의미 있는 곳(CI 폴링)은 호출부가 이미 연속 오류를 센다.
-// 두 패키지는 서로를 import 하지 않으므로 복사본이다.
+// 정책이 달라 래퍼는 두 벌이지만, 엔드포인트 라벨(토큰 제거)과 타임아웃 판별은 #core/http-errors.js 를 공유한다.
 
+import { endpointLabel as sharedEndpointLabel, isTimeoutAbort } from "#core/http-errors.js";
 import { catalog } from "../i18n.js";
 
 /** JSON API 호출의 기본 상한. 웹 콘솔·원격 MCP·GitHub·GitLab·Jenkins. */
@@ -35,24 +36,8 @@ const M = catalog(
   },
 );
 
-/**
- * 에러 메시지용 엔드포인트 라벨 — host + path 만.
- * 쿼리스트링은 버린다: 토큰이 실릴 수 있고, 에러는 터미널·CI 로그에 남는다.
- */
-function endpointLabel(input: string | URL): string {
-  try {
-    const url = new URL(String(input));
-    return `${url.host}${url.pathname}`;
-  } catch {
-    return M().unknownEndpoint;
-  }
-}
-
-/** AbortSignal.timeout 이 만든 중단인가. undici 가 cause 로 한 겹 싸는 경우까지 본다. */
-function isTimeoutAbort(error: unknown): boolean {
-  const named = (e: unknown) => (e as { name?: string } | null)?.name === "TimeoutError";
-  return named(error) || named((error as { cause?: unknown } | null)?.cause);
-}
+/** 에러 메시지용 엔드포인트 라벨 — host + path 만(쿼리스트링의 토큰은 버린다). */
+const endpointLabel = (input: string | URL) => sharedEndpointLabel(input, M().unknownEndpoint);
 
 /**
  * 본문을 읽다가 끊긴 중단인가 (TimeoutError **또는** AbortError, 한 겹 cause 포함).

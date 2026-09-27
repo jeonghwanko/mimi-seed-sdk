@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { billingVersionFromPom, checkBillingCompliance } from '../checks/billing.js';
+import { billingVersionFromPom, checkBillingCompliance } from '#core/checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
 const dirs: string[] = [];

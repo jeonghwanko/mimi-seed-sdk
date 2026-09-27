@@ -6,6 +6,9 @@
 //
 // 팀 온보딩 목적: 새 팀원이 clone → mimi_seed_status 호출 → 안내 따라가기 만으로
 // 자기 머신에 필요한 자격증명을 채울 수 있게 한다.
+//
+// 두 패키지가 **이 한 리더**를 쓴다 (예전엔 cli 에 손으로 복제한 최소 리더가 따로 있었고,
+// manifest-schema-parity 테스트가 두 사본의 스키마를 텍스트로 비교했다).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -106,23 +109,37 @@ export function isValidSocialProfileId(value: string): boolean {
   return SOCIAL_PROFILE_ID_PATTERN.test(value);
 }
 
+/**
+ * socialProfiles 검증 실패 문구. **검증 규칙은 하나**지만 문구는 소비자마다 다르다 — MCP 도구
+ * 출력(LLM 이 읽는다)은 한국어 기본값을, CLI 는 자기 출력 언어의 문구를 넘긴다.
+ */
+export interface SocialProfileMessages {
+  notAnObject: string;
+  invalidId: (platform: SocialPlatform) => string;
+}
+
+export const SOCIAL_PROFILE_MESSAGES_KO: SocialProfileMessages = {
+  notAnObject: `${MANIFEST_FILENAME}의 socialProfiles는 객체여야 합니다.`,
+  invalidId: (platform) =>
+    `${MANIFEST_FILENAME}의 socialProfiles.${platform} 값이 올바르지 않습니다. ` +
+    '영문자·숫자로 시작하는 1~64자의 영문자/숫자/점/밑줄/하이픈만 사용할 수 있습니다.',
+};
+
 /** 매니페스트에 지정된 플랫폼 프로필. 잘못된 값은 조용히 무시하지 않고 오류로 막는다. */
 export function manifestSocialProfile(
   m: ProjectManifest,
   platform: SocialPlatform,
+  messages: SocialProfileMessages = SOCIAL_PROFILE_MESSAGES_KO,
 ): string | null {
   const profiles = m.socialProfiles as unknown;
   if (profiles === undefined) return null;
   if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) {
-    throw new Error(`${MANIFEST_FILENAME}의 socialProfiles는 객체여야 합니다.`);
+    throw new Error(messages.notAnObject);
   }
   const value = (profiles as Partial<Record<SocialPlatform, unknown>>)[platform];
   if (value === undefined) return null;
   if (typeof value !== 'string' || !isValidSocialProfileId(value)) {
-    throw new Error(
-      `${MANIFEST_FILENAME}의 socialProfiles.${platform} 값이 올바르지 않습니다. ` +
-      '영문자·숫자로 시작하는 1~64자의 영문자/숫자/점/밑줄/하이픈만 사용할 수 있습니다.',
-    );
+    throw new Error(messages.invalidId(platform));
   }
   return value;
 }

@@ -13,19 +13,16 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { writeCredentialJson } from "./lib/atomic-write.js";
+import { writeCredentialJson } from "#core/atomic-write.js";
+import type { JenkinsConfig } from "#core/jenkins.js";
 
 const CONFIG_DIR = path.join(os.homedir(), ".mimi-seed");
 const JENKINS_PATH = path.join(CONFIG_DIR, "jenkins.json");
 const LEGACY_PATH = path.join(CONFIG_DIR, "config.json");
 
-export interface JenkinsConfig {
-  url: string;
-  username: string; // 레거시 config.json 에서는 `user` 였다 — 마이그레이션에서 리네임한다.
-  token: string;
-  jobAndroid?: string;
-  jobIos?: string;
-}
+// 모양은 이 파일을 쓰는 mcp-server 와 공유한다 (#core/jenkins.js). `username` 은 레거시 config.json 의
+// `user` 였다 — 아래 마이그레이션에서 리네임한다.
+export type { JenkinsConfig } from "#core/jenkins.js";
 
 export function loadJenkinsConfig(home = os.homedir()): JenkinsConfig | null {
   try {

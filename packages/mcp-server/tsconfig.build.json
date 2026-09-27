@@ -1,0 +1,13 @@
+{
+  "//": "배포 빌드 전용 — `npm run build` 의 마지막 단계(tsc -p tsconfig.build.json). dist/ 레이아웃(= bin 경로)은 rootDir src → outDir dist 로 고정된다. 테스트는 dist 에 넣지 않는다. `paths` 를 비워서 `#core/*` 를 package.json \"imports\" 로 — 즉 앞 단계(tsconfig.core.json)가 dist/core 에 낸 .d.ts 로 — 풀게 한다: 소스로 풀면 core 파일이 rootDir(src) 밖이라 이 프로그램에 들어올 수 없다.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {}
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/__tests__/**", "**/*.test.ts"]
+}

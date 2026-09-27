@@ -28,7 +28,8 @@ import { detectHints } from "./detect.js";
 import { promptGitProviderSetup } from "./deploy.js";
 import { saveCiProviderConfig, verifyCiToken } from "./ci-providers.js";
 import { t } from "./i18n.js";
-import { isLangUnset, writeSettings, type Lang } from "./settings.js";
+import type { Lang } from "#core/lang.js";
+import { isLangUnset, writeSettings } from "./settings.js";
 import { usageRun } from "./telemetry.js";
 
 function log(msg = ""): void {

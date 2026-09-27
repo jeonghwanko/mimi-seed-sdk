@@ -4,10 +4,17 @@ import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
-import { CLI_AI_MODEL } from "./ai-model.js";
+import {
+  AI_MODEL,
+  detectReviewSentiment,
+  REVIEW_REPLY_MAX_TOKENS,
+  type ReviewSentiment,
+  type ReviewTone,
+} from "#core/ai.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
-// 톤/감정 **키**(friendly, bug_report, ...)는 --tone 값이자 detectSentiment 의 반환값이라 번역하지 않는다.
+// 톤/감정 **키**(friendly, bug_report, ...)는 --tone 값이자 detectReviewSentiment 의 반환값이라 번역하지 않는다
+// (키 집합은 #core/ai.js 가 정하고, satisfies 가 mcp-server 판과의 일치를 컴파일 타임에 강제한다).
 // 번역하는 건 그 키가 가리키는 LLM 지시문뿐이다.
 const M = catalog(
   {
@@ -16,7 +23,7 @@ const M = catalog(
       professional: "정중하고 공식적으로. 문제를 인정하고 해결책을 제시.",
       empathetic: "공감을 먼저 표현. 불편을 충분히 인정한 후 해결 의지를 보여줌.",
       brief: "2~3문장으로 간결하게. 핵심 응답만.",
-    },
+    } satisfies Record<ReviewTone, string>,
     sentimentPrompts: {
       positive: "긍정적인 리뷰. 감사 인사와 함께 앞으로도 좋은 경험을 제공하겠다는 의지를 표현.",
       negative:
@@ -24,7 +31,7 @@ const M = catalog(
       neutral: "중립적인 리뷰. 피드백에 감사하고 개선 노력을 약속.",
       bug_report: "버그 리포트. 문제를 확인했음을 알리고, 수정 예정임을 전달.",
       feature_request: "기능 요청. 피드백에 감사하고, 검토하겠다고 약속.",
-    },
+    } satisfies Record<ReviewSentiment, string>,
     localeNames: { ko: "한국어", en: "영어", ja: "일본어", "en-US": "영어", "zh-TW": "번체중국어" },
 
     // Claude 프롬프트
@@ -157,15 +164,6 @@ async function promptUser(question: string): Promise<string> {
   return answer.trim();
 }
 
-function detectSentiment(text: string): string {
-  const lower = text.toLowerCase();
-  if (["버그", "오류", "안됨", "crash", "bug", "error", "broken"].some((w) => lower.includes(w))) return "bug_report";
-  if (["추가", "원해", "있으면", "wish", "feature", "add", "would like"].some((w) => lower.includes(w))) return "feature_request";
-  if (["별로", "실망", "짜증", "terrible", "worst", "awful"].some((w) => lower.includes(w))) return "negative";
-  if (["좋아", "최고", "훌륭", "great", "excellent", "love", "perfect"].some((w) => lower.includes(w))) return "positive";
-  return "neutral";
-}
-
 async function generateReply(opts: ReviewArgs & { text: string }): Promise<string> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const m = M();
@@ -173,7 +171,7 @@ async function generateReply(opts: ReviewArgs & { text: string }): Promise<strin
   const sentimentPrompts: Record<string, string> = m.sentimentPrompts;
   const localeNames: Record<string, string> = m.localeNames;
 
-  const sentiment = detectSentiment(opts.text);
+  const sentiment = detectReviewSentiment(opts.text);
   const toneGuide = toneGuides[opts.tone] ?? toneGuides.friendly;
   const sentimentPrompt = sentimentPrompts[sentiment] ?? sentimentPrompts.neutral;
   const stars =
@@ -183,8 +181,8 @@ async function generateReply(opts: ReviewArgs & { text: string }): Promise<strin
   const langName = localeNames[opts.language] ?? opts.language;
 
   const response = await client.messages.create({
-    model: CLI_AI_MODEL,
-    max_tokens: 500,
+    model: AI_MODEL,
+    max_tokens: REVIEW_REPLY_MAX_TOKENS,
     system: m.system(langName, toneGuide, opts.developerName ?? m.defaultDeveloper),
     messages: [{
       role: "user",

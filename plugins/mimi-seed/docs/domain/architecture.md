@@ -4,7 +4,8 @@
 > full tool list see [[tool-catalog]]; for credentials see [[auth-credentials]]; for the CLI see [[cli-deploy]].
 >
 > SSOT: `packages/mcp-server/src/server.ts` (+ `src/index.ts`), `packages/mcp-server/src/registers/*.ts`,
-> `packages/cli/src/index.ts`, the two `package.json` files. Step-by-step checklists live in [[recipes]].
+> `packages/cli/src/index.ts`, the two published `package.json` files, `packages/core/src/`. Step-by-step
+> checklists live in [[recipes]].
 
 ## Two packages, one monorepo
 
@@ -12,7 +13,8 @@
 mimi-seed-sdk/
 ├─ packages/
 │  ├─ cli/          → npm "mimi-seed"            (build: tsup,  node >=18)
-│  └─ mcp-server/   → npm "@yoonion/mimi-seed-mcp" (build: tsc, node >=20)
+│  ├─ mcp-server/   → npm "@yoonion/mimi-seed-mcp" (build: tsc, node >=20)
+│  └─ core/         → never published — shared SOURCE compiled into both (see "Shared source" below)
 ├─ skills/          → Claude Code / Codex skills   ([[skills-plugins]])
 ├─ .claude-plugin/ .codex-plugin/ .mcp.json          (plugin + MCP registration SSOT)
 ├─ .agents/plugins/marketplace.json                  (Codex marketplace)
@@ -31,7 +33,8 @@ mimi-seed-sdk/
 
 The two packages are independent: the CLI talks to the **remote HTTP MCP** (web console, PAT auth) for
 onboarding; the MCP server is the **local stdio MCP** (file-based credentials) that does the heavy store work.
-They are not in a parent/child relationship — see the transport split below and [[cli-deploy]].
+They are not in a parent/child relationship — see the transport split below and [[cli-deploy]]. They never import
+each other; code both need lives in `packages/core` and is compiled into each one.
 
 ## The register pattern (the spine to learn first)
 
@@ -93,21 +96,6 @@ classified — nobody has to remember to hand-write a preview branch.
   [[external-apis]]. A register that wants every call of a domain module translated wraps the module once with
   `lib/wrap-domain.ts` (`wrapDomain(mod, translate)`) instead of a hand-copied `Proxy`.
 
-### Deliberately duplicated across the two packages
-
-The packages never import each other, so a few contracts are hand-mirrored. Three are pure duplication kept in
-step by a guard ([[testing]]): the `.mimi-seed.json` reader, the Claude model id, and the AI generators'
-language-independent contract. The AI generators are **not** merge candidates — the CLI runs its prompt text
-through `catalog(ko, en)` so an English CLI user gets English tone guidance, and the two release-note
-generators return different JSON shapes (`tones[]` vs flat keys). Merging would delete working behavior; the
-guard locks only what must not diverge (classifier keywords, tone/sentiment keys, `max_tokens`).
-
-Release Doctor is a different kind of duplication: the MCP package owns `src/checks/{billing,release-doctor,
-release-doctor-render}.ts`, while `scripts/sync-release-doctor.mjs` copies them byte for
-byte into the CLI. The CLI bundles that mirror so its no-login check runs in-process instead of launching a
-second, dependency-heavy `npx`. Never edit the CLI mirror; `npm run release-doctor:sync` is its only writer and
-`npm run plugin:check` rejects drift.
-
 To **add a tool**: implement it in `<domain>/tools.ts`, register it in `registers/<domain>.ts`, and keep the
 manifest + docs in sync — the ordered checklist is [[recipes]] §1, the guards are [[testing]].
 
@@ -143,7 +131,8 @@ manifest + docs in sync — the ordered checklist is [[recipes]] §1, the guards
 
 ## Bootstrapping a clone
 
-The repo is **not** an npm workspace — each package installs and builds independently. The root `package.json`
+The repo is **not** an npm workspace — each package installs and builds independently (`packages/core` has
+nothing to install; each package's build picks it up from the checkout). The root `package.json`
 is private and holds only bootstrap scripts: `scripts/install.mjs` walks both packages (`npm install` → `npm run
 build` → optional `npm link`) and can register the from-source server with `claude mcp add mimi-seed-dev`. The
 `mimi-seed-install` skill is a thin wrapper so an agent can do it from a prompt. The same setup also syncs and
@@ -179,11 +168,80 @@ Registered in `mcp-server/src/resources.ts` and `prompts.ts`:
 - **Prompts → slash commands** — `getting-started`, `deploy`, `health`, `review-inbox`, surfaced in MCP
   clients as `/mimi-seed:<name>`. More in [[skills-plugins]].
 
+## Shared source: `packages/core`
+
+The two published packages never import each other, and neither may depend on an unpublished package — each
+must install from npm on its own. Code both of them need therefore lives in **`packages/core`**: private,
+dependency-free TypeScript **source** that each package compiles into its own output. It is never published,
+never `npm install`ed, and has no build of its own.
+
+| `#core/…` module | What both packages share |
+|---|---|
+| `checks/{billing,release-doctor,release-doctor-render}.ts` | Release Doctor — the MCP bin/tools and `mimi-seed check --local` run the same scanner in-process |
+| `project-manifest.ts` | the `.mimi-seed.json` schema + reader (wording of validation errors is passed in by the caller) |
+| `lang.ts` | the `MIMI_SEED_LANG` > `settings.json` > `ko` rule, so the wizard and the setup bins it spawns agree |
+| `atomic-write.ts` | temp + rename credential writes, incl. the Windows rename-retry schedule |
+| `ai.ts` | the Claude model id and the AI generators' language-independent contract (classifier keywords, tone / sentiment keys, `max_tokens`) |
+| `http-errors.ts` | the fetch wrappers' token-stripping endpoint label and timeout detection |
+| `ci.ts`, `jenkins.ts` | the `ci.json` / `jenkins.json` shapes and the CI REST base-URL rules |
+
+**How each build consumes it.** Both packages import it as `#core/<path>.js`:
+
+- **cli** — `tsconfig.json` `paths` maps `#core/*` to `../core/src/*`. tsup (esbuild), tsx and `tsc` all read
+  that mapping, so the bundle *contains* the core code and the published `dist/` has no `#core` specifier left.
+- **mcp-server** — `npm run build` is `npm run clean && tsc -p tsconfig.core.json && tsc -p tsconfig.build.json`:
+  it deletes `dist/` (so a module removed from core never lingers in `dist/core/` and ships), compiles core into
+  **`dist/core/`** (emitted as ESM because `packages/core/package.json` says `"type": "module"`), then builds the
+  server against the `.d.ts` files that produced — `tsconfig.build.json` empties `paths` so `#core/*` resolves
+  through `imports`, since core's source sits outside its `rootDir: src`. At runtime Node resolves `#core/*` through the
+  package's own `"imports": { "#core/*": "./dist/core/*" }`, which works identically from a checkout and from an
+  installed tarball. Every `bin` path and every other `dist/` entry point is unchanged.
+- **Tooling reads the source, not a build.** mcp-server's plain `tsconfig.json` is the editor / typecheck / tsx
+  config: `noEmit`, tests included, and `paths` mapping `#core/*` to the core source — so `npx tsx src/…`,
+  `tsc -p tsconfig.json`, and go-to-definition work before any build and never land on a stale `dist/core`
+  `.d.ts` (`tsconfig.lint.json` just extends it, matching the CLI's lint entry point). Emit settings live only in
+  `tsconfig.build.json` / `tsconfig.core.json`. Both `vitest.config.ts` files do the same mapping with a
+  `resolve.alias`.
+- **Checked where it is consumed.** Each package's typecheck covers the core files it imports; mcp-server's
+  `npm test` additionally typechecks all of core (`tsc -p ../core`) and lints it (`eslint . ../core` — core's
+  `eslint.config.js` borrows mcp-server's config and toolchain). Core has no tests or `node_modules` of its own:
+  the tests for a core module stay in the package that has always tested it, importing `#core/…`.
+
+**Why this shape and not another.** A published `@mimi-seed/core` package would add a third release to
+coordinate for code nobody installs directly. An npm workspace would change how both packages install and lock.
+Switching mcp-server to a bundler would rewrite `dist/` (a dozen `bin` entry points, the deep imports of
+`scripts/googleads-report.mjs`, `package-bin-contract.test.ts`). tsc project references would need a separate
+core `outDir` copied into mcp-server's `dist/`. The chosen shape adds one `imports` entry and splits mcp-server's tsconfig into editor (`tsconfig.json`) and emit
+(`tsconfig.build.json`, `tsconfig.core.json`) configs, and
+the only change to the published MCP tarball is the new `dist/core/` directory (the three Release Doctor files
+and a few `lib/` modules moved there from their old paths).
+
+**Rules** (enforced by `core-boundary.test.ts`, [[testing]]):
+
+1. Core imports only `node:` builtins and its own files (`./x.js`). An npm import would compile but fail after
+   install, because core has no `node_modules` of its own.
+2. Core never calls `fetch` — timeout/retry policy differs by package and lives in each `lib/http.ts`.
+3. The packages reach core only through `#core/<path>.js`, never a relative `../../core/src/…` path (that
+   would point outside mcp-server's published `dist/`).
+4. Core code must satisfy **both** compilers (mcp-server's NodeNext + the CLI's Bundler resolution, both
+   strict): `.js` import specifiers, no package-specific helpers such as the CLI's `catalog()`.
+
+**What stays duplicated on purpose.** Only code whose behavior differs by package: the two `fetch` wrappers
+(mcp-server: 60 s + 429/5xx retry; CLI: 30 s, no retry, localized errors), the CI clients (request shapes,
+polling, error text), and the AI generators' prompt text — the CLI runs it through `catalog(ko, en)` so an
+English CLI user gets English tone guidance, and the two release-note generators return different JSON shapes
+(`tones[]` vs flat keys). What must not diverge between those copies is already in core.
+
+To **add to core**: move the file into `packages/core/src/` (keep its tests where they are and point them at
+`#core/…`), switch every importer in both packages to `#core/<path>.js`, and run `npm run build && npm test` in
+**both** packages — see [[recipes]].
+
 ## Build & module conventions
 
 - **ESM everywhere** (`"type": "module"`); imports use `.js` specifiers even from `.ts` sources (NodeNext).
 - Tool names: `snake_case` (`playstore_get_app`). Files: `kebab-case`. Domain folders: lowercase.
-- MCP server builds with `tsc` to `dist/`; the CLI bundles with `tsup`. The CLI publishes `dist` + `LICENSE`;
+- MCP server builds with `tsc` to `dist/` (core first, into `dist/core/`); the CLI bundles with `tsup`
+  (core included). The CLI publishes `dist` + `LICENSE`;
   the MCP server additionally ships `assets/` (the served agent guide) and `tool-manifest.json` (the catalog
   resource's data). Both test with `vitest`. Verify a change with `npm run build && npm test` **inside the
   changed package**.

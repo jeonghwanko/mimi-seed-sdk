@@ -1,20 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialJson } from '#core/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CI_CONFIG_PATH = path.join(CONFIG_DIR, 'ci.json');
 
-export type CiProvider = 'github' | 'gitlab';
-
-export interface CiConfig {
-  provider: CiProvider;
-  token: string;
-  owner: string;
-  repo: string;
-  host?: string; // GitLab self-hosted: e.g. https://gitlab.example.com
-}
+// ci.json 의 모양은 CLI 와 공유한다 — 두 패키지가 모두 쓰는 문서화된 예외다(pitfalls §12).
+import type { CiConfig } from '#core/ci.js';
+export type { CiConfig, CiProvider } from '#core/ci.js';
 
 export function loadCiConfig(): CiConfig | null {
   try {

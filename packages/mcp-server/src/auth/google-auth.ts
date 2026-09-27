@@ -10,7 +10,7 @@ import { AuthError, classifyError, type AuthErrorPayload } from './errors.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
 import { scopesForDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.js';
-import { writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialJson } from '#core/atomic-write.js';
 import { fetchWithTimeout } from '../lib/http.js';
 
 export type { AuthDomainId } from './scopes.js';

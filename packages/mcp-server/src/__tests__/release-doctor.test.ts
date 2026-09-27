@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { scanReleaseDoctor } from '../checks/release-doctor.js';
-import { renderReleaseDoctor } from '../checks/release-doctor-render.js';
+import { scanReleaseDoctor } from '#core/checks/release-doctor.js';
+import { renderReleaseDoctor } from '#core/checks/release-doctor-render.js';
 
 const roots: string[] = [];
 

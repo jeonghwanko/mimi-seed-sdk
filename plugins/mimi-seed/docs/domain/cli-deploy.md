@@ -42,8 +42,8 @@ detailed help in `auth.ts`. Adding a command means touching three places: the `s
 call time, not module-load time — the wizard asks for a language on its very first prompt and everything after it
 is already in that language.
 
-**`runMcpBin` passes `MIMI_SEED_LANG` down to the spawned setup bins**, which resolve it the same way
-(`mcp-server/src/lib/lang.ts`). Without that, the wizard would be in English while its child prompts came back in
+**`runMcpBin` passes `MIMI_SEED_LANG` down to the spawned setup bins**, which resolve it with the very same
+function (`resolveLang` from `#core/lang.js`, shared by both packages). Without that, the wizard would be in English while its child prompts came back in
 Korean. The credential registry's human text (`label` / `note` / `obtain`) is `LocalizedText`, read through
 `credLabel()` / `credNote()` / `credObtain()`.
 

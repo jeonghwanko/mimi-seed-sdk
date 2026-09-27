@@ -12,6 +12,8 @@
 // 규칙: 새 provider 클라이언트를 만들 때 raw `fetch` 를 쓰지 말고 이 래퍼를 쓸 것
 // (`__tests__/http-timeout.test.ts` 가 강제한다).
 
+import { endpointLabel as sharedEndpointLabel, isTimeoutAbort } from '#core/http-errors.js';
+
 /** JSON/메타데이터 API 의 기본 상한. 대부분의 Google·Apple·Meta·Jenkins 호출. */
 export const HTTP_TIMEOUT_MS = 60_000;
 
@@ -67,25 +69,9 @@ const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS', '
 const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 /**
- * 에러 메시지에 쓸 엔드포인트 라벨.
- *
- * 쿼리스트링은 **의도적으로 버린다** — Meta Graph API 는 `?access_token=...` 로 토큰을
- * 실어 보내므로, URL 을 통째로 에러에 넣으면 토큰이 에이전트 전사록과 로그에 남는다.
+ * 에러 메시지에 쓸 엔드포인트 라벨 — 쿼리스트링(토큰)을 버리는 규칙은 CLI 래퍼와 공유한다(#core/http-errors.js).
  */
-function endpointLabel(input: string | URL): string {
-  try {
-    const url = new URL(String(input));
-    return `${url.host}${url.pathname}`;
-  } catch {
-    return '외부 서버';
-  }
-}
-
-/** AbortSignal.timeout 이 만든 중단인가. undici 가 cause 로 한 겹 싸는 경우까지 본다. */
-function isTimeoutAbort(error: unknown): boolean {
-  const named = (e: unknown) => (e as { name?: string } | null)?.name === 'TimeoutError';
-  return named(error) || named((error as { cause?: unknown } | null)?.cause);
-}
+const endpointLabel = (input: string | URL) => sharedEndpointLabel(input, '외부 서버');
 
 /**
  * 본문을 다시 보낼 수 있는가.

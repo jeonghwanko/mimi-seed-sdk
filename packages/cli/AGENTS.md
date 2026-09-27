@@ -15,9 +15,10 @@ detection, setup, init, or deploy. The ordered checklist is
 - `src/mcp-client.ts` talks to the remote HTTP MCP used for onboarding; it is not the local stdio MCP server.
 - `src/detect.ts`, `handshake.ts`, and `release-manifest.ts` own the `init` pipeline.
 - `src/deploy.ts` orchestrates CI build → readiness check → release notes → store apply.
-- `src/checks/{billing,release-doctor,release-doctor-render}.ts` are generated mirrors used
-  to bundle the no-login check. Their source of truth is the matching MCP package files; refresh them only with
-  `npm run release-doctor:sync` from the repository root.
+- `#core/…` imports (Release Doctor, the `.mimi-seed.json` reader, `resolveLang`, atomic writes, the AI contract,
+  the CI/Jenkins config shapes) resolve to `packages/core/src` through `tsconfig.json` `paths` and are **bundled**
+  by tsup — the published `dist/` contains them. A change there is a change to both packages: build and test
+  `packages/mcp-server` too ([`recipes.md`](../../docs/domain/recipes.md) §8).
 
 Keep the CLI as the onboarding and orchestration layer. Store/cloud API implementation belongs in
 `packages/mcp-server`.

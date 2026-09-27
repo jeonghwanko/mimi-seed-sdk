@@ -1,0 +1,15 @@
+{
+  "//": "에디터 전용 — core 는 스스로 빌드되지 않는다. 두 패키지가 각자 컴파일한다(cli: tsup 번들, mcp-server: tsconfig.core.json → dist/core). 여기 옵션은 두 소비자 모두의 제약(NodeNext 의 .js 지정자 + strict)을 만족시키려는 것. core 는 node: 빌트인만 쓰므로 @types/node 는 mcp-server 설치본을 빌려 본다.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "typeRoots": ["../mcp-server/node_modules/@types"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*"]
+}

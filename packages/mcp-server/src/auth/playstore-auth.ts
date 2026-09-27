@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { PLAY_DEVELOPER_REPORTING_SCOPE } from './scopes.js';
-import { writeCredentialFile } from '../lib/atomic-write.js';
+import { writeCredentialFile } from '#core/atomic-write.js';
 import { assertAndroidPackageName, isValidAndroidPackageName } from '../lib/package-name.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');

@@ -1,0 +1,7 @@
+{
+  "name": "@mimi-seed/core",
+  "private": true,
+  "type": "module",
+  "description": "Shared SOURCE for the two published packages — never published, never installed, zero dependencies. The CLI bundles it (tsup); the MCP server compiles it into dist/core (tsc -p tsconfig.core.json). Import it as `#core/<path>.js`. See docs/domain/architecture.md.",
+  "license": "PolyForm-Noncommercial-1.0.0"
+}

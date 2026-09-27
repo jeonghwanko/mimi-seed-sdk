@@ -3,7 +3,7 @@ import readline from 'node:readline';
 import { exchangeAuthorizationCode, getBusinessAccount } from './api.js';
 import { configFromToken, hasTikTokScope } from './auth.js';
 import { loadTikTokBusinessConfig, saveTikTokBusinessConfig } from './config.js';
-import { resolveLang } from '../lib/lang.js';
+import { resolveLang } from '#core/lang.js';
 
 const ko = {
   title: '  🤖 Mimi Seed — TikTok Business 연결',

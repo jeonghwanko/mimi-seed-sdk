@@ -1,15 +1,16 @@
 {
+  "//": "에디터·타입체크·tsx 기본 설정 — 아무것도 내보내지 않는다(noEmit). `#core/*` 를 빌드 산출물(dist/core)이 아니라 packages/core **소스**로 풀어서, 빌드 전에도 타입체크·`npx tsx src/…`·go-to-definition 이 core 소스를 본다(그래서 rootDir 을 두 패키지를 덮는 상위로 연다). 테스트도 포함한다. 배포 산출물은 tsconfig.build.json(+ tsconfig.core.json)이 만든다.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "declaration": true
+    "noEmit": true,
+    "declaration": true,
+    "rootDir": "..",
+    "paths": { "#core/*": ["../core/src/*"] }
   },
-  "include": ["src/**/*"],
-  "exclude": ["src/__tests__/**", "**/*.test.ts"]
+  "include": ["src/**/*"]
 }

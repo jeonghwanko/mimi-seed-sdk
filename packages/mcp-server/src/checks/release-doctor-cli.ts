@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { resolveLang } from '../lib/lang.js';
-import { scanReleaseDoctor } from './release-doctor.js';
+import { resolveLang } from '#core/lang.js';
+import { scanReleaseDoctor } from '#core/checks/release-doctor.js';
 import { parseReleaseDoctorArgs, RELEASE_DOCTOR_USAGE } from './release-doctor-cli-args.js';
-import { renderReleaseDoctor } from './release-doctor-render.js';
+import { renderReleaseDoctor } from '#core/checks/release-doctor-render.js';
 
 async function main(): Promise<void> {
   const args = parseReleaseDoctorArgs(process.argv.slice(2));
