@@ -158,14 +158,20 @@ describe('폐기 예정 별칭 이름이 안내 문구에 남지 않는다', () 
     'README.md', 'README.ko.md', 'packages/mcp-server/README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md',
   ];
 
+  // 파일은 한 번만 읽어 별칭 케이스끼리 공유한다. 예전엔 별칭마다 수백 개 파일을 다시 읽어서, 첫 케이스가
+  // 콜드 디스크 비용을 떠안고 부하 걸린 러너에서 5초 기본 타임아웃을 넘겼다 (15회 중 3회 실패 재현).
+  let lines: Map<string, string[]> | undefined;
+  const linesOf = () =>
+    (lines ??= new Map(files.map((rel) => [rel, readRepoFile(rel).split(/\r?\n/)])));
+
   it('별칭이 있을 때만 의미가 있다', () => {
     expect(files.length).toBeGreaterThan(50);
   });
 
-  it.each(aliases)('%s', (alias) => {
+  it.each(aliases)('%s', { timeout: 30_000 }, (alias) => {
     const hits = files.flatMap((rel) =>
-      readRepoFile(rel)
-        .split(/\r?\n/)
+      linesOf()
+        .get(rel)!
         .map((line, i) => ({ line, at: `${rel}:${i + 1}` }))
         .filter(({ line }) => line.includes(alias) && !/deprecated/i.test(line))
         .map(({ at }) => at),
