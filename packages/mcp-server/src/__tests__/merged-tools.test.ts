@@ -73,6 +73,16 @@ describe('playstore_update_release_notes — versionCode 지정 / 생략(최신 
     });
   });
 
+  // 옛 별칭(playstore_update_latest_release_notes)이 지키던 기본 경로 — 별칭을 지우면서 이 단언을 잃지 않게.
+  it('versionCode 를 생략하면 트랙 최신 릴리스만 갱신한다 (syncTracks 없음)', async () => {
+    await withClient(async (client) => {
+      const r = await client.callTool({ name: 'playstore_update_release_notes', arguments: { ...base } });
+      expect(r.isError).toBeFalsy();
+      expect(m.updateLatestReleaseNotes).toHaveBeenCalledTimes(1);
+      expect(m.updateReleaseNotes).not.toHaveBeenCalled();
+    });
+  });
+
   it('versionCode 를 생략하면 최신 릴리스 + syncTracks', async () => {
     await withClient(async (client) => {
       const r = await client.callTool({

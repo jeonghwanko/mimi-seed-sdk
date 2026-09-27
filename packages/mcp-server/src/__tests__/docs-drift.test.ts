@@ -163,9 +163,11 @@ describe('폐기 예정 별칭·제거된 도구 이름이 안내 문구에 남�
     ...walk('packages/mcp-server/src/', /\.ts$/),
     ...walk('packages/cli/src/', /\.ts$/),
     ...walk('docs/', /\.md$/),
-    ...walk('skills/', /\.md$/),
+    // 스킬 폴더엔 SKILL.md 외에 agents/*.yaml(에이전트 프롬프트)도 있다 — 도구 이름을 담을 수 있다.
+    ...walk('skills/', /\.(md|ya?ml)$/),
     'README.md', 'README.ko.md', 'packages/mcp-server/README.md', 'packages/cli/README.md',
     'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', 'packages/mcp-server/AGENTS.md', 'packages/cli/AGENTS.md',
+    'packages/mcp-server/CLAUDE.md', 'packages/cli/CLAUDE.md', '.codex-plugin/README.md',
   ];
 
   // 파일은 한 번만 읽어 케이스끼리 공유한다. 예전엔 이름마다 수백 개 파일을 다시 읽어서, 첫 케이스가
