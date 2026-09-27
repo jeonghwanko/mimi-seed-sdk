@@ -42,7 +42,8 @@ import {
 } from '../iam/tools.js';
 
 const auth = {} as OAuth2Client;
-const SA = '<service-account>@<project>.iam.gserviceaccount.com';
+// 실제 형식의 플레이스홀더 — resourceSegment 가 <> 를 거부하므로 꺾쇠 표기는 쓸 수 없다.
+const SA = 'ci-bot@example-project.iam.gserviceaccount.com';
 
 beforeEach(() => {
   vi.clearAllMocks();

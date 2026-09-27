@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { resourceName } from '../lib/resource-id.js';
 
 /**
  * AdMob API 래퍼
@@ -30,7 +31,7 @@ export async function listApps(auth: OAuth2Client, accountId: string) {
   do {
     const res = await admobApi.accounts.apps.list({
       auth,
-      parent: accountId,
+      parent: resourceName(accountId, 'accounts', 'AdMob 계정 ID'),
       pageSize: 100,
       pageToken,
     });
@@ -57,7 +58,7 @@ export async function listAdUnits(auth: OAuth2Client, accountId: string) {
   do {
     const res = await admobApi.accounts.adUnits.list({
       auth,
-      parent: accountId,
+      parent: resourceName(accountId, 'accounts', 'AdMob 계정 ID'),
       pageSize: 100,
       pageToken,
     });
@@ -86,7 +87,7 @@ export async function getNetworkReport(
   const admob = google.admob('v1');
   const res = await admob.accounts.networkReport.generate({
     auth,
-    parent: accountId,
+    parent: resourceName(accountId, 'accounts', 'AdMob 계정 ID'),
     requestBody: {
       reportSpec: {
         dateRange: { startDate, endDate },
@@ -163,7 +164,7 @@ export async function createApp(
   }
   const res = await admobBeta.accounts.apps.create({
     auth,
-    parent: accountId,
+    parent: resourceName(accountId, 'accounts', 'AdMob 계정 ID'),
     requestBody,
   });
   return res.data;
@@ -181,7 +182,7 @@ export async function createAdUnit(
   const admobBeta = google.admob('v1beta' as any) as any;
   const res = await admobBeta.accounts.adUnits.create({
     auth,
-    parent: accountId,
+    parent: resourceName(accountId, 'accounts', 'AdMob 계정 ID'),
     requestBody: {
       appId,
       displayName,

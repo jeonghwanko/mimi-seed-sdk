@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client, JWT } from 'google-auth-library';
+import { resourceSegment } from '../lib/resource-id.js';
 
 /** BigQuery 호출에 쓰이는 인증 클라이언트 — 사용자 OAuth 또는 서비스 계정 JWT. */
 export type BigQueryAuthClient = OAuth2Client | JWT;
@@ -31,7 +32,7 @@ export async function assertSelectOnly(
 ): Promise<void> {
   const res = await bq().jobs.insert({
     auth,
-    projectId,
+    projectId: resourceSegment(projectId, 'BigQuery 프로젝트 ID'),
     requestBody: {
       configuration: {
         dryRun: true,
@@ -67,7 +68,7 @@ export async function runQuery(
 
   const res = await bq().jobs.query({
     auth,
-    projectId,
+    projectId: resourceSegment(projectId, 'BigQuery 프로젝트 ID'),
     requestBody: {
       query,
       useLegacySql: false,
@@ -88,8 +89,8 @@ export async function runQuery(
     polls += 1;
     const next = await bq().jobs.getQueryResults({
       auth,
-      projectId,
-      jobId,
+      projectId: resourceSegment(projectId, 'BigQuery 프로젝트 ID'),
+      jobId: resourceSegment(jobId, 'BigQuery 작업 ID'),
       location,
       maxResults,
       timeoutMs: Math.max(0, Math.min(QUERY_POLL_WAIT_MS, deadline - Date.now())),
@@ -122,7 +123,7 @@ export async function runQuery(
 // ─── 데이터셋 목록 ───
 
 export async function listDatasets(auth: BigQueryAuthClient, projectId: string) {
-  const res = await bq().datasets.list({ auth, projectId });
+  const res = await bq().datasets.list({ auth, projectId: resourceSegment(projectId, 'BigQuery 프로젝트 ID') });
   return (res.data.datasets ?? []).map((d) => ({
     datasetId: d.datasetReference?.datasetId,
     location: d.location,
@@ -136,7 +137,11 @@ export async function listTables(
   projectId: string,
   datasetId: string,
 ) {
-  const res = await bq().tables.list({ auth, projectId, datasetId });
+  const res = await bq().tables.list({
+    auth,
+    projectId: resourceSegment(projectId, 'BigQuery 프로젝트 ID'),
+    datasetId: resourceSegment(datasetId, 'BigQuery 데이터셋 ID'),
+  });
   return (res.data.tables ?? []).map((t) => ({
     tableId: t.tableReference?.tableId,
     type: t.type,
@@ -151,7 +156,12 @@ export async function getTableSchema(
   datasetId: string,
   tableId: string,
 ) {
-  const res = await bq().tables.get({ auth, projectId, datasetId, tableId });
+  const res = await bq().tables.get({
+    auth,
+    projectId: resourceSegment(projectId, 'BigQuery 프로젝트 ID'),
+    datasetId: resourceSegment(datasetId, 'BigQuery 데이터셋 ID'),
+    tableId: resourceSegment(tableId, 'BigQuery 테이블 ID'),
+  });
   return {
     tableId,
     schema: res.data.schema?.fields?.map((f) => ({

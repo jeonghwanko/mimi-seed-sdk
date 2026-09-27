@@ -2,6 +2,7 @@ import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { collectPages } from '../lib/paginate.js';
 import { saveServiceAccountKey } from './key-files.js';
+import { resourceSegment } from '../lib/resource-id.js';
 
 /**
  * Google Cloud IAM + Cloud Resource Manager 래퍼.
@@ -21,7 +22,7 @@ export async function listServiceAccounts(auth: OAuth2Client, projectId: string)
   const accounts = await collectPages(async (pageToken) => {
     const res = await iam().projects.serviceAccounts.list({
       auth,
-      name: `projects/${projectId}`,
+      name: `projects/${resourceSegment(projectId)}`,
       pageSize: 100,
       ...(pageToken && { pageToken }),
     });
@@ -45,7 +46,7 @@ export async function createServiceAccount(
 ) {
   const res = await iam().projects.serviceAccounts.create({
     auth,
-    name: `projects/${projectId}`,
+    name: `projects/${resourceSegment(projectId)}`,
     requestBody: {
       accountId,
       serviceAccount: { displayName },
@@ -67,7 +68,7 @@ export async function createServiceAccountKey(
 ) {
   const res = await iam().projects.serviceAccounts.keys.create({
     auth,
-    name: `projects/-/serviceAccounts/${serviceAccountEmail}`,
+    name: `projects/-/serviceAccounts/${resourceSegment(serviceAccountEmail)}`,
     requestBody: {
       keyAlgorithm: 'KEY_ALG_RSA_2048',
       privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE',
@@ -111,7 +112,7 @@ export async function createServiceAccountKeyFile(
 export async function listServiceAccountKeys(auth: OAuth2Client, serviceAccountEmail: string) {
   const res = await iam().projects.serviceAccounts.keys.list({
     auth,
-    name: `projects/-/serviceAccounts/${serviceAccountEmail}`,
+    name: `projects/-/serviceAccounts/${resourceSegment(serviceAccountEmail)}`,
   });
   return (res.data.keys ?? []).map((k) => ({
     id: k.name?.split('/').pop() ?? null,
@@ -145,7 +146,7 @@ export async function addProjectIamPolicyBinding(
 ): Promise<{ added: boolean; role: string; member: string; etag: string | null | undefined }> {
   const current = await crm().projects.getIamPolicy({
     auth,
-    resource: projectId,
+    resource: resourceSegment(projectId, 'GCP 프로젝트 ID'),
     requestBody: {},
   });
   const policy = current.data;
@@ -170,7 +171,7 @@ export async function addProjectIamPolicyBinding(
 
   const updated = await crm().projects.setIamPolicy({
     auth,
-    resource: projectId,
+    resource: resourceSegment(projectId, 'GCP 프로젝트 ID'),
     requestBody: { policy: { bindings, etag: policy.etag } },
   });
   return { added: true, role, member, etag: updated.data.etag };

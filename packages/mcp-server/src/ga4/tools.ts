@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { resourceName } from '../lib/resource-id.js';
 
 /**
  * Google Analytics 4 — Admin API(v1beta) + Data API(v1beta) 래퍼.
@@ -36,20 +37,17 @@ export type DataStreamPlatform = 'web' | 'android' | 'ios';
 
 /** '123' | 'accounts/123' → 'accounts/123' */
 export function normalizeAccountName(accountId: string): string {
-  const id = accountId.trim();
-  return id.startsWith('accounts/') ? id : `accounts/${id}`;
+  return resourceName(accountId, 'accounts', 'GA4 계정 ID');
 }
 
 /** '123' | 'properties/123' → 'properties/123' */
 export function normalizePropertyName(propertyId: string): string {
-  const id = propertyId.trim();
-  return id.startsWith('properties/') ? id : `properties/${id}`;
+  return resourceName(propertyId, 'properties', 'GA4 속성 ID');
 }
 
 /** 'my-project' | 'projects/my-project' → 'projects/my-project' */
 export function normalizeCloudProjectName(projectId: string): string {
-  const id = projectId.trim();
-  return id.startsWith('projects/') ? id : `projects/${id}`;
+  return resourceName(projectId, 'projects', 'GCP 프로젝트 ID');
 }
 
 /**

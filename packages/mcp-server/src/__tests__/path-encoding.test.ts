@@ -85,6 +85,54 @@ describe('provider 클라이언트 — 경로 세그먼트 인코딩', () => {
   });
 });
 
+/**
+ * googleapis 리소스 문자열 가드 (2026-09 적대적 재검토).
+ *
+ * googleapis 는 name/parent/resource/projectId 를 예약 확장 `{+name}` 으로 경로에 넣어 `/` 를
+ * 인코딩하지 않는다. `projects/${projectId}/androidApps/${appId}` 에 appId=`../../B/androidApps/Z`
+ * 를 주면 **다른 프로젝트의 앱**에 `:remove` 가 나갔다. 인코딩은 답이 아니므로(Google 이 디코딩하지
+ * 않는다) 검증한다: 세그먼트는 `resourceSegment(…)`, `prefix/id` 정규화는 `resourceName(…)`.
+ */
+const GOOGLE_DIRS = ['admob', 'bigquery', 'billing', 'firebase', 'ga4', 'gsc', 'iam', 'playstore', 'youtube'];
+const GOOGLE_ALLOWED: Array<{ file: string; expr: string; why: string }> = [
+  { file: 'firebase/remote-config.ts', expr: 'encodedProject', why: 'encodePathSegment() 결과 (raw REST, googleapis 아님)' },
+  { file: 'firebase/remote-config.ts', expr: 'encodedNamespace', why: 'encodePathSegment() 결과 (raw REST, googleapis 아님)' },
+  { file: 'playstore/tools.ts', expr: 'resource', why: 'metricSet enum 에서 고른 고정 리소스명' },
+];
+const GOOGLE_INTERPOLATION = /\/\$\{(?!resourceSegment\(|encodePathSegment\(|encodeURIComponent\()([^}]*)\}/g;
+
+describe('googleapis 리소스 이름 — 세그먼트 검증', () => {
+  const files = GOOGLE_DIRS.flatMap((d) => sourceFiles(path.join(srcRoot, d)));
+
+  it('스캔 대상을 실제로 찾았다', () => {
+    expect(files.length).toBeGreaterThan(15);
+  });
+
+  it('호출자 값이 검증 없이 리소스 문자열 세그먼트로 들어가지 않는다', () => {
+    const offenders: string[] = [];
+    for (const file of files) {
+      const rel = path.relative(srcRoot, file).replaceAll(path.sep, '/');
+      readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+        for (const match of line.matchAll(GOOGLE_INTERPOLATION)) {
+          const expr = match[1];
+          if (/^[A-Z][A-Z0-9_]*$/.test(expr)) continue;
+          if (GOOGLE_ALLOWED.some((a) => a.file === rel && a.expr === expr)) continue;
+          offenders.push(`${rel}:${i + 1} \${${expr}}`);
+        }
+      });
+    }
+    expect(offenders, `resourceSegment(…) / resourceName(…) 로 검증하세요 (lib/resource-id.ts):\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('`prefix/` 로 시작하면 통과시키는 옛 정규화 패턴이 남아 있지 않다', () => {
+    // `id.startsWith('accounts/') ? id : \`accounts/${id}\`` 는 'accounts/../../x' 를 그대로 통과시켰다.
+    const offenders = files
+      .filter((file) => /startsWith\('[a-zA-Z]+\/'\)\s*\?/.test(readFileSync(file, 'utf8')))
+      .map((file) => path.relative(srcRoot, file));
+    expect(offenders, 'resourceName(value, collection) 을 쓰세요').toEqual([]);
+  });
+});
+
 describe('encodePathSegment', () => {
   it('슬래시와 특수문자를 인코딩해 세그먼트를 못 벗어나게 한다', () => {
     expect(encodePathSegment('../appScreenshotSets/123')).toBe('..%2FappScreenshotSets%2F123');

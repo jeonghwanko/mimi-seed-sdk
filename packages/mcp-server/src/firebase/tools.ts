@@ -1,6 +1,7 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { collectPages } from '../lib/paginate.js';
+import { resourceSegment } from '../lib/resource-id.js';
 
 /**
  * Firebase Management API + Cloud Resource Manager 래퍼
@@ -24,7 +25,7 @@ export async function listProjects(auth: OAuth2Client) {
 export async function getProject(auth: OAuth2Client, projectId: string) {
   const res = await google.firebase('v1beta1').projects.get({
     auth,
-    name: `projects/${projectId}`,
+    name: `projects/${resourceSegment(projectId)}`,
   });
   return res.data;
 }
@@ -121,7 +122,7 @@ export async function createProject(
   // 아니라 "같은 projectId로 복구"를 안내해야 한다(안 그러면 고아 프로젝트가 계속 쌓일 수 있음).
   try {
     const fb = google.firebase('v1beta1');
-    const addRes = await fb.projects.addFirebase({ auth, project: `projects/${projectId}` });
+    const addRes = await fb.projects.addFirebase({ auth, project: `projects/${resourceSegment(projectId)}` });
     const addOpName = addRes.data.name;
     if (!addOpName) throw new Error('Firebase 추가 응답에 operation name이 없습니다.');
     await waitForOperation(
@@ -147,7 +148,7 @@ export async function createProject(
 export async function listAndroidApps(auth: OAuth2Client, projectId: string) {
   const res = await google.firebase('v1beta1').projects.androidApps.list({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
   });
   return (res.data.apps ?? []).map((a) => ({
     appId: a.appId,
@@ -165,7 +166,7 @@ export async function createAndroidApp(
 ) {
   const res = await google.firebase('v1beta1').projects.androidApps.create({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
     requestBody: { packageName, displayName },
   });
   return res.data;
@@ -174,7 +175,7 @@ export async function createAndroidApp(
 export async function getAndroidConfig(auth: OAuth2Client, projectId: string, appId: string) {
   const res = await google.firebase('v1beta1').projects.androidApps.getConfig({
     auth,
-    name: `projects/${projectId}/androidApps/${appId}/config`,
+    name: `projects/${resourceSegment(projectId)}/androidApps/${resourceSegment(appId)}/config`,
   });
   return {
     filename: res.data.configFilename,
@@ -187,7 +188,7 @@ export async function getAndroidConfig(auth: OAuth2Client, projectId: string, ap
 export async function deleteAndroidApp(auth: OAuth2Client, projectId: string, appId: string) {
   const res = await google.firebase('v1beta1').projects.androidApps.remove({
     auth,
-    name: `projects/${projectId}/androidApps/${appId}`,
+    name: `projects/${resourceSegment(projectId)}/androidApps/${resourceSegment(appId)}`,
     requestBody: { immediate: true },
   });
   return res.data;
@@ -198,7 +199,7 @@ export async function deleteAndroidApp(auth: OAuth2Client, projectId: string, ap
 export async function listIosApps(auth: OAuth2Client, projectId: string) {
   const res = await google.firebase('v1beta1').projects.iosApps.list({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
   });
   return (res.data.apps ?? []).map((a) => ({
     appId: a.appId,
@@ -216,7 +217,7 @@ export async function createIosApp(
 ) {
   const res = await google.firebase('v1beta1').projects.iosApps.create({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
     requestBody: { bundleId, displayName },
   });
   return res.data;
@@ -225,7 +226,7 @@ export async function createIosApp(
 export async function getIosConfig(auth: OAuth2Client, projectId: string, appId: string) {
   const res = await google.firebase('v1beta1').projects.iosApps.getConfig({
     auth,
-    name: `projects/${projectId}/iosApps/${appId}/config`,
+    name: `projects/${resourceSegment(projectId)}/iosApps/${resourceSegment(appId)}/config`,
   });
   return {
     filename: res.data.configFilename,
@@ -238,7 +239,7 @@ export async function getIosConfig(auth: OAuth2Client, projectId: string, appId:
 export async function deleteIosApp(auth: OAuth2Client, projectId: string, appId: string) {
   const res = await google.firebase('v1beta1').projects.iosApps.remove({
     auth,
-    name: `projects/${projectId}/iosApps/${appId}`,
+    name: `projects/${resourceSegment(projectId)}/iosApps/${resourceSegment(appId)}`,
     requestBody: { immediate: true },
   });
   return res.data;
@@ -249,7 +250,7 @@ export async function deleteIosApp(auth: OAuth2Client, projectId: string, appId:
 export async function listWebApps(auth: OAuth2Client, projectId: string) {
   const res = await google.firebase('v1beta1').projects.webApps.list({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
   });
   return (res.data.apps ?? []).map((a) => ({
     appId: a.appId,
@@ -265,7 +266,7 @@ export async function createWebApp(
 ) {
   const res = await google.firebase('v1beta1').projects.webApps.create({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
     requestBody: { displayName },
   });
   return res.data;
@@ -274,7 +275,7 @@ export async function createWebApp(
 export async function getWebConfig(auth: OAuth2Client, projectId: string, appId: string) {
   const res = await google.firebase('v1beta1').projects.webApps.getConfig({
     auth,
-    name: `projects/${projectId}/webApps/${appId}/config`,
+    name: `projects/${resourceSegment(projectId)}/webApps/${resourceSegment(appId)}/config`,
   });
   return res.data;
 }
@@ -282,7 +283,7 @@ export async function getWebConfig(auth: OAuth2Client, projectId: string, appId:
 export async function deleteWebApp(auth: OAuth2Client, projectId: string, appId: string) {
   const res = await google.firebase('v1beta1').projects.webApps.remove({
     auth,
-    name: `projects/${projectId}/webApps/${appId}`,
+    name: `projects/${resourceSegment(projectId)}/webApps/${resourceSegment(appId)}`,
     requestBody: { immediate: true },
   });
   return res.data;
@@ -294,7 +295,7 @@ export async function enableService(auth: OAuth2Client, projectId: string, servi
   const serviceusage = google.serviceusage('v1');
   const res = await serviceusage.services.enable({
     auth,
-    name: `projects/${projectId}/services/${serviceId}`,
+    name: `projects/${resourceSegment(projectId)}/services/${resourceSegment(serviceId)}`,
   });
   return { service: serviceId, state: res.data.name };
 }
@@ -304,7 +305,7 @@ export async function listEnabledServices(auth: OAuth2Client, projectId: string)
   const services = await collectPages(async (pageToken) => {
     const res = await serviceusage.services.list({
       auth,
-      parent: `projects/${projectId}`,
+      parent: `projects/${resourceSegment(projectId)}`,
       filter: 'state:ENABLED',
       pageSize: 200,
       ...(pageToken && { pageToken }),
@@ -342,7 +343,7 @@ export async function linkAnalytics(
   }
   const res = await google.firebase('v1beta1').projects.addGoogleAnalytics({
     auth,
-    parent: `projects/${projectId}`,
+    parent: `projects/${resourceSegment(projectId)}`,
     requestBody,
   });
   return res.data;
@@ -352,7 +353,7 @@ export async function linkAnalytics(
 export async function getAnalyticsDetails(auth: OAuth2Client, projectId: string) {
   const res = await google.firebase('v1beta1').projects.getAnalyticsDetails({
     auth,
-    name: `projects/${projectId}/analyticsDetails`,
+    name: `projects/${resourceSegment(projectId)}/analyticsDetails`,
   });
   return res.data;
 }
