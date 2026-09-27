@@ -54,10 +54,59 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   written atomically with `0600` permissions; an interrupted write can no longer leave a truncated file or a
   briefly world-readable token.
 - `doctor` no longer aborts when the Mimi Seed server is unreachable; it reports one failed check and finishes.
+- List tools no longer stop at the first page: IAM service accounts, Firebase projects and enabled services,
+  and Play one-time products and subscriptions follow every `nextPageToken`. The Play product lists return what
+  was fetched with `truncated: true` and a note if they hit the page cap.
+- `bigquery_run_query` waits up to 2 more minutes for a query that misses the 30 s window and, if it still has not
+  finished, says so with `jobComplete: false` and the `jobId` instead of returning an empty result.
+- Google API calls made through `googleapis` now have a 60 s timeout with bounded retries (Play `edits.commit`
+  5 min, media uploads 30 min), so a hung connection can no longer freeze a tool call indefinitely.
+- On Windows, credential writes retry briefly (up to 1 s) when antivirus, the search indexer, OneDrive, or another
+  mimi-seed process holds the file open, instead of failing with `EPERM`.
+- `CALLBACK_PORT_IN_USE` names the loopback address that is taken and how to find the process holding it.
+
+### Security
+
+- Package and bundle ids are validated on every tool, and service-account file paths are checked to stay inside
+  `~/.mimi-seed/play-service-accounts/`. A `packageName` like `../tokens` could previously delete, overwrite, or
+  remote-sync the Google OAuth token file.
+- `mimi_seed_remote_sync_credentials` only sends registered service accounts (or, with the legacy single SA, any
+  well-formed package name), skips and lists anything else, requires an https endpoint (http only for
+  localhost), and shows the destination host in the preview.
+- Ids interpolated into App Store Connect, Meta (Facebook/Instagram/Threads), Google Ads, and GitHub/GitLab
+  request paths are encoded, and ids used in Google resource names (Firebase, IAM, GA4, AdMob, Billing, BigQuery,
+  Search Console, Play) are validated, so a crafted id can no longer redirect a request — including a `DELETE`
+  or `:remove` — to another resource or project.
+- Secrets are no longer returned into the conversation: `iam_create_key` saves the key under `~/.mimi-seed/keys/`
+  and `android_generate_keystore` saves the keystore and its passwords under `~/.mimi-seed/keystores/` (both
+  `0600`), and keytool receives passwords through environment variables instead of the command line. The
+  `playstore_upload_data_safety` preview no longer echoes CSV content.
+- `bigquery_run_query` enforces read-only: a dry run rejects anything that is not a single `SELECT`.
+- The Google login callback listens only on `127.0.0.1` and `::1` instead of every network interface.
+- FFmpeg can no longer be pointed at an arbitrary program from a tool call; it is configured only by
+  `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` / `PATH`.
+- `jenkins_save_config` warns when the Jenkins URL sends the API token over plain http to a public host
+  (LAN / Tailscale http stays allowed).
+- mcp-server dependency advisories fixed (`fast-uri`, `ip-address`, `hono`, `qs`, `nanoid`).
 
 ### Tool changes
 
-- None.
+- No tools were added, renamed, or removed. Parameter and output changes:
+  - `iam_create_key` returns the key **file path**, keyId and client email — no longer the private key JSON.
+  - `android_generate_keystore` returns the **paths** of `upload.jks` and `signing.json` — no longer the passwords
+    or the keystore base64.
+  - New optional `serviceAccountJsonPath` on `playstore_register_service_account` and
+    `playstore_verify_service_account`, and `service_account_json_path` on `jenkins_upload_playstore_sa`
+    (files inside `~/.mimi-seed/keys/` only). The `serviceAccountJson` string still works.
+  - New optional `keystore_path` on `jenkins_upload_keystore`, and `secret_file` + `secret_field` on
+    `jenkins_create_credential` (files inside `~/.mimi-seed/keystores/` only). `keystore_base64` and `secret`
+    still work.
+  - **Removed** the `ffmpegPath` parameter from `video_render`, `video_validate`, and
+    `tiktok_business_plan_video_post` (set `MIMI_SEED_FFMPEG_PATH` instead).
+  - `playstore_list_inapp_products` / `playstore_list_subscriptions` return `{ truncated, note, items }` instead
+    of a bare array only when the page cap is hit.
+  - `packageName` / `package_name(s)` / `bundleId` parameters now reject values that are not valid Android
+    package names / iOS bundle ids.
 
 ## [0.19.18] - 2026-09-27
 
