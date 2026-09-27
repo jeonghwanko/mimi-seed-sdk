@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
+import { jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
 import * as jobs from '../jenkins/jobs.js';
 import { textResult } from '../lib/mcp-response.js';
@@ -75,6 +75,7 @@ export function registerJenkinsTools(server: McpServer) {
     },
     async ({ url, username, token }) => {
       saveJenkinsConfig({ url, username, token });
+      const warning = jenkinsUrlWarning(url);
       return {
         content: [{
           type: 'text',
@@ -82,6 +83,7 @@ export function registerJenkinsTools(server: McpServer) {
             '✅ Jenkins 설정 저장 완료',
             `   URL:    ${url}`,
             `   사용자: ${username}`,
+            ...(warning ? ['', warning] : []),
             '',
             '이제 jenkins_list_credentials 로 연결이 잘 됐는지 확인하세요.',
           ].join('\n'),
