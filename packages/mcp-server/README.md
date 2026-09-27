@@ -127,11 +127,11 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
-<!-- generated:readme-tools-heading:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## 제공 도구 (150+ 개 · 22개 영역)
 <!-- generated:readme-tools-heading:end -->
 
-<!-- generated:readme-tools-table:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
 | App Store Connect | 64 | `appstore_submit_for_review` / `appstore_get_weekly_insight` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
@@ -140,7 +140,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI (GitHub Actions / GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
 | Jenkins (크리덴셜 + 잡) | 10 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` |
-| Google Analytics 4 | 8 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_plan_bigquery_link` / `ga4_create_bigquery_link` / `ga4_run_report` |
+| GA4 (Google Analytics 4) | 8 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_plan_bigquery_link` / `ga4_create_bigquery_link` / `ga4_run_report` |
 | Search Console | 6 | `gsc_inspect_url` / `gsc_search_analytics` / `gsc_submit_sitemap` |
 | Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |
 | Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
@@ -152,9 +152,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | 출시 점검 | 5 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `android_check_billing_compliance` / `screenshot_validate` / `release_status` |
 | Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
-| 연결/진단 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
-| AI 생성 | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
-| 영상 제작 | 15 | `youtube_upload_video` / `youtube_get_video_status` / `youtube_update_video_privacy` / `video_plan_from_story` / `video_research_youtube` / `video_render` |
+| 인증 / 연결 진단 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
+| AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
+| 영상 제작 · YouTube 업로드 | 15 | `youtube_upload_video` / `youtube_get_video_status` / `youtube_update_video_privacy` / `video_plan_from_story` / `video_research_youtube` / `video_render` |
 | YouTube | 10 | `youtube_get_channel` / `youtube_list_videos` / `youtube_get_analytics_report` / `youtube_get_content_insights` / `youtube_update_video_metadata` / `youtube_set_thumbnail` / `youtube_schedule_video` / `youtube_list_comments` / `youtube_list_comment_replies` / `youtube_reply_comment` |
 <!-- generated:readme-tools-table:end -->
 

@@ -39,7 +39,9 @@ describe('생성 문서 블록 (scripts/gen-docs.mjs) ↔ tool-manifest.json', (
     let open: string | null = null;
     const seen = new Set<string>();
     for (const line of readRepoFile(rel).split(/\r?\n/)) {
-      const m = line.trim().match(/^<!-- generated:([a-z0-9:-]+):(start|end)\b.*-->$/);
+      const marker = /^<!-- generated:([a-z0-9:-]+):(start|end)\b.*-->$/;
+      const m = line.match(marker);
+      if (!m && marker.test(line.trim())) problems.push(`들여쓴 마커(줄 맨 앞에 둘 것): ${line.trim()}`);
       if (!m) continue;
       const [, id, edge] = m;
       if (edge === 'start') {

@@ -46,6 +46,7 @@ export const domains = {
   },
   ga4: {
     en: 'GA4',
+    ko: 'GA4 (Google Analytics 4)',
     highlights: ['ga4_create_property', 'ga4_create_data_stream', 'ga4_plan_bigquery_link', 'ga4_create_bigquery_link', 'ga4_run_report'],
   },
   gsc: {
@@ -94,14 +95,17 @@ export const domains = {
   },
   auth: {
     en: 'Auth',
+    ko: '인증 / 연결 진단',
     highlights: ['mimi_seed_status', 'mimi_seed_auth_start', 'mimi_seed_auth_status', 'mimi_seed_remote_sync_credentials'],
   },
   ai: {
     en: 'AI',
+    ko: 'AI (Claude)',
     highlights: ['generate_release_notes_from_commits', 'generate_review_reply'],
   },
   video: {
     en: 'Video production',
+    ko: '영상 제작 · YouTube 업로드',
     highlights: ['youtube_upload_video', 'youtube_get_video_status', 'youtube_update_video_privacy', 'video_plan_from_story', 'video_research_youtube', 'video_render'],
   },
   youtube: {

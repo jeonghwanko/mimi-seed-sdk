@@ -16,8 +16,8 @@
   `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase,
   AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins credentials,
   Facebook, Instagram, Threads, Android signing, video production (incl. YouTube publishing), AI, Auth, and
-  Checks. (Prose docs use the "150+" floor; only the manifest, [[tool-catalog]], and the README count columns
-  carry exact counts.)
+  Checks. (Prose docs use the "150+" floor; only the manifest and the blocks generated from it — [[tool-catalog]]
+  and the README tool tables — carry exact counts.)
 - It drives Google / Apple APIs **directly** using local credentials under `~/.mimi-seed/`. It manages
   metadata, store releases, and CI/Jenkins *credentials* — it does **not** compile `.aab`/`.ipa` binaries.
 - The private web console is a **separate repo** with a different transport and auth model. The boundary and the
@@ -119,7 +119,7 @@ The ontology is a *mirror* of the code, so every mirrored fact can drift. This i
 | CLI commands | `cli/src/index.ts` router | [cli-deploy.md](cli-deploy.md) | ⚠️ manual |
 | Skills, prompts, resources | `skills/*/SKILL.md`, `prompts.ts`, `resources.ts` | [skills-plugins.md](skills-plugins.md) | ⚠️ manual (incl. the skill count in the table above) |
 | Tool discoverability (`select:` batches) | `tool-manifest.json` + `scripts/docs-spec.mjs` `batches` | [`../agent-guide.md`](../agent-guide.md) §0 — **generated**; a new tool joins the batch that owns its domain (`fallbackFor`) | ✅ `gen-docs` refuses a domain no batch owns; `docs-drift.test.ts` — every registered tool (except deprecated aliases) must sit in ≥1 batch, and no batch may name a tool that doesn't exist or a deprecated alias |
-| Tool classification (read / **W** / **D**, local, idempotent) → MCP annotations + confirm guard | `tool-manifest.json` (`write` / `destructive` / `local` / `idempotent`) | [tool-catalog.md](tool-catalog.md) **W**/**D** markers | ✅ `docs-drift.test.ts` (markers ↔ lists) + `tool-manifest.test.ts` (live annotations) + `destructive-confirm.test.ts` (every **D** tool previews without `confirm`) |
+| Tool classification (read / **W** / **D**, local, idempotent) → MCP annotations + confirm guard | `tool-manifest.json` (`write` / `destructive` / `local` / `idempotent`) | [tool-catalog.md](tool-catalog.md) **W**/**D** markers — **generated** | ✅ `gen-docs --check` (via `plugin:check` + `docs-drift.test.ts`: markers are rendered from the lists) + `tool-manifest.test.ts` (live annotations) + `destructive-confirm.test.ts` (every **D** tool previews without `confirm`) |
 | Agent guide served over MCP | `docs/agent-guide.md` | `packages/mcp-server/assets/agent-guide.md` (refreshed by `npm run plugin:sync`) | ✅ `prompts-resources.test.ts` — byte equality |
 | Auth error codes & their recovery | `mcp-server/src/auth/errors.ts` (`AuthErrorCode`) | [`../troubleshooting.md`](../troubleshooting.md) + `.ko` | ✅ `docs-onboarding.test.ts` — add a code without a recovery entry and CI fails |
 | Credential list & wizard deep-links | `cli/src/credentials.ts` (the registry) | [`../credentials.md`](../credentials.md) + `.ko` | ✅ anchors + EN/KO parity tested; the vendor click-paths themselves are ⚠️ manual (Apple/Meta/Google reorganize their consoles on their own schedule) |

@@ -28,6 +28,9 @@ const GUIDE = 'docs/agent-guide.md';
 const WRAP = 116; // 카탈로그 불릿 줄바꿈 폭 (도구 항목 경계에서만 끊는다)
 
 const MARKER = /^<!-- generated:([a-z0-9:-]+):(start|end)\b.*-->$/;
+// 마커 문구는 짧게 — agent-guide 는 MCP 리소스로 그대로 서빙된다. 생성기가 매번 이 모양으로 다시 쓴다.
+const startMarker = (id) => `<!-- generated:${id}:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->`;
+const endMarker = (id) => `<!-- generated:${id}:end -->`;
 
 // ── 모델 ──────────────────────────────────────────────────────────────────────
 
@@ -95,11 +98,16 @@ function toolRef(model, name) {
 }
 
 /** 불릿 하나: 항목 경계(` · `)에서만 WRAP 폭으로 줄바꿈하고 연속 줄은 두 칸 들여쓴다. */
-function bullet(prefix, items, after) {
+export function bullet(prefix, items, after) {
   const lines = [];
+  // 첫 항목만으로 폭을 넘으면 접두어 뒤에서 끊는다 (항목 자체는 쪼개지 않는다 — 별칭 표기와 이름이 한 줄에 남도록).
   let line = `- ${prefix} ${items[0]}`;
+  if (line.length > WRAP) {
+    lines.push(`- ${prefix}`);
+    line = `  ${items[0]}`;
+  }
   for (const item of items.slice(1)) {
-    if (`${line} · ${item}`.length > WRAP) {
+    if (`${line} · ${item} ·`.length > WRAP) { // 줄 끝에 붙을 " ·" 까지 폭에 넣는다
       lines.push(`${line} ·`);
       line = `  ${item}`;
     } else {
@@ -308,7 +316,10 @@ export function applyBlocks(rel, text, blocks, errors) {
   const stale = [];
   let open = null; // { id, body: [] }
   for (const line of lines) {
-    const m = line.trim().match(MARKER);
+    const m = line.match(MARKER);
+    if (!m && MARKER.test(line.trim())) {
+      errors.push(`${rel}: 생성 마커 앞뒤에 공백이 있습니다 — 줄 맨 앞에 두세요 (들여쓴 주석은 GitHub 에서 코드로 보일 수 있음): ${line.trim()}`);
+    }
     if (!m) {
       if (open) open.body.push(line);
       else out.push(line);
@@ -319,8 +330,7 @@ export function applyBlocks(rel, text, blocks, errors) {
       if (open) errors.push(`${rel}: "${open.id}" 블록이 닫히기 전에 "${id}" 가 시작됩니다`);
       if (seen.has(id)) errors.push(`${rel}: 생성 블록 "${id}" 가 두 번 있습니다`);
       seen.add(id);
-      out.push(line);
-      open = { id, body: [] };
+      open = { id, body: [], start: line };
       continue;
     }
     if (!open || open.id !== id) {
@@ -330,19 +340,21 @@ export function applyBlocks(rel, text, blocks, errors) {
     }
     if (!blocks.has(id)) {
       errors.push(`${rel}: 알 수 없는 생성 블록 "${id}" — 스펙에서 사라진 도메인/표라면 마커와 함께 지우세요`);
-      out.push(...open.body);
+      out.push(open.start, ...open.body, line);
     } else {
       const want = blocks.get(id);
-      if (open.body.join('\n') !== want) stale.push(id);
-      out.push(want);
+      if (open.body.join('\n') !== want || open.start !== startMarker(id) || line !== endMarker(id)) stale.push(id);
+      out.push(startMarker(id), want, endMarker(id));
     }
-    out.push(line);
     open = null;
   }
-  if (open) errors.push(`${rel}: "${open.id}" 블록의 end 마커가 없습니다`);
+  if (open) {
+    errors.push(`${rel}: "${open.id}" 블록의 end 마커가 없습니다`);
+    out.push(open.start, ...open.body);
+  }
   for (const id of blocks.keys()) {
     if (!seen.has(id)) {
-      errors.push(`${rel}: 생성 블록 "${id}" 의 마커가 없습니다 — <!-- generated:${id}:start --> … <!-- generated:${id}:end --> 를 넣으세요`);
+      errors.push(`${rel}: 생성 블록 "${id}" 의 마커가 없습니다 — ${startMarker(id)} … ${endMarker(id)} 를 넣으세요`);
     }
   }
   return { text: out.join('\n'), stale };
@@ -382,6 +394,7 @@ function main() {
   }
 
   if (errors.length) {
+    errors.splice(0, errors.length, ...new Set(errors)); // 같은 원인이 여러 README·표에서 반복돼도 한 번만
     console.error('\n  ✗ gen-docs: 생성 입력(tool-manifest.json / scripts/docs-spec.mjs) 또는 마커에 문제가 있습니다:');
     for (const e of errors) console.error(`      ${e}`);
     console.error('');

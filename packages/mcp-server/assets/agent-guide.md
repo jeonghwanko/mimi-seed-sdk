@@ -43,9 +43,10 @@ tools directly — but the *call order* and *safety rules* below still apply.
 ### Ready-made `select:` batches
 
 Every registered tool appears in at least one batch below (the table is generated from the tool manifest, and a
-new tool lands in its domain's batch automatically), so a task you can name is a batch you can paste. Pick the row for the job; batching two rows in one `select:` call is fine.
+new tool lands in its domain's batch automatically), so a task you can name is a batch you can paste. Pick the
+row for the job; batching two rows in one `select:` call is fine.
 
-<!-- generated:select-batches:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:select-batches:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Goal | `ToolSearch` query |
 |------|--------------------|
 | First contact / "what's connected?" | `select:mimi_seed_status,mimi_seed_auth_status,mimi_seed_auth_start,mimi_seed_remote_sync_credentials` |

@@ -1,6 +1,6 @@
 # Tool catalog
 
-<!-- generated:catalog-total:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 **244 tools across 22 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
@@ -14,7 +14,8 @@
 > `destructiveHint`, … — and every **D** tool is confirm-gated by the registrar, [[architecture]]). English labels,
 > per-tool notes, and bullet grouping come from `scripts/docs-spec.mjs`. Never edit inside a block: change the
 > manifest or the spec, then `npm run plugin:sync` (`npm run plugin:check` fails on a stale block). The prose
-> outside the blocks is hand-written.
+> outside the blocks is hand-written. The manifest's `tools` lists are themselves test-enforced against the live
+> registrations (`tool-manifest.test.ts`, [[pitfalls]] §8), so what is generated here is what the server registers.
 > For *how to call* these in order, see [`../agent-guide.md`](../agent-guide.md); this doc is the inventory only.
 >
 > Reading the markers: within one bullet or table row, a **W** / **D** applies to every tool name after it until
@@ -23,7 +24,7 @@
 
 ## Counts by domain
 
-<!-- generated:catalog-counts:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-counts:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain | Register file | Tools |
 |--------|---------------|------:|
 | App Store Connect | `registers/appstore.ts` | 64 |
@@ -51,7 +52,7 @@
 | **Total** | **22 modules** | **244** |
 <!-- generated:catalog-counts:end -->
 
-<!-- generated:catalog-domain:playstore:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## Google Play — `registers/playstore.ts` (39) · impl `playstore/tools.ts`
 
 - Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
@@ -59,7 +60,8 @@
   `playstore_list_subscriptions` · `playstore_verify_service_account` · `playstore_list_service_accounts` ·
   `playstore_plan_release` · `playstore_list_products` · `playstore_list_recovery_actions` ·
   `playstore_list_financial_reports` · `playstore_get_financial_report` (GCS 재무 CSV — Play API 엔 매출 엔드포인트가 없다)
-- **W** `playstore_update_details` (developer contact + default language — `edits.details.patch`, distinct from the store listing) ·
+- **W**
+  `playstore_update_details` (developer contact + default language — `edits.details.patch`, distinct from the store listing) ·
   `playstore_update_listing` · `playstore_upload_image` ·
   `playstore_update_release_notes` (versionCode 생략 = 트랙 최신 릴리스, `syncTracks` 지원) ·
   `playstore_update_latest_release_notes` (**deprecated alias** → `playstore_update_release_notes`) ·
@@ -68,16 +70,16 @@
   `playstore_update_product_state` (DRAFT ↔ 활성) · `playstore_update_product` ·
   `playstore_create_recovery_action` (DRAFT 생성 — 아직 사용자에게 안 나감)
 - **D** `playstore_delete_all_images` · `playstore_replace_images` (기존 이미지 deleteall 후 업로드) ·
-  `playstore_reply_review` (public) · `playstore_delete_service_account` (로컬 SA 파일 삭제) · `playstore_submit_release` ·
-  `playstore_promote_release` (draft 포함 모든 status 가 confirm 필요) · `playstore_delete_product` ·
-  `setup_playstore_connection` (SA 키 발급 + 로컬 등록 SA 덮어쓰기) ·
+  `playstore_reply_review` (public) · `playstore_delete_service_account` (로컬 SA 파일 삭제) ·
+  `playstore_submit_release` · `playstore_promote_release` (draft 포함 모든 status 가 confirm 필요) ·
+  `playstore_delete_product` · `setup_playstore_connection` (SA 키 발급 + 로컬 등록 SA 덮어쓰기) ·
   `playstore_upload_data_safety` (데이터 안전 CSV — 기존 제출 전체 덮어씀) · `playstore_deploy_recovery_action` (원격 인앱 업데이트 실배포) ·
   `playstore_cancel_recovery_action`
 <!-- generated:catalog-domain:playstore:end -->
 - `playstore_list_products` (서비스 계정 전용, 구독+일회성 요약) and `playstore_list_inapp_products` (OAuth 가능,
   `purchaseOptions` 포함 — 구매 옵션 활성화 토글의 입력) are **not** duplicates; both stay.
 
-<!-- generated:catalog-domain:appstore:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-domain:appstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## App Store Connect — `registers/appstore.ts` (64) · impl `appstore/tools.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
@@ -88,7 +90,8 @@
   `appstore_get_age_rating` · `appstore_get_availability` · `appstore_beta_status` · `appstore_list_previews`
 - Read (분석/매출): `appstore_get_sales_report` (Sales and Trends — sandbox 가 섞이지 않는 실매출 기준선) ·
   `appstore_get_finance_report` (정산 — reportDate 는 **Apple 회계월**)
-- **W** `appstore_get_weekly_insight` (Analytics 주간 변화에서 제품 페이지·획득·수익화 중 한 가지 개선안을 선택 — 기본은 읽기; ONGOING report request 생성은 `confirmCreate` 필요) ·
+- **W**
+  `appstore_get_weekly_insight` (Analytics 주간 변화에서 제품 페이지·획득·수익화 중 한 가지 개선안을 선택 — 기본은 읽기; ONGOING report request 생성은 `confirmCreate` 필요) ·
   `appstore_upload_preview` (제품 페이지 미리보기 동영상 — 커밋 후 Apple 인코딩 남음)
 - **W** TestFlight: `appstore_update_beta_review_detail` · `appstore_update_beta_test_info` ·
   `appstore_update_whats_to_test`
@@ -113,7 +116,7 @@
 - `appstore_release_status` (versionId 하나의 출시·단계적 출시 상세) and `release_status` in Checks (버전 문자열로
   두 스토어를 한 번에) answer different questions; both stay.
 
-<!-- generated:catalog-domain:firebase:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-domain:firebase:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## Firebase — `registers/firebase.ts` (21)
 
 - Read: `firebase_list_projects` · `firebase_get_project` · `firebase_list_android_apps` ·
@@ -121,14 +124,14 @@
   `firebase_get_web_config` · `firebase_list_enabled_services` · `firebase_get_analytics_details` ·
   `firebase_get_remote_config_overview` (일일 fetch·무료 한도 경고·실험/rollout 상태)
 - **W** `firebase_create_project` (new GCP project + addFirebase, polls 2 long-running operations) ·
-  `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_create_web_app` · `firebase_enable_service` ·
-  `firebase_enable_common_services` · `firebase_link_analytics`
+  `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_create_web_app` ·
+  `firebase_enable_service` · `firebase_enable_common_services` · `firebase_link_analytics`
 - **D** `firebase_delete_android_app` · `firebase_delete_ios_app` · `firebase_delete_web_app`
 <!-- generated:catalog-domain:firebase:end -->
 
 ## Cloud & growth domains
 
-<!-- generated:catalog-table:cloud:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-table:cloud:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain (file) | Tools (W = write, D = destructive) |
 |---|---|
 | AdMob (`admob.ts`) | `admob_list_accounts` · `admob_list_apps` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` · **W** `admob_create_app` · **W** `admob_create_ad_unit` |
@@ -145,7 +148,7 @@
 
 ## Build / CI / signing
 
-<!-- generated:catalog-table:build:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-table:build:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain (file) | Tools |
 |---|---|
 | CI (GitHub Actions / GitLab) (`ci.ts`) — **not** Jenkins builds | `ci_list_workflows` · `ci_get_build_status` · `ci_list_recent_builds` · **W** `ci_save_config` · **W** `ci_trigger_build` · **D** `ci_cancel_build` |
@@ -155,7 +158,7 @@
 
 ## Cross-cutting
 
-<!-- generated:catalog-table:cross:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-table:cross:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain (file) | Tools |
 |---|---|
 | Checks / Risk (`checks.ts`) | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
@@ -163,13 +166,14 @@
 | AI (`ai.ts`) — needs `ANTHROPIC_API_KEY` | `generate_release_notes_from_commits` · `generate_review_reply` |
 <!-- generated:catalog-table:cross:end -->
 
-<!-- generated:catalog-domain:video:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-domain:video:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## Video production — `registers/video.ts` (15) · impl `video/*.ts`
 
 - Read: `youtube_get_video_status` · `video_job_status` · `video_validate`
 - **W** research (saves under `research/`): `video_research_youtube` (metadata/reference-only) ·
   `video_search_stock_assets`
-- **W** `youtube_upload_video` (profile로 계정 선택, expectedChannelId 필수·실제 채널 검증, 기본 private, public/unlisted는 명시 확인 필수) ·
+- **W**
+  `youtube_upload_video` (profile로 계정 선택, expectedChannelId 필수·실제 채널 검증, 기본 private, public/unlisted는 명시 확인 필수) ·
   `youtube_update_video_privacy` (public/unlisted는 명시 확인 필수)
   — private 업로드·비공개 전환은 되돌릴 수 있어 W; 공개 경로는 `confirmVisible` 이 막는다
 - **W** `video_plan_from_story` (Anthropic + local project) ·
@@ -182,13 +186,14 @@
 - YouTube results are permanently marked `reference-only`; only assets with recorded provenance and
   `allowedForRendering=true` can enter a timeline.
 
-<!-- generated:catalog-domain:youtube:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-domain:youtube:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## YouTube — `registers/youtube.ts` (10) · impl `youtube/*.ts`
 
 - Read: `youtube_get_channel` · `youtube_list_videos` · `youtube_get_analytics_report` · `youtube_list_comments` ·
   `youtube_list_comment_replies` · `youtube_get_content_insights`
 - **W** `youtube_update_video_metadata` · `youtube_set_thumbnail` · `youtube_schedule_video`
-- **D** `youtube_reply_comment` (agent-authored supplied text; preview by default, explicit confirmation required for public posting)
+- **D**
+  `youtube_reply_comment` (agent-authored supplied text; preview by default, explicit confirmation required for public posting)
 <!-- generated:catalog-domain:youtube:end -->
 - `youtube_get_content_insights` is a bounded current-vs-previous-period evidence brief with a ranked
   metadata sample; it does not call an AI API or generate a storyboard.
@@ -198,14 +203,15 @@
   The tools accept an optional named `profile` and channel expectation for multi-channel accounts;
   they do not grant or alter publishing access.
 
-<!-- generated:catalog-domain:tiktok:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:catalog-domain:tiktok:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## TikTok Business — `registers/tiktok.ts` (7) · impl `tiktok-business/*.ts`
 
 - Read: `tiktok_business_auth_status` · `tiktok_business_get_account` · `tiktok_business_get_video_settings` ·
   `tiktok_business_list_publish_audits`
 - **W** `tiktok_business_plan_video_post` (local validation plan + SHA-256 dedup record) ·
   `tiktok_business_get_publish_status` (provider read + local audit update)
-- **D** `tiktok_business_publish_video` (owned Business Account에 공개 게시 — 명시 확인 필수, 원자적 중복 예약, POST 결과 불명 시 자동 재시도 금지)
+- **D**
+  `tiktok_business_publish_video` (owned Business Account에 공개 게시 — 명시 확인 필수, 원자적 중복 예약, POST 결과 불명 시 자동 재시도 금지)
 <!-- generated:catalog-domain:tiktok:end -->
 
 ## Quirks worth knowing (tool name ≠ register file)

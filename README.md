@@ -441,13 +441,13 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
-<!-- generated:readme-tools-heading:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## Local MCP Tool List (150+ tools · 22 domains)
 <!-- generated:readme-tools-heading:end -->
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md). Every tool carries MCP annotations (read-only / destructive / open-world), and destructive tools (submit, delete, public posts, …) return a dry-run preview unless called with `confirm: true`.
 
-<!-- generated:readme-tools-table:start · do not edit — scripts/gen-docs.mjs -->
+<!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain | Count | Key Tools |
 |--------|-------|-----------|
 | **App Store Connect** | 64 | `appstore_submit_for_review` · `appstore_get_weekly_insight` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` |

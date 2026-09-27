@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applyBlocks, buildModel, expandBatches } from './gen-docs.mjs';
+import { applyBlocks, buildModel, bullet, expandBatches } from './gen-docs.mjs';
 
 const manifest = {
   total: 5,
@@ -51,13 +51,14 @@ test('manifest.total 이 실제 도구 수와 다르면 오류', () => {
   assert.ok(errors.some((e) => e.includes('total 99')));
 });
 
-test('applyBlocks: 마커 사이만 바꾸고 산문은 그대로, 낡은 블록을 보고한다', () => {
+test('applyBlocks: 마커 사이만 바꾸고 산문은 그대로, 낡은 블록을 보고하고, 마커 문구를 표준형으로 맞춘다', () => {
   const errors = [];
-  const text = ['intro', '<!-- generated:a:start · hint -->', 'old', '<!-- generated:a:end -->', 'outro'].join('\n');
+  const text = ['intro', '<!-- generated:a:start · old hint -->', 'old', '<!-- generated:a:end -->', 'outro'].join('\n');
   const { text: out, stale } = applyBlocks('x.md', text, new Map([['a', 'new\nlines']]), errors);
   assert.deepEqual(errors, []);
   assert.deepEqual(stale, ['a']);
-  assert.equal(out, ['intro', '<!-- generated:a:start · hint -->', 'new', 'lines', '<!-- generated:a:end -->', 'outro'].join('\n'));
+  const start = '<!-- generated:a:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->';
+  assert.equal(out, ['intro', start, 'new', 'lines', '<!-- generated:a:end -->', 'outro'].join('\n'));
 
   const again = applyBlocks('x.md', out, new Map([['a', 'new\nlines']]), errors);
   assert.deepEqual(again.stale, []);
@@ -73,4 +74,16 @@ test('applyBlocks: 빠진 마커·짝 없는 마커·모르는 블록은 오류'
   const errors2 = [];
   applyBlocks('x.md', '<!-- generated:a:start -->\nbody', new Map([['a', 'x']]), errors2);
   assert.ok(errors2.some((e) => e.includes('end 마커가 없습니다')));
+});
+
+test('applyBlocks: 들여쓴 마커는 오류 (GitHub 에서 코드 블록으로 보인다)', () => {
+  const errors = [];
+  applyBlocks('x.md', '    <!-- generated:a:start -->\nbody\n<!-- generated:a:end -->', new Map([['a', 'x']]), errors);
+  assert.ok(errors.some((e) => e.includes('공백')), errors.join('\n'));
+});
+
+test('bullet: 항목 경계에서만 줄바꿈하고, 첫 항목이 폭을 넘으면 접두어 뒤에서 끊는다', () => {
+  const long = `\`tool_a\` (${'x'.repeat(120)})`;
+  assert.equal(bullet('**W**', [long, '`tool_b`']), `- **W**\n  ${long} ·\n  \`tool_b\``);
+  assert.equal(bullet('Read:', ['`a`', '`b`']), '- Read: `a` · `b`');
 });
