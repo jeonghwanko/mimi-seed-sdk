@@ -123,6 +123,6 @@ cd packages/mcp-server && npm install && npm run build
   "disabledMcpjsonServers": ["mimi-seed"]
   ```
 
-- **`~/.mimi-seed/tokens.json`이 없어도 정상이다.** 현행 인증은 PAT(`MIMI_SEED_TOKEN` 환경변수 + `config.json`)라 이 파일은 원래 없을 수 있다. 파일 부재를 미인증으로 단정하지 말고 `mimi-seed doctor`로 확인한다.
+- **`~/.mimi-seed/tokens.json`이 없어도 정상이다.** 현행 인증은 PAT(`MIMI_SEED_TOKEN` 환경변수 + `config.json`)라 이 파일은 원래 없을 수 있다. 파일 부재를 미인증으로 단정하지 말고 `mimi-seed doctor`의 **계정** 섹션(원격 PAT)을 본다. 그때 자격증명 섹션의 `Google OAuth ✗`는 로컬 MCP의 Google 도구(Firebase·AdMob·Play 등)를 쓸 때만 필요하다는 뜻이지 업데이트 실패가 아니다 — `doctor`는 `--strict` 없이는 ✗ 가 있어도 exit 0 이다.
 - **CLI를 올려도 도구는 안 늘어난다.** 도구는 `@yoonion/mimi-seed-mcp`에 있다. `mimi-seed`(CLI)는 별개 패키지이고 버전도 따로 논다.
 - **스킬만 최신, 서버는 구버전** (2A의 함정). 스킬 문구는 새 도구를 설명하는데 그 도구가 없는 상태가 되어 디버깅이 꼬인다.

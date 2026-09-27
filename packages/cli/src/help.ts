@@ -45,11 +45,13 @@ ${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 
       status: `${kleur.bold("mimi-seed status")} — 연결 상태 + 등록 앱 목록. 옵션 없음.`,
       doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI)
 
-✗ 항목이 하나라도 있으면 exit 1 (⚠ 는 실패가 아님). Mimi Seed 클라우드 토큰은
-원격 기능(MIMI_SEED_TOKEN · MIMI_SEED_WEB_BASE · .mimi-seed-link.json)을 쓸 때만 필수로 본다.
+기본은 진단만 하고 exit 0. Mimi Seed 클라우드 토큰은 원격 기능
+(MIMI_SEED_TOKEN · MIMI_SEED_WEB_BASE · .mimi-seed-link.json)을 쓸 때만, App Store Connect 는
+프로젝트에 iOS 앱이 있을 때만 ✗ 로 본다.
 
 옵션:
-  --json   사람용 출력 대신 진단 결과를 JSON으로 출력`,
+  --strict  ✗ 항목이 하나라도 있으면 exit 1 (⚠ 는 실패가 아님) — CI 게이트용
+  --json    사람용 출력 대신 진단 결과를 JSON으로 출력 (ok 필드 포함)`,
       logout: `${kleur.bold("mimi-seed logout")} — 로컬 설정(config.json) 삭제. 옵션 없음.`,
       restart: `${kleur.bold("mimi-seed restart")} — MCP 서버 프로세스 재시작 (기본: mimi-seed)
 
@@ -178,11 +180,13 @@ ${kleur.dim("The setup wizard asks on first run, so you rarely need to type this
       status: `${kleur.bold("mimi-seed status")} — connection status + registered apps. No options.`,
       doctor: `${kleur.bold("mimi-seed doctor")} — environment check (token · Node · Git · project · CI)
 
-Exits 1 if any ✗ check fails (⚠ is not a failure). The Mimi Seed cloud token is only required
-when remote features are configured (MIMI_SEED_TOKEN · MIMI_SEED_WEB_BASE · .mimi-seed-link.json).
+By default it only reports and exits 0. The Mimi Seed cloud token is only a ✗ when remote features
+are configured (MIMI_SEED_TOKEN · MIMI_SEED_WEB_BASE · .mimi-seed-link.json), and App Store Connect
+only when the project has an iOS app.
 
 Options:
-  --json   print the diagnosis as JSON instead of the human-readable report`,
+  --strict  exit 1 if any ✗ check fails (⚠ is not a failure) — for CI gating
+  --json    print the diagnosis as JSON instead of the human-readable report (includes ok)`,
       logout: `${kleur.bold("mimi-seed logout")} — delete the local config (config.json). No options.`,
       restart: `${kleur.bold("mimi-seed restart")} — restart the MCP server process (default: mimi-seed)
 

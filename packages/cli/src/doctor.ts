@@ -26,8 +26,8 @@ import {
 // ── 결과 모델 ──
 //
 // 모든 체크는 한 곳(Reporter)을 지난다: 사람용 출력은 즉시 찍고, --json 이면 모아 두었다가
-// 마지막에 한 번 찍는다. 종료 코드는 여기서 파생된다 — ✗ 가 하나라도 있으면 exit 1.
-// 예전엔 ✗ 를 찍고도 exit 0 이라 `mimi-seed doctor` 를 CI 게이트로 쓸 수 없었다.
+// 마지막에 한 번 찍는다. `ok` 는 여기서 파생된다 — ✗ 가 하나라도 있으면 false. 종료 코드는
+// `--strict` 일 때만 `ok` 를 따른다 (cmdDoctor 참고).
 
 export type CheckStatus = "ok" | "warn" | "fail";
 /** 섹션 id 는 언어와 무관하게 고정 — JSON 소비자가 번역된 제목에 의존하지 않게. */
@@ -260,12 +260,17 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
 }
 
 /**
- * `mimi-seed doctor [--json]`. ✗ 가 하나라도 있으면 exit code 1 (⚠ 는 0).
- * `--json` 은 사람용 출력 대신 `DoctorReport` 를 stdout 에 JSON 으로 찍는다.
+ * `mimi-seed doctor [--strict] [--json]`.
+ *
+ * 기본 종료 코드는 **✗ 가 있어도 0** 이다. doctor 는 설치 스킬·시작 가이드의 마지막 "확인" 단계이고,
+ * 새 머신(OAuth 아직 없음)·PAT 전용·OAuth 만 있는 크로스플랫폼 프로젝트처럼 ✗ 가 정상인 상태가
+ * 흔하다 — 거기서 exit 1 을 내면 설치가 실패한 것처럼 보인다. CI 게이트로 쓰려면 `--strict`:
+ * ✗ 가 하나라도 있으면 exit 1 (⚠ 는 실패가 아님). `--json` 은 어느 쪽이든 `ok` 를 담는다.
  */
 export async function cmdDoctor(args: string[] = []): Promise<void> {
   const json = args.includes("--json");
+  const strict = args.includes("--strict");
   const report = await runDoctor({ cwd: process.cwd(), print: !json });
   if (json) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-  if (!report.ok) process.exitCode = 1;
+  if (strict && !report.ok) process.exitCode = 1;
 }

@@ -89,15 +89,12 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
     expect(mocks.mcpCall).not.toHaveBeenCalled();
   });
 
-  it("프로젝트가 웹 앱과 연결돼 있으면(.mimi-seed-link.json) 토큰 부재는 ✗ 이고 exit 1", async () => {
+  it("프로젝트가 웹 앱과 연결돼 있으면(.mimi-seed-link.json) 토큰 부재는 ✗ 다", async () => {
     fs.writeFileSync(
       path.join(cwd, ".mimi-seed-link.json"),
       JSON.stringify({ schema: 1, webBase: "https://console.example.test", appId: "app_1" }),
     );
 
-    await cmdDoctor([]);
-
-    expect(process.exitCode).toBe(1);
     const report = await runDoctor({ cwd, print: false });
     expect(report.ok).toBe(false);
     // 클라우드 계정은 "계정" 섹션에서 한 번만 판정한다 (자격증명 섹션에 같은 줄을 또 찍지 않는다).
@@ -117,20 +114,52 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
     expect(await remoteConfigured(cwd, { MIMI_SEED_TOKEN: "placeholder" })).toBe(true);
   });
 
-  it("토큰이 서버에서 거부되면 exit 1", async () => {
-    mocks.config.mockResolvedValue({
-      token: "placeholder-token",
-      prefix: "placehol",
-      endpoint: "https://console.example.test/api/mcp",
-      webBase: "https://console.example.test",
-      createdAt: "2026-01-01T00:00:00.000Z",
+  // 기본 종료 코드는 ✗ 가 있어도 0 — doctor 는 설치 스킬·시작 가이드의 마지막 확인 단계이고, 새 머신
+  // (OAuth 없음)·PAT 전용·OAuth 만 있는 크로스플랫폼 프로젝트에서 ✗ 는 정상이다. CI 게이트는 --strict.
+  describe("종료 코드", () => {
+    const rejectedToken = () => {
+      mocks.config.mockResolvedValue({
+        token: "placeholder-token",
+        prefix: "placehol",
+        endpoint: "https://console.example.test/api/mcp",
+        webBase: "https://console.example.test",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      mocks.detectAll.mockReturnValue(new Map(CREDENTIALS.map((spec) => [spec.id, { present: true }])));
+      mocks.mcpCall.mockResolvedValue({ text: "HTTP 401: invalid token", isError: true });
+    };
+
+    it("기본: ✗ 가 있어도 exit 0 (main 과 같은 동작)", async () => {
+      rejectedToken();
+      await cmdDoctor([]);
+      expect(process.exitCode ?? 0).toBe(0);
+      expect((await runDoctor({ cwd, print: false })).ok).toBe(false);
     });
-    mocks.detectAll.mockReturnValue(new Map(CREDENTIALS.map((spec) => [spec.id, { present: true }])));
-    mocks.mcpCall.mockResolvedValue({ text: "HTTP 401: invalid token", isError: true });
 
-    await cmdDoctor([]);
+    it("새 머신(Google OAuth 없음)도 기본은 exit 0", async () => {
+      mocks.detectAll.mockReturnValue(new Map(CREDENTIALS.map((spec) => [spec.id, { present: false }])));
+      await cmdDoctor([]);
+      expect(process.exitCode ?? 0).toBe(0);
+    });
 
-    expect(process.exitCode).toBe(1);
+    it("--strict: ✗ 가 하나라도 있으면 exit 1", async () => {
+      rejectedToken();
+      await cmdDoctor(["--strict"]);
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("--strict: 모두 ✓/⚠ 면 exit 0", async () => {
+      await cmdDoctor(["--strict"]);
+      expect(process.exitCode ?? 0).toBe(0);
+    });
+
+    it("--json 은 --strict 없이도 ok 를 담는다", async () => {
+      rejectedToken();
+      await cmdDoctor(["--json"]);
+      const out = vi.mocked(process.stdout.write).mock.calls.map((c) => String(c[0])).join("");
+      expect((JSON.parse(out) as { ok: boolean }).ok).toBe(false);
+      expect(process.exitCode ?? 0).toBe(0);
+    });
   });
 
   it("서버에 닿지 않아도 doctor 가 죽지 않고 ✗ 한 줄로 남긴다", async () => {
@@ -164,8 +193,8 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
   });
 });
 
-// App Store Connect 는 requirement "platform"(ios) 이다. 예전 doctor 는 플랫폼을 보지 않고 실패시켜서
-// Android 전용 사용자는 영원히 exit 1 이었다. 규칙은 missingRequired()/setup 과 같다:
+// App Store Connect 는 requirement "platform"(ios) 이다. 플랫폼을 보지 않고 ✗ 를 주면 Android 전용
+// 사용자는 `--strict` 게이트를 절대 통과하지 못한다. 규칙은 missingRequired()/setup 과 같다:
 // 이 프로젝트에서 그 플랫폼이 감지될 때만 ✗, 아니면 ⚠.
 describe("doctor 플랫폼 자격증명", () => {
   let cwd: string;

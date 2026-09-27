@@ -20,7 +20,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `mimi-seed doctor --json` prints the whole diagnosis as one machine-readable report.
+- `mimi-seed doctor --json` prints the whole diagnosis as one machine-readable report, including an `ok` flag.
+- `mimi-seed doctor --strict` exits with code 1 when any ✗ check fails, for CI gating. Without it, `doctor` still
+  only reports and exits 0.
 - CI runs both packages' test suites on Windows (Node 22) in addition to Linux (Node 20 and 22).
 - `CHANGELOG.md` (this file), with a `Tool changes` convention for MCP tool additions, renames, and removals.
 
@@ -30,8 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   pushing to `main` runs tests only. Both packages publish from one job that runs only after every test leg
   passes, mcp-server first, so a failed mcp-server publish stops the cli publish instead of leaving a lone cli
   release.
-- `mimi-seed doctor` exits with code 1 when any ✗ check fails, so it can gate CI. The Mimi Seed cloud token is
-  only treated as required when remote use is configured (`MIMI_SEED_TOKEN`, `MIMI_SEED_WEB_BASE`, or a
+- `mimi-seed doctor`: the Mimi Seed cloud token is only treated as required when remote use is configured (`MIMI_SEED_TOKEN`, `MIMI_SEED_WEB_BASE`, or a
   `.mimi-seed-link.json` in the project); local-stdio-only setups now get a warning instead of a failure. App
   Store Connect only fails when the project has an iOS app, so Android-only projects pass.
 - When a setup binary is not on `PATH`, the CLI runs `npx @yoonion/mimi-seed-mcp@<its own version>` instead of
