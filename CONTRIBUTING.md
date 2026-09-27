@@ -50,8 +50,8 @@ npm run build && npm test
 1. Branch off `main`.
 2. Keep changes scoped to one package where possible.
 3. **Build + test must pass** (`npm run build && npm test` in the affected package). The
-   mcp-server also type-checks via `tsc`; the CLI builds with `tsup` — run `npx tsc --noEmit`
-   there too, since `tsup` does not type-check.
+   mcp-server also type-checks via `tsc`; the CLI builds with `tsup`, which does not type-check — its
+   `npm test` runs `npm run typecheck` first, and you can run `npm run typecheck` alone while iterating.
 4. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`,
    `chore:`, `docs:`…). Release notes are auto-generated from commit messages.
 5. Adding/changing an MCP tool? Register it in `registers/<domain>.ts` (a **new** register
@@ -64,7 +64,9 @@ npm run build && npm test
    manifest is the single source of truth (see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8).
    The full step list — including the README count columns and when to re-run `npm run plugin:sync` — is
    [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
-6. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run
+6. User-visible change? Add a bullet to `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) (tool additions,
+   renames, and removals go under its `Tool changes` heading).
+7. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run
    `npm run plugin:sync` and commit the regenerated `plugins/mimi-seed/` — root `npm test` rejects drift.
 
 ## Releasing (maintainers)
@@ -77,6 +79,11 @@ npm run version:set 0.9.0     # or: patch | minor | major
 npm run version:check         # fails if anything drifted (also enforced by a test)
 git commit -am "feat(cli): ..." && git push origin main
 ```
+
+In the same release commit, rename the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) to the new
+version and date and open a fresh empty `[Unreleased]` above it. Between releases, every PR with a user-visible
+change adds its bullet to `[Unreleased]`; an MCP tool that is added, renamed, or removed also goes under
+`Tool changes` there, because a rename silently breaks prompts, skills, and `select:` batches that name the old tool.
 
 The four followers are `packages/cli`, `packages/mcp-server`, `.claude-plugin/plugin.json`, and
 `.codex-plugin/plugin.json`. They used to drift apart (0.7.0 / 0.8.1 / 0.4.1), which left nobody able

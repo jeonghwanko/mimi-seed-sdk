@@ -24,7 +24,7 @@ mimi-seed-sdk/
 |---|---|---|
 | npm name | `mimi-seed` | `@yoonion/mimi-seed-mcp` |
 | version | both follow the **root** `package.json` (`npm run version:set`) — never written down here | ← same |
-| build | **tsup** (esbuild bundle, **no type-check** — run `npx tsc --noEmit`) | **tsc** (plain `dist/`) |
+| build | **tsup** (esbuild bundle, **no type-check** — run `npm run typecheck`) | **tsc** (plain `dist/`) |
 | node | `.nvmrc` is the floor for both (currently 20); `engines.node` mirrors it | ← same |
 | role | local/CI orchestration + remote-MCP onboarding | the 150+-tool stdio MCP that hits Google/Apple APIs |
 | key deps | `@anthropic-ai/sdk`, `kleur`, `open` | `@modelcontextprotocol/sdk`, `googleapis`, `jose`, `@onesub/providers`, `zod`, `@anthropic-ai/sdk` |

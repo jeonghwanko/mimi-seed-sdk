@@ -65,7 +65,7 @@ before changing any assertion.
 The compiler is a guard too: `catalog<T>(ko, en: NoInfer<T>)` makes a **missing English key a build error**, and
 ESM/NodeNext makes a missing `.js` import specifier fail the published build ([[pitfalls]] §11). For the CLI the
 compiler only counts if you *run* it — `tsup` strips types without checking them, so `packages/cli`'s `npm test`
-runs `tsc --noEmit` first.
+runs `npm run typecheck` (`tsc --noEmit`) first.
 
 ESLint is the third static gate, wired into both packages' `npm test`. It carries **no formatting rules on
 purpose**: reformatting 27k lines would rewrite every file in one commit and destroy `git blame`, and in this

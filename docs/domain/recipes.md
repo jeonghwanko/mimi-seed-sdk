@@ -44,6 +44,9 @@
    until every registered tool appears in at least one batch. Add a new row when no existing task fits.
 7. **Test** it next to the behavior in `mcp-server/src/__tests__/`.
 8. If step 6 touched `docs/`: `npm run plugin:sync` from the repo root, and commit `plugins/mimi-seed/`.
+9. **Changelog** — add the tool under `Tool changes` in `[Unreleased]` of the root
+   [`CHANGELOG.md`](../../CHANGELOG.md) (added / renamed `old` → `new` / removed). A rename or removal breaks every
+   prompt, skill, and `select:` batch that still names the old tool, so it must be spelled out, not implied.
 
 **Guards:** `tool-manifest.test.ts` (server ↔ manifest) · `docs-drift.test.ts` (manifest ↔ catalog ↔ READMEs) ·
 `prompts-resources.test.ts` (agent-guide copy) · `npm run plugin:check`.
@@ -95,7 +98,8 @@ to a source entrypoint and `dist` ships) · `setup.test.ts` (never spawns a bloc
 **Guards:** the compiler (`catalog<T>(ko, en: NoInfer<T>)` — a missing English key fails the build) ·
 `i18n-coverage.test.ts` (a user-facing Hangul literal outside a `ko` catalog fails) · `deploy-args.test.ts`
 for `deploy` flag parsing.
-**Verify:** `npm run build && npm test` in `packages/cli`, plus `npx tsc --noEmit` — `tsup` does not type-check.
+**Verify:** `npm run build && npm test` in `packages/cli` — its `npm test` runs `npm run typecheck` first, because
+`tsup` does not type-check.
 
 ---
 
@@ -143,6 +147,9 @@ npm run version:set patch     # or minor | major | 0.14.0
 npm run version:check         # also enforced by version-sync.test.ts and plugin:check
 ```
 
+In the same commit, rename `[Unreleased]` in the root [`CHANGELOG.md`](../../CHANGELOG.md) to the new version and
+date, and open a fresh empty `[Unreleased]` above it.
+
 Then commit with a [Conventional Commit](https://www.conventionalcommits.org/) message — release notes are
 generated from it. CI publishes each package whose version is not yet on npm (idempotent, so version-less
 pushes are safe). Details and the rationale: [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).
@@ -156,7 +163,7 @@ dist-tags; stable versions alone update `latest`. Batch routine fixes before a s
 
 ```bash
 npm run build && npm test      # inside the package you changed
-npx tsc --noEmit               # packages/cli only — tsup does not type-check
+npm run typecheck              # packages/cli only — tsup does not type-check (its `npm test` runs this first)
 npm run plugin:check           # if you touched docs/, skills/, manifests, or versions
 npm test                       # root: plugin drift + both suites (the full gate)
 ```
