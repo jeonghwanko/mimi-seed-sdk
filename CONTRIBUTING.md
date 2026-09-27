@@ -85,7 +85,9 @@ to say which CLI matched which server; `version-sync.test.ts` now fails if they 
 One consequence of a single version: bumping it republishes **both** packages, even the one you didn't
 touch. That's the trade for never having to reason about cross-package compatibility.
 
-CI then, for each package whose `package.json` version is not yet on npm:
+CI then, once every test leg (Linux node 20/22, Windows node 22) and the repo guards are green, runs a single
+`publish` job that handles **mcp-server first, then cli** — if the mcp-server publish fails, cli is not
+published. For each package whose `package.json` version is not yet on npm it:
 - publishes to npm with **provenance** (signed via GitHub OIDC), and
 - creates a **GitHub Release** with auto-generated notes (`<package>-v<version>` tag).
 

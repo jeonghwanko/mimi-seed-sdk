@@ -74,16 +74,17 @@ the latter excludes `src/__tests__`, which had left the test files with **no typ
 
 ### Where each guard actually runs in CI
 
-`.github/workflows/ci.yml` has two jobs, and the split matters:
+`.github/workflows/ci.yml` has three jobs, and the split matters:
 
 | Job | Runs | Why separate |
 |---|---|---|
-| `repo-guards` | root `npm run plugin:check` on the `.nvmrc` version | the package jobs set `working-directory: packages/<pkg>` and therefore **never execute a root script**. No package suite covers `plugins/mimi-seed/` drift, so without this job the `plugin:sync` rule is enforced by nothing. |
-| `build-test` (matrix: `cli`/`mcp-server` × node 20/22) | `npm run build && npm test` | node **20** is the declared floor (`.nvmrc`, both `engines`); testing only 22 means nobody ever ran the floor. Publish is pinned to `matrix.node == 22` so two jobs never race the same package onto npm. |
+| `repo-guards` | root `npm run plugin:check` on the `.nvmrc` version, once (outside the OS matrix) | the package jobs set `working-directory: packages/<pkg>` and therefore **never execute a root script**. No package suite covers `plugins/mimi-seed/` drift, so without this job the `plugin:sync` rule is enforced by nothing. |
+| `build-test` (matrix: `cli`/`mcp-server` × node 20/22 on Linux, plus node 22 on Windows) | `npm run build && npm test` — **tests only, never publishes** | node **20** is the declared floor (`.nvmrc`, both `engines`); testing only 22 means nobody ever ran the floor. The Windows leg covers the `.cmd`-shim / `PATH` / path-separator code that a Linux runner never executes. |
+| `publish` (main push only) | `needs: [repo-guards, build-test]`; publishes **mcp-server first, then cli**, each skipped if its version is already on npm (`.github/scripts/publish-if-new.sh`) | one sequential job means a failed mcp-server publish stops the cli step — a cli whose pinned MCP bins don't exist on npm is broken on install. Every test leg must be green first. |
 
-`build-test` has `needs: repo-guards` on purpose. mcp-server's `prepublishOnly` re-checks the agent-guide sync,
-so a drifted commit that reaches the publish step fails **mid-release** — after `cli` may already be on npm.
-The gate belongs before the tests, not inside the publish.
+`build-test` has `needs: repo-guards` on purpose: a drifted commit is stopped before the tests, not by
+mcp-server's `prepublishOnly` in the middle of a release. The publish **trigger** lives only in the `publish`
+job's `if:` (plus `on:`); the script itself does not know why it was called.
 
 ## Behavior tests (the rest)
 
