@@ -168,7 +168,7 @@ describe('폐기 예정 별칭 이름이 안내 문구에 남지 않는다', () 
     expect(files.length).toBeGreaterThan(50);
   });
 
-  it.each(aliases)('%s', { timeout: 30_000 }, (alias) => {
+  it.each(aliases)('%s', (alias) => {
     const hits = files.flatMap((rel) =>
       linesOf()
         .get(rel)!
