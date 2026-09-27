@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialJson } from '#core/atomic-write.js';
 
 // Primary location under ~/.mimi-seed. Legacy ~/.preseed read as fallback
 // during the rebrand window so existing App Store Connect sessions don't

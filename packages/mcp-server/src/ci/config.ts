@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialJson } from '#core/atomic-write.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CI_CONFIG_PATH = path.join(CONFIG_DIR, 'ci.json');

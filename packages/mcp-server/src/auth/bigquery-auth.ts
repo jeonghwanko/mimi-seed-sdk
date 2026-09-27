@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getAuthenticatedClient } from './google-auth.js';
-import { writeCredentialFile } from '../lib/atomic-write.js';
+import { writeCredentialFile } from '#core/atomic-write.js';
 
 // BigQuery 전용 서비스 계정 키 저장 위치.
 // 서비스 계정 인증은 Google Workspace 의 재인증(reauth) 정책에서 면제되므로,

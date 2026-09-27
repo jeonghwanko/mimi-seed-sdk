@@ -7,7 +7,7 @@ import {
   manifestSocialProfile,
   type SocialPlatform,
 } from '#core/project-manifest.js';
-import { writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialJson } from '#core/atomic-write.js';
 
 export interface SocialConfigOptions {
   /** 명시하면 프로젝트 매니페스트 매핑보다 우선한다. */

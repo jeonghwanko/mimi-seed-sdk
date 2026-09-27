@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeCredentialFile, writeCredentialJson } from '../lib/atomic-write.js';
+import { writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
 import { resolveInsideDir } from '../lib/path-containment.js';
 import type { GeneratedKeystore } from './keystore.js';
 

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { writeCredentialJson } from "./lib/atomic-write.js";
+import { writeCredentialJson } from "#core/atomic-write.js";
 
 /**
  * @deprecated Jenkins 설정의 정본은 `~/.mimi-seed/jenkins.json` 이다 (`jenkins-config.ts`).

@@ -1,9 +1,9 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-// 구현은 lib/atomic-write.ts 로 승격됐다 — 같은 원자성 보장이 자격증명 writer 에도 필요했는데
+// 구현은 packages/core 의 atomic-write.ts 로 승격됐다 — 같은 원자성 보장이 자격증명 writer 에도 필요했는데
 // video/ 안에 갇혀 있어서 아무도 쓰지 못하고 있었다. video 쪽 호출부를 위해 이름만 재수출한다.
-export { writeJsonAtomic } from '../lib/atomic-write.js';
+export { writeJsonAtomic } from '#core/atomic-write.js';
 
 export function readJson(filePath: string, maxBytes = 20 * 1024 * 1024): unknown {
   try {

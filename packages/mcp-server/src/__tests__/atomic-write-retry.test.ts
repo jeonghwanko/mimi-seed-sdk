@@ -26,7 +26,7 @@ vi.mock('node:fs', async (original) => {
   return { ...actual, renameSync, default: { ...actual, renameSync } };
 });
 
-import { RENAME_RETRY_CODES, RENAME_RETRY_DELAYS_MS, renameWithRetry, writeFileAtomic } from '../lib/atomic-write.js';
+import { RENAME_RETRY_CODES, RENAME_RETRY_DELAYS_MS, renameWithRetry, writeFileAtomic } from '#core/atomic-write.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-rename-retry-'));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));

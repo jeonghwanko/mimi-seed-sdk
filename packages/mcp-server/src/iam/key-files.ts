@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeCredentialFile } from '../lib/atomic-write.js';
+import { writeCredentialFile } from '#core/atomic-write.js';
 import { resolveInsideDir } from '../lib/path-containment.js';
 
 /** 호출 시점에 계산한다 — 테스트가 홈 디렉터리를 바꿀 수 있어야 한다. */

@@ -11,7 +11,7 @@ import {
   writeCredentialJson,
   writeFileAtomic,
   writeJsonAtomic,
-} from '../lib/atomic-write.js';
+} from '#core/atomic-write.js';
 
 const srcRoot = fileURLToPath(new URL('../', import.meta.url));
 let tmp: string;
@@ -123,7 +123,7 @@ describe('자격증명 writer 가드', () => {
       return readdirSync(dir).flatMap((entry) => {
         const full = path.join(dir, entry);
         if (statSync(full).isDirectory()) {
-          return ['__tests__', 'lib', 'video'].includes(entry) ? [] : walk(full);
+          return ['__tests__', 'video'].includes(entry) ? [] : walk(full);
         }
         return full.endsWith('.ts') ? [full] : [];
       });

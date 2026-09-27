@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { catalog } from "./i18n.js";
 import { fetchWithTimeout } from "./lib/http.js";
-import { writeCredentialJson } from "./lib/atomic-write.js";
+import { writeCredentialJson } from "#core/atomic-write.js";
 
 const CI_CONFIG_PATH = path.join(os.homedir(), ".mimi-seed", "ci.json");
 

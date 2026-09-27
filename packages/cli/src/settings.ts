@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import { settingsPath, type Lang } from "#core/lang.js";
-import { writeJsonAtomic } from "./lib/atomic-write.js";
+import { writeJsonAtomic } from "#core/atomic-write.js";
 
 export interface Settings {
   lang?: Lang;

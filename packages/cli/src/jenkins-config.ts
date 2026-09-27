@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { writeCredentialJson } from "./lib/atomic-write.js";
+import { writeCredentialJson } from "#core/atomic-write.js";
 
 const CONFIG_DIR = path.join(os.homedir(), ".mimi-seed");
 const JENKINS_PATH = path.join(CONFIG_DIR, "jenkins.json");
