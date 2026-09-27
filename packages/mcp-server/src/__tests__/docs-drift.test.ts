@@ -143,8 +143,17 @@ describe('산문에 박힌 도구·도메인 개수', () => {
 // 폐기 예정 별칭은 한 마이너 릴리스 동안 **등록만** 유지한다. 코드 안내 문구·문서·스킬이 옛 이름을 계속
 // 가리키면 에이전트가 계속 옛 이름을 쓰고, 별칭을 지우는 날 그 안내가 전부 깨진다. 허용: manifest(별칭 등록
 // 자체), 테스트, 그리고 "deprecated" 를 적은 줄(CHANGELOG 식 안내 — 예: 카탈로그의 alias 표기).
-describe('폐기 예정 별칭 이름이 안내 문구에 남지 않는다', () => {
-  const aliases = Object.keys(manifest.deprecated ?? {});
+//
+// 제거된 도구는 더 엄격하다 — 어느 줄에도(“deprecated” 줄 포함) 남으면 안 되고 manifest 에도 없어야 한다.
+// 제거 직후 한 릴리스 동안 여기 두어, 스킬·가이드·프롬프트가 옛 이름을 되살리는 회귀를 막는다.
+// 다음 릴리스에서 비워도 된다 (이력은 CHANGELOG 가 가진다 — CHANGELOG 는 검사 대상이 아니다).
+const REMOVED_TOOLS: Record<string, string> = {
+  // 0.21.0 — 0.20.0 에서 폐기 예정 별칭이 된 두 도구.
+  playstore_update_latest_release_notes: 'playstore_update_release_notes',
+  appstore_attach_latest_build: 'appstore_attach_build',
+};
+
+describe('폐기 예정 별칭·제거된 도구 이름이 안내 문구에 남지 않는다', () => {
   const repo = new URL('../../../../', import.meta.url);
   const walk = (rel: string, ext: RegExp): string[] =>
     (readdirSync(new URL(rel, repo), { recursive: true }) as string[])
@@ -155,27 +164,40 @@ describe('폐기 예정 별칭 이름이 안내 문구에 남지 않는다', () 
     ...walk('packages/cli/src/', /\.ts$/),
     ...walk('docs/', /\.md$/),
     ...walk('skills/', /\.md$/),
-    'README.md', 'README.ko.md', 'packages/mcp-server/README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md',
+    'README.md', 'README.ko.md', 'packages/mcp-server/README.md', 'packages/cli/README.md',
+    'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md', 'packages/mcp-server/AGENTS.md', 'packages/cli/AGENTS.md',
   ];
 
-  // 파일은 한 번만 읽어 별칭 케이스끼리 공유한다. 예전엔 별칭마다 수백 개 파일을 다시 읽어서, 첫 케이스가
+  // 파일은 한 번만 읽어 케이스끼리 공유한다. 예전엔 이름마다 수백 개 파일을 다시 읽어서, 첫 케이스가
   // 콜드 디스크 비용을 떠안고 부하 걸린 러너에서 5초 기본 타임아웃을 넘겼다 (15회 중 3회 실패 재현).
   let lines: Map<string, string[]> | undefined;
   const linesOf = () =>
     (lines ??= new Map(files.map((rel) => [rel, readRepoFile(rel).split(/\r?\n/)])));
-
-  it('별칭이 있을 때만 의미가 있다', () => {
-    expect(files.length).toBeGreaterThan(50);
-  });
-
-  it.each(aliases)('%s', (alias) => {
-    const hits = files.flatMap((rel) =>
+  const hitsOf = (name: string, allow: (line: string) => boolean) =>
+    files.flatMap((rel) =>
       linesOf()
         .get(rel)!
         .map((line, i) => ({ line, at: `${rel}:${i + 1}` }))
-        .filter(({ line }) => line.includes(alias) && !/deprecated/i.test(line))
+        .filter(({ line }) => line.includes(name) && !allow(line))
         .map(({ at }) => at),
     );
-    expect(hits, `${alias} 대신 정식 이름(${manifest.deprecated![alias]})을 쓰세요: ${hits.join(', ')}`).toEqual([]);
+
+  it('검사 대상 파일을 실제로 찾는다', () => {
+    expect(files.length).toBeGreaterThan(50);
+  });
+
+  const cases: Array<[string, 'deprecated' | 'removed', string]> = [
+    ...Object.entries(manifest.deprecated ?? {}).map(([old, next]) => [old, 'deprecated', next] as [string, 'deprecated', string]),
+    ...Object.entries(REMOVED_TOOLS).map(([old, next]) => [old, 'removed', next] as [string, 'removed', string]),
+  ];
+
+  it.each(cases)('%s (%s)', (name, status, replacement) => {
+    if (status === 'removed') {
+      const owners = Object.entries(manifest.domains).filter(([, d]) => d.tools.includes(name)).map(([id]) => id);
+      expect(owners, `제거된 도구 ${name} 가 manifest 에 다시 등록됐습니다 (${owners.join(', ')})`).toEqual([]);
+      expect(manifest.deprecated ?? {}).not.toHaveProperty(name);
+    }
+    const hits = hitsOf(name, (line) => status === 'deprecated' && /deprecated/i.test(line));
+    expect(hits, `${name} 대신 정식 이름(${replacement})을 쓰세요: ${hits.join(', ')}`).toEqual([]);
   });
 });

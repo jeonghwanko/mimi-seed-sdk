@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary) + 도구 분류(write·destructive·local·idempotent → MCP annotations·confirm 가드) + toolset 그룹·폐기 별칭의 SSOT (src/lib/tool-registrar.ts 가 읽는다). src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
-  "total": 244,
+  "total": 242,
   "alwaysOn": [
     "auth",
     "checks"
@@ -53,10 +53,7 @@
       "android"
     ]
   },
-  "deprecated": {
-    "playstore_update_latest_release_notes": "playstore_update_release_notes",
-    "appstore_attach_latest_build": "appstore_attach_build"
-  },
+  "deprecated": {},
   "domains": {
     "admob": {
       "label": "AdMob",
@@ -130,7 +127,6 @@
         "appstore_list_versions",
         "appstore_create_version",
         "appstore_attach_build",
-        "appstore_attach_latest_build",
         "appstore_get_metadata",
         "appstore_update_localization",
         "appstore_list_screenshots",
@@ -192,7 +188,6 @@
       "write": [
         "appstore_create_version",
         "appstore_attach_build",
-        "appstore_attach_latest_build",
         "appstore_update_localization",
         "appstore_upload_screenshot",
         "appstore_update_whats_new",
@@ -613,7 +608,6 @@
         "playstore_delete_all_images",
         "playstore_replace_images",
         "playstore_update_release_notes",
-        "playstore_update_latest_release_notes",
         "playstore_list_reviews",
         "playstore_reply_review",
         "playstore_list_inapp_products",
@@ -647,7 +641,6 @@
         "playstore_update_listing",
         "playstore_upload_image",
         "playstore_update_release_notes",
-        "playstore_update_latest_release_notes",
         "playstore_create_onetime_product",
         "playstore_create_subscription",
         "playstore_register_service_account",
@@ -683,7 +676,6 @@
         "playstore_update_details",
         "playstore_update_listing",
         "playstore_update_release_notes",
-        "playstore_update_latest_release_notes",
         "playstore_update_product_listing",
         "playstore_update_subscription_listing",
         "playstore_update_product_state",

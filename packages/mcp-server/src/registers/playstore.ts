@@ -269,7 +269,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         return textResult(`✅ ${packageName} ${track} v${versionCode} ${language} 노트 반영\n\n${JSON.stringify(result, null, 2)}`);
       }
 
-      // versionCode 생략 = 트랙 최신 릴리스 (폐기 예정 별칭의 옛 경로·응답 모양 그대로).
+      // versionCode 생략 = 트랙 최신 릴리스 (0.20.0 에서 합친 옛 latest 전용 도구의 경로·응답 모양 그대로).
       const primaryResult = await playstore.updateLatestReleaseNotes(auth, packageName, track, language, text);
       const lines: string[] = [
         `✅ ${packageName} ${track} (versionCodes=${JSON.stringify(primaryResult.updatedVersionCodes)}) ${language} 노트 반영`,

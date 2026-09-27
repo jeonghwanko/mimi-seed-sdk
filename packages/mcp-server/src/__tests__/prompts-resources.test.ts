@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { readToolManifest } from '../lib/package-root.js';
+import { readToolManifest, type ToolManifest } from '../lib/package-root.js';
+import { resolveToolsets } from '../lib/toolsets.js';
+import { buildToolCatalog } from '../resources.js';
 import { withClient } from './helpers.js';
 
 // 프롬프트/리소스는 tool-manifest 의 대상이 아니므로 여기서 별도로 스모크한다.
@@ -106,7 +108,6 @@ describe('prompts & resources (boot smoke test)', () => {
     }
     const playstore = catalog.domains.find((d) => d.id === 'playstore')!;
     expect(playstore.destructive).toContain('playstore_submit_release');
-    expect(playstore.tools).not.toContain('playstore_update_latest_release_notes');
   });
 
   it('tools/catalog 는 MIMI_SEED_TOOLSETS 로 켜진 도구만 서빙한다', async () => {
@@ -132,7 +133,35 @@ describe('prompts & resources (boot smoke test)', () => {
 
     const excluded = await readCatalog({ MIMI_SEED_TOOLSETS_EXCLUDE: 'playstore' });
     expectMatchesRegistered(excluded.catalog, excluded.registered);
-    expect(excluded.catalog.deprecated).not.toHaveProperty('playstore_update_latest_release_notes');
+    expect(excluded.catalog.domains.map((d) => d.id)).not.toContain('playstore');
+  });
+
+  // 실제 manifest 에 폐기 별칭이 없는 릴리스에도 별칭 처리 규칙이 살아 있게 가짜 manifest 로 본다.
+  it('buildToolCatalog — 폐기 별칭은 tools 가 아니라 deprecated 에 싣고, 꺼진 도메인의 별칭은 뺀다', () => {
+    const fixture: ToolManifest = {
+      total: 3,
+      alwaysOn: [],
+      deprecated: { store_old_write: 'store_write' },
+      domains: {
+        store: {
+          label: 'Store', credential: '-', summary: '-',
+          tools: ['store_write', 'store_old_write'],
+          write: ['store_write', 'store_old_write'],
+        },
+        other: { label: 'Other', credential: '-', summary: '-', tools: ['other_read'] },
+      },
+    };
+    const all = buildToolCatalog(fixture, resolveToolsets({}, fixture));
+    expect(all.total).toBe(3); // = tools/list 길이 (별칭 포함)
+    expect(all.deprecated).toEqual({ store_old_write: 'store_write' });
+    const store = all.domains.find((d) => d.id === 'store')!;
+    expect(store.tools).toEqual(['store_write']);
+    expect(store.write).toEqual(['store_write']);
+    expect(store.toolCount).toBe(1);
+
+    const off = buildToolCatalog(fixture, resolveToolsets({ MIMI_SEED_TOOLSETS_EXCLUDE: 'store' }, fixture));
+    expect(off.deprecated).toEqual({});
+    expect(off.domains.map((d) => d.id)).toEqual(['other']);
   });
 
   it('온보딩 표면이 이름을 대는 도구가 전부 manifest 에 실존한다 (리네임 드리프트 가드)', async () => {

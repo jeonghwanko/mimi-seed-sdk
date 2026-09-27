@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**244 tools across 22 domains** — per-domain counts below.
+**242 tools across 22 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -27,8 +27,8 @@
 <!-- generated:catalog-counts:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 64 |
-| Google Play | `registers/playstore.ts` | 39 |
+| App Store Connect | `registers/appstore.ts` | 63 |
+| Google Play | `registers/playstore.ts` | 38 |
 | Firebase | `registers/firebase.ts` | 21 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub Actions / GitLab) | `registers/ci.ts` | 6 |
@@ -49,11 +49,11 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **22 modules** | **244** |
+| **Total** | **22 modules** | **242** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## Google Play — `registers/playstore.ts` (39) · impl `playstore/*.ts`
+## Google Play — `registers/playstore.ts` (38) · impl `playstore/*.ts`
 
 - Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
@@ -64,7 +64,6 @@
   `playstore_update_details` (developer contact + default language — `edits.details.patch`, distinct from the store listing) ·
   `playstore_update_listing` · `playstore_upload_image` ·
   `playstore_update_release_notes` (versionCode 생략 = 트랙 최신 릴리스, `syncTracks` 지원) ·
-  `playstore_update_latest_release_notes` (**deprecated alias** → `playstore_update_release_notes`) ·
   `playstore_create_onetime_product` · `playstore_create_subscription` · `playstore_register_service_account` ·
   `playstore_update_product_listing` · `playstore_update_subscription_listing` ·
   `playstore_update_product_state` (DRAFT ↔ 활성) · `playstore_update_product` ·
@@ -80,7 +79,7 @@
   `purchaseOptions` 포함 — 구매 옵션 활성화 토글의 입력) are **not** duplicates; both stay.
 
 <!-- generated:catalog-domain:appstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## App Store Connect — `registers/appstore.ts` (64) · impl `appstore/*.ts`
+## App Store Connect — `registers/appstore.ts` (63) · impl `appstore/*.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
@@ -96,11 +95,11 @@
 - **W** TestFlight: `appstore_update_beta_review_detail` · `appstore_update_beta_test_info` ·
   `appstore_update_whats_to_test`
 - **W** `appstore_create_version` · `appstore_attach_build` (buildId 생략 = 최신 VALID 빌드) ·
-  `appstore_attach_latest_build` (**deprecated alias** → `appstore_attach_build`) · `appstore_update_localization` ·
-  `appstore_upload_screenshot` · `appstore_update_whats_new` · `appstore_update_review_notes` ·
-  `appstore_update_app_info_localization` · `appstore_create_app_info_localization` ·
-  `appstore_create_inapp_purchase` · `appstore_create_subscription` · `appstore_update_product_review_note` ·
-  `appstore_update_product_localization` · `appstore_upload_product_review_screenshot` · `appstore_update_product` ·
+  `appstore_update_localization` · `appstore_upload_screenshot` · `appstore_update_whats_new` ·
+  `appstore_update_review_notes` · `appstore_update_app_info_localization` ·
+  `appstore_create_app_info_localization` · `appstore_create_inapp_purchase` · `appstore_create_subscription` ·
+  `appstore_update_product_review_note` · `appstore_update_product_localization` ·
+  `appstore_upload_product_review_screenshot` · `appstore_update_product` ·
   `appstore_add_version_to_review_submission` · `appstore_update_version_string` ·
   `appstore_update_release_type` (MANUAL / AFTER_APPROVAL / SCHEDULED 전환) ·
   `appstore_update_age_rating` (심사 제출 전 필수) · `appstore_declare_encryption` (수출 규정 신고)
