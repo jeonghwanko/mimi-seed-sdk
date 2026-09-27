@@ -39,7 +39,7 @@ vi.mock('node:http', () => ({ default: {
   createServer: (callback: unknown) => {
     h.callback = callback;
     const server = { listening: false, on: vi.fn(), close: () => { server.listening = false; },
-      listen: (_port: number, ready: () => void) => { server.listening = true; ready(); } };
+      listen: () => { server.listening = true; } };
     return server;
   },
 } }));

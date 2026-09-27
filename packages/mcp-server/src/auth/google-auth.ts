@@ -153,8 +153,16 @@ function saveTokens(tokens: StoredTokens, profile?: string, credentials?: OAuthC
   }
 }
 
+/** OAuth 루프백 콜백. redirect URI 는 Google 콘솔에 등록된 값이라 호스트명을 바꾸면 안 된다. */
+export const OAUTH_CALLBACK_PORT = 9876;
+export const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_CALLBACK_PORT}/callback`;
+/** `localhost` 가 풀릴 수 있는 두 루프백 주소 — 외부 인터페이스에는 열지 않는다. */
+export const OAUTH_CALLBACK_HOSTS = ['127.0.0.1', '::1'] as const;
+/** ::1 을 못 여는 머신(IPv6 비활성)에서 나는 에러 — 무시하고 127.0.0.1 만 쓴다. */
+const IPV6_UNAVAILABLE_CODES = new Set(['EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EINVAL']);
+
 export function createOAuth2Client(clientId: string, clientSecret: string) {
-  return new google.auth.OAuth2(clientId, clientSecret, 'http://localhost:9876/callback');
+  return new google.auth.OAuth2(clientId, clientSecret, OAUTH_REDIRECT_URI);
 }
 
 /**
@@ -245,7 +253,7 @@ export function startAuth(
     // 핸들러 전체가 try/catch 로 감싸여 있고 모든 경로가 응답 후 rejectAuth 로 끝난다 —
     // createServer 가 void 를 기대하지만 여기서 새어 나갈 rejection 은 없다.
     // eslint-disable-next-line @typescript-eslint/no-misused-promises
-    const server = http.createServer(async (req, res) => {
+    const handler: http.RequestListener = async (req, res) => {
       try {
         const url = new URL(req.url!, `http://localhost:9876`);
         if (url.pathname !== '/callback') {
@@ -344,7 +352,22 @@ export function startAuth(
         try { server.close(); } catch { /* noop */ }
         rejectAuth(err);
       }
-    });
+    };
+
+    // 루프백에만 묶는다. 예전엔 listen(9876) 이 모든 인터페이스(::)에 열려서 같은 네트워크의
+    // 다른 기기가 콜백 포트에 닿을 수 있었다. redirect URI 가 `http://localhost:9876` 이고
+    // 브라우저는 localhost 를 ::1 로 먼저 풀 수도, 127.0.0.1 로 풀 수도 있으므로 둘 다 연다.
+    const httpServers = OAUTH_CALLBACK_HOSTS.map(() => http.createServer(handler));
+    const server = {
+      close() {
+        for (const s of httpServers) {
+          try { s.close(); } catch { /* noop */ }
+        }
+      },
+      get listening() {
+        return httpServers.some((s) => s.listening);
+      },
+    };
 
     cancelActiveAuth = () => {
       if (attempt.status !== 'pending') return;
@@ -352,12 +375,15 @@ export function startAuth(
       rejectAuth(new Error('Login replaced by a new authentication request.'));
     };
 
-    server.on('error', (err) => {
-      rejectAuth(err);
-    });
-
-    server.listen(9876, () => {
-      // Callback server is ready.
+    httpServers.forEach((s, i) => {
+      const host = OAUTH_CALLBACK_HOSTS[i];
+      s.on('error', (err: NodeJS.ErrnoException) => {
+        // IPv6 가 꺼진 머신에는 ::1 이 없다 — 그럴 땐 127.0.0.1 하나로 충분하다.
+        if (host === '::1' && IPV6_UNAVAILABLE_CODES.has(err.code ?? '')) return;
+        server.close();
+        rejectAuth(err);
+      });
+      s.listen(OAUTH_CALLBACK_PORT, host);
     });
 
     const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
