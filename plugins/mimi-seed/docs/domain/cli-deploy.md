@@ -70,6 +70,12 @@ because the *validation* (probe the server, call the API, refuse to save a bad t
 writer across the two packages is what produced the Jenkins dual-config bug ([[pitfalls]]). The one exception is
 `ci.json`, which the CLI both writes and reads at deploy time.
 
+`runMcpBin` (`mcp-bin.ts`) prefers a bin already on `PATH` (a global install or an `npm link`ed checkout). Otherwise
+it runs `npx -y @yoonion/mimi-seed-mcp@<the CLI's own version>` — pinned, with the version inlined from
+`package.json` at build time. Both packages ship under one version, so the matching server is always that exact
+version; an unpinned spec would pair an old or half-released CLI with whatever npm `latest` is.
+`MIMI_SEED_FORCE_NPX` (developer switch) still forces `@latest`.
+
 Facebook, Instagram, and Threads support named local profiles. `mimi-seed auth facebook|instagram|threads
 --profile <id>` forwards the profile to the owning MCP setup binary. Without an explicit flag, the binary reads the current project's
 `.mimi-seed.json.socialProfiles` mapping; without a mapping it preserves the legacy single-file behavior.
