@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
-import { mcpCall } from "./mcp-client.js";
+import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
 import { CLI_AI_MODEL } from "./ai-model.js";
 
@@ -268,7 +268,7 @@ export async function cmdNotes(argv: string[]): Promise<void> {
       platform: "android",
       locale,
       text,
-    });
+    }, { timeoutMs: MCP_WRITE_TIMEOUT_MS });
     process.stdout.write(
       r.isError ? kleur.red(M().applyFailed(locale, r.text)) : kleur.green(M().applied(locale)),
     );

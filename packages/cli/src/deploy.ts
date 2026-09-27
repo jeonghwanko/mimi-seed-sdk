@@ -10,7 +10,7 @@ import { getDeployRun, updateDeployRun, type DeployRunFailureReason } from "./de
 import { loadJenkinsConfig, migrateLegacyJenkins, type JenkinsConfig } from "./jenkins-config.js";
 import { runMcpBin } from "./mcp-bin.js";
 import { resolveProjectJenkins, jenkinsBase, jenkinsJobPath, jenkinsBuildParameters } from "./jenkins-project.js";
-import { fetchWithTimeout, HTTP_STREAM_TIMEOUT_MS } from "./lib/http.js";
+import { fetchWithTimeout, HTTP_STREAM_TIMEOUT_MS, readBodyWithTimeout } from "./lib/http.js";
 import {
   loadCiProviderConfig,
   saveCiProviderConfig,
@@ -348,7 +348,8 @@ async function streamDeploy(webBase: string, token: string, appId: string, body:
 
   let linkPrinted = linkAlreadyPrinted;
   try {
-    await consumeDeployStream(reader, (event) => {
+    // 스트림 도중 상한이 지나면 reader.read() 가 날것의 AbortError 로 끊긴다 — 안내 메시지로 바꾼다.
+    await readBodyWithTimeout(`${webBase}/api/deploy`, HTTP_STREAM_TIMEOUT_MS, () => consumeDeployStream(reader, (event) => {
       if (event.jobId && !linkPrinted) {
         const link = new URL(`/apps/${encodeURIComponent(appId)}`, webBase);
         link.searchParams.set("deployment", event.jobId);
@@ -360,7 +361,7 @@ async function streamDeploy(webBase: string, token: string, appId: string, body:
         event.status === "failed" ? kleur.red :
         event.status === "skipped" ? kleur.yellow : kleur.dim;
       log(`  ${icon} ${color(event.message)}`);
-    });
+    }));
   } catch (error) {
     if (error instanceof DeployStreamError) {
       if (error.reason === "malformed") throw new Error(M().malformedSse, { cause: error });

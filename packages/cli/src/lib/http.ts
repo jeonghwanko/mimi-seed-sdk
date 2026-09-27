@@ -55,6 +55,43 @@ function isTimeoutAbort(error: unknown): boolean {
 }
 
 /**
+ * 본문을 읽다가 끊긴 중단인가 (TimeoutError **또는** AbortError, 한 겹 cause 포함).
+ *
+ * fetchWithTimeout 의 signal 은 응답 헤더 뒤에도 본문을 다 읽을 때까지 살아 있다. 그 사이에
+ * 상한이 지나면 `reader.read()` / `res.text()` 는 런타임에 따라 TimeoutError 가 아니라
+ * AbortError 로 끊긴다. 호출부가 signal 을 따로 넘기지 않았다면 그 중단의 주인은 우리 타이머뿐이다.
+ */
+function isBodyAbort(error: unknown): boolean {
+  const named = (e: unknown) => {
+    const name = (e as { name?: string } | null)?.name;
+    return name === "TimeoutError" || name === "AbortError";
+  };
+  return named(error) || named((error as { cause?: unknown } | null)?.cause);
+}
+
+function timeoutError(input: string | URL, timeoutMs: number, cause: unknown): Error {
+  return new Error(M().timedOut(endpointLabel(input), Math.max(1, Math.round(timeoutMs / 1000))), { cause });
+}
+
+/**
+ * fetchWithTimeout 으로 받은 응답의 **본문 읽기**를 감싼다 — 스트림 도중에 상한이 지나도 날것의
+ * AbortError 대신 fetch 단계와 같은 안내 메시지를 낸다. (SSE 배포 스트림, 원격 MCP 응답.)
+ * `input` / `timeoutMs` 는 그 fetch 에 준 값 그대로.
+ */
+export async function readBodyWithTimeout<T>(
+  input: string | URL,
+  timeoutMs: number,
+  read: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isBodyAbort(error)) throw timeoutError(input, timeoutMs, error);
+    throw error;
+  }
+}
+
+/**
  * 타임아웃이 붙은 `fetch`.
  *
  * 호출부가 `init.signal` 을 넘기면 그걸 그대로 쓴다(취소 주체는 하나여야 한다 — Node 20.0 에는
@@ -70,11 +107,7 @@ export async function fetchWithTimeout(
   try {
     return await fetch(input, { ...init, signal });
   } catch (error) {
-    if (isTimeoutAbort(error)) {
-      throw new Error(M().timedOut(endpointLabel(input), Math.max(1, Math.round(timeoutMs / 1000))), {
-        cause: error,
-      });
-    }
+    if (isTimeoutAbort(error)) throw timeoutError(input, timeoutMs, error);
     throw error;
   }
 }

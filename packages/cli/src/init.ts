@@ -8,7 +8,7 @@ import kleur from "kleur";
 import open from "open";
 import { detectHints, hasAnyProjectSignal } from "./detect.js";
 import { awaitHandshake } from "./handshake.js";
-import { mcpCall } from "./mcp-client.js";
+import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
 import { writeConfig, getEffectiveConfig, CONFIG_LOCATION, type MimiSeedConfig } from "./config.js";
 import { cmdAuth } from "./auth.js";
 import { printMcpSetup } from "./mcp-config.js";
@@ -129,7 +129,7 @@ export async function cmdInit(args: string[]): Promise<void> {
     if (cfg && hints.length > 0) {
       log(kleur.dim(M().ciMode));
       const payload = hints.map((h) => ({ name: h.name, packageName: h.packageName, bundleId: h.bundleId }));
-      const result = await mcpCall(cfg.endpoint, cfg.token, "sync_apps", { hints: payload });
+      const result = await mcpCall(cfg.endpoint, cfg.token, "sync_apps", { hints: payload }, { timeoutMs: MCP_WRITE_TIMEOUT_MS });
       if (result.isError) {
         log(kleur.red(M().syncFailed(result.text)));
       } else {
@@ -178,7 +178,7 @@ export async function cmdInit(args: string[]): Promise<void> {
   if (hints.length > 0) {
     log(M().registering);
     const payload = hints.map((h) => ({ name: h.name, packageName: h.packageName, bundleId: h.bundleId }));
-    const result = await mcpCall(cfg.endpoint, cfg.token, "sync_apps", { hints: payload });
+    const result = await mcpCall(cfg.endpoint, cfg.token, "sync_apps", { hints: payload }, { timeoutMs: MCP_WRITE_TIMEOUT_MS });
     if (result.isError) {
       log(kleur.red(M().syncFailed(result.text)));
     } else {
