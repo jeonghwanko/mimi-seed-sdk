@@ -42,7 +42,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Dependencies: `@modelcontextprotocol/sdk` 1.30, `googleapis` 178.0 (the last release that still supports Node
   20), `@anthropic-ai/sdk` 0.128 (both packages), `jose` 6, and `open` 11 (both packages). The Node floor stays
   at 20 and the tool list the MCP server exposes is unchanged apart from `jenkins_upload_playstore_sa` (see
-  `Tool changes`).
+  `Tool changes`). With the MCP SDK update, an invalid tool argument is reported as readable lines (for example
+  `… at packageName`) instead of the raw zod issue JSON; the `-32602` error code and `isError` are unchanged.
 - Releases publish only on a `v*` tag push (the tag must equal the root version and point at a commit on `main`);
   pushing to `main` runs tests only. Both packages publish from one job that runs only after every test leg
   passes, mcp-server first, so a failed mcp-server publish stops the cli publish instead of leaving a lone cli
