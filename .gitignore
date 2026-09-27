@@ -16,3 +16,6 @@ artifacts/
 
 # vitest 커버리지 리포트 (로컬 진단용)
 coverage/
+
+# Local generated output (Release Doctor reports, rendered media, scratch exports)
+/output/
