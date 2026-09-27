@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
@@ -6,7 +6,7 @@ import * as jobs from '../jenkins/jobs.js';
 import { textResult } from '../lib/mcp-response.js';
 import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from '../android/keystore-store.js';
 
-export function registerJenkinsTools(server: McpServer) {
+export function registerJenkinsTools(server: ToolRegistrar) {
   // ── 0. 상태 확인 (항상 첫 번째로 호출) ─────────────────────────────────────
   server.tool(
     'jenkins_status',

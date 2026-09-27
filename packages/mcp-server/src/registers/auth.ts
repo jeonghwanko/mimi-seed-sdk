@@ -1,6 +1,6 @@
 import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getGoogleAuthAttempt } from '../auth/google-auth.js';
 import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
 import { getMcpOAuthClient } from '../auth/constants.js';
@@ -35,6 +35,7 @@ import {
   type ManifestService,
 } from '../lib/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
+import { describeToolsets } from '../lib/toolsets.js';
 
 /**
  * tokens.json mtime → "Nd Hh ago" 형식 문자열 + 재인증 권고.
@@ -135,7 +136,7 @@ function renderManifestLine(
   return `❌ ${label} — 미설정${detailSuffix}\n     → ${fix}${noteLine}`;
 }
 
-export function registerAuthTools(server: McpServer) {
+export function registerAuthTools(server: ToolRegistrar) {
   // ── 전체 연결 상태 진단 ────────────────────────────────────────────────────
   server.tool(
     'mimi_seed_status',
@@ -149,6 +150,8 @@ export function registerAuthTools(server: McpServer) {
     async () => {
       const lines: string[] = [
         `🌱 Mimi Seed 연결 상태 — local-stdio (@yoonion/mimi-seed-mcp v${PKG_VERSION})`,
+        // 도메인을 꺼 둔 서버에서 "도구가 없다" 를 연결 문제로 오해하지 않게 켜진 toolset 을 밝힌다.
+        `🧰 Toolsets: ${describeToolsets(server.toolsets, server.manifest)}`,
         '',
       ];
 

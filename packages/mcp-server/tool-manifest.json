@@ -1,6 +1,44 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary)의 SSOT. src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
   "total": 244,
+  "alwaysOn": [
+    "auth",
+    "checks"
+  ],
+  "toolsets": {
+    "store": [
+      "playstore",
+      "appstore",
+      "android",
+      "ai"
+    ],
+    "google": [
+      "firebase",
+      "admob",
+      "iam",
+      "billing",
+      "bigquery",
+      "ga4",
+      "gsc",
+      "googleads"
+    ],
+    "social": [
+      "facebook",
+      "instagram",
+      "threads",
+      "tiktok",
+      "youtube"
+    ],
+    "media": [
+      "video",
+      "youtube"
+    ],
+    "build": [
+      "ci",
+      "jenkins",
+      "android"
+    ]
+  },
   "domains": {
     "admob": {
       "label": "AdMob",
@@ -14,7 +52,14 @@
         "admob_get_report",
         "admob_create_app",
         "admob_create_ad_unit"
-      ]
+      ],
+      "write": [
+        "admob_create_app",
+        "admob_create_ad_unit"
+      ],
+      "destructive": [],
+      "local": [],
+      "idempotent": []
     },
     "ai": {
       "label": "AI 생성",
@@ -23,7 +68,11 @@
       "tools": [
         "generate_release_notes_from_commits",
         "generate_review_reply"
-      ]
+      ],
+      "write": [],
+      "destructive": [],
+      "local": [],
+      "idempotent": []
     },
     "android": {
       "label": "Android 서명",
@@ -32,6 +81,17 @@
       "tools": [
         "android_signing_setup",
         "android_generate_keystore",
+        "jenkins_upload_playstore_sa"
+      ],
+      "write": [
+        "android_generate_keystore",
+        "jenkins_upload_playstore_sa"
+      ],
+      "destructive": [],
+      "local": [
+        "android_generate_keystore"
+      ],
+      "idempotent": [
         "jenkins_upload_playstore_sa"
       ]
     },
@@ -104,6 +164,69 @@
         "appstore_get_sales_report",
         "appstore_get_weekly_insight",
         "appstore_get_finance_report"
+      ],
+      "write": [
+        "appstore_create_version",
+        "appstore_attach_build",
+        "appstore_attach_latest_build",
+        "appstore_update_localization",
+        "appstore_upload_screenshot",
+        "appstore_update_whats_new",
+        "appstore_update_review_notes",
+        "appstore_update_app_info_localization",
+        "appstore_create_app_info_localization",
+        "appstore_create_inapp_purchase",
+        "appstore_create_subscription",
+        "appstore_update_product_review_note",
+        "appstore_update_product_localization",
+        "appstore_upload_product_review_screenshot",
+        "appstore_update_product",
+        "appstore_add_version_to_review_submission",
+        "appstore_update_version_string",
+        "appstore_update_release_type",
+        "appstore_update_age_rating",
+        "appstore_declare_encryption",
+        "appstore_update_beta_review_detail",
+        "appstore_update_beta_test_info",
+        "appstore_update_whats_to_test",
+        "appstore_upload_preview",
+        "appstore_get_weekly_insight"
+      ],
+      "destructive": [
+        "appstore_reply_review",
+        "appstore_add_product_to_review",
+        "appstore_delete_product",
+        "appstore_submit_for_review",
+        "appstore_remove_review_submission_item",
+        "appstore_cancel_review",
+        "appstore_release_version",
+        "appstore_phased_release",
+        "appstore_set_territory_availability",
+        "appstore_submit_beta_review",
+        "appstore_set_beta_group_build",
+        "appstore_add_beta_testers",
+        "appstore_notify_beta_testers",
+        "appstore_delete_preview",
+        "appstore_delete_screenshot",
+        "appstore_delete_screenshot_set"
+      ],
+      "local": [],
+      "idempotent": [
+        "appstore_attach_build",
+        "appstore_attach_latest_build",
+        "appstore_update_localization",
+        "appstore_update_whats_new",
+        "appstore_update_review_notes",
+        "appstore_update_app_info_localization",
+        "appstore_update_product_review_note",
+        "appstore_update_product_localization",
+        "appstore_update_product",
+        "appstore_update_version_string",
+        "appstore_update_release_type",
+        "appstore_update_age_rating",
+        "appstore_update_beta_review_detail",
+        "appstore_update_beta_test_info",
+        "appstore_update_whats_to_test"
       ]
     },
     "auth": {
@@ -115,7 +238,14 @@
         "mimi_seed_auth_start",
         "mimi_seed_auth_status",
         "mimi_seed_remote_sync_credentials"
-      ]
+      ],
+      "write": [
+        "mimi_seed_auth_start",
+        "mimi_seed_remote_sync_credentials"
+      ],
+      "destructive": [],
+      "local": [],
+      "idempotent": []
     },
     "bigquery": {
       "label": "BigQuery",
@@ -127,7 +257,13 @@
         "bigquery_list_tables",
         "bigquery_get_table_schema",
         "bigquery_auth_status"
-      ]
+      ],
+      "write": [],
+      "destructive": [],
+      "local": [
+        "bigquery_auth_status"
+      ],
+      "idempotent": []
     },
     "billing": {
       "label": "GCP Billing",
@@ -138,7 +274,13 @@
         "gcp_list_billing_projects",
         "gcp_list_budgets",
         "gcp_create_budget"
-      ]
+      ],
+      "write": [
+        "gcp_create_budget"
+      ],
+      "destructive": [],
+      "local": [],
+      "idempotent": []
     },
     "checks": {
       "label": "출시 점검",
@@ -150,7 +292,13 @@
         "android_check_billing_compliance",
         "screenshot_validate",
         "release_status"
-      ]
+      ],
+      "write": [],
+      "destructive": [],
+      "local": [
+        "screenshot_validate"
+      ],
+      "idempotent": []
     },
     "ci": {
       "label": "CI (GitHub Actions / GitLab)",
@@ -163,6 +311,19 @@
         "ci_get_build_status",
         "ci_list_recent_builds",
         "ci_cancel_build"
+      ],
+      "write": [
+        "ci_save_config",
+        "ci_trigger_build"
+      ],
+      "destructive": [
+        "ci_cancel_build"
+      ],
+      "local": [
+        "ci_save_config"
+      ],
+      "idempotent": [
+        "ci_save_config"
       ]
     },
     "facebook": {
@@ -176,6 +337,19 @@
         "facebook_post_photo",
         "facebook_post_multi_photo",
         "facebook_current_config"
+      ],
+      "write": [
+        "facebook_save_config"
+      ],
+      "destructive": [
+        "facebook_post_photo",
+        "facebook_post_multi_photo"
+      ],
+      "local": [
+        "facebook_current_config"
+      ],
+      "idempotent": [
+        "facebook_save_config"
       ]
     },
     "firebase": {
@@ -204,6 +378,25 @@
         "firebase_link_analytics",
         "firebase_get_analytics_details",
         "firebase_get_remote_config_overview"
+      ],
+      "write": [
+        "firebase_create_project",
+        "firebase_create_android_app",
+        "firebase_create_ios_app",
+        "firebase_create_web_app",
+        "firebase_enable_service",
+        "firebase_enable_common_services",
+        "firebase_link_analytics"
+      ],
+      "destructive": [
+        "firebase_delete_android_app",
+        "firebase_delete_ios_app",
+        "firebase_delete_web_app"
+      ],
+      "local": [],
+      "idempotent": [
+        "firebase_enable_service",
+        "firebase_enable_common_services"
       ]
     },
     "ga4": {
@@ -219,6 +412,16 @@
         "ga4_plan_bigquery_link",
         "ga4_create_bigquery_link",
         "ga4_run_report"
+      ],
+      "write": [
+        "ga4_create_property",
+        "ga4_create_data_stream",
+        "ga4_create_bigquery_link"
+      ],
+      "destructive": [],
+      "local": [],
+      "idempotent": [
+        "ga4_create_bigquery_link"
       ]
     },
     "googleads": {
@@ -232,6 +435,17 @@
         "googleads_get_uac_report",
         "googleads_list_accessible_customers",
         "googleads_config_status"
+      ],
+      "write": [
+        "googleads_save_config"
+      ],
+      "destructive": [],
+      "local": [
+        "googleads_save_config",
+        "googleads_config_status"
+      ],
+      "idempotent": [
+        "googleads_save_config"
       ]
     },
     "gsc": {
@@ -245,6 +459,14 @@
         "gsc_submit_sitemap",
         "gsc_inspect_url",
         "gsc_search_analytics"
+      ],
+      "write": [
+        "gsc_submit_sitemap"
+      ],
+      "destructive": [],
+      "local": [],
+      "idempotent": [
+        "gsc_submit_sitemap"
       ]
     },
     "iam": {
@@ -257,6 +479,17 @@
         "iam_list_keys",
         "iam_create_key",
         "iam_add_iam_policy_binding"
+      ],
+      "write": [
+        "iam_create_service_account"
+      ],
+      "destructive": [
+        "iam_create_key",
+        "iam_add_iam_policy_binding"
+      ],
+      "local": [],
+      "idempotent": [
+        "iam_add_iam_policy_binding"
       ]
     },
     "instagram": {
@@ -268,6 +501,17 @@
         "instagram_get_account",
         "instagram_post_image",
         "instagram_post_carousel"
+      ],
+      "write": [
+        "instagram_save_config"
+      ],
+      "destructive": [
+        "instagram_post_image",
+        "instagram_post_carousel"
+      ],
+      "local": [],
+      "idempotent": [
+        "instagram_save_config"
       ]
     },
     "jenkins": {
@@ -284,6 +528,23 @@
         "jenkins_list_jobs",
         "jenkins_get_job_config",
         "jenkins_create_job",
+        "jenkins_update_job"
+      ],
+      "write": [
+        "jenkins_save_config",
+        "jenkins_create_credential",
+        "jenkins_upload_keystore"
+      ],
+      "destructive": [
+        "jenkins_delete_credential",
+        "jenkins_create_job",
+        "jenkins_update_job"
+      ],
+      "local": [],
+      "idempotent": [
+        "jenkins_save_config",
+        "jenkins_create_credential",
+        "jenkins_upload_keystore",
         "jenkins_update_job"
       ]
     },
@@ -331,6 +592,49 @@
         "playstore_cancel_recovery_action",
         "playstore_list_financial_reports",
         "playstore_get_financial_report"
+      ],
+      "write": [
+        "playstore_update_details",
+        "playstore_update_listing",
+        "playstore_upload_image",
+        "playstore_update_release_notes",
+        "playstore_update_latest_release_notes",
+        "playstore_create_onetime_product",
+        "playstore_create_subscription",
+        "playstore_register_service_account",
+        "playstore_update_product_listing",
+        "playstore_update_subscription_listing",
+        "playstore_update_product_state",
+        "playstore_update_product",
+        "setup_playstore_connection",
+        "playstore_create_recovery_action"
+      ],
+      "destructive": [
+        "playstore_delete_all_images",
+        "playstore_replace_images",
+        "playstore_reply_review",
+        "playstore_delete_service_account",
+        "playstore_submit_release",
+        "playstore_promote_release",
+        "playstore_delete_product",
+        "playstore_upload_data_safety",
+        "playstore_deploy_recovery_action",
+        "playstore_cancel_recovery_action"
+      ],
+      "local": [
+        "playstore_list_service_accounts",
+        "playstore_delete_service_account"
+      ],
+      "idempotent": [
+        "playstore_update_details",
+        "playstore_update_listing",
+        "playstore_update_release_notes",
+        "playstore_update_latest_release_notes",
+        "playstore_update_product_listing",
+        "playstore_update_subscription_listing",
+        "playstore_update_product_state",
+        "playstore_update_product",
+        "playstore_register_service_account"
       ]
     },
     "threads": {
@@ -345,6 +649,21 @@
         "threads_post_video",
         "threads_post_carousel",
         "threads_current_config"
+      ],
+      "write": [
+        "threads_save_config",
+        "threads_refresh_token"
+      ],
+      "destructive": [
+        "threads_post",
+        "threads_post_video",
+        "threads_post_carousel"
+      ],
+      "local": [
+        "threads_current_config"
+      ],
+      "idempotent": [
+        "threads_save_config"
       ]
     },
     "tiktok": {
@@ -359,6 +678,19 @@
         "tiktok_business_publish_video",
         "tiktok_business_get_publish_status",
         "tiktok_business_list_publish_audits"
+      ],
+      "write": [
+        "tiktok_business_plan_video_post",
+        "tiktok_business_get_publish_status"
+      ],
+      "destructive": [
+        "tiktok_business_publish_video"
+      ],
+      "local": [
+        "tiktok_business_list_publish_audits"
+      ],
+      "idempotent": [
+        "tiktok_business_get_publish_status"
       ]
     },
     "video": {
@@ -381,6 +713,33 @@
         "video_render",
         "video_job_status",
         "video_validate"
+      ],
+      "write": [
+        "video_plan_from_story",
+        "video_save_plan",
+        "video_research_youtube",
+        "video_search_stock_assets",
+        "video_synthesize_research",
+        "video_download_stock_assets",
+        "video_generate_image",
+        "video_add_local_asset",
+        "video_build_timeline",
+        "video_render"
+      ],
+      "destructive": [
+        "youtube_upload_video",
+        "youtube_update_video_privacy"
+      ],
+      "local": [
+        "video_save_plan",
+        "video_add_local_asset",
+        "video_build_timeline",
+        "video_render",
+        "video_job_status",
+        "video_validate"
+      ],
+      "idempotent": [
+        "video_build_timeline"
       ]
     },
     "youtube": {
@@ -398,6 +757,20 @@
         "youtube_list_comment_replies",
         "youtube_reply_comment",
         "youtube_get_content_insights"
+      ],
+      "write": [
+        "youtube_update_video_metadata",
+        "youtube_set_thumbnail",
+        "youtube_schedule_video"
+      ],
+      "destructive": [
+        "youtube_reply_comment"
+      ],
+      "local": [],
+      "idempotent": [
+        "youtube_update_video_metadata",
+        "youtube_set_thumbnail",
+        "youtube_schedule_video"
       ]
     }
   }

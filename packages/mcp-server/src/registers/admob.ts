@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as admob from '../admob/tools.js';
 import { requireAuth } from '../helpers.js';
@@ -18,7 +18,7 @@ async function withAdmobErrors<T>(call: Promise<T>): Promise<T> {
   }
 }
 
-export function registerAdmobTools(server: McpServer) {
+export function registerAdmobTools(server: ToolRegistrar) {
   server.tool(
     'admob_list_accounts',
     'AdMob 계정 목록 조회',

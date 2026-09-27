@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { requireInstagramConfig } from '../instagram/config.js';
 import { connectInstagram } from '../instagram/setup.js';
@@ -7,7 +7,7 @@ import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
 
-export function registerInstagramTools(server: McpServer) {
+export function registerInstagramTools(server: ToolRegistrar) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
     '저장/사용할 소셜 프로필 ID. 생략 시 .mimi-seed.json의 socialProfiles.instagram, 없으면 기존 기본 설정',
   );

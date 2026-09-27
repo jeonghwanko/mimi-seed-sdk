@@ -1,6 +1,6 @@
 import { GOOGLE_PROFILE_ID } from '../auth/google-auth.js';
 import { YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import {
   addLocalAsset,
@@ -36,7 +36,7 @@ const httpUrl = z.string().url().refine((value) => {
   return protocol === 'https:' || protocol === 'http:';
 }, 'HTTP(S) URL만 허용합니다.');
 
-export function registerVideoTools(server: McpServer) {
+export function registerVideoTools(server: ToolRegistrar) {
   server.tool(
     'youtube_upload_video',
     [

@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
 import { checkPlayStoreRisks, checkAppStoreRisks, formatRisks } from '../checks/risks.js';
@@ -10,7 +10,7 @@ import { jsonResult } from '../lib/mcp-response.js';
 import { checkBillingCompliance } from '../checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
-export function registerChecksTools(server: McpServer) {
+export function registerChecksTools(server: ToolRegistrar) {
   server.tool(
     'android_check_billing_compliance',
     [

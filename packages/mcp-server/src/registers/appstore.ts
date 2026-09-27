@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { iosBundleId } from '../lib/package-name.js';
 import * as appstore from '../appstore/tools.js';
@@ -27,7 +27,7 @@ function stringifyAttr(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-export function registerAppstoreTools(server: McpServer) {
+export function registerAppstoreTools(server: ToolRegistrar) {
   server.tool(
     'appstore_get_weekly_insight',
     [

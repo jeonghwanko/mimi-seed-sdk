@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName, iosBundleId } from '../lib/package-name.js';
 import * as ga4Raw from '../ga4/tools.js';
@@ -31,7 +31,7 @@ const ga4: typeof ga4Raw = new Proxy(ga4Raw, {
 
 const PROPERTY_DESC = "GA4 property ID — '123456789' 또는 'properties/123456789'";
 
-export function registerGa4Tools(server: McpServer) {
+export function registerGa4Tools(server: ToolRegistrar) {
   server.tool(
     'ga4_list_account_summaries',
     '접근 가능한 Google Analytics 계정 + 각 계정의 GA4 property 요약. accountId / propertyId 를 확인할 때 먼저 호출. analytics.edit 스코프 필요(없으면 재로그인 안내).',

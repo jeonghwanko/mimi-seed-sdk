@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readToolManifest } from '../lib/package-root.js';
+import { annotationsFor, buildToolIndex } from '../lib/tool-registrar.js';
 import { withClient } from './helpers.js';
 
 // tool-manifest.json = 등록 도구 인벤토리 + 도메인 메타데이터의 SSOT.
@@ -45,6 +46,70 @@ describe('tool-manifest (boot smoke test)', () => {
         untracked,
         `서버에 등록됐는데 manifest 에 없는 도구 — tool-manifest.json 에 추가하세요: ${untracked.join(', ')}`,
       ).toEqual([]);
+    });
+  });
+
+  it('분류 목록(write/destructive/local/idempotent)은 같은 도메인의 tools 안에 있고 서로 모순이 없다', () => {
+    const problems: string[] = [];
+    for (const [domain, d] of Object.entries(manifest.domains)) {
+      for (const key of ['write', 'destructive', 'local', 'idempotent'] as const) {
+        for (const name of d[key] ?? []) {
+          if (!d.tools.includes(name)) problems.push(`${domain}.${key}: ${name} 은(는) ${domain}.tools 에 없음`);
+        }
+      }
+      const write = new Set(d.write ?? []);
+      for (const name of d.destructive ?? []) {
+        if (write.has(name)) problems.push(`${domain}: ${name} 이 write 와 destructive 양쪽에 있음 (destructive 는 write 를 함의 — 한쪽만)`);
+      }
+      for (const name of d.idempotent ?? []) {
+        if (!write.has(name) && !(d.destructive ?? []).includes(name)) {
+          problems.push(`${domain}.idempotent: ${name} 은 읽기 도구 — 읽기는 자동으로 idempotent 이니 빼세요`);
+        }
+      }
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
+
+  it('폐기 별칭·toolset 그룹·alwaysOn 이 실재하는 이름을 가리킨다', () => {
+    const index = buildToolIndex(manifest);
+    const problems: string[] = [];
+    for (const [oldName, newName] of Object.entries(manifest.deprecated ?? {})) {
+      const alias = index.get(oldName);
+      const canonical = index.get(newName);
+      if (!alias || !canonical) {
+        problems.push(`deprecated: ${oldName} → ${newName} 중 manifest 에 없는 이름`);
+        continue;
+      }
+      if (canonical.deprecatedFor) problems.push(`deprecated: ${newName} 자체가 별칭 — 별칭의 별칭 금지`);
+      if (alias.domain !== canonical.domain) problems.push(`deprecated: ${oldName} 은 ${canonical.domain} 도메인이어야 함`);
+      // 별칭은 정식 도구의 스키마·핸들러로 등록되므로 annotations 도 같아야 한다.
+      if (alias.kind !== canonical.kind || alias.local !== canonical.local || alias.idempotent !== canonical.idempotent) {
+        problems.push(`deprecated: ${oldName} 의 분류가 ${newName} 과 다름`);
+      }
+    }
+    for (const [group, domains] of Object.entries(manifest.toolsets ?? {})) {
+      if (group === 'all' || manifest.domains[group]) problems.push(`toolsets.${group}: 도메인 키/내장 키워드와 겹침`);
+      for (const d of domains) if (!manifest.domains[d]) problems.push(`toolsets.${group}: 없는 도메인 ${d}`);
+    }
+    for (const d of manifest.alwaysOn ?? []) if (!manifest.domains[d]) problems.push(`alwaysOn: 없는 도메인 ${d}`);
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
+
+  it('실제 서버의 annotations·title 이 manifest 분류와 같다 (registerTool 경로)', async () => {
+    const index = buildToolIndex(manifest);
+    await withClient(async (client) => {
+      const { tools } = await client.listTools();
+      const wrong: string[] = [];
+      for (const tool of tools) {
+        const expected = annotationsFor(index.get(tool.name)!);
+        if (tool.title !== expected.title) wrong.push(`${tool.name}: title ${tool.title ?? '없음'}`);
+        for (const [k, v] of Object.entries(expected)) {
+          if (tool.annotations?.[k as keyof typeof tool.annotations] !== v) {
+            wrong.push(`${tool.name}: ${k}=${String(tool.annotations?.[k as keyof typeof tool.annotations])} ≠ ${String(v)}`);
+          }
+        }
+      }
+      expect(wrong, wrong.join('\n')).toEqual([]);
     });
   });
 

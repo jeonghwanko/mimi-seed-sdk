@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as bigquery from '../bigquery/tools.js';
 import { requireBigQueryAuth, resolveBigQueryAuth, type BigQueryAuth } from '../auth/bigquery-auth.js';
@@ -58,7 +58,7 @@ function errResult(text: string) {
   return { content: [{ type: 'text' as const, text }], isError: true };
 }
 
-export function registerBigqueryTools(server: McpServer) {
+export function registerBigqueryTools(server: ToolRegistrar) {
   server.tool(
     'bigquery_run_query',
     'BigQuery 읽기 전용 SQL 쿼리 실행 — 단일 SELECT 문만 허용 (실행 전 dry run 으로 문장 유형을 확인해 ' +

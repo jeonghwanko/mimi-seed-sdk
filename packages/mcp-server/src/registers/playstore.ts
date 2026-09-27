@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
 import * as playstoreRaw from '../playstore/tools.js';
@@ -58,7 +58,7 @@ function truncatedList<T>(result: { items: T[]; truncated: boolean }) {
   };
 }
 
-export function registerPlaystoreTools(server: McpServer) {
+export function registerPlaystoreTools(server: ToolRegistrar) {
   server.tool(
     'playstore_get_app',
     'Google Play 앱 세부정보 조회 — 개발자 연락처(이메일·전화·웹사이트)·기본 언어 등 (edits.details). 수정은 playstore_update_details.',

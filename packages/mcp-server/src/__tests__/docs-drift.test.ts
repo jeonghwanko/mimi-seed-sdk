@@ -58,6 +58,52 @@ describe('docs/domain/tool-catalog.md ↔ tool-manifest.json', () => {
     expect(Number(total![1])).toBe(Object.keys(manifest.domains).length);
     expect(Number(total![2])).toBe(manifest.total);
   });
+
+  // W/D 마커는 사람이 읽는 카탈로그, manifest 의 write/destructive 목록은 MCP annotations 와
+  // confirm 가드의 입력이다. 둘이 어긋나면 "문서엔 파괴적인데 가드가 없는" 도구가 생긴다.
+  // 문법(카탈로그 머리말에 명시): 한 불릿(+들여쓴 연속 줄) 또는 한 표 행 안에서 **W** / **D** 는
+  // 다음 마커 전까지의 모든 도구 이름에 적용되고, 새 불릿·행은 읽기 전용으로 다시 시작한다.
+  it('카탈로그의 W/D 마커가 manifest 의 write/destructive 목록과 같다', () => {
+    const kindOf = new Map<string, 'R' | 'W' | 'D'>();
+    for (const d of Object.values(manifest.domains)) {
+      for (const t of d.tools) {
+        kindOf.set(t, (d.destructive ?? []).includes(t) ? 'D' : (d.write ?? []).includes(t) ? 'W' : 'R');
+      }
+    }
+
+    const text = catalog.replace(/\r\n/g, '\n');
+    const start = text.indexOf('\n## ', text.indexOf('## Counts by domain') + 1);
+    const end = text.indexOf('\n## Quirks');
+    expect(start > 0 && end > start, '카탈로그 섹션 구조(Counts by domain … Quirks)가 바뀌었습니다').toBe(true);
+
+    const rank = { R: 0, W: 1, D: 2 } as const;
+    const documented = new Map<string, 'R' | 'W' | 'D'>();
+    let marker: 'R' | 'W' | 'D' = 'R';
+    for (const line of text.slice(start, end).split('\n')) {
+      if (/^(- |\|)/.test(line)) marker = 'R';
+      else if (!/^\s+\S/.test(line)) {
+        marker = 'R';
+        continue;
+      }
+      for (const m of line.matchAll(/\*\*([WD])\*\*|`([a-z0-9_]+)`/g)) {
+        if (m[1]) {
+          marker = m[1] as 'W' | 'D';
+          continue;
+        }
+        if (!kindOf.has(m[2])) continue;
+        const prev = documented.get(m[2]);
+        documented.set(m[2], prev && rank[prev] > rank[marker] ? prev : marker);
+      }
+    }
+
+    const mismatched = [...kindOf]
+      .filter(([t, k]) => documented.get(t) !== k)
+      .map(([t, k]) => `${t}: 카탈로그 ${documented.get(t) ?? '없음'} ≠ manifest ${k}`);
+    expect(
+      mismatched,
+      `tool-catalog.md 의 W/D 마커와 tool-manifest.json 의 write/destructive 가 다릅니다 — 둘을 함께 고치세요:\n${mismatched.join('\n')}`,
+    ).toEqual([]);
+  });
 });
 
 // Claude Code 에서 도구 schema 는 lazy 로드다 — agent-guide §0 의 `select:` 배치에 이름이 없는
