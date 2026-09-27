@@ -90,8 +90,14 @@ npx mimi-seed deploy \
 GitHub Actions의 deploy.yml을 main에서 실행하고 완료까지 추적해줘. 실제 스토어 출시는 하지 마.
 ```
 
-MCP에서는 `ci_*` 도구로 GitHub/GitLab 빌드를 다룬다. Jenkins MCP 도구는 자격증명과 job 구성을 관리하고,
-실제 Jenkins 빌드 트리거·추적은 CLI `deploy`가 담당한다.
+MCP에서는 `ci_*` 도구로 GitHub/GitLab 빌드를 다룬다. Jenkins는 에이전트에게 잡 실행을 요청하면
+`jenkins_trigger_build`(먼저 미리보기, 승인 후에만 실행) → `jenkins_get_queue_item`에서 정확한 빌드 번호 →
+`jenkins_get_build_status` 순서로 진행한다. CLI `deploy`도 Jenkins 빌드를 실행·추적한다.
+
+MCP 트리거는 요청마다 `request_id`를 가진다. 같은 `request_id`로 재호출하면 잡을 다시 실행하지 않고 기록된
+결과를 돌려준다. 결과가 `unknown`이면 Jenkins에서 확인하고, 새 ID로 다시 실행하지 않는다. 기록은 같은
+Jenkins URL·사용자 기준으로 이 PC의 `~/.mimi-seed/jenkins-build-requests/`에 남으며 다른 PC까지 보장하지 않는다.
+재시도를 위해 기록을 삭제하지 않는다.
 
 ## 실패 복구
 

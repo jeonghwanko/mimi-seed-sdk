@@ -5,7 +5,8 @@ import {
 } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
 import * as jobs from '../jenkins/jobs.js';
-import { textResult } from '../lib/mcp-response.js';
+import * as builds from '../jenkins/builds.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from '../android/keystore-store.js';
 import {
   ambiguousDefaultIdNote, existingCredentialPreview, jenkinsConfiguredLines, jenkinsNotConfiguredLines,
@@ -254,5 +255,50 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       await jobs.updateJob(cfg, job, config_xml);
       return textResult(`✅ Jenkins 잡 updated: \`${job}\``);
     },
+  );
+
+  // ── 10. 빌드 실행 ──────────────────────────────────────────────────────────
+  server.tool(
+    'jenkins_trigger_build',
+    [
+      'Jenkins 잡 빌드를 실행합니다 (배포·출시 잡일 수 있음). 사용자가 승인한 잡/파라미터만 전달하세요.',
+      'request_id 는 논리적 요청마다 새로 만들고, dry-run 으로 본 인자와 불확실한 응답의 재호출에는 반드시 같은 값을 쓰세요.',
+      'dry-run(confirm 생략)은 request_id 를 예약하지도 기록하지도 않습니다 — confirm: true 호출이 처음 한 번만 POST 합니다.',
+      '로컬 영속 기록(~/.mimi-seed/jenkins-build-requests/)으로 같은 request_id 의 중복 POST 를 막습니다 (다른 PC·기록 삭제까지는 보장하지 않음).',
+      'state=unknown 이면 Jenkins 에서 접수 여부를 확인하고 새 request_id 로 재시도하지 마세요.',
+      '반환된 queue_id 를 jenkins_get_queue_item 으로 추적하세요.',
+      'parameters 생략은 /build, 빈 객체를 포함해 지정하면 /buildWithParameters 입니다. 자격증명 값은 파라미터에 넣지 마세요.',
+    ].join(' '),
+    {
+      job: builds.buildJobSchema.describe('잡 경로 (예: my-app, team-folder/my-app)'),
+      request_id: builds.requestIdSchema.describe('이 논리적 빌드 요청의 고유 ID (영숫자·_·-, 최대 128자). 재호출에는 같은 값'),
+      parameters: builds.buildParametersSchema
+        .optional()
+        .describe('빌드 파라미터 (문자열 값). 생략하면 파라미터 없는 /build'),
+    },
+    async (args) => jsonResult(await builds.triggerBuild(requireJenkinsConfig(), args)),
+  );
+
+  // ── 11. 큐 항목 조회 ───────────────────────────────────────────────────────
+  server.tool(
+    'jenkins_get_queue_item',
+    [
+      '트리거 응답의 정확한 queue_id 로 대기 사유·취소·배정된 build_number 를 조회합니다.',
+      'state=started 가 되면 원래 job 과 build_number 를 저장하고 jenkins_get_build_status 를 쓰세요.',
+      'unavailable 은 만료/없음이며 재트리거하지 마세요. lastBuild 로 번호를 추정하지 않습니다.',
+    ].join(' '),
+    { queue_id: builds.buildIdSchema.describe('jenkins_trigger_build 가 반환한 Jenkins 큐 ID') },
+    async ({ queue_id }) => jsonResult(await builds.getQueueItem(requireJenkinsConfig(), queue_id)),
+  );
+
+  // ── 12. 빌드 상태 조회 ─────────────────────────────────────────────────────
+  server.tool(
+    'jenkins_get_build_status',
+    '큐에서 배정받은 정확한 job 과 build_number 의 building/result 를 조회합니다. 빌드를 새로 실행하지 않습니다.',
+    {
+      job: builds.buildJobSchema.describe('원래 빌드 잡 경로 (예: team-folder/my-app)'),
+      build_number: builds.buildIdSchema.describe('jenkins_get_queue_item 이 반환한 빌드 번호'),
+    },
+    async ({ job, build_number }) => jsonResult(await builds.getBuildStatus(requireJenkinsConfig(), job, build_number)),
   );
 }

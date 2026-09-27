@@ -25,6 +25,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `play-service-account.json` | Default / legacy Play service account — fallback when no per-package match | same |
 | `bigquery-service-account.json` | BigQuery SA — exempt from Workspace reauth (`invalid_rapt`); OAuth is the fallback | `mimi-seed-bigquery-auth` |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
+| `jenkins-build-requests/<sha256>/receipt.json` | **Not a credential** — `jenkins_trigger_build`'s at-most-once dispatch record: the directory (0700) is the atomic `request_id` reservation, keyed by a hash of Jenkins URL + user + `request_id`; the receipt (`0600`) holds only a payload hash, state, queue id, and HTTP status — never parameters or the token. Never deleted automatically ([[pitfalls]] §5) | `jenkins/builds.ts` |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page or account access tokens for social post tools (written `0600`) | each domain's `*_save_config` |
 | `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads credentials. One file can hold all three; `.mimi-seed.json.socialProfiles` selects each platform independently | `facebook_save_config` / `instagram_save_config` / `threads_save_config`, or `mimi-seed auth <platform> --profile <id>` |
 | `tiktok-business.json` | TikTok API for Business app secret + one-day access token + one-year refresh token (written `0600`) | `mimi-seed-tiktok-business-auth` / `mimi-seed auth tiktok` |

@@ -101,6 +101,7 @@ describe('자격증명 writer 가드', () => {
     'ci/config.ts',
     'googleads/config.ts',
     'iam/key-files.ts',
+    'jenkins/builds.ts', // 빌드 요청 receipt (~/.mimi-seed/jenkins-build-requests/, 0600)
     'jenkins/config.ts',
     'social/profile-store.ts',
     'tiktok-business/config.ts',

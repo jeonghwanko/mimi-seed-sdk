@@ -15,12 +15,14 @@
   never-published source that both compile in (the code they share; [[architecture]]).
 - The MCP server registers **150+ tools** across the domain modules under `src/registers/` (exact inventory:
   `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase,
-  AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins credentials,
+  AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins (credentials,
+  jobs, and build triggers),
   Facebook, Instagram, Threads, Android signing, video production (incl. YouTube publishing), AI, Auth, and
   Checks. (Prose docs use the "150+" floor; only the manifest and the blocks generated from it — [[tool-catalog]]
   and the README tool tables — carry exact counts.)
 - It drives Google / Apple APIs **directly** using local credentials under `~/.mimi-seed/`. It manages
-  metadata, store releases, and CI/Jenkins *credentials* — it does **not** compile `.aab`/`.ipa` binaries.
+  metadata, store releases, CI/Jenkins *credentials*, and can start existing CI/Jenkins jobs — it does **not**
+  compile `.aab`/`.ipa` binaries.
 - The private web console is a **separate repo** with a different transport and auth model. The boundary and the
   drift rules live in [[pitfalls]] and [[architecture]].
 
@@ -50,7 +52,7 @@ Each file lives under `docs/domain/`. Read the one that matches your task first.
 | [external-apis.md](external-apis.md) | What each domain talks to (`googleapis` surfaces, ASC REST+JWT, `@onesub/providers`, Anthropic) and the friendly-error translation layer | googleapis, App Store Connect, jose, friendly error, google-errors, 403, providers |
 | [cli-deploy.md](cli-deploy.md) | CLI command topology, app detection, CI providers, the deploy pipeline data flow, MCP registration, init handshake, release manifest | cli, init, deploy, detect, ci-providers, handshake, mcp-config, releases.json |
 | [skills-plugins.md](skills-plugins.md) | The 8 skills, plugin manifests (`.claude-plugin` vs `.codex-plugin`), multi-client surface differences, slash commands & MCP resources | skills, plugin, codex, slash command, resources, prompts, multi-client |
-| [pitfalls.md](pitfalls.md) | Validated SDK-side traps — deferred tools, draft-app track, 403≠permission, Play↔Console overwrite, CI≠Jenkins, two-repo drift, tool-count sync | pitfalls, gotchas, deferred, draft app, 403, drift, two repos, tool count |
+| [pitfalls.md](pitfalls.md) | Validated SDK-side traps — deferred tools, draft-app track, 403≠permission, Play↔Console overwrite, CI≠Jenkins + Jenkins trigger dedup, two-repo drift, tool-count sync | pitfalls, gotchas, deferred, draft app, 403, drift, two repos, tool count |
 | [recipes.md](recipes.md) | ★ **do this task** — ordered file-by-file checklists: add a tool, add a credential, add a CLI command, ship a doc, add a skill, cut a release, PR gate | how to, checklist, add tool, add credential, add command, plugin sync, release, PR |
 | [testing.md](testing.md) | Which guard owns which fact, what a red test is really telling you, how to run one file, what is *not* enforced | tests, vitest, drift, guard, plugin:check, CI, failure |
 

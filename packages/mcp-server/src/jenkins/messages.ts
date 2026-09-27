@@ -114,5 +114,6 @@ export function jenkinsConfiguredLines({ url, username }: { url: string; usernam
     'jenkins_list_credentials 로 등록된 credential 목록을 확인하거나,',
     'jenkins_create_credential / jenkins_upload_keystore 로 credential을 추가하세요.',
     '잡은 jenkins_list_jobs / jenkins_get_job_config / jenkins_create_job / jenkins_update_job 로 다룹니다.',
+    '빌드는 jenkins_trigger_build → jenkins_get_queue_item → jenkins_get_build_status 순서로 실행·추적합니다.',
   ];
 }

@@ -44,13 +44,35 @@ Committing *any* Play Developer API edit (image, listing, release) discards list
 saved-but-didn't-publish in the Play Console UI. Google warns against editing the same app with both tools at
 once. Do all listing writes via the API, **or** finish & publish Console edits first — never interleave.
 
-## 5. CI ≠ Jenkins; there is no `jenkins_trigger_build`
+## 5. CI ≠ Jenkins; a Jenkins trigger is at-most-once per `request_id`, locally
 
 `ci_*` triggers **GitHub Actions / GitLab only**. The `jenkins_*` tools manage **credentials** (keystore,
 service account, secrets) and **job definitions** (`jenkins_list_jobs` / `jenkins_get_job_config` /
-`jenkins_create_job` / `jenkins_update_job`) — they do **not** start builds. To run a Jenkins job, hit its
-REST API. And remember: **Mimi Seed never compiles binaries** — `.aab`/`.ipa` come from EAS/Xcode/Gradle/CI,
-not from this SDK.
+`jenkins_create_job` / `jenkins_update_job`), and run builds through `jenkins_trigger_build` →
+`jenkins_get_queue_item` → `jenkins_get_build_status`.
+
+A Jenkins `POST …/build` has no idempotency key, and a timeout or 5xx does not say whether the job was queued —
+blindly retrying a deploy job runs it twice. So `jenkins_trigger_build` (`jenkins/builds.ts`) takes a caller-chosen
+`request_id` and reserves it with an atomic `mkdir` under `~/.mimi-seed/jenkins-build-requests/<sha256(url, user,
+request_id)>/` **before** the POST, then records the outcome in `receipt.json` (0600, via `#core/atomic-write.js`).
+Any later call with the same `request_id` returns that record (`replayed: true`) and never POSTs; the same key with
+a different job or parameters is refused. Outcomes it cannot classify — network error, 5xx, 429, a redirect, a 201
+without a queue `Location`, a missing or torn receipt — stay `unknown` and fail closed: check Jenkins, don't delete
+the reservation to retry. The receipt holds only hashes and bounded response metadata (state, queue id, HTTP
+status), never parameters or the API token. The POST uses API-token auth (exempt from CSRF crumbs), no redirects,
+and a single attempt.
+
+It is **not** Jenkins-side exactly-once: another machine, another Jenkins user, or a deleted
+`jenkins-build-requests/` directory can dispatch the same logical request again.
+
+- **The confirm gate composes with it.** The tool is **D**; the registrar's injected gate returns the dry-run
+  before the handler runs, so a preview never reserves the `request_id` or writes a receipt. Preview and confirm
+  with the same `request_id`.
+- **Follow the queue item, not `lastBuild`.** The queue id from the trigger leads to the exact build number
+  (`jenkins_get_queue_item`); `lastBuild` may belong to someone else's run.
+
+And remember: **Mimi Seed never compiles binaries** — `.aab`/`.ipa` come from EAS/Xcode/Gradle/CI, not from this
+SDK; the trigger tools only start a job that already exists.
 
 ## 6. Per-package Play SA needs Android Publisher API enabled
 

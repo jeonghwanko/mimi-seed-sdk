@@ -40,9 +40,9 @@ export const domains = {
     highlights: ['ci_trigger_build', 'ci_get_build_status', 'ci_list_workflows', 'ci_cancel_build'],
   },
   jenkins: {
-    en: 'Jenkins (credentials + jobs)',
-    ko: 'Jenkins (크리덴셜 + 잡)',
-    highlights: ['jenkins_create_credential', 'jenkins_upload_keystore', 'jenkins_create_job', 'jenkins_update_job'],
+    en: 'Jenkins (credentials + jobs + builds)',
+    ko: 'Jenkins (크리덴셜 + 잡 + 빌드)',
+    highlights: ['jenkins_create_credential', 'jenkins_upload_keystore', 'jenkins_create_job', 'jenkins_update_job', 'jenkins_trigger_build'],
   },
   ga4: {
     en: 'GA4',
@@ -173,7 +173,7 @@ export const catalog = {
       header: 'Tools',
       rows: [
         ['ci', '— **not** Jenkins builds'],
-        ['jenkins', '— **no build trigger**'],
+        ['jenkins', '— builds: `jenkins_trigger_build` → `jenkins_get_queue_item` → `jenkins_get_build_status`'],
         ['android'],
       ],
     },
@@ -242,6 +242,7 @@ export const catalog = {
     jenkins_upload_playstore_sa: '새 id 는 바로 생성, 기존 id 교체만 confirm',
     jenkins_create_job: '`overwrite=true` replaces',
     jenkins_update_job: 'replaces config.xml',
+    jenkins_trigger_build: 'confirm 필요; 같은 `request_id` 는 로컬 기록으로 한 번만 발송',
     // Cross-cutting
     mimi_seed_auth_start: 'local callback server + token write',
     mimi_seed_remote_sync_credentials: 'confirm-gated secret upload',
@@ -523,6 +524,10 @@ export const batches = [
       'jenkins_get_job_config', 'jenkins_create_job', 'jenkins_update_job',
     ],
     fallbackFor: ['jenkins'],
+  },
+  {
+    goal: 'Jenkins build run + track',
+    tools: ['jenkins_status', 'jenkins_trigger_build', 'jenkins_get_queue_item', 'jenkins_get_build_status'],
   },
   {
     goal: 'CI (GitHub/GitLab)',
