@@ -18,6 +18,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- `playstore_list_reviews` now returns the developer's published reply. Each review gains a top-level
+  `developerComment` (`{ text, lastModified }`, or `null` when unanswered), and `comments` keeps reply entries
+  instead of turning them into empty user comments. Before, answered reviews looked unanswered, so the
+  "reply to unanswered reviews" flow could reply again and replace an existing answer (Play keeps one reply per
+  review). The review-reply prompt and the Play skill now select reviews whose `developerComment` is `null`.
+
+### Tool changes
+
+- None added, renamed or removed. `playstore_list_reviews` output gains `developerComment`.
+
 ## [0.21.0] - 2026-09-28
 
 ### Changed
