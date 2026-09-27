@@ -12,7 +12,7 @@ Routed by `main()` in `cli/src/index.ts`:
 
 | Command | Module | What it does |
 |---|---|---|
-| `init` | `index.ts` (`cmdInit`) | detect app → browser PAT handshake → register apps → scaffold project context files |
+| `init` | `init.ts` | detect app → browser PAT handshake → register apps → scaffold project context files |
 | `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
 | `lang` | `lang.ts` | CLI output language (`ko` / `en`) → `~/.mimi-seed/settings.json`. `setup` asks on first run; `MIMI_SEED_LANG` overrides |
 | `status` | `index.ts` (`cmdStatus`) | show connection + `list_apps` via the remote MCP |
@@ -29,10 +29,10 @@ Routed by `main()` in `cli/src/index.ts`:
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 
 Per-command options are the SSOT in the `usage.<command>` entries of the `catalog(ko, en)` block in
-`index.ts` — that string is exactly what `mimi-seed <cmd> --help` prints (`printCommandHelp`), and the one-line
+`help.ts` — that string is exactly what `mimi-seed <cmd> --help` prints (`printCommandHelp`), and the one-line
 summaries next to it in `help` are what a bare `mimi-seed` prints. `auth` is the exception: it owns its own
-detailed help in `auth.ts`. Adding a command means touching three places in `index.ts` (the `switch` case, the
-`usage` entry, the `help` line) — checklist in [[recipes]] §3.
+detailed help in `auth.ts`. Adding a command means touching three places: the `switch` case in `index.ts`, and the
+`usage` entry and `help` line in `help.ts` — checklist in [[recipes]] §3.
 
 ### Output language
 

@@ -96,7 +96,7 @@ cross-module wiring, why a thing is built the way it is, and traps that cost som
 | Don't put here | It already lives in |
 |---|---|
 | A tool's parameters / schema | `registers/<domain>.ts` (the `server.tool(…)` call) |
-| A CLI command's flags | the `usage.<command>` entries of the `catalog(…)` in `cli/src/index.ts` (what `mimi-seed <cmd> --help` prints) |
+| A CLI command's flags | the `usage.<command>` entries of the `catalog(…)` in `cli/src/help.ts` (what `mimi-seed <cmd> --help` prints) |
 | How an agent should *call* tools at runtime | [`../agent-guide.md`](../agent-guide.md) |
 | Install / usage instructions for end users | `README.md` |
 | How a **user obtains** a credential (vendor consoles) | [`../credentials.md`](../credentials.md) |

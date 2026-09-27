@@ -79,7 +79,7 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
 ## Documentation and generated files
 
 - Do not repeat parameters already defined by a tool schema, or flags already defined by the `usage.<command>`
-  entries in `packages/cli/src/index.ts`; link to the owning source instead.
+  entries in `packages/cli/src/help.ts`; link to the owning source instead.
 - Never put release version numbers in domain docs. The root `package.json` and version scripts own them.
 - Use “150+” in prose and name domains rather than counting them. Exact tool **and domain** counts belong only
   in `tool-manifest.json`, `docs/domain/tool-catalog.md`, and the README count columns — `docs-drift.test.ts`

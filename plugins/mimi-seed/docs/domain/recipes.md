@@ -15,7 +15,7 @@
 | Wiring a **new** register module into the server | `mcp-server/src/server.ts` (`buildServer`) | `mcp-server/src/index.ts` (stdio entry only) |
 | A credential's *writer* + validation | the `mcp-server` setup bin that owns it | a second writer in the CLI ([[pitfalls]] §12) |
 | A credential's *detection* + "how to fix" text | `cli/src/credentials.ts` (`CredSpec`) | ad-hoc `fs` checks in `doctor` / `setup` |
-| A CLI command's behavior | `cli/src/<command>.ts` | `cli/src/index.ts` (router + usage only) |
+| A CLI command's behavior | `cli/src/<command>.ts` | `cli/src/index.ts` (router only) |
 | User-facing Korean/English text | a `catalog(ko, en)` in the file that prints it | a bare string literal ([[cli-deploy]]) |
 | A shared onboarding string | `cli/src/i18n.ts` `t()` | duplicated per command |
 
@@ -87,7 +87,7 @@ to a source entrypoint and `dist` ships) · `setup.test.ts` (never spawns a bloc
 1. **Behavior** in `cli/src/<command>.ts`. All user-facing text goes through `catalog(ko, en)` in that file;
    shared onboarding strings live in `cli/src/i18n.ts` `t()`.
 2. **Router** — `cli/src/index.ts`: a `case` in `main()`'s `switch`.
-3. **Usage** — the `usage.<command>` entry in the same file's `catalog(...)`. That entry *is* the flag SSOT:
+3. **Usage** — the `usage.<command>` entry in `cli/src/help.ts`'s `catalog(...)`. That entry *is* the flag SSOT:
    `mimi-seed <cmd> --help` prints it. Add the one-line summary to the `help` block too.
 4. **Docs** — the command table in [[cli-deploy]]; the README quick reference only for headline commands.
 5. Non-interactive safety: a command must not spawn a stdin-blocking child when `--non-interactive` / not a TTY.
