@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-09-28
+
 ### Added
 
 - MCP tools can now run and follow a Jenkins build: `jenkins_trigger_build` starts a job (`/build`, or
