@@ -4,30 +4,13 @@ import { androidPackageName, iosBundleId } from '../lib/package-name.js';
 import * as ga4Raw from '../ga4/tools.js';
 import { requireAuth } from '../helpers.js';
 import { friendlyGoogleError } from '../lib/google-errors.js';
+import { wrapDomain } from '../lib/wrap-domain.js';
 import { jsonResult } from '../lib/mcp-response.js';
 
 // firebase register 와 동일한 프록시 — raw GaxiosError(SERVICE_DISABLED / 403 /
 // ACCESS_TOKEN_SCOPE_INSUFFICIENT)를 "다음에 뭘 할지" 메시지로 변환. 특히 GA4 는
 // analytics.edit 스코프를 새로 추가했으므로 기존 사용자는 재로그인 안내가 필수.
-const ga4: typeof ga4Raw = new Proxy(ga4Raw, {
-  get(target, prop, receiver) {
-    const orig = Reflect.get(target, prop, receiver);
-    if (typeof orig !== 'function') return orig;
-    return (...args: unknown[]) => {
-      try {
-        const out = (orig as (...a: unknown[]) => unknown)(...args);
-        if (out && typeof (out as { then?: unknown }).then === 'function') {
-          return (out as Promise<unknown>).catch((err) => {
-            throw friendlyGoogleError(err);
-          });
-        }
-        return out;
-      } catch (err) {
-        throw friendlyGoogleError(err);
-      }
-    };
-  },
-});
+const ga4 = wrapDomain(ga4Raw, (err) => friendlyGoogleError(err));
 
 const PROPERTY_DESC = "GA4 property ID — '123456789' 또는 'properties/123456789'";
 

@@ -4,7 +4,7 @@ import * as admob from '../admob/tools.js';
 import { requireAuth } from '../helpers.js';
 import { resolveAccountEmail } from '../auth/google-auth.js';
 import { friendlyAdmobError } from '../admob/errors.js';
-import { jsonResult } from '../lib/mcp-response.js';
+import { jsonResult, textResult } from '../lib/mcp-response.js';
 
 /**
  * AdMob 호출의 계정 거부(401/403)를 "지금 어느 계정으로 로그인돼 있는지" 와 함께 안내한다.
@@ -102,20 +102,15 @@ export function registerAdmobTools(server: ToolRegistrar) {
         return jsonResult(result);
       } catch (err: any) {
         if (err.code === 403) {
-          return {
-            content: [{
-              type: 'text',
-              text: [
-                '❌ AdMob 앱 생성 API 접근 불가 (403).',
-                '',
-                'AdMob v1beta 쓰기 API는 Google Account Manager 승인이 필요합니다.',
-                '대신 AdMob 콘솔에서 수동 등록하세요:',
-                '  https://admob.google.com/home',
-                '',
-                '등록 후 admob_list_apps로 확인할 수 있습니다.',
-              ].join('\n'),
-            }],
-          };
+          return textResult([
+            '❌ AdMob 앱 생성 API 접근 불가 (403).',
+            '',
+            'AdMob v1beta 쓰기 API는 Google Account Manager 승인이 필요합니다.',
+            '대신 AdMob 콘솔에서 수동 등록하세요:',
+            '  https://admob.google.com/home',
+            '',
+            '등록 후 admob_list_apps로 확인할 수 있습니다.',
+          ]);
         }
         throw friendlyAdmobError(err, await resolveAccountEmail());
       }
@@ -138,17 +133,12 @@ export function registerAdmobTools(server: ToolRegistrar) {
         return jsonResult(result);
       } catch (err: any) {
         if (err.code === 403) {
-          return {
-            content: [{
-              type: 'text',
-              text: [
-                '❌ 광고 단위 생성 API 접근 불가 (403).',
-                '',
-                'AdMob 콘솔에서 수동 생성하세요:',
-                '  https://admob.google.com/home',
-              ].join('\n'),
-            }],
-          };
+          return textResult([
+            '❌ 광고 단위 생성 API 접근 불가 (403).',
+            '',
+            'AdMob 콘솔에서 수동 생성하세요:',
+            '  https://admob.google.com/home',
+          ]);
         }
         throw friendlyAdmobError(err, await resolveAccountEmail());
       }

@@ -16,21 +16,16 @@ export function registerGoogleAdsTools(server: ToolRegistrar) {
     },
     async ({ developerToken, customerId, loginCustomerId }) => {
       saveConfig({ developerToken, customerId, loginCustomerId });
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ Google Ads 설정 저장 완료.',
-            `  customerId: ${customerId}`,
-            loginCustomerId ? `  loginCustomerId: ${loginCustomerId}` : '',
-            '',
-            '이제 googleads_list_campaigns 나 googleads_get_uac_report 를 사용할 수 있어.',
-            '',
-            '⚠️  Google Ads API는 adwords OAuth 스코프가 필요해.',
-            '기존 토큰에 스코프가 없으면 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth 로 재인증해줘.',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ Google Ads 설정 저장 완료.',
+        `  customerId: ${customerId}`,
+        loginCustomerId ? `  loginCustomerId: ${loginCustomerId}` : '',
+        '',
+        '이제 googleads_list_campaigns 나 googleads_get_uac_report 를 사용할 수 있어.',
+        '',
+        '⚠️  Google Ads API는 adwords OAuth 스코프가 필요해.',
+        '기존 토큰에 스코프가 없으면 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth 로 재인증해줘.',
+      ].filter(Boolean));
     },
   );
 
@@ -63,23 +58,18 @@ export function registerGoogleAdsTools(server: ToolRegistrar) {
       const totalImpressions = report.reduce((s, r) => s + r.impressions, 0);
       const totalConversions = report.reduce((s, r) => s + r.conversions, 0);
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            period: { startDate, endDate },
-            metricNote: googleads.REPORT_METRIC_NOTE,
-            summary: {
-              totalCost: Math.round(totalCost * 100) / 100,
-              totalClicks,
-              totalImpressions,
-              totalConversions,
-              avgCpi: totalConversions > 0 ? Math.round(totalCost / totalConversions * 100) / 100 : null,
-            },
-            campaigns: report,
-          }, null, 2),
-        }],
-      };
+      return jsonResult({
+        period: { startDate, endDate },
+        metricNote: googleads.REPORT_METRIC_NOTE,
+        summary: {
+          totalCost: Math.round(totalCost * 100) / 100,
+          totalClicks,
+          totalImpressions,
+          totalConversions,
+          avgCpi: totalConversions > 0 ? Math.round(totalCost / totalConversions * 100) / 100 : null,
+        },
+        campaigns: report,
+      });
     },
   );
 
@@ -98,23 +88,18 @@ export function registerGoogleAdsTools(server: ToolRegistrar) {
       const totalCost = report.reduce((s, r) => s + r.cost, 0);
       const totalInstalls = report.reduce((s, r) => s + r.installs, 0);
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            period: { startDate, endDate },
-            metricNote: googleads.REPORT_METRIC_NOTE,
-            summary: {
-              totalCost: Math.round(totalCost * 100) / 100,
-              totalInstalls,
-              totalConversions: totalInstalls,
-              avgCpi: totalInstalls > 0 ? Math.round(totalCost / totalInstalls * 100) / 100 : null,
-              campaignCount: report.length,
-            },
-            campaigns: report,
-          }, null, 2),
-        }],
-      };
+      return jsonResult({
+        period: { startDate, endDate },
+        metricNote: googleads.REPORT_METRIC_NOTE,
+        summary: {
+          totalCost: Math.round(totalCost * 100) / 100,
+          totalInstalls,
+          totalConversions: totalInstalls,
+          avgCpi: totalInstalls > 0 ? Math.round(totalCost / totalInstalls * 100) / 100 : null,
+          campaignCount: report.length,
+        },
+        campaigns: report,
+      });
     },
   );
 
@@ -139,17 +124,12 @@ export function registerGoogleAdsTools(server: ToolRegistrar) {
       if (!cfg) {
         return textResult('❌ Google Ads 설정 없음. googleads_save_config 로 먼저 설정해.');
       }
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            status: 'configured',
-            customerId: cfg.customerId,
-            loginCustomerId: cfg.loginCustomerId ?? null,
-            hasDeveloperToken: !!cfg.developerToken,
-          }, null, 2),
-        }],
-      };
+      return jsonResult({
+        status: 'configured',
+        customerId: cfg.customerId,
+        loginCustomerId: cfg.loginCustomerId ?? null,
+        hasDeveloperToken: !!cfg.developerToken,
+      });
     },
   );
 }

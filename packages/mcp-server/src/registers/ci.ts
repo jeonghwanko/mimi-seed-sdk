@@ -26,18 +26,13 @@ export function registerCiTools(server: ToolRegistrar) {
     async ({ provider, token, owner, repo, host }) => {
       const config = { provider, token, owner, repo, host };
       saveCiConfig(config);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ CI 설정 저장 완료 (${provider})`,
-            `   저장소: ${owner}/${repo}`,
-            host ? `   Host: ${host}` : '',
-            '',
-            'ci_list_workflows 로 사용 가능한 워크플로를 확인하세요.',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ CI 설정 저장 완료 (${provider})`,
+        `   저장소: ${owner}/${repo}`,
+        host ? `   Host: ${host}` : '',
+        '',
+        'ci_list_workflows 로 사용 가능한 워크플로를 확인하세요.',
+      ].filter(Boolean));
     },
   );
 
@@ -85,21 +80,16 @@ export function registerCiTools(server: ToolRegistrar) {
         return textResult('✅ 빌드 트리거 완료. run_id 조회 불가 — 잠시 후 ci_list_recent_builds로 확인하세요.');
       }
 
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 빌드 트리거 완료`,
-            `   run_id: ${result.id}`,
-            `   상태: ${result.status}`,
-            `   브랜치: ${result.branch}`,
-            result.commit ? `   커밋: ${result.commit}` : '',
-            `   URL: ${result.url}`,
-            '',
-            `ci_get_build_status(run_id="${result.id}") 로 진행 상황을 확인하세요.`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 빌드 트리거 완료`,
+        `   run_id: ${result.id}`,
+        `   상태: ${result.status}`,
+        `   브랜치: ${result.branch}`,
+        result.commit ? `   커밋: ${result.commit}` : '',
+        `   URL: ${result.url}`,
+        '',
+        `ci_get_build_status(run_id="${result.id}") 로 진행 상황을 확인하세요.`,
+      ].filter(Boolean));
     },
   );
 
@@ -120,20 +110,15 @@ export function registerCiTools(server: ToolRegistrar) {
       };
       const emoji = statusEmoji[build.status] ?? '❓';
 
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `${emoji} 빌드 #${build.id} — ${build.status.toUpperCase()}`,
-            build.workflow ? `   워크플로: ${build.workflow}` : '',
-            `   브랜치: ${build.branch}`,
-            build.commit ? `   커밋: ${build.commit}` : '',
-            `   생성: ${build.createdAt}`,
-            `   갱신: ${build.updatedAt}`,
-            `   URL: ${build.url}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `${emoji} 빌드 #${build.id} — ${build.status.toUpperCase()}`,
+        build.workflow ? `   워크플로: ${build.workflow}` : '',
+        `   브랜치: ${build.branch}`,
+        build.commit ? `   커밋: ${build.commit}` : '',
+        `   생성: ${build.createdAt}`,
+        `   갱신: ${build.updatedAt}`,
+        `   URL: ${build.url}`,
+      ].filter(Boolean));
     },
   );
 

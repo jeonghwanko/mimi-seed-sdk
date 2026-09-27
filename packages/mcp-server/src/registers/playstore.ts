@@ -1,10 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
 import * as playstoreRaw from '../playstore/tools.js';
 import { friendlyPlayError } from '../playstore/errors.js';
+import { wrapDomain } from '../lib/wrap-domain.js';
 import {
   saveServiceAccountJsonForPackage,
   listRegisteredServiceAccounts,
@@ -21,32 +20,20 @@ import * as iam from '../iam/tools.js';
 import { resolveServiceAccountJsonInput } from '../iam/key-files.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
-import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { jsonResult, textResult, errorResult } from '../lib/mcp-response.js';
 import { googleSubscriptionCreationResult } from '../lib/store-create-result.js';
+import { readDataSafetyCsv } from '../playstore/data-safety.js';
+import {
+  serviceAccountVerificationLines, serviceAccountRegisterAbortedLines, serviceAccountRegisteredLines,
+  registeredServiceAccountsLines, playConnectionSetupLines, dataSafetyDryRunLines, dataSafetyUploadedLines,
+  recoveryActionsText, recoveryCreateDryRunLines, recoveryCreatedLines,
+} from '../playstore/messages.js';
 
 // 모든 playstore tools 호출을 친절 에러로 감싸는 프록시 — 403(권한)/404/edit 충돌/
 // invalid_grant 를 raw dump 대신 구체적 복구 안내로 변환. args[1] 이 packageName 규약.
 // 비-Promise 반환(publisher 등 sync factory)은 그대로 통과, 도메인 에러는 원본 보존.
-const playstore: typeof playstoreRaw = new Proxy(playstoreRaw, {
-  get(target, prop, receiver) {
-    const orig = Reflect.get(target, prop, receiver);
-    if (typeof orig !== 'function') return orig;
-    return (...args: unknown[]) => {
-      const pkg = typeof args[1] === 'string' ? (args[1]) : undefined;
-      try {
-        const out = (orig as (...a: unknown[]) => unknown)(...args);
-        if (out && typeof (out as { then?: unknown }).then === 'function') {
-          return (out as Promise<unknown>).catch((err) => {
-            throw friendlyPlayError(err, pkg);
-          });
-        }
-        return out;
-      } catch (err) {
-        throw friendlyPlayError(err, pkg);
-      }
-    };
-  },
-});
+const playstore = wrapDomain(playstoreRaw, (err, args) =>
+  friendlyPlayError(err, typeof args[1] === 'string' ? args[1] : undefined));
 
 /** 전부 읽었으면 예전처럼 배열 그대로, 페이지 상한에 걸렸으면 잘렸다는 사실을 앞에 붙인다. */
 function truncatedList<T>(result: { items: T[]; truncated: boolean }) {
@@ -266,24 +253,12 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     },
     async ({ packageName, track, versionCode, language, text, syncTracks }) => {
       if (versionCode !== undefined && syncTracks && syncTracks.length > 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: '❌ versionCode 와 syncTracks 는 함께 쓸 수 없다 — API 호출 안 함. syncTracks 는 트랙별 최신 릴리스에 적용하므로 versionCode 를 빼고 호출하거나, 트랙마다 versionCode 를 지정해 따로 호출하세요.',
-          }],
-          isError: true,
-        };
+        return errorResult('❌ versionCode 와 syncTracks 는 함께 쓸 수 없다 — API 호출 안 함. syncTracks 는 트랙별 최신 릴리스에 적용하므로 versionCode 를 빼고 호출하거나, 트랙마다 versionCode 를 지정해 따로 호출하세요.');
       }
       // ── 사전 lint — 500자 / HTML / 역슬래시 가격(\5000원) round-trip 차단.
       const validation = validatePlayReleaseNotes(text);
       if (!validation.ok) {
-        return {
-          content: [{
-            type: 'text',
-            text: `❌ 릴리스 노트 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`,
-          }],
-          isError: true,
-        };
+        return errorResult(`❌ 릴리스 노트 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
       }
       const auth = requirePlayStoreAuth(packageName);
 
@@ -410,19 +385,14 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       if (!result.success) {
         return textResult(`❌ 상품 생성 실패: ${result.error}`);
       }
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ Play 일회성 상품 생성 완료`,
-            `productId: ${result.productId}`,
-            `price: ${args.price} ${args.currency}`,
-            '',
-            'Play Console에서 활성화 확인:',
-            `https://play.google.com/console/u/0/developers/-/app/-/managed-products?package=${encodeURIComponent(args.packageName)}`,
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        `✓ Play 일회성 상품 생성 완료`,
+        `productId: ${result.productId}`,
+        `price: ${args.price} ${args.currency}`,
+        '',
+        'Play Console에서 활성화 확인:',
+        `https://play.google.com/console/u/0/developers/-/app/-/managed-products?package=${encodeURIComponent(args.packageName)}`,
+      ]);
     },
   );
 
@@ -493,55 +463,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     async ({ serviceAccountJson, serviceAccountJsonPath, packageName }) => {
       const json = resolveServiceAccountJsonInput({ json: serviceAccountJson, jsonPath: serviceAccountJsonPath });
       const result = await playstore.verifyServiceAccountJson(json, packageName);
-      if (result.ok) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                '✓ 서비스 계정 유효 — Play Developer API 호출 가능',
-                '',
-                `**clientEmail**: \`${result.clientEmail}\``,
-                `**projectId**: \`${result.projectId}\``,
-                `**packageName**: \`${packageName}\``,
-                '',
-                '이제 이 JSON 내용을 onesub 서버의 `GOOGLE_SERVICE_ACCOUNT_KEY` 환경변수에 (한 줄로) 넣으면 됩니다. 예:',
-                '```bash',
-                'cat service-account.json | tr -d \'\\n\' | jq -c .',
-                '```',
-              ].join('\n'),
-            },
-          ],
-        };
-      }
-      const lines: string[] = [
-        `✗ 검증 실패 (stage: **${result.stage}**${result.httpStatus ? `, HTTP ${result.httpStatus}` : ''})`,
-        '',
-        `${result.message}`,
-        '',
-      ];
-      if (result.stage === 'parse') {
-        lines.push('원인: 붙여넣은 JSON 구조가 올바르지 않음.');
-        lines.push('확인: Google Cloud Console → Service Accounts → Keys → **Create new key → JSON** 흐름으로 받은 파일 맞나요?');
-      } else if (result.stage === 'auth') {
-        lines.push('원인: Google이 자격증명 자체를 거부함 (private_key 손상 / 프로젝트 비활성 / 계정 삭제됨).');
-        lines.push('확인: 새 키를 다시 발급 (기존 키 회수 후).');
-      } else if (result.stage === 'api') {
-        if (result.httpStatus === 401 || result.httpStatus === 403) {
-          lines.push('원인: 토큰은 받았지만 Play Console에서 이 서비스 계정에 권한 없음.');
-          lines.push('확인 순서:');
-          lines.push('1. Play Console → Users and permissions → 이 서비스 계정 이메일을 초대');
-          lines.push('2. App permissions에서 해당 패키지명 앱 선택');
-          lines.push('3. Account permissions에 **View financial data, orders, and cancellation survey responses** 체크');
-          lines.push('4. 권한 적용까지 **~5분 대기** 후 재시도 (너무 빨리 시도하면 계속 403)');
-        } else if (result.httpStatus === 404) {
-          lines.push('원인: 패키지명이 이 Play Console 개발자 계정 소유가 아님.');
-          lines.push(`확인: packageName이 Play Console에 등록된 앱의 것과 정확히 일치하나요? ("\`${packageName}\`")`);
-        } else {
-          lines.push('원인: Play Developer API 호출 중 예외. 네트워크 또는 Google 쪽 문제일 수 있음.');
-        }
-      }
-      return textResult(lines.join('\n'));
+      return textResult(serviceAccountVerificationLines(result, packageName));
     },
   );
 
@@ -563,17 +485,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       if (!skipVerify) {
         const verify = await playstore.verifyServiceAccountJson(serviceAccountJson, packageName);
         if (!verify.ok) {
-          return {
-            content: [{
-              type: 'text',
-              text: [
-                `❌ 검증 실패 (stage: ${verify.stage})로 등록 중단.`,
-                verify.message,
-                '',
-                `검증을 건너뛰고 강제 등록하려면 skipVerify=true 옵션 추가.`,
-              ].join('\n'),
-            }],
-          };
+          return textResult(serviceAccountRegisterAbortedLines(verify.stage, verify.message));
         }
       }
       let clientEmail: string;
@@ -586,20 +498,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         return textResult('❌ JSON 파싱 실패 — 서비스 계정 JSON 형식이 올바르지 않음.');
       }
       saveServiceAccountJsonForPackage(packageName, serviceAccountJson);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ ${packageName} 서비스 계정 등록 완료`,
-            '',
-            `**clientEmail**: \`${clientEmail}\``,
-            `**projectId**: \`${projectId}\``,
-            `**저장 경로**: \`~/.mimi-seed/play-service-accounts/${packageName}.json\` (0600)`,
-            '',
-            '이후 이 packageName으로 호출하는 모든 playstore_* 도구가 자동으로 이 SA 사용.',
-          ].join('\n'),
-        }],
-      };
+      return textResult(serviceAccountRegisteredLines(packageName, clientEmail, projectId));
     },
   );
 
@@ -607,30 +506,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     'playstore_list_service_accounts',
     '등록된 패키지별 서비스 계정 + default(레거시) SA 정보 요약. clientEmail / projectId 만 노출 (private_key 미노출).',
     {},
-    async () => {
-      const info = listRegisteredServiceAccounts();
-      const lines: string[] = [];
-      if (info.default) {
-        lines.push('**Default (legacy)**: `~/.mimi-seed/play-service-account.json`');
-        lines.push(`  - clientEmail: \`${info.default.clientEmail ?? '(parse error)'}\``);
-        lines.push(`  - projectId: \`${info.default.projectId ?? '(parse error)'}\``);
-        lines.push('');
-      } else {
-        lines.push('**Default (legacy)**: 미등록');
-        lines.push('');
-      }
-      if (info.perPackage.length === 0) {
-        lines.push('**Per-package**: 없음');
-        lines.push('');
-        lines.push('등록 방법: `playstore_register_service_account(packageName, serviceAccountJsonPath)`');
-      } else {
-        lines.push(`**Per-package** (${info.perPackage.length}개):`);
-        for (const item of info.perPackage) {
-          lines.push(`- \`${item.packageName}\` → \`${item.clientEmail ?? '(parse error)'}\` (project: \`${item.projectId ?? 'unknown'}\`)`);
-        }
-      }
-      return textResult(lines.join('\n'));
-    },
+    async () => textResult(registeredServiceAccountsLines(listRegisteredServiceAccounts())),
   );
 
   server.tool(
@@ -641,14 +517,9 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     },
     async ({ packageName }) => {
       const deleted = deleteServiceAccountJsonForPackage(packageName);
-      return {
-        content: [{
-          type: 'text',
-          text: deleted
-            ? `✓ ${packageName} 서비스 계정 파일 삭제 완료. 이후 이 패키지는 default SA로 폴백.`
-            : `(skip) ${packageName} 등록된 패키지별 SA 없음.`,
-        }],
-      };
+      return textResult(deleted
+        ? `✓ ${packageName} 서비스 계정 파일 삭제 완료. 이후 이 패키지는 default SA로 폴백.`
+        : `(skip) ${packageName} 등록된 패키지별 SA 없음.`);
     },
   );
 
@@ -676,7 +547,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         track: track ?? 'production',
         language: language ?? 'ko-KR',
       });
-      return { content: [{ type: 'text', text }] };
+      return textResult(text);
     },
   );
 
@@ -772,17 +643,12 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     async ({ packageName, productId, listings }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.updateOneTimeProductListings(auth, packageName, productId, listings);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ ${productId} 리스팅 갱신`,
-            result.created.length ? `추가된 언어: ${result.created.join(', ')}` : '',
-            result.updated.length ? `수정된 언어: ${result.updated.join(', ')}` : '',
-            `현재 언어: ${result.listings.map((l) => l.languageCode).join(', ')}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✓ ${productId} 리스팅 갱신`,
+        result.created.length ? `추가된 언어: ${result.created.join(', ')}` : '',
+        result.updated.length ? `수정된 언어: ${result.updated.join(', ')}` : '',
+        `현재 언어: ${result.listings.map((l) => l.languageCode).join(', ')}`,
+      ].filter(Boolean));
     },
   );
 
@@ -804,17 +670,12 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     async ({ packageName, productId, listings }) => {
       const auth = requirePlayStoreAuth(packageName);
       const result = await playstore.updateSubscriptionListings(auth, packageName, productId, listings);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✓ ${productId} 구독 리스팅 갱신`,
-            result.created.length ? `추가된 언어: ${result.created.join(', ')}` : '',
-            result.updated.length ? `수정된 언어: ${result.updated.join(', ')}` : '',
-            `현재 언어: ${result.listings.map((l) => l.languageCode).join(', ')}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✓ ${productId} 구독 리스팅 갱신`,
+        result.created.length ? `추가된 언어: ${result.created.join(', ')}` : '',
+        result.updated.length ? `수정된 언어: ${result.updated.join(', ')}` : '',
+        `현재 언어: ${result.listings.map((l) => l.languageCode).join(', ')}`,
+      ].filter(Boolean));
     },
   );
 
@@ -924,27 +785,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       // 3. 로컬 등록 (검증은 Play Console 초대 전이라 skip)
       saveServiceAccountJsonForPackage(packageName, key.json);
 
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ Play Store 서비스 계정 설정 완료`,
-            '',
-            `**패키지**: \`${packageName}\``,
-            `**SA 이메일**: \`${saEmail}\``,
-            `**저장 경로**: \`~/.mimi-seed/play-service-accounts/${packageName}.json\``,
-            '',
-            '## 필수 수동 단계 — Play Console 초대',
-            '1. https://play.google.com/console/developers 접속',
-            '2. **설정 → 사용자 및 권한 → 새 사용자 초대**',
-            `3. 이메일 입력: \`${saEmail}\``,
-            '4. 권한: **앱 출시** 또는 **릴리스 관리자** 선택 → 초대 전송',
-            '5. 권한 적용까지 약 5분 소요',
-            '',
-            '초대 완료 후 `playstore_verify_service_account` 로 연결 확인 가능합니다.',
-          ].join('\n'),
-        }],
-      };
+      return textResult(playConnectionSetupLines(packageName, saEmail));
     },
   );
 
@@ -967,42 +808,11 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       confirm: z.boolean().optional().describe('true 명시 시에만 업로드. 생략/false 면 요약만 반환.'),
     },
     async ({ packageName, csvPath, csv, confirm }) => {
-      if (!csv && !csvPath) throw new Error('csvPath 또는 csv 중 하나는 필요하다.');
-      if (!csv && csvPath && !path.isAbsolute(csvPath)) {
-        throw new Error(`csvPath 는 절대경로여야 한다: ${csvPath}`);
-      }
-      const content: string = csv ?? fs.readFileSync(csvPath as string, 'utf8');
-      const lines = content.trim().split('\n');
-      if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              '🛑 데이터 안전 업로드 dry-run — 아직 보내지 않았다.',
-              `  패키지: ${packageName}`,
-              `  CSV: ${lines.length}줄 / ${Buffer.byteLength(content, 'utf8')} bytes`,
-              // 원문은 싣지 않는다 — CSV 가 사설 데이터 처리 내역을 담고 있고, 대화 기록에 남는다.
-              `  열 수(첫 줄 기준): ${lines[0] ? lines[0].split(',').length : 0}`,
-              '',
-              '⚠️ 업로드하면 기존 데이터 안전 제출을 통째로 덮어쓴다.',
-              '실행하려면 confirm: true 로 다시 호출.',
-            ].join('\n'),
-          }],
-        };
-      }
+      const content = readDataSafetyCsv({ csv, csvPath });
+      if (!confirm) return textResult(dataSafetyDryRunLines(packageName, content));
       const auth = requirePlayStoreAuth(packageName);
       const r = await playstore.uploadDataSafety(auth, packageName, content);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 데이터 안전 선언 업로드 완료',
-            `  패키지: ${r.packageName}`,
-            `  전송: ${r.lines}줄 / ${r.bytes} bytes`,
-            'Play Console > 앱 콘텐츠 > 데이터 안전에서 반영을 확인할 것.',
-          ].join('\n'),
-        }],
-      };
+      return textResult(dataSafetyUploadedLines(r));
     },
   );
 
@@ -1023,22 +833,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       const auth = requirePlayStoreAuth(packageName);
       const rows = await playstore.listRecoveryActions(auth, packageName, versionCode);
       if (rows.length === 0) return textResult('복구 액션 없음.');
-      return {
-        content: [{
-          type: 'text',
-          text: rows
-            .map((r) =>
-              [
-                `${r.id}: ${r.status}`,
-                r.createTime ? `  생성 ${r.createTime}` : '',
-                r.deployTime ? `  배포 ${r.deployTime}` : '',
-                r.cancelTime ? `  취소 ${r.cancelTime}` : '',
-                `  대상: ${JSON.stringify(r.targeting ?? {})}`,
-              ].filter(Boolean).join('\n'),
-            )
-            .join('\n'),
-        }],
-      };
+      return textResult(recoveryActionsText(rows));
     },
   );
 
@@ -1072,33 +867,10 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         regions,
         sdkLevels,
       };
-      if (!confirm) {
-        return {
-          content: [{
-            type: 'text',
-            text: [
-              '🛑 dry-run — 아직 만들지 않았다.',
-              `  패키지: ${packageName}`,
-              `  대상: ${JSON.stringify(targeting)}`,
-              '',
-              'DRAFT 로 만들려면 confirm: true. 만든 뒤에도 배포는 별도 단계다.',
-            ].join('\n'),
-          }],
-        };
-      }
+      if (!confirm) return textResult(recoveryCreateDryRunLines(packageName, targeting));
       const auth = requirePlayStoreAuth(packageName);
       const r = await playstore.createRecoveryAction(auth, packageName, targeting);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 복구 액션 생성 (DRAFT — 아직 사용자에게 나가지 않았다)',
-            `  id: ${r.id}`,
-            `  상태: ${r.status}`,
-            '배포하려면 playstore_deploy_recovery_action.',
-          ].join('\n'),
-        }],
-      };
+      return textResult(recoveryCreatedLines(r));
     },
   );
 

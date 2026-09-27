@@ -47,7 +47,7 @@ export function registerThreadsTools(server: ToolRegistrar) {
     async ({ profile }) => {
       const cfg = requireThreadsConfig({ profile });
       const result = await refreshThreadsToken(cfg.accessToken, { profile });
-      return { content: [{ type: 'text', text: result.text }], isError: !result.ok };
+      return { ...textResult(result.text), isError: !result.ok };
     },
   );
 
@@ -59,17 +59,12 @@ export function registerThreadsTools(server: ToolRegistrar) {
       const cfg = requireThreadsConfig({ profile });
       const account = await api.getAccount(cfg);
 
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `@${account.username}${account.name ? ` (${account.name})` : ''}`,
-            `   ID: ${account.id}`,
-            account.threads_biography ? `   소개: ${account.threads_biography}` : '',
-            `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `@${account.username}${account.name ? ` (${account.name})` : ''}`,
+        `   ID: ${account.id}`,
+        account.threads_biography ? `   소개: ${account.threads_biography}` : '',
+        `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,
+      ].filter(Boolean));
     },
   );
 
@@ -89,16 +84,11 @@ export function registerThreadsTools(server: ToolRegistrar) {
     async ({ text, imageUrl, profile }) => {
       const cfg = requireThreadsConfig({ profile });
       const result = await api.postText(cfg, text, imageUrl);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 게시 완료',
-            `   media_id: ${result.id}`,
-            result.permalink ? `   URL: ${result.permalink}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 게시 완료',
+        `   media_id: ${result.id}`,
+        result.permalink ? `   URL: ${result.permalink}` : '',
+      ].filter(Boolean));
     },
   );
 
@@ -117,16 +107,11 @@ export function registerThreadsTools(server: ToolRegistrar) {
     async ({ imageUrls, text, profile }) => {
       const cfg = requireThreadsConfig({ profile });
       const result = await api.postCarousel(cfg, imageUrls, text);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            `✅ 캐러셀 ${imageUrls.length}장 게시 완료`,
-            `   media_id: ${result.id}`,
-            result.permalink ? `   URL: ${result.permalink}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        `✅ 캐러셀 ${imageUrls.length}장 게시 완료`,
+        `   media_id: ${result.id}`,
+        result.permalink ? `   URL: ${result.permalink}` : '',
+      ].filter(Boolean));
     },
   );
 
@@ -147,16 +132,11 @@ export function registerThreadsTools(server: ToolRegistrar) {
     async ({ videoUrl, text, altText, profile }) => {
       const cfg = requireThreadsConfig({ profile });
       const result = await api.postVideo(cfg, videoUrl, text, altText);
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ 영상 게시 완료',
-            `   media_id: ${result.id}`,
-            result.permalink ? `   URL: ${result.permalink}` : '',
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ 영상 게시 완료',
+        `   media_id: ${result.id}`,
+        result.permalink ? `   URL: ${result.permalink}` : '',
+      ].filter(Boolean));
     },
   );
 
@@ -172,18 +152,13 @@ export function registerThreadsTools(server: ToolRegistrar) {
       if (!cfg) {
         return textResult(`❌ Threads ${socialTargetLabel(target)} 미설정 → threads_save_config 또는 mimi-seed auth threads`);
       }
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '✅ Threads 연결됨',
-            `   대상: ${socialTargetLabel(target)}`,
-            `   @${cfg.username ?? '(username 미저장)'}`,
-            `   userId: ${cfg.userId}`,
-            `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,
-          ].filter(Boolean).join('\n'),
-        }],
-      };
+      return textResult([
+        '✅ Threads 연결됨',
+        `   대상: ${socialTargetLabel(target)}`,
+        `   @${cfg.username ?? '(username 미저장)'}`,
+        `   userId: ${cfg.userId}`,
+        `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,
+      ].filter(Boolean));
     },
   );
 }

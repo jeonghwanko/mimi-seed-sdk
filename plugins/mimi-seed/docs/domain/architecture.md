@@ -73,14 +73,21 @@ Why a registrar instead of editing 200+ call sites: the classification has one o
 by the catalog's **W**/**D** markers and test-enforced), and a new destructive tool is guarded the moment it is
 classified — nobody has to remember to hand-write a preview branch.
 - Business logic lives in sibling folders (`playstore/tools.ts`, `appstore/tools.ts`, …), not in the register
-  file. The register file is the thin "surface"; `tools.ts` is the "engine".
+  file. The register file is the thin "surface"; `tools.ts` is the "engine". File IO (reading a CSV or a key
+  file the caller named) belongs to the domain module too — e.g. `playstore/data-safety.ts`,
+  `android/playstore-sa.ts`.
 - Responses go through `lib/mcp-response.ts`: `jsonResult(value)` for structured output, `textResult(str | lines)`
-  for prose. Don't hand-write `{ content: [{ type: 'text', … }] }` — that wrapper was repeated 250 times and made
-  it impossible to see at a glance whether a register file was actually thin. The helpers deliberately stop at
-  joining: whether to keep blank lines or drop them with `.filter(Boolean)` is the call site's meaning, so that
-  stays visible where it is written.
+  for prose, `errorResult(str | lines)` for a pre-call rejection (`isError: true`). Don't hand-write
+  `{ content: [{ type: 'text', … }] }` — that wrapper was repeated 250 times and made it impossible to see at a
+  glance whether a register file was actually thin. The helpers deliberately stop at joining: whether to keep
+  blank lines or drop them with `.filter(Boolean)` is the call site's meaning, so that stays visible where it is
+  written.
+- Multi-line user-facing prose — troubleshooting trees, next-step checklists, dry-run previews — lives in the
+  domain's `messages.ts` (`playstore/`, `appstore/`, `android/`, `jenkins/`) as functions returning lines or
+  text, so a register handler reads as "call → format → return".
 - Errors are translated to human-friendly messages before returning — see the friendly-error layer in
-  [[external-apis]].
+  [[external-apis]]. A register that wants every call of a domain module translated wraps the module once with
+  `lib/wrap-domain.ts` (`wrapDomain(mod, translate)`) instead of a hand-copied `Proxy`.
 
 ### Deliberately duplicated across the two packages
 

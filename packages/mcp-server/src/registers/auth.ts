@@ -371,24 +371,19 @@ export function registerAuthTools(server: ToolRegistrar) {
       const scopeLine = domains?.length
         ? `요청 도메인: ${domains.map((d) => `${d} (${AUTH_DOMAINS[d].label})`).join(', ')} — 기존 부여 권한은 유지됨.`
         : `요청 도메인: 전체 (${DOMAIN_IDS.join(', ')})`;
-      return {
-        content: [{
-          type: 'text',
-          text: [
-            '🔐 Google 로그인 링크 (10분 유효):',
-            '',
-            url,
-            '',
-            scopeLine,
-            `로그인 프로필: ${profile ?? '(기본)'} / 대상 채널: ${expectedChannelId ?? '(로그인 후 확인)'}`,
-            'YouTube는 Google 로그인에서 선택한 개인/브랜드 채널에 연결됩니다. 완료 후 mimi_seed_auth_status(profile=...)로 실제 채널을 확인하세요.',
-            '',
-            '이 URL을 브라우저에서 열고 Google 계정으로 승인해줘.',
-            '완료되면 localhost:9876으로 자동 리다이렉트되고 토큰이 저장돼.',
-            '이후 바로 다른 MCP 도구(playstore_*, firebase_* 등) 호출 가능.',
-          ].join('\n'),
-        }],
-      };
+      return textResult([
+        '🔐 Google 로그인 링크 (10분 유효):',
+        '',
+        url,
+        '',
+        scopeLine,
+        `로그인 프로필: ${profile ?? '(기본)'} / 대상 채널: ${expectedChannelId ?? '(로그인 후 확인)'}`,
+        'YouTube는 Google 로그인에서 선택한 개인/브랜드 채널에 연결됩니다. 완료 후 mimi_seed_auth_status(profile=...)로 실제 채널을 확인하세요.',
+        '',
+        '이 URL을 브라우저에서 열고 Google 계정으로 승인해줘.',
+        '완료되면 localhost:9876으로 자동 리다이렉트되고 토큰이 저장돼.',
+        '이후 바로 다른 MCP 도구(playstore_*, firebase_* 등) 호출 가능.',
+      ]);
     },
   );
 
@@ -441,16 +436,12 @@ export function registerAuthTools(server: ToolRegistrar) {
 
       switch (r.status) {
         case 'unauthenticated':
-          return {
-            content: [{
-              type: 'text',
-              text:
-                `❌ [${r.error.code}] ${r.error.message}\n` +
-                (r.error.hint ? `→ ${r.error.hint}\n\n` : '\n') +
-                `Google profiles: ${JSON.stringify(profiles)}\n` +
-                '터미널에서 실행:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
-            }],
-          };
+          return textResult(
+            `❌ [${r.error.code}] ${r.error.message}\n` +
+            (r.error.hint ? `→ ${r.error.hint}\n\n` : '\n') +
+            `Google profiles: ${JSON.stringify(profiles)}\n` +
+            '터미널에서 실행:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+          );
         case 'fresh': {
           const min = Math.round(r.msUntilExpiry / 60000);
           return textResult(`✅ 인증 유효 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`);
@@ -460,21 +451,17 @@ export function registerAuthTools(server: ToolRegistrar) {
           return textResult(`✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`);
         }
         case 'expired_refresh_failed':
-          return {
-            content: [{
-              type: 'text',
-              text:
-                `⚠️ 토큰 만료 + 자동 갱신 실패\n` +
-                `   코드: ${r.error.code}\n` +
-                `   ${r.error.message}\n` +
-                (r.error.hint ? `   → ${r.error.hint}\n` : '') +
-                `${refreshLine}` +
-                // 재로그인 안내는 그것이 실제 해법일 때만 (네트워크/설정 조회 실패엔 무의미)
-                (r.error.needsReauth
-                  ? '\n\n터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth'
-                  : ''),
-            }],
-          };
+          return textResult(
+            `⚠️ 토큰 만료 + 자동 갱신 실패\n` +
+            `   코드: ${r.error.code}\n` +
+            `   ${r.error.message}\n` +
+            (r.error.hint ? `   → ${r.error.hint}\n` : '') +
+            `${refreshLine}` +
+            // 재로그인 안내는 그것이 실제 해법일 때만 (네트워크/설정 조회 실패엔 무의미)
+            (r.error.needsReauth
+              ? '\n\n터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth'
+              : ''),
+          );
       }
     },
   );
@@ -493,18 +480,11 @@ export function registerAuthTools(server: ToolRegistrar) {
       include_playstore: z.boolean().optional().describe('Play 서비스 계정 포함 (기본 true)'),
       package_names: z.array(androidPackageName).optional().describe('특정 Play 패키지만 동기화 — playstore_register_service_account 로 등록된 패키지명만 허용'),
     },
-    async ({ confirm, include_appstore, include_playstore, package_names }) => ({
-      content: [
-        {
-          type: 'text' as const,
-          text: await syncRemoteCredentials({
-            confirm,
-            includeAppStore: include_appstore,
-            includePlayStore: include_playstore,
-            packageNames: package_names,
-          }),
-        },
-      ],
-    }),
+    async ({ confirm, include_appstore, include_playstore, package_names }) => textResult(await syncRemoteCredentials({
+      confirm,
+      includeAppStore: include_appstore,
+      includePlayStore: include_playstore,
+      packageNames: package_names,
+    })),
   );
 }
