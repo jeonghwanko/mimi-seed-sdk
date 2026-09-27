@@ -173,38 +173,27 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       'App Store 버전에 업로드된 빌드를 연결 — PATCH /v1/appStoreVersions/{id}/relationships/build.',
       'TestFlight에 업로드되어 processingState=VALID 상태인 빌드만 연결 가능.',
       '편집 가능한 버전(PREPARE_FOR_SUBMISSION 등)에서만 변경됨.',
-      'buildId는 appstore_list_builds 결과 사용.',
+      'buildId 는 appstore_list_builds 결과. 생략하면 최신 VALID 빌드를 자동 선택한다 —',
+      'versionId 로 appId 역추적 → processingState=VALID 만 필터 → buildNumber 최대값 → attach (PROCESSING 빌드 오연결 차단).',
+      'minBuildNumber 로 자동 선택의 floor 지정 가능 (예: 1.4.x 빌드만).',
     ].join(' '),
     {
       versionId: z.string().describe('App Store 버전 ID (appstore_list_versions 또는 appstore_create_version 결과)'),
-      buildId: z.string().describe('빌드 ID (appstore_list_builds 결과)'),
+      buildId: z.string().optional().describe('빌드 ID (appstore_list_builds 결과). 생략 시 최신 VALID 빌드 자동 선택'),
+      minBuildNumber: z.number().int().optional().describe('buildId 생략 시 자동 선택 후보의 최소 buildNumber (예: 186 — 이전 빌드 무시)'),
     },
-    async ({ versionId, buildId }) => {
-      const result = await appstore.attachBuildToVersion(versionId, buildId);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ 빌드 ${buildId}가 버전 ${versionId}에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`,
-          },
-        ],
-      };
-    },
-  );
-
-  server.tool(
-    'appstore_attach_latest_build',
-    [
-      'App Store 버전에 최신 VALID 빌드를 자동으로 attach — list_builds → 필터 → attach 의 3-step 을 1회로 단축.',
-      '내부: versionId 로 appId 역추적 → listBuilds 에서 processingState=VALID 만 필터 → buildNumber 숫자 최대값 선택 → attach.',
-      'PROCESSING 중인 빌드를 실수로 attach 해서 심사 제출 시 깨지는 케이스를 차단.',
-      'minBuildNumber 옵션으로 floor 지정 가능 (예: 1.4.x 빌드만 attach).',
-    ].join(' '),
-    {
-      versionId: z.string().describe('App Store 버전 ID (appstore_create_version 또는 list_versions 결과)'),
-      minBuildNumber: z.number().int().optional().describe('attach 후보 최소 buildNumber (예: 186 — 이전 빌드 무시)'),
-    },
-    async ({ versionId, minBuildNumber }) => {
+    async ({ versionId, buildId, minBuildNumber }) => {
+      if (buildId) {
+        const result = await appstore.attachBuildToVersion(versionId, buildId);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ 빌드 ${buildId}가 버전 ${versionId}에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`,
+            },
+          ],
+        };
+      }
       const result = await appstore.attachLatestValidBuild(versionId, { minBuildNumber });
       return {
         content: [

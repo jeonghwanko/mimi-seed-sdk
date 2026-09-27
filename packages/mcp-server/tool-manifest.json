@@ -39,6 +39,10 @@
       "android"
     ]
   },
+  "deprecated": {
+    "playstore_update_latest_release_notes": "playstore_update_release_notes",
+    "appstore_attach_latest_build": "appstore_attach_build"
+  },
   "domains": {
     "admob": {
       "label": "AdMob",

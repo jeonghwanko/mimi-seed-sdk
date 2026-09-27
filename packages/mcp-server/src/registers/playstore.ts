@@ -247,15 +247,23 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
 
   server.tool(
     'playstore_update_release_notes',
-    "Google Play 트랙 릴리스의 '최근 변경사항'(releaseNotes) 업데이트. versionCode로 타겟 릴리스 지정. 다른 언어/release는 보존. 이미 라이브(completed) 상태도 noteOnly 편집 가능",
+    [
+      "Google Play 트랙 릴리스의 '최근 변경사항'(releaseNotes) 업데이트. 다른 언어/release는 보존. 이미 라이브(completed) 상태도 noteOnly 편집 가능.",
+      'versionCode 를 주면 그 릴리스, 생략하면 트랙의 최신 릴리스(versionCode 최대)에 적용한다.',
+      '⚠️ 지정한 트랙에만 적용 — 다른 트랙에는 자동 복사되지 않음 (Google Play 정책: promote_release 시점에 노트 캐리됨).',
+      '동일 노트를 여러 트랙에 즉시 반영하려면 syncTracks 사용 — 1차 track 반영 후 순차로 같은 노트 적용 (versionCode 생략 시 트랙별 최신 릴리스).',
+    ].join(' '),
     {
       packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
-      track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('릴리스 트랙'),
-      versionCode: z.string().describe('대상 versionCode (문자열, 예: "40")'),
+      track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('릴리스 트랙 (1차 적용 트랙)'),
+      versionCode: z.string().optional().describe('대상 versionCode (문자열, 예: "40"). 생략 시 트랙의 최신 릴리스'),
       language: z.string().describe('언어 코드 (예: ko-KR, en-US)'),
       text: z.string().describe('릴리스 노트 본문 (500자 이내)'),
+      syncTracks: z.array(z.enum(['production', 'beta', 'alpha', 'internal']))
+        .optional()
+        .describe('추가로 동일 노트 적용할 트랙 배열 (예: ["production"]). 지정 시 1차 track 반영 후 순차 동기화.'),
     },
-    async ({ packageName, track, versionCode, language, text }) => {
+    async ({ packageName, track, versionCode, language, text, syncTracks }) => {
       // ── 사전 lint — 500자 / HTML / 역슬래시 가격(\5000원) round-trip 차단.
       const validation = validatePlayReleaseNotes(text);
       if (!validation.ok) {
@@ -268,42 +276,16 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         };
       }
       const auth = requirePlayStoreAuth(packageName);
-      const result = await playstore.updateReleaseNotes(auth, packageName, track, versionCode, language, text);
-      return textResult(`✅ ${packageName} ${track} v${versionCode} ${language} 노트 반영\n\n${JSON.stringify(result, null, 2)}`);
-    },
-  );
 
-  server.tool(
-    'playstore_update_latest_release_notes',
-    [
-      "Google Play 트랙의 최신 릴리스(versionCode 최대) '최근 변경사항' 업데이트 — versionCode를 모를 때 편의용.",
-      '⚠️ 지정한 단일 트랙에만 적용 — 다른 트랙에는 자동 복사되지 않음 (Google Play 정책: promote_release 시점에 노트 캐리됨).',
-      '동일 노트를 여러 트랙에 즉시 반영하려면 syncTracks 옵션 사용 — 지정 트랙들에 대해 순차로 같은 노트 적용.',
-    ].join(' '),
-    {
-      packageName: androidPackageName.describe('패키지명'),
-      track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('1차 적용 트랙'),
-      language: z.string().describe('언어 코드 (예: ko-KR)'),
-      text: z.string().describe('릴리스 노트 본문 (500자 이내)'),
-      syncTracks: z.array(z.enum(['production', 'beta', 'alpha', 'internal']))
-        .optional()
-        .describe('추가로 동일 노트 적용할 트랙 배열 (예: ["production"]). 지정 시 1차 track 반영 후 순차 동기화.'),
-    },
-    async ({ packageName, track, language, text, syncTracks }) => {
-      const validation = validatePlayReleaseNotes(text);
-      if (!validation.ok) {
-        return {
-          content: [{
-            type: 'text',
-            text: `❌ 릴리스 노트 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`,
-          }],
-          isError: true,
-        };
-      }
-      const auth = requirePlayStoreAuth(packageName);
+      // versionCode 가 있으면 그 릴리스, 없으면 트랙 최신 릴리스 (옛 update_latest_release_notes 경로).
+      // updateReleaseNotes 결과에는 updatedVersionCodes 가 없으므로 요청한 versionCode 로 채운다.
+      const applyTo = async (t: string) =>
+        versionCode
+          ? { ...(await playstore.updateReleaseNotes(auth, packageName, t, versionCode, language, text)), updatedVersionCodes: [versionCode] }
+          : await playstore.updateLatestReleaseNotes(auth, packageName, t, language, text);
 
       // 1차 적용 + 결과 누적.
-      const primaryResult = await playstore.updateLatestReleaseNotes(auth, packageName, track, language, text);
+      const primaryResult = await applyTo(track);
       const lines: string[] = [
         `✅ ${packageName} ${track} (versionCodes=${JSON.stringify(primaryResult.updatedVersionCodes)}) ${language} 노트 반영`,
       ];
@@ -314,7 +296,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         const targets = syncTracks.filter((t) => t !== track);
         for (const t of targets) {
           try {
-            const r = await playstore.updateLatestReleaseNotes(auth, packageName, t, language, text);
+            const r = await applyTo(t);
             allResults[t] = r;
             lines.push(`  ↳ sync ${t} (versionCodes=${JSON.stringify(r.updatedVersionCodes)}) 반영`);
           } catch (e) {
