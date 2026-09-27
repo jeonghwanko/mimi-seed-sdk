@@ -17,24 +17,39 @@ const REVIEW_MAX_PAGES = 10;
 
 type PlayReview = androidpublisher_v3.Schema$Review;
 
-async function fetchAllReviews(auth: OAuth2Client | JWT, packageName: string): Promise<PlayReview[]> {
+/**
+ * 모든 페이지를 모은다. 첫 페이지 실패는 그대로 던진다(그땐 돌려줄 게 없다). 이후 페이지 실패나 페이지
+ * 상한은 **모은 만큼 돌려주고** `truncated` 로 알린다 — 할당량이 빡빡한 API 라 2페이지 오류로 1페이지까지
+ * 버리면 첫 페이지만 읽던 예전보다 나빠진다. 부분 목록이어도 각 리뷰의 답변 여부는 정확하다.
+ */
+async function fetchAllReviews(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+): Promise<{ reviews: PlayReview[]; truncated: string | null }> {
   const all: PlayReview[] = [];
   const seen = new Set<string>();
   let token: string | undefined;
   for (let page = 0; page < REVIEW_MAX_PAGES; page++) {
-    const res = await publisher().reviews.list({
-      auth,
-      packageName,
-      maxResults: REVIEW_PAGE_SIZE,
-      ...(token ? { token } : {}),
-    });
+    let res;
+    try {
+      res = await publisher().reviews.list({
+        auth,
+        packageName,
+        maxResults: REVIEW_PAGE_SIZE,
+        ...(token ? { token } : {}),
+      });
+    } catch (err) {
+      if (page === 0) throw err;
+      const reason = err instanceof Error ? err.message : String(err);
+      return { reviews: all, truncated: `${page + 1}페이지 조회 실패로 ${all.length}건까지만 가져왔다 (${reason})` };
+    }
     all.push(...(res.data.reviews ?? []));
     const next = res.data.tokenPagination?.nextPageToken ?? undefined;
-    if (!next || seen.has(next)) break;
+    if (!next || seen.has(next)) return { reviews: all, truncated: null };
     seen.add(next);
     token = next;
   }
-  return all;
+  return { reviews: all, truncated: `페이지 상한(${REVIEW_MAX_PAGES}페이지)에 걸려 최근 ${all.length}건까지만 가져왔다` };
 }
 
 type DevComment = { text?: string | null; lastModified?: { seconds?: string | null } | null };
@@ -48,39 +63,46 @@ function latestDeveloperComment(comments: PlayReview['comments']): DevComment | 
   }, undefined);
 }
 
+/** 리뷰 목록과, 목록이 잘렸다면 그 이유(아니면 null). 도구 응답은 이걸 쓴다. */
+export async function listReviewsWithStatus(auth: OAuth2Client | JWT, packageName: string) {
+  const { reviews, truncated } = await fetchAllReviews(auth, packageName);
+  return { reviews: reviews.map(toReviewSummary), truncated };
+}
+
 export async function listReviews(auth: OAuth2Client | JWT, packageName: string) {
-  const reviews = await fetchAllReviews(auth, packageName);
-  return reviews.map((r) => {
-    const developerComment = latestDeveloperComment(r.comments);
-    return {
-      reviewId: r.reviewId,
-      authorName: r.authorName,
-      developerComment: developerComment
-        ? { text: developerComment.text, lastModified: developerComment.lastModified?.seconds }
-        : null,
-      comments: r.comments
-        ?.map((c) => {
-          if (c.userComment) {
-            return {
-              text: c.userComment.text,
-              starRating: c.userComment.starRating,
-              lastModified: c.userComment.lastModified?.seconds,
-              deviceMetadata: c.userComment.deviceMetadata?.productName,
-            };
-          }
-          if (c.developerComment) {
-            return {
-              developerComment: {
-                text: c.developerComment.text,
-                lastModified: c.developerComment.lastModified?.seconds,
-              },
-            };
-          }
-          return null;
-        })
-        .filter((c) => c !== null),
-    };
-  });
+  return (await listReviewsWithStatus(auth, packageName)).reviews;
+}
+
+function toReviewSummary(r: PlayReview) {
+  const developerComment = latestDeveloperComment(r.comments);
+  return {
+    reviewId: r.reviewId,
+    authorName: r.authorName,
+    developerComment: developerComment
+      ? { text: developerComment.text, lastModified: developerComment.lastModified?.seconds }
+      : null,
+    comments: r.comments
+      ?.map((c) => {
+        if (c.userComment) {
+          return {
+            text: c.userComment.text,
+            starRating: c.userComment.starRating,
+            lastModified: c.userComment.lastModified?.seconds,
+            deviceMetadata: c.userComment.deviceMetadata?.productName,
+          };
+        }
+        if (c.developerComment) {
+          return {
+            developerComment: {
+              text: c.developerComment.text,
+              lastModified: c.developerComment.lastModified?.seconds,
+            },
+          };
+        }
+        return null;
+      })
+      .filter((c) => c !== null),
+  };
 }
 
 // ─── 리뷰 답변 ───

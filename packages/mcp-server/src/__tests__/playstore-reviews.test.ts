@@ -7,7 +7,7 @@ vi.mock('../lib/googleapis-lite.js', () => ({
   google: { androidpublisher: () => ({ reviews: { list: api.list } }) },
 }));
 
-import { listReviews } from '../playstore/tools.js';
+import { listReviews, listReviewsWithStatus } from '../playstore/tools.js';
 
 const auth = {} as OAuth2Client;
 
@@ -65,6 +65,41 @@ describe('listReviews', () => {
 
     await listReviews(auth, 'com.example.app');
     expect(api.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('전부 가져오면 truncated 는 null', async () => {
+    api.list.mockResolvedValue({ data: { reviews: [{ reviewId: 'a' }] } });
+
+    expect((await listReviewsWithStatus(auth, 'com.example.app')).truncated).toBeNull();
+  });
+
+  // 첫 페이지만 읽던 예전보다 나빠지면 안 된다 — 2페이지 오류로 1페이지 결과를 버리지 않는다.
+  it('2페이지 이후 오류는 모은 만큼 돌려주고 truncated 로 알린다', async () => {
+    api.list
+      .mockResolvedValueOnce({ data: { reviews: [{ reviewId: 'a' }], tokenPagination: { nextPageToken: 't1' } } })
+      .mockRejectedValueOnce(new Error('Quota exceeded'));
+
+    const out = await listReviewsWithStatus(auth, 'com.example.app');
+    expect(out.reviews.map((r) => r.reviewId)).toEqual(['a']);
+    expect(out.truncated).toMatch(/2페이지.*Quota exceeded/);
+  });
+
+  it('첫 페이지 오류는 그대로 던진다', async () => {
+    api.list.mockRejectedValueOnce(new Error('403 forbidden'));
+
+    await expect(listReviewsWithStatus(auth, 'com.example.app')).rejects.toThrow('403 forbidden');
+  });
+
+  it('페이지 상한에 걸리면 truncated 로 알린다', async () => {
+    let n = 0;
+    api.list.mockImplementation(() =>
+      Promise.resolve({ data: { reviews: [{ reviewId: `r${n}` }], tokenPagination: { nextPageToken: `t${++n}` } } }),
+    );
+
+    const out = await listReviewsWithStatus(auth, 'com.example.app');
+    expect(api.list).toHaveBeenCalledTimes(10);
+    expect(out.reviews).toHaveLength(10);
+    expect(out.truncated).toMatch(/페이지 상한/);
   });
 
   it('답변이 여럿이면 가장 최근 답변을 developerComment 로 고른다', async () => {

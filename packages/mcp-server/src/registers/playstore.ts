@@ -302,8 +302,11 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
-      const reviews = await playstore.listReviews(auth, packageName);
-      return jsonResult(reviews);
+      const { reviews, truncated } = await playstore.listReviewsWithStatus(auth, packageName);
+      const result = jsonResult(reviews);
+      // 목록이 잘렸을 때만 안내 줄을 덧붙인다 — 전부 가져왔으면 응답은 예전과 같은 JSON 하나다.
+      if (truncated) result.content.push({ type: 'text', text: `⚠️ 일부만 조회됨: ${truncated}` });
+      return result;
     },
   );
 
