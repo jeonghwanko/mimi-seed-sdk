@@ -47,7 +47,38 @@ describe('listReviews', () => {
       developerComment: null,
       comments: [{ text: 'Nice app', starRating: 5, lastModified: undefined, deviceMetadata: undefined }],
     }]);
-    expect(api.list).toHaveBeenCalledWith({ auth, packageName: 'com.example.app' });
+    expect(api.list).toHaveBeenCalledWith({ auth, packageName: 'com.example.app', maxResults: 100 });
+  });
+
+  it('다음 페이지 토큰을 따라가 모든 리뷰를 모은다', async () => {
+    api.list
+      .mockResolvedValueOnce({ data: { reviews: [{ reviewId: 'a' }], tokenPagination: { nextPageToken: 't1' } } })
+      .mockResolvedValueOnce({ data: { reviews: [{ reviewId: 'b' }] } });
+
+    const out = await listReviews(auth, 'com.example.app');
+    expect(out.map((r) => r.reviewId)).toEqual(['a', 'b']);
+    expect(api.list).toHaveBeenNthCalledWith(2, { auth, packageName: 'com.example.app', maxResults: 100, token: 't1' });
+  });
+
+  it('같은 토큰이 반복되면 멈춘다', async () => {
+    api.list.mockResolvedValue({ data: { reviews: [{ reviewId: 'x' }], tokenPagination: { nextPageToken: 'same' } } });
+
+    await listReviews(auth, 'com.example.app');
+    expect(api.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('답변이 여럿이면 가장 최근 답변을 developerComment 로 고른다', async () => {
+    api.list.mockResolvedValue({ data: { reviews: [{
+      reviewId: 'review-4',
+      comments: [
+        { developerComment: { text: 'new', lastModified: { seconds: '300' } } },
+        { userComment: { text: 'Bug', starRating: 2 } },
+        { developerComment: { text: 'old', lastModified: { seconds: '100' } } },
+      ],
+    }] } });
+
+    const [r] = await listReviews(auth, 'com.example.app');
+    expect(r.developerComment).toEqual({ text: 'new', lastModified: '300' });
   });
 
   it('댓글이 없는 리뷰도 미답변(null)으로 돌려준다', async () => {

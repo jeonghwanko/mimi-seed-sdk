@@ -25,6 +25,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   instead of turning them into empty user comments. Before, answered reviews looked unanswered, so the
   "reply to unanswered reviews" flow could reply again and replace an existing answer (Play keeps one reply per
   review). The review-reply prompt and the Play skill now select reviews whose `developerComment` is `null`.
+  It also follows `nextPageToken` (up to 10 pages of 100) instead of returning only the first page, and when a
+  review carries more than one reply it reports the most recent one.
+- `appstore_list_reviews` always reported `response: null`. The request's sparse fieldset for `customerReviews`
+  left out the `response` relationship, so included replies could not be matched to their reviews and every
+  review looked unanswered. Answered reviews now carry their reply.
 
 ### Tool changes
 
