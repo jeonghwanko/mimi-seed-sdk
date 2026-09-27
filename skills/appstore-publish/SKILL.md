@@ -28,7 +28,7 @@ App Store Connect 는 Issuer ID · Key ID · `.p8` 파일 3개가 필요하고, 
 호출 전 schema 로드:
 
 ```
-ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_update_version_string,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_latest_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
+ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_update_version_string,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
 ```
 
 승인 이후 출시 제어까지 다룰 때 추가로:
@@ -52,7 +52,12 @@ ToolSearch(query="select:appstore_list_review_submissions,appstore_add_version_t
 5. 사용자에게 `versionString`, `versionId`, `state`, `localizationId`, 업로드할 파일 목록을 보고하고 승인받는다.
 6. What's New를 업데이트한다.
 7. 스크린샷 교체 요청이 있으면 기존 screenshot set을 삭제한 뒤 매니페스트 순서대로 업로드한다.
-8. 적용 결과와 실패 지점을 요약한다.
+   삭제 도구(`appstore_delete_screenshot_set` 등)는 먼저 `confirm` 없이 호출해 dry-run preview 를 받고,
+   5단계 승인 범위에 그 셋이 포함돼 있을 때만 같은 인자 + `confirm: true` 로 다시 호출한다.
+8. 빌드 연결은 `appstore_attach_build` — `buildId` 를 생략하면 최신 VALID 빌드를 붙인다.
+9. 심사 제출(`appstore_submit_for_review`)도 같은 순서다: `confirm` 없이 호출 → preview(버전·빌드·whatsNew)를
+   사용자에게 보여 명시 승인 → `confirm: true` 로 재호출.
+10. 적용 결과와 실패 지점을 요약한다.
 
 ## 심사 제출 묶음 — 제출·재제출이 막힐 때
 

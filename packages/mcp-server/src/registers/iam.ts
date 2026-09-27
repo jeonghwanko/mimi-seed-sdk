@@ -1,11 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as iam from '../iam/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { jsonResult } from '../lib/mcp-response.js';
 
-export function registerIamTools(server: McpServer) {
+export function registerIamTools(server: ToolRegistrar) {
   server.tool(
     'iam_list_service_accounts',
     '주어진 projectId의 서비스 계정 목록. 이메일 / displayName / disabled 상태 반환.',

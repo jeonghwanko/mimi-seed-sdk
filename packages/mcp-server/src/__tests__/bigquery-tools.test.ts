@@ -26,7 +26,7 @@ vi.mock('../lib/googleapis-lite.js', () => ({
   },
 }));
 
-import { runQuery, listDatasets, listTables, getTableSchema } from '../bigquery/tools.js';
+import { runQuery, listDatasets, listTables, getTableSchema, assertSelectOnlyQuery } from '../bigquery/tools.js';
 
 const auth = {} as OAuth2Client;
 
@@ -212,5 +212,48 @@ describe('listDatasets / listTables / getTableSchema', () => {
         tableId: 'events',
       }),
     );
+  });
+});
+
+// bigquery_run_query 는 readOnlyHint 를 단다. BigQuery 에는 읽기 전용 모드가 없어서
+// 이 가드가 빠지면 DELETE / DROP TABLE 이 "조회 도구" 로 그대로 실행된다.
+describe('assertSelectOnlyQuery', () => {
+  it.each([
+    'SELECT 1',
+    '  select event_name, count(*) from `p.analytics_123456789.events_*` group by 1;',
+    'WITH t AS (SELECT 1 AS x) SELECT * FROM t',
+    '(SELECT 1) UNION ALL (SELECT 2)',
+    "-- 설명\nSELECT 'DELETE FROM x; DROP TABLE y' AS s",
+    '/* DROP TABLE t */ SELECT 1',
+    "SELECT \"\"\"a;\nb\"\"\" AS s",
+    "FROM `p.d.events` |> WHERE event_name = 'open' |> AGGREGATE COUNT(*) AS n",
+    '(FROM t |> SELECT x)',
+    'SELECT 1 -- 주석\r\nFROM t',
+  ])('허용: %s', (sql) => {
+    expect(() => assertSelectOnlyQuery(sql)).not.toThrow();
+  });
+
+  it.each([
+    'DELETE FROM `p.d.t` WHERE true',
+    'drop table p.d.t',
+    'INSERT INTO t SELECT 1',
+    'MERGE t USING s ON false WHEN NOT MATCHED THEN INSERT ROW',
+    'CREATE OR REPLACE TABLE t AS SELECT 1',
+    'SELECT 1; DELETE FROM t WHERE true',
+    // 한 줄 주석은 \r 에서도 끝난다 (ZetaSQL) — \n 만 보면 뒤 문장이 주석에 숨는다.
+    'SELECT 1 -- x\r; DROP TABLE ds.t',
+    'SELECT 1 # x\r; DROP TABLE ds.t',
+    'SELECT 1 -- x\r\n; DROP TABLE ds.t',
+    'CREATE TEMP FUNCTION f(x INT64) AS (x + 1); SELECT f(1)',
+    'DECLARE x INT64; SELECT x',
+    'EXPORT DATA OPTIONS(uri="gs://b/*.csv") AS SELECT 1',
+    '# 주석만',
+    '',
+  ])('거부: %s', (sql) => {
+    expect(() => assertSelectOnlyQuery(sql)).toThrow(/읽기 전용|단일 SELECT/);
+  });
+
+  it('임시 함수 스크립트는 거부하되 이유를 말한다', () => {
+    expect(() => assertSelectOnlyQuery('CREATE TEMP FUNCTION f() AS (1); SELECT f()')).toThrow(/CREATE TEMP FUNCTION/);
   });
 });

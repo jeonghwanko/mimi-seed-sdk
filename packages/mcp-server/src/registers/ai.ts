@@ -1,9 +1,9 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { generateReleaseNotesFromCommits, formatGeneratedNotes } from '../ai/notes.js';
 import { generateReviewReply, formatReviewReply } from '../ai/review.js';
 
-export function registerAiTools(server: McpServer) {
+export function registerAiTools(server: ToolRegistrar) {
   server.tool(
     'generate_release_notes_from_commits',
     [

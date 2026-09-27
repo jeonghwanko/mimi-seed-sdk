@@ -177,7 +177,7 @@ export async function buildPlayStoreReleasePlan(opts: {
     state: 'pending',
     title: `릴리즈 노트 등록/갱신 (${language})`,
     detail: 'AI 노트 초안 + 사용자 확인 후 적용',
-    tool: 'playstore_update_release_notes (또는 playstore_update_latest_release_notes)',
+    tool: 'playstore_update_release_notes (versionCode 생략 = 트랙 최신 릴리스)',
   });
 
   // 5) 제출

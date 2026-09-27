@@ -31,18 +31,20 @@ CI 실행 번호는 스토어 빌드 번호가 아니다. 실제 산출물 버�
 
 1. 도구 로드:
    ```
-   ToolSearch(query="select:mimi_seed_status,ci_list_workflows,ci_trigger_build,ci_get_build_status,generate_release_notes_from_commits,playstore_check_submission_risks,playstore_update_latest_release_notes,playstore_promote_release,appstore_list_builds,appstore_attach_latest_build,appstore_update_whats_new,appstore_submit_for_review")
+   ToolSearch(query="select:mimi_seed_status,ci_list_workflows,ci_trigger_build,ci_get_build_status,generate_release_notes_from_commits,playstore_check_submission_risks,playstore_update_release_notes,playstore_promote_release,appstore_list_builds,appstore_attach_build,appstore_update_whats_new,appstore_submit_for_review")
    ```
 2. **빌드**: `ci_trigger_build`(GitHub/GitLab) → `ci_get_build_status`로 완료 대기. (Jenkins면 REST 트리거 후 빌드 로그 폴링.)
 3. **노트**: git 커밋 배열을 `generate_release_notes_from_commits`(3톤 × 다국어)로 생성 → 사용자 리뷰 → 적용.
 4. **점검**: `playstore_check_submission_risks` / `appstore_check_submission_risks` 블로커 보고.
 5. **적용**:
-   - Android: `playstore_update_latest_release_notes` → `playstore_promote_release`/`submit_release`
-   - iOS: `appstore_attach_latest_build` → `appstore_update_whats_new` → `appstore_submit_for_review`
+   - Android: `playstore_update_release_notes`(versionCode 생략 = 최신 릴리스) → `playstore_promote_release`/`submit_release`
+   - iOS: `appstore_attach_build`(buildId 생략 = 최신 VALID 빌드) → `appstore_update_whats_new` → `appstore_submit_for_review`
+   - 출시 도구(`promote_release`/`submit_release`/`submit_for_review`)는 **먼저 `confirm` 없이** 호출해 dry-run preview 를 받고,
+     사용자에게 보여 승인받은 뒤 같은 인자 + `confirm: true` 로 다시 호출한다. `status="draft"` 도 예외 없이 확인을 거친다.
 
 ## 안전 규칙
 
-- 빌드 산출물 업로드와 스토어 출시는 외부 노출/비가역 작업 — 출시(`status=completed`, `submit_for_review`) 전 **반드시 사용자 승인**.
+- 빌드 산출물 업로드와 스토어 출시는 외부 노출/비가역 작업 — 출시(`status=completed`, `submit_for_review`) 전 **반드시 사용자 승인**. 서버도 이 도구들을 `confirm: true` 없이는 실행하지 않고 dry-run preview 만 돌려준다 — 첫 호출에 `confirm: true` 를 넣지 말 것.
 - 점검(`*_check_submission_risks`)을 출시보다 먼저 돌려 블로커를 체크리스트로 보여준다.
 - TestFlight/스토어 업로드는 처리 시간이 있으니 상태를 폴링하고 결과를 요약한다.
 - mimi-seed는 빌드 바이너리를 직접 만들지 않는다 — 컴파일은 CI/Jenkins/EAS 잡이 담당.

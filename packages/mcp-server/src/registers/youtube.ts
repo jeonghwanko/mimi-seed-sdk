@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { GOOGLE_PROFILE_ID, getStoredTokens } from '../auth/google-auth.js';
 import { YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
@@ -23,7 +23,7 @@ async function requireYouTubeReadAuth(selectedProfile?: string) {
   return requireAuth(granted.includes(YOUTUBE_SCOPE) ? YOUTUBE_SCOPE : readScope, selectedProfile);
 }
 
-export function registerYouTubeTools(server: McpServer): void {
+export function registerYouTubeTools(server: ToolRegistrar): void {
   server.tool('youtube_get_channel',
     '인증된 YouTube 채널의 기본 정보·통계·업로드 플레이리스트를 조회합니다. youtube 또는 youtube_analytics 권한이 필요합니다.',
     { profile, expectedChannelId },

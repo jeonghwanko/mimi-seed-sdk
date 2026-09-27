@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
@@ -6,7 +6,16 @@ import * as jobs from '../jenkins/jobs.js';
 import { textResult } from '../lib/mcp-response.js';
 import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from '../android/keystore-store.js';
 
-export function registerJenkinsTools(server: McpServer) {
+/** 같은 id 가 이미 있어 쓰지 않았을 때의 dry-run 응답 (confirm 없이 기존 credential 을 덮어쓰지 않는다). */
+function existingCredentialPreview(id: string): string {
+  return [
+    `🛑 dry-run — Jenkins credential \`${id}\` 가 이미 존재해 아직 바꾸지 않았다.`,
+    '같은 종류의 기존 값(비밀값·keystore)은 교체되면 되돌릴 수 없다.',
+    '사용자에게 교체 여부를 확인받은 뒤 같은 인자에 confirm: true 를 추가해 다시 호출하거나, 다른 id 를 쓰세요.',
+  ].join('\n');
+}
+
+export function registerJenkinsTools(server: ToolRegistrar) {
   // ── 0. 상태 확인 (항상 첫 번째로 호출) ─────────────────────────────────────
   server.tool(
     'jenkins_status',
@@ -117,7 +126,8 @@ export function registerJenkinsTools(server: McpServer) {
     [
       'Jenkins에 Secret Text credential을 생성하거나 업데이트합니다.',
       '비밀번호, API 키, 앱 시크릿 등 문자열 값에 사용하세요.',
-      '같은 id가 이미 존재하면 자동으로 업데이트합니다.',
+      '새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 값을 되돌릴 수 없게 덮어쓰므로',
+      'confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.',
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
@@ -132,11 +142,13 @@ export function registerJenkinsTools(server: McpServer) {
         .optional()
         .describe('secret_file 에서 꺼낼 필드 (storePassword / keyPassword / keyAlias)'),
       description: z.string().optional().describe('설명 (선택)'),
+      confirm: z.boolean().optional().describe('같은 id 가 이미 있을 때만 필요. true 면 기존 값을 교체'),
     },
-    async ({ id, secret, secret_file, secret_field, description }) => {
+    async ({ id, secret, secret_file, secret_field, description, confirm }) => {
       const value = resolveSecretInput({ secret, secretFile: secret_file, secretField: secret_field });
       const cfg = requireJenkinsConfig();
-      const result = await creds.upsertSecretText(cfg, id, value, description ?? '');
+      const result = await creds.upsertSecretText(cfg, id, value, description ?? '', { allowReplace: confirm === true });
+      if (result === 'exists') return textResult(existingCredentialPreview(id));
       return textResult(`✅ Jenkins credential ${result}: \`${id}\``);
     },
   );
@@ -147,7 +159,8 @@ export function registerJenkinsTools(server: McpServer) {
     [
       'Jenkins에 Android keystore 파일을 Secret File credential로 업로드합니다.',
       'keystore_base64에 .jks/.p12 파일을 base64로 인코딩한 값을 전달하세요.',
-      '같은 id가 이미 존재하면 자동으로 교체합니다.',
+      '새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 keystore 를 되돌릴 수 없게 교체하므로',
+      'confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.',
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
@@ -159,11 +172,15 @@ export function registerJenkinsTools(server: McpServer) {
         .describe('권장 — android_generate_keystore 가 만든 keystore 절대경로 (~/.mimi-seed/keystores/ 안만 허용)'),
       file_name: z.string().default('keystore.jks').describe('파일명 (기본: keystore.jks)'),
       description: z.string().optional().describe('설명 (선택)'),
+      confirm: z.boolean().optional().describe('같은 id 가 이미 있을 때만 필요. true 면 기존 keystore 를 교체'),
     },
-    async ({ id, keystore_base64, keystore_path, file_name, description }) => {
+    async ({ id, keystore_base64, keystore_path, file_name, description, confirm }) => {
       const keystore = resolveKeystoreInput({ base64: keystore_base64, path: keystore_path });
       const cfg = requireJenkinsConfig();
-      const result = await creds.upsertSecretFile(cfg, id, keystore, file_name, description ?? '');
+      const result = await creds.upsertSecretFile(cfg, id, keystore, file_name, description ?? '', {
+        allowReplace: confirm === true,
+      });
+      if (result === 'exists') return textResult(existingCredentialPreview(id));
       return textResult(`✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`);
     },
   );

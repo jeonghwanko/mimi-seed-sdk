@@ -274,7 +274,7 @@ git commits → user-friendly release notes → push to stores.
 ```
 
 Tones: `friendly` · `professional` · `empathetic` · `brief`  
-Post directly with `playstore_reply_review` after review.
+Post with `playstore_reply_review` after review — the first call (without `confirm`) returns a dry-run preview; the reply is published only when you call again with `confirm: true`.
 
 > AI-generated replies are drafts. Always review before posting.
 
@@ -443,7 +443,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ## Local MCP Tool List (150+ tools · 22 domains)
 
-> These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
+> These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md). Every tool carries MCP annotations (read-only / destructive / open-world), and destructive tools (submit, delete, public posts, …) return a dry-run preview unless called with `confirm: true`.
 
 | Domain | Count | Key Tools |
 |--------|-------|-----------|
@@ -515,6 +515,7 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/t
 | `OPENAI_API_KEY` | Generated scene images for `video_generate_image` (optional) |
 | `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | Optional absolute executable paths when FFmpeg/ffprobe are not on `PATH` |
 | `MIMI_SEED_LANG` | Force CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json` |
+| `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | Local MCP only: expose just these tool domains (comma-separated domain keys such as `playstore,appstore`, or groups `store` · `google` · `social` · `media` · `build` · `all`). Unset = every domain. `auth` and `checks` are always on; unknown keys are ignored with a warning. Keeps tool lists small in clients without lazy tool loading ([agent guide](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Bring your own Google OAuth client. Otherwise it is fetched from the web console at login — set these if you're offline, air-gapped, or self-hosting ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
 
 ---

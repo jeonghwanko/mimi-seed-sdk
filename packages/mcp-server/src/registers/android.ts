@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
 import { existsSync, readFileSync } from 'node:fs';
@@ -25,7 +25,7 @@ function credentialPrefix(nameOrPackage: string): string {
   return slug || 'app';
 }
 
-export function registerAndroidTools(server: McpServer) {
+export function registerAndroidTools(server: ToolRegistrar) {
   // ── 0. 설정 마법사 ─────────────────────────────────────────────────────────
   server.tool(
     'android_signing_setup',

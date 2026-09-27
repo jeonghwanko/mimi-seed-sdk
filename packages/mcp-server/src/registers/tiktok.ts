@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { getBusinessAccount, getVideoSettings, inspectAccessToken } from '../tiktok-business/api.js';
 import {
@@ -23,7 +23,7 @@ const httpsUrl = z.string().url().refine((value) => new URL(value).protocol === 
   message: 'HTTPS URL만 허용합니다.',
 });
 
-export function registerTikTokBusinessTools(server: McpServer) {
+export function registerTikTokBusinessTools(server: ToolRegistrar) {
   server.tool(
     'tiktok_business_auth_status',
     [

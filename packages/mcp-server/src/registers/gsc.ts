@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { requireAuth } from '../helpers.js';
 import * as gsc from '../gsc/tools.js';
@@ -7,7 +7,7 @@ import { jsonResult, textResult } from '../lib/mcp-response.js';
 const SITE_URL_DESC =
   "Search Console 속성 식별자. 도메인 속성은 'sc-domain:example.com', URL 접두어 속성은 'https://example.com/' 형식.";
 
-export function registerGscTools(server: McpServer) {
+export function registerGscTools(server: ToolRegistrar) {
   server.tool(
     'gsc_list_sites',
     'Search Console에 등록된(권한 있는) 속성 목록 + 권한 레벨 조회. siteUrl 값을 확인할 때 먼저 호출.',

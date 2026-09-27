@@ -56,6 +56,16 @@ function assertSameKind(id: string, existing: string | null, wanted: string, lab
   );
 }
 
+/**
+ * allowReplace=false 면 같은 id 가 이미 있을 때 **아무것도 쓰지 않고** 'exists' 를 돌려준다.
+ * 같은 종류의 기존 값(예: 서명 keystore)을 조용히 갈아끼우면 되돌릴 수 없으므로, MCP 도구는
+ * 사용자 confirm 전에는 이 모드로 부른다. 새 id 생성은 확인 없이 진행된다.
+ */
+export interface UpsertOptions {
+  allowReplace?: boolean;
+}
+export type UpsertResult = 'created' | 'updated' | 'exists';
+
 export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCredentialSummary[]> {
   const res = await fetchWithTimeout(`${storeBase(cfg.url)}/api/json?depth=1`, {
     headers: authHeaders(cfg),
@@ -76,10 +86,12 @@ export async function upsertSecretText(
   id: string,
   secret: string,
   description = '',
-): Promise<'created' | 'updated'> {
+  options: UpsertOptions = {},
+): Promise<UpsertResult> {
   const existingClass = await credentialClass(cfg, id);
   assertSameKind(id, existingClass, TEXT_CLASS, 'Secret text');
   const exists = existingClass !== null;
+  if (exists && options.allowReplace === false) return 'exists';
   const payload = {
     credentials: {
       scope: 'GLOBAL',
@@ -120,10 +132,12 @@ export async function upsertSecretFile(
   fileBase64: string,
   fileName: string,
   description = '',
-): Promise<'created' | 'updated'> {
+  options: UpsertOptions = {},
+): Promise<UpsertResult> {
   const existingClass = await credentialClass(cfg, id);
   assertSameKind(id, existingClass, FILE_CLASS, 'Secret file');
   const exists = existingClass !== null;
+  if (exists && options.allowReplace === false) return 'exists';
   const payload = {
     credentials: {
       scope: 'GLOBAL',

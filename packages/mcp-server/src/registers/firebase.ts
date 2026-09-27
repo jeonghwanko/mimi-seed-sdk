@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName, iosBundleId } from '../lib/package-name.js';
 import * as firebaseRaw from '../firebase/tools.js';
@@ -31,7 +31,7 @@ const firebase: typeof firebaseRaw = new Proxy(firebaseRaw, {
   },
 });
 
-export function registerFirebaseTools(server: McpServer) {
+export function registerFirebaseTools(server: ToolRegistrar) {
   server.tool(
     'firebase_get_remote_config_overview',
     [

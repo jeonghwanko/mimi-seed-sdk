@@ -58,6 +58,52 @@ describe('docs/domain/tool-catalog.md ↔ tool-manifest.json', () => {
     expect(Number(total![1])).toBe(Object.keys(manifest.domains).length);
     expect(Number(total![2])).toBe(manifest.total);
   });
+
+  // W/D 마커는 사람이 읽는 카탈로그, manifest 의 write/destructive 목록은 MCP annotations 와
+  // confirm 가드의 입력이다. 둘이 어긋나면 "문서엔 파괴적인데 가드가 없는" 도구가 생긴다.
+  // 문법(카탈로그 머리말에 명시): 한 불릿(+들여쓴 연속 줄) 또는 한 표 행 안에서 **W** / **D** 는
+  // 다음 마커 전까지의 모든 도구 이름에 적용되고, 새 불릿·행은 읽기 전용으로 다시 시작한다.
+  it('카탈로그의 W/D 마커가 manifest 의 write/destructive 목록과 같다', () => {
+    const kindOf = new Map<string, 'R' | 'W' | 'D'>();
+    for (const d of Object.values(manifest.domains)) {
+      for (const t of d.tools) {
+        kindOf.set(t, (d.destructive ?? []).includes(t) ? 'D' : (d.write ?? []).includes(t) ? 'W' : 'R');
+      }
+    }
+
+    const text = catalog.replace(/\r\n/g, '\n');
+    const start = text.indexOf('\n## ', text.indexOf('## Counts by domain') + 1);
+    const end = text.indexOf('\n## Quirks');
+    expect(start > 0 && end > start, '카탈로그 섹션 구조(Counts by domain … Quirks)가 바뀌었습니다').toBe(true);
+
+    const rank = { R: 0, W: 1, D: 2 } as const;
+    const documented = new Map<string, 'R' | 'W' | 'D'>();
+    let marker: 'R' | 'W' | 'D' = 'R';
+    for (const line of text.slice(start, end).split('\n')) {
+      if (/^(- |\|)/.test(line)) marker = 'R';
+      else if (!/^\s+\S/.test(line)) {
+        marker = 'R';
+        continue;
+      }
+      for (const m of line.matchAll(/\*\*([WD])\*\*|`([a-z0-9_]+)`/g)) {
+        if (m[1]) {
+          marker = m[1] as 'W' | 'D';
+          continue;
+        }
+        if (!kindOf.has(m[2])) continue;
+        const prev = documented.get(m[2]);
+        documented.set(m[2], prev && rank[prev] > rank[marker] ? prev : marker);
+      }
+    }
+
+    const mismatched = [...kindOf]
+      .filter(([t, k]) => documented.get(t) !== k)
+      .map(([t, k]) => `${t}: 카탈로그 ${documented.get(t) ?? '없음'} ≠ manifest ${k}`);
+    expect(
+      mismatched,
+      `tool-catalog.md 의 W/D 마커와 tool-manifest.json 의 write/destructive 가 다릅니다 — 둘을 함께 고치세요:\n${mismatched.join('\n')}`,
+    ).toEqual([]);
+  });
 });
 
 // Claude Code 에서 도구 schema 는 lazy 로드다 — agent-guide §0 의 `select:` 배치에 이름이 없는
@@ -75,9 +121,11 @@ describe('docs/agent-guide.md `select:` 배치 ↔ tool-manifest.json', () => {
     ),
   );
   const registered = Object.values(manifest.domains).flatMap((d) => d.tools);
+  // 폐기 예정 별칭은 등록은 되지만 배치로 안내하지 않는다 — 에이전트는 정식 이름을 써야 한다.
+  const deprecated = new Set(Object.keys(manifest.deprecated ?? {}));
 
-  it('등록된 모든 도구가 최소 하나의 배치에 들어 있다', () => {
-    const missing = registered.filter((t) => !batched.has(t));
+  it('등록된 모든 도구가 최소 하나의 배치에 들어 있다 (폐기 예정 별칭 제외)', () => {
+    const missing = registered.filter((t) => !deprecated.has(t) && !batched.has(t));
     expect(
       missing,
       `agent-guide §0 의 select: 배치에 없는 도구 — 알맞은 행에 추가하세요: ${missing.join(', ')}`,
@@ -88,6 +136,13 @@ describe('docs/agent-guide.md `select:` 배치 ↔ tool-manifest.json', () => {
     const known = new Set(registered);
     const ghosts = [...batched].filter((t) => !known.has(t));
     expect(ghosts, `등록되지 않은 이름이 배치에 있습니다: ${ghosts.join(', ')}`).toEqual([]);
+  });
+
+  it('배치가 폐기 예정 별칭 대신 정식 이름을 쓴다', () => {
+    const stale = [...batched]
+      .filter((t) => deprecated.has(t))
+      .map((t) => `${t} → ${manifest.deprecated![t]}`);
+    expect(stale, `폐기 예정 별칭이 배치에 있습니다 — 정식 이름으로 바꾸세요: ${stale.join(', ')}`).toEqual([]);
   });
 });
 
@@ -175,5 +230,39 @@ describe('README 도구 목록 ↔ tool-manifest.json', () => {
     expect(Number(heading![1]), `${file} 제목의 도메인 개수가 manifest 와 다릅니다`).toBe(
       Object.keys(manifest.domains).length,
     );
+  });
+});
+
+// 폐기 예정 별칭은 한 마이너 릴리스 동안 **등록만** 유지한다. 코드 안내 문구·문서·스킬이 옛 이름을 계속
+// 가리키면 에이전트가 계속 옛 이름을 쓰고, 별칭을 지우는 날 그 안내가 전부 깨진다. 허용: manifest(별칭 등록
+// 자체), 테스트, 그리고 "deprecated" 를 적은 줄(CHANGELOG 식 안내 — 예: 카탈로그의 alias 표기).
+describe('폐기 예정 별칭 이름이 안내 문구에 남지 않는다', () => {
+  const aliases = Object.keys(manifest.deprecated ?? {});
+  const repo = new URL('../../../../', import.meta.url);
+  const walk = (rel: string, ext: RegExp): string[] =>
+    (readdirSync(new URL(rel, repo), { recursive: true }) as string[])
+      .map((p) => `${rel}${p.replace(/\\/g, '/')}`)
+      .filter((p) => ext.test(p) && !p.includes('/__tests__/') && !p.includes('node_modules'));
+  const files = [
+    ...walk('packages/mcp-server/src/', /\.ts$/),
+    ...walk('packages/cli/src/', /\.ts$/),
+    ...walk('docs/', /\.md$/),
+    ...walk('skills/', /\.md$/),
+    'README.md', 'README.ko.md', 'packages/mcp-server/README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md',
+  ];
+
+  it('별칭이 있을 때만 의미가 있다', () => {
+    expect(files.length).toBeGreaterThan(50);
+  });
+
+  it.each(aliases)('%s', (alias) => {
+    const hits = files.flatMap((rel) =>
+      readRepoFile(rel)
+        .split(/\r?\n/)
+        .map((line, i) => ({ line, at: `${rel}:${i + 1}` }))
+        .filter(({ line }) => line.includes(alias) && !/deprecated/i.test(line))
+        .map(({ at }) => at),
+    );
+    expect(hits, `${alias} 대신 정식 이름(${manifest.deprecated![alias]})을 쓰세요: ${hits.join(', ')}`).toEqual([]);
   });
 });

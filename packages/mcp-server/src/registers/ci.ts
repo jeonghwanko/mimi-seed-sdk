@@ -1,11 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { requireCiConfig, saveCiConfig } from '../ci/config.js';
 import * as github from '../ci/github.js';
 import * as gitlab from '../ci/gitlab.js';
 import { textResult } from '../lib/mcp-response.js';
 
-export function registerCiTools(server: McpServer) {
+export function registerCiTools(server: ToolRegistrar) {
   server.tool(
     'ci_save_config',
     [

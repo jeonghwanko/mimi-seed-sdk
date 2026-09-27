@@ -1,11 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as billing from '../billing/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { jsonResult } from '../lib/mcp-response.js';
 
-export function registerBillingTools(server: McpServer) {
+export function registerBillingTools(server: ToolRegistrar) {
   server.tool(
     'gcp_get_billing_info',
     [

@@ -99,7 +99,12 @@ describe('iam_create_key', () => {
       data: { name: 'projects/-/serviceAccounts/x/keys/KEY123', privateKeyData: Buffer.from(keyJson).toString('base64') },
     });
 
-    const { text } = await call('iam_create_key', { serviceAccount: SA });
+    // iam_create_key 는 파괴적 도구라 레지스트라 confirm 가드가 앞에 선다 — confirm 없이는 키를 만들지도 쓰지도 않는다.
+    const preview = await call('iam_create_key', { serviceAccount: SA });
+    expect(preview.text).toContain('DRY-RUN');
+    expect(mocks.keysCreate).not.toHaveBeenCalled();
+
+    const { text } = await call('iam_create_key', { serviceAccount: SA, confirm: true });
 
     expect(text).not.toContain('PRIVATE KEY');
     expect(text).not.toContain('placeholder-secret-material');
@@ -202,7 +207,10 @@ describe('android_generate_keystore → Jenkins', () => {
     });
     expect(pw.isError).toBe(false);
     expect(pw.text).not.toContain(secrets.storePassword);
-    expect(mocks.upsertSecretText).toHaveBeenCalledWith(expect.anything(), 'myapp-android-store-password', secrets.storePassword, '');
+    // 기존 id 교체는 confirm 뒤로 — confirm 없는 호출은 allowReplace:false 로 내려간다.
+    expect(mocks.upsertSecretText).toHaveBeenCalledWith(
+      expect.anything(), 'myapp-android-store-password', secrets.storePassword, '', { allowReplace: false },
+    );
 
     const ks = await call('jenkins_upload_keystore', {
       id: 'myapp-android-keystore',
@@ -212,6 +220,7 @@ describe('android_generate_keystore → Jenkins', () => {
     expect(ks.isError).toBe(false);
     expect(mocks.upsertSecretFile).toHaveBeenCalledWith(
       expect.anything(), 'myapp-android-keystore', Buffer.from('FAKE-KEYSTORE-BYTES').toString('base64'), 'upload.jks', '',
+      { allowReplace: false },
     );
   });
 });
@@ -221,7 +230,7 @@ describe('jenkins_create_credential — 기존 동작 유지', () => {
   it('secret:"" 는 예전처럼 빈 Secret text 로 저장한다', async () => {
     const r = await call('jenkins_create_credential', { id: 'example-empty', secret: '' });
     expect(r.isError).toBe(false);
-    expect(mocks.upsertSecretText).toHaveBeenCalledWith(expect.anything(), 'example-empty', '', '');
+    expect(mocks.upsertSecretText).toHaveBeenCalledWith(expect.anything(), 'example-empty', '', '', { allowReplace: false });
   });
 
   it('secret 도 secret_file 도 없으면 거부한다', async () => {

@@ -1,11 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { requireAuth } from '../helpers.js';
 import { saveConfig, loadConfig, requireConfig } from '../googleads/config.js';
 import * as googleads from '../googleads/tools.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
 
-export function registerGoogleAdsTools(server: McpServer) {
+export function registerGoogleAdsTools(server: ToolRegistrar) {
   server.tool(
     'googleads_save_config',
     'Google Ads API 설정 저장 (Developer Token + 계정 ID). 최초 1회만 필요.',

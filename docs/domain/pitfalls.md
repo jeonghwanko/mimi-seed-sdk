@@ -15,6 +15,11 @@ Claude Code lazy-loads large tool catalogs: the 150+ tool **names** are visible,
 - As a *developer*: a newly added tool is invisible-until-selected for Claude Code users, so the `select:`
   batches in `docs/agent-guide.md` §0 are an **inventory contract, not a curated sample** — every registered
   tool must appear in at least one batch, and `docs-drift.test.ts` fails until it does ([[testing]]).
+- A tool can also be *genuinely* absent: `MIMI_SEED_TOOLSETS` / `MIMI_SEED_TOOLSETS_EXCLUDE` in the server's
+  `env` drop whole domains at registration ([[architecture]]). `mimi_seed_status` prints the active toolsets —
+  read it before calling a missing tool unregistered.
+- A **D** tool that "did nothing" usually returned its dry-run preview: without `confirm: true` the registrar
+  never runs the handler. That is the contract, not a bug — show the preview, get approval, repeat with confirm.
 
 ## 2. Draft-app track constraint (Play)
 
