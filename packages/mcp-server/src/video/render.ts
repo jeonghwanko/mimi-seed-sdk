@@ -139,6 +139,24 @@ export function buildFfmpegPlan(
   return { args, outputPath, subtitlePath };
 }
 
+const FFMPEG_BASENAME = /^ffmpeg(\.exe)?$/i;
+
+/**
+ * 도구 인자로 받은 ffmpegPath 검증 (2026-09 보안 점검).
+ *
+ * 예전엔 ffmpegPath 를 그대로 execFile 했다 — `-version` 을 붙여 실행하므로 모델이나
+ * 프롬프트 주입이 넘긴 임의 실행 파일(`/bin/sh`, 받은 스크립트 등)이 그대로 돌았다.
+ * 이름이 ffmpeg(.exe) 인 파일만 받는다. 환경변수(MIMI_SEED_FFMPEG_PATH 등)는 사용자가 직접
+ * 설정한 값이라 여기서 막지 않는다.
+ */
+export function assertFfmpegPath(ffmpegPath: string): string {
+  // 구분자는 양쪽 다 본다 — POSIX 의 path.basename 은 백슬래시를 구분자로 보지 않는다.
+  if (!FFMPEG_BASENAME.test(ffmpegPath.split(/[\\/]/).pop() ?? '')) {
+    throw new Error(`ffmpegPath 는 ffmpeg 실행 파일(ffmpeg 또는 ffmpeg.exe)을 가리켜야 합니다: ${ffmpegPath}`);
+  }
+  return ffmpegPath;
+}
+
 async function verifyExecutable(command: string): Promise<void> {
   try {
     await execFileAsync(command, ['-version'], { timeout: 10_000, windowsHide: true });
@@ -191,7 +209,8 @@ export async function startRender(input: StartRenderInput): Promise<VideoRenderJ
   const projectDir = path.resolve(input.projectDir);
   loadProject(projectDir);
   loadTimeline(projectDir);
-  const ffmpeg = input.ffmpegPath ?? process.env.MIMI_SEED_FFMPEG_PATH ?? 'ffmpeg';
+  const ffmpeg = (input.ffmpegPath !== undefined ? assertFfmpegPath(input.ffmpegPath) : undefined)
+    ?? process.env.MIMI_SEED_FFMPEG_PATH ?? 'ffmpeg';
   await verifyExecutable(ffmpeg);
 
   const safeOutputName = (input.outputFileName ?? 'output.mp4')
@@ -296,6 +315,8 @@ export function getRenderJob(projectDir: string, jobId: string): VideoRenderJob 
 }
 
 function ffprobeFor(ffmpegPath?: string): string {
+  // 환경변수보다 먼저 검사한다 — 잘못된 인자가 환경변수 때문에 조용히 무시되면 안 된다.
+  if (ffmpegPath !== undefined) assertFfmpegPath(ffmpegPath);
   const configured = process.env.MIMI_SEED_FFPROBE_PATH;
   if (configured) return configured;
   if (ffmpegPath && path.isAbsolute(ffmpegPath)) {

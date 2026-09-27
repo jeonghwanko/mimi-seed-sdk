@@ -78,7 +78,7 @@ export function registerTikTokBusinessTools(server: McpServer) {
       disableStitch: z.boolean().default(false),
       thumbnailOffsetMs: z.number().int().min(0).optional().describe('영상 시작 기준 썸네일 오프셋(ms)'),
       isAiGenerated: z.boolean().default(true).describe('AI 생성·변형 영상 고지'),
-      ffmpegPath: z.string().optional().describe('FFmpeg 절대경로. 생략하면 PATH의 ffprobe 사용'),
+      ffmpegPath: z.string().optional().describe('FFmpeg 절대경로 (파일명이 ffmpeg/ffmpeg.exe 인 경로만 허용). 생략하면 PATH의 ffprobe 사용'),
     },
     async (input) => jsonResult(await planVideoPost(input)),
   );
