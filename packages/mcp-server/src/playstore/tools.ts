@@ -4,6 +4,7 @@ import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import { extractHttpStatus } from '../lib/google-errors.js';
 import { collectPagesUpTo } from '../lib/paginate.js';
+import { guardDotSegmentParams } from '../lib/resource-id.js';
 import { GOOGLEAPIS_COMMIT_OPTIONS } from '../lib/google-timeouts.js';
 import { GOOGLEAPIS_MEDIA_OPTIONS } from '../lib/google-timeouts.js';
 
@@ -33,7 +34,8 @@ function mimeTypeFor(filePath: string): string {
  * 여기서는 기존 앱의 메타데이터, 빌드, 출시를 관리.
  */
 
-export const publisher = () => google.androidpublisher('v3');
+// 모든 호출에서 경로 파라미터가 정확히 '.'/'..' 이면 요청 전에 거부 (lib/resource-id.ts).
+export const publisher = () => guardDotSegmentParams(google.androidpublisher('v3'));
 
 export type PlayVitalsMetricSet = 'anrRate' | 'crashRate' | 'errorCount';
 

@@ -3,10 +3,11 @@ import type { OAuth2Client } from 'google-auth-library';
 import { notDotSegment, resourceName, resourceSegment } from '../lib/resource-id.js';
 import { deleteAndroidApp } from '../firebase/tools.js';
 import { createServiceAccountKey } from '../iam/tools.js';
-import { listTables } from '../bigquery/tools.js';
+import { getTableSchema, listTables } from '../bigquery/tools.js';
 import { listApps } from '../admob/tools.js';
 import { normalizePropertyName } from '../ga4/tools.js';
 import { normalizeBillingAccount } from '../billing/tools.js';
+import { publisher } from '../playstore/tools.js';
 
 /**
  * googleapis 예약 확장(`{+name}`) 우회 (2026-09 적대적 재검토에서 실측).
@@ -72,6 +73,62 @@ describe('googleapis 호출 — 요청 전에 막힌다', { timeout: 60_000 }, (
     await expect(listTables(auth, 'p', '../../other/datasets/d')).rejects.toThrow(/데이터셋/);
     await expect(listTables(auth, '../x', 'd')).rejects.toThrow(/프로젝트/);
     expect(request).not.toHaveBeenCalled();
+  });
+
+  // BigQuery "flexible" 테이블 이름(유니코드·공백·대시)은 정상 값이다 — 막으면 안 된다.
+  it.each(['주문 내역', 'événements-2026', 'events_20260101', 'Täglich Umsatz', 'events$20260101'])(
+    'bigquery getTableSchema: 유효한 테이블 이름 %j 는 통과하고 한 세그먼트로 인코딩된다',
+    async (tableId) => {
+      const { auth, request } = fakeAuth();
+      await getTableSchema(auth, 'example.com:my-project', 'analytics_123456789', tableId);
+      const url = new URL(request.mock.calls[0][0].url);
+      const segments = url.pathname.split('/');
+      expect(decodeURIComponent(segments[segments.length - 1])).toBe(tableId);
+      expect(segments.at(-2)).toBe('tables');
+    },
+  );
+
+  it.each(['../x', '..', '.', 'a/b', 'a\\b', 'a?b', 'a#b', 'a\u0000b', 'a\nb', ''])(
+    'bigquery getTableSchema: 테이블 이름 %j 는 거부',
+    async (tableId) => {
+      const { auth, request } = fakeAuth();
+      await expect(getTableSchema(auth, 'my-project', 'ds', tableId)).rejects.toThrow(/테이블 ID/);
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['My-Project', 'proj/x', '../p', 'example.com:../p'])('bigquery 프로젝트 ID %j 거부', async (projectId) => {
+    const { auth } = fakeAuth();
+    await expect(listTables(auth, projectId, 'ds')).rejects.toThrow(/프로젝트 ID/);
+  });
+
+  it('bigquery 데이터셋 ID 는 영문자·숫자·밑줄만', async () => {
+    const { auth } = fakeAuth();
+    await expect(listTables(auth, 'my-project', 'my-dataset')).rejects.toThrow(/데이터셋/);
+  });
+
+  // Play 는 단순 확장이라 `/` 는 인코딩되지만, 값이 통째로 '..' 이면 한 단계 올라간다.
+  it.each([
+    ['productId', { packageName: 'com.example.app', productId: '..' }],
+    ['track', { packageName: 'com.example.app', editId: 'e1', track: '.' }],
+  ])('play: %s 가 정확히 점 세그먼트면 요청 전에 거부', async (_key, params) => {
+    const { auth, request } = fakeAuth();
+    const api = publisher();
+    const call = 'productId' in params
+      ? api.monetization.onetimeproducts.get({ auth, ...params } as never)
+      : api.edits.tracks.get({ auth, ...params } as never);
+    await expect(call).rejects.toThrow(/쓸 수 없는 값/);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('play: 정상 값과 요청 본문은 그대로 통과한다', async () => {
+    const { auth, request } = fakeAuth();
+    await publisher().edits.tracks.update({
+      auth, packageName: 'com.example.app', editId: 'e1', track: 'production',
+      requestBody: { track: '..' },
+    } as never);
+    expect(new URL(request.mock.calls[0][0].url).pathname)
+      .toBe('/androidpublisher/v3/applications/com.example.app/edits/e1/tracks/production');
   });
 
   it('admob listApps: accounts/ 접두사 뒤의 우회', async () => {

@@ -251,7 +251,12 @@ review found three places where a plain `z.string()` flowed into something dange
   `appId: "../../B/androidApps/Z"` removed an app in **another project**. Encoding is no fix (Google does not
   decode `%2F` there), so these ids are *validated* as a single segment with `resourceSegment()` /
   `resourceName()` (`lib/resource-id.ts`). The same `path-encoding.test.ts` scans the Google domain folders, and
-  `google-resource-id.test.ts` drives the real googleapis client to prove the request never leaves.
+  `google-resource-id.test.ts` drives the real googleapis client to prove the request never leaves. BigQuery is
+  the exception to the generic segment rule: its "flexible" table names allow Unicode letters/marks/numbers,
+  connector punctuation, dashes and spaces, so `bigquery/ids.ts` mirrors BigQuery's own naming rules (which
+  already exclude `/ \ ? #`, control characters and `.`). Play (androidpublisher) uses *simple* expansion, which
+  does encode `/`; the remaining level-climb — a value of exactly `.` or `..` — is refused for every call by
+  `guardDotSegmentParams()` around the `publisher()` client.
 - **Executables.** `ffmpegPath` was executed as given; a basename check still let `\\host\share\ffmpeg.exe`
   (UNC/WebDAV — remote binary plus an NTLM hash leak) through. The MCP tools no longer accept it at all (FFmpeg is
   configured by env var / `PATH`); the internal parameter requires a local absolute path, rejects UNC/device
@@ -295,5 +300,6 @@ returns `jobComplete=false` with a note — an empty row set must never look lik
 `writeFileAtomic` replaces `tokens.json` and friends with `rename(2)`. On Windows that fails with
 `EPERM`/`EBUSY`/`EACCES` while another process holds a read handle — antivirus, the search indexer, OneDrive, or
 another mimi-seed process reading the token — and the refresh looked like a random auth failure. The rename now
-retries only those codes on `RENAME_RETRY_DELAYS_MS` (10/20/40/80/160/320 ms, ~1 s total) and still deletes the
-temp file if it gives up. The CLI has its own copy of the atomic writer; **keep both schedules identical**.
+retries only those codes (`RENAME_RETRY_CODES`) on `RENAME_RETRY_DELAYS_MS` (10/20/40/80/160/320/370 ms, exactly
+1 s) and still deletes the temp file if it gives up. The CLI has its own copy of the atomic writer; **keep both
+constants identical** — `rename-retry-parity.test.ts` compares the literals once both copies exist.

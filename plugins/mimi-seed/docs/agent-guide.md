@@ -336,8 +336,9 @@ General rules:
 - **Identifiers are validated at the schema.** `packageName` / `package_name(s)` must look like an
   Android application id (`com.example.app`) and `bundleId` like an iOS bundle id; anything else
   (`../x`, slashes, empty segments) is rejected with `Input validation error` before the tool runs.
-  Google resource ids (project, app, service-account email, dataset/table, AdMob/GA4/billing account) must be a
-  single segment (`A-Z a-z 0-9 - _ . : @`) — `../` is refused before any request.
+  Google resource ids (project, app, service-account email, AdMob/GA4/billing account) must be a single segment
+  (`A-Z a-z 0-9 - _ . : @`) — `../` is refused before any request. BigQuery ids follow BigQuery's own naming
+  rules (table names may contain Unicode and spaces), and Play ids may not be exactly `.` or `..`.
 - **FFmpeg location is configuration, not a tool argument.** The video/TikTok tools no longer take
   `ffmpegPath`; set `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` or put FFmpeg on `PATH`.
 - **Reward/cash-out apps** are a sensitive Play category — flag policy implications to
