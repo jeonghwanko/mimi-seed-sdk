@@ -22,6 +22,8 @@ jobs:
   # 절대 실행하지 않는다. plugins/mimi-seed(Codex 배포본) 드리프트를 잡는 테스트는
   # 어느 패키지 스위트에도 없으므로, 이 잡이 없으면 CLAUDE.md 규칙 #8(`plugin:sync`
   # 후 재생성본 커밋)은 순전히 사람 손에만 의존한다. OS 매트릭스 밖에 있어서 한 번만 돈다.
+  # plugin:check 의 첫 단계는 `gen-docs --check` — tool-manifest.json 에서 생성되는 문서 블록
+  # (tool-catalog · README 도구 표 · agent-guide select: 배치)이 최신인지 본다.
   #
   # build-test 가 이 잡에 needs 로 매달려 있다 — 드리프트난 커밋은 테스트 전에 막는다.
   repo-guards:
@@ -37,7 +39,7 @@ jobs:
           node-version-file: .nvmrc
 
       - run: npm run plugin:check
-      - run: node --test scripts/release-channel.test.mjs
+      - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs
 
   # 테스트 전용 — 이 잡은 절대 publish 하지 않는다 (publish 잡이 따로 있다).
   build-test:

@@ -32,12 +32,12 @@ repository root and commit the mirror.
    check destructive/write semantics.
 2. Put API logic in the domain implementation and keep registration/response formatting thin.
 3. Add or change the zod input schema in `src/registers/<domain>.ts`.
-4. Update `tool-manifest.json` and the corresponding inventory in `docs/domain/tool-catalog.md`. If a domain
-   count changes, update the count columns in both root README language variants and this package's
-   `README.md`.
-5. Add the tool to a `select:` batch in `docs/agent-guide.md` §0 — **required**, not optional:
-   `docs-drift.test.ts` fails until every registered tool is in at least one batch (a tool in no batch is
-   invisible to Claude Code's deferred loading). Keep other prose at “150+”; do not copy exact counts elsewhere.
+4. Update `tool-manifest.json` (name, `total`, write/destructive classification).
+5. Run `npm run plugin:sync` at the repository root. It regenerates the inventory in
+   `docs/domain/tool-catalog.md`, the tool tables in both root READMEs and this package's `README.md`, and the
+   `select:` batches in `docs/agent-guide.md` §0 — a new tool joins its domain's owning batch automatically (a tool
+   in no batch is invisible to Claude Code's deferred loading). Notes and batch placement live in
+   `scripts/docs-spec.mjs`; never edit inside a `<!-- generated:… -->` block. Keep other prose at “150+”.
 6. Add focused tests and run the manifest/drift tests through the full package suite.
 
 ## Auth, errors, and safety

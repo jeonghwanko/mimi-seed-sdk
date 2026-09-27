@@ -84,11 +84,14 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
   entries in `packages/cli/src/help.ts`; link to the owning source instead.
 - Never put release version numbers in domain docs. The root `package.json` and version scripts own them.
 - Use “150+” in prose and name domains rather than counting them. Exact tool **and domain** counts belong only
-  in `tool-manifest.json`, `docs/domain/tool-catalog.md`, and the README count columns — `docs-drift.test.ts`
-  rejects a hard-coded count in any other contributor or agent-facing document.
+  in `tool-manifest.json` and the blocks generated from it (`docs/domain/tool-catalog.md`, the README tool tables)
+  — `docs-drift.test.ts` rejects a hard-coded count in any other contributor or agent-facing document.
+- Text between `<!-- generated:… -->` markers (tool catalog, README tool tables, agent-guide `select:` batches) is
+  written by `scripts/gen-docs.mjs` from `tool-manifest.json` + `scripts/docs-spec.mjs`. Edit those inputs, then
+  `npm run plugin:sync`; `npm run plugin:check` fails on a stale block.
 - Keep English and `.ko` onboarding documents structurally equivalent when changing user-facing guidance.
-- Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, or `LICENSE` require `npm run plugin:sync`.
-  Commit the resulting `plugins/mimi-seed/` update; do not hand-edit it.
+- Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, `LICENSE`, or `tool-manifest.json` require
+  `npm run plugin:sync`. Commit what it regenerated (generated doc blocks, `plugins/mimi-seed/`); do not hand-edit it.
 - Do not hand-edit the CLI Release Doctor mirror. `npm run release-doctor:check` enforces byte equality with the
   MCP-owned source and `npm run release-doctor:sync` refreshes it.
 

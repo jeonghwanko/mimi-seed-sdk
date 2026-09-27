@@ -127,32 +127,36 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ---
 
+<!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## 제공 도구 (150+ 개 · 22개 영역)
+<!-- generated:readme-tools-heading:end -->
 
+<!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
 | App Store Connect | 64 | `appstore_submit_for_review` / `appstore_get_weekly_insight` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
 | Google Play | 39 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
 | Firebase | 21 | `firebase_create_project` / `firebase_get_remote_config_overview` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
-| CI/CD (GitHub Actions · GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
+| CI (GitHub Actions / GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
 | Jenkins (크리덴셜 + 잡) | 10 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` |
-| GA4 | 8 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_plan_bigquery_link` / `ga4_create_bigquery_link` / `ga4_run_report` |
+| GA4 (Google Analytics 4) | 8 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_plan_bigquery_link` / `ga4_create_bigquery_link` / `ga4_run_report` |
 | Search Console | 6 | `gsc_inspect_url` / `gsc_search_analytics` / `gsc_submit_sitemap` |
 | Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |
 | Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
 | Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |
-| GCP Billing | 4 | `gcp_get_billing_info` / `gcp_list_billing_projects` / `gcp_list_budgets` / `gcp_create_budget` |
 | BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
+| GCP Billing | 4 | `gcp_get_billing_info` / `gcp_list_billing_projects` / `gcp_list_budgets` / `gcp_create_budget` |
 | Threads | 7 | `threads_post` / `threads_post_video` / `threads_post_carousel` / `threads_refresh_token` |
 | TikTok Business | 7 | `tiktok_business_plan_video_post` / `tiktok_business_publish_video` / `tiktok_business_get_publish_status` |
-| 점검 / 위험 | 5 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `android_check_billing_compliance` / `screenshot_validate` / `release_status` |
+| 출시 점검 | 5 | `playstore_check_submission_risks` / `appstore_check_submission_risks` / `android_check_billing_compliance` / `screenshot_validate` / `release_status` |
 | Instagram | 4 | `instagram_post_image` / `instagram_post_carousel` / `instagram_save_config` |
 | Android 서명 | 3 | `android_signing_setup` / `android_generate_keystore` / `jenkins_upload_playstore_sa` |
-| 인증 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
+| 인증 / 연결 진단 | 4 | `mimi_seed_status` / `mimi_seed_auth_start` / `mimi_seed_auth_status` / `mimi_seed_remote_sync_credentials` |
 | AI (Claude) | 2 | `generate_release_notes_from_commits` / `generate_review_reply` |
-| 영상 제작·YouTube | 15 | `youtube_upload_video` / `youtube_get_video_status` / `youtube_update_video_privacy` / `video_plan_from_story` / `video_render` |
+| 영상 제작 · YouTube 업로드 | 15 | `youtube_upload_video` / `youtube_get_video_status` / `youtube_update_video_privacy` / `video_plan_from_story` / `video_research_youtube` / `video_render` |
 | YouTube | 10 | `youtube_get_channel` / `youtube_list_videos` / `youtube_get_analytics_report` / `youtube_get_content_insights` / `youtube_update_video_metadata` / `youtube_set_thumbnail` / `youtube_schedule_video` / `youtube_list_comments` / `youtube_list_comment_replies` / `youtube_reply_comment` |
+<!-- generated:readme-tools-table:end -->
 
 > 인앱 결제(IAP·구독) 도구는 위 Play Store·App Store 카운트에 포함됩니다 — `appstore_create_inapp_purchase` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` 등.
 > 전체 카탈로그(항상 최신): [`docs/domain/tool-catalog.md`](../../docs/domain/tool-catalog.md)

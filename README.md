@@ -441,34 +441,38 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 
 ---
 
+<!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 ## Local MCP Tool List (150+ tools · 22 domains)
+<!-- generated:readme-tools-heading:end -->
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md). Every tool carries MCP annotations (read-only / destructive / open-world), and destructive tools (submit, delete, public posts, …) return a dry-run preview unless called with `confirm: true`.
 
+<!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain | Count | Key Tools |
 |--------|-------|-----------|
-| **App Store Connect** | 64 | `appstore_submit_for_review` · `appstore_get_weekly_insight` · `appstore_upload_product_review_screenshot` |
-| **Google Play** | 39 | `playstore_submit_release` · `playstore_replace_images` · `playstore_reply_review` |
-| **Firebase** | 21 | `firebase_create_project` · `firebase_get_remote_config_overview` · `firebase_get_android_config` |
-| **AdMob** | 7 | `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
-| **CI/CD** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (GitHub Actions · GitLab) |
-| **Jenkins** (credentials + jobs) | 10 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` |
+| **App Store Connect** | 64 | `appstore_submit_for_review` · `appstore_get_weekly_insight` · `appstore_update_product_review_note` · `appstore_upload_product_review_screenshot` |
+| **Google Play** | 39 | `playstore_submit_release` · `playstore_promote_release` · `playstore_replace_images` · `playstore_reply_review` · `playstore_verify_service_account` |
+| **Firebase** | 21 | `firebase_create_project` · `firebase_get_remote_config_overview` · `firebase_get_android_config` · `firebase_create_ios_app` |
+| **AdMob** | 7 | `admob_list_apps` · `admob_create_ad_unit` · `admob_get_today_earnings` · `admob_get_report` |
+| **CI (GitHub Actions / GitLab)** | 6 | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` · `ci_cancel_build` |
+| **Jenkins (credentials + jobs)** | 10 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` · `jenkins_update_job` |
 | **GA4** | 8 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_plan_bigquery_link` · `ga4_create_bigquery_link` · `ga4_run_report` |
 | **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
 | **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | 5 | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
-| **GCP Billing** | 4 | `gcp_get_billing_info` · `gcp_list_billing_projects` · `gcp_create_budget` |
+| **GCP Billing** | 4 | `gcp_get_billing_info` · `gcp_list_billing_projects` · `gcp_list_budgets` · `gcp_create_budget` |
 | **Threads** | 7 | `threads_post` · `threads_post_video` · `threads_post_carousel` · `threads_refresh_token` |
 | **TikTok Business** | 7 | `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
-| **Checks / Risk** | 5 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `release_status` |
+| **Checks / Risk** | 5 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
 | **Auth** | 4 | `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **AI** | 2 | `generate_release_notes_from_commits` · `generate_review_reply` |
 | **Video production** | 15 | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_plan_from_story` · `video_research_youtube` · `video_render` |
 | **YouTube** | 10 | `youtube_get_channel` · `youtube_list_videos` · `youtube_get_analytics_report` · `youtube_get_content_insights` · `youtube_update_video_metadata` · `youtube_set_thumbnail` · `youtube_schedule_video` · `youtube_list_comments` · `youtube_list_comment_replies` · `youtube_reply_comment` |
+<!-- generated:readme-tools-table:end -->
 
 Full catalog → [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md) · source → [packages/mcp-server](packages/mcp-server)
 

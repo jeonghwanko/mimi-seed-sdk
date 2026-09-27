@@ -40,25 +40,29 @@
    one, a `toolsets` group.
    *Renaming?* keep the old name for one minor release: leave it in `tools` with the same classification and add
    `"deprecated": { "<old>": "<new>" }` — the registrar registers the alias; remove its own `server.tool` call.
-4. **Catalog doc** — [[tool-catalog]]: add the backticked tool name to its domain section, mark **W** (write) or
-   **D** (destructive) exactly as in the manifest, and update the "Counts by domain" row **and** the title total.
-5. **README count columns** — the tool-list table in `README.md`, `README.ko.md`, **and** the published
-   `packages/mcp-server/README.md`. All three are test-enforced (each row is matched to its domain by the tool
-   names it lists, so keep one domain per row).
-6. **Agent guide** — [`../agent-guide.md`](../agent-guide.md) §0: add the tool to the `select:` batch of the
-   task it belongs to. This is **required, not optional** — in Claude Code a tool that is in no batch is
-   invisible until someone happens to keyword-search for it ([[pitfalls]] §1), so `docs-drift.test.ts` fails
-   until every registered tool appears in at least one batch. Add a new row when no existing task fits.
-7. **Test** it next to the behavior in `mcp-server/src/__tests__/`.
-8. If step 6 touched `docs/`: `npm run plugin:sync` from the repo root, and commit `plugins/mimi-seed/`.
-9. **Changelog** — add the tool under `Tool changes` in `[Unreleased]` of the root
+4. **Regenerate the docs** — `npm run plugin:sync` from the repo root. `scripts/gen-docs.mjs` rewrites every
+   `<!-- generated:… -->` block from the manifest: the [[tool-catalog]] listing (with **W** / **D** and the
+   deprecated-alias note), its counts and total, the tool-count tables in `README.md`, `README.ko.md`, and the
+   published `packages/mcp-server/README.md`, and the `select:` batches in
+   [`../agent-guide.md`](../agent-guide.md) §0 — a new tool is appended to the batch that owns its domain
+   (`fallbackFor`), so no tool is ever left out of a batch ([[pitfalls]] §1). The same command then refreshes the
+   agent-guide asset and `plugins/mimi-seed/`. Commit everything it touched; never edit inside a generated block.
+5. **Presentation (optional)** — `scripts/docs-spec.mjs`, then `npm run plugin:sync` again: a catalog note
+   (`catalog.notes`), a better-fitting or new `select:` batch (`batches` — move the tool into that row's `tools`),
+   or a README highlight (`domains.<id>.highlights`). *Renamed or deleted?* gen-docs names every spec entry that
+   still points at the old tool. *New domain?* gen-docs lists what the spec needs: a `domains` entry (`en` label +
+   `highlights`), a catalog `sections` entry (plus its marker pair in [[tool-catalog]]) or a `tables` row, and a
+   batch that owns it through `domains` or `fallbackFor`.
+6. **Test** it next to the behavior in `mcp-server/src/__tests__/`.
+7. **Changelog** — add the tool under `Tool changes` in `[Unreleased]` of the root
    [`CHANGELOG.md`](../../CHANGELOG.md) (added / renamed `old` → `new` / removed). A rename or removal breaks every
    prompt, skill, and `select:` batch that still names the old tool, so it must be spelled out, not implied.
 
 **Guards:** `tool-manifest.test.ts` (server ↔ manifest, classification lists, live annotations) ·
-`docs-drift.test.ts` (manifest ↔ catalog counts **and W/D markers** ↔ READMEs, batches) ·
-`destructive-confirm.test.ts` (every **D** tool previews without `confirm`) ·
-`prompts-resources.test.ts` (agent-guide copy) · `npm run plugin:check`.
+`gen-docs --check` — in `npm run plugin:check` **and** `docs-drift.test.ts` (a stale or missing generated block, a
+spec entry naming an unknown or deprecated tool, a domain no batch owns) · `docs-drift.test.ts` (every tool in a
+batch, no hard-coded counts in prose, no deprecated alias in guidance) · `destructive-confirm.test.ts` (every
+**D** tool previews without `confirm`) · `prompts-resources.test.ts` (agent-guide copy).
 **Verify:** `npm run build && npm test` in `packages/mcp-server`, then root `npm test`.
 
 > Naming: tools are `snake_case`, files `kebab-case`, domain folders lowercase. A tool's **prefix does not
@@ -118,11 +122,13 @@ for `deploy` flag parsing.
 editing any of them:
 
 ```bash
-npm run plugin:sync     # regenerates plugins/mimi-seed/ + packages/mcp-server/assets/agent-guide.md
+npm run plugin:sync     # gen-docs blocks, then plugins/mimi-seed/ + packages/mcp-server/assets/agent-guide.md
 npm run plugin:check    # what CI runs; also chained into root `npm test`
 ```
 
-Commit the regenerated `plugins/mimi-seed/`; never hand-edit it. `docs/agent-guide.md` additionally has a
+Commit the regenerated `plugins/mimi-seed/`; never hand-edit it. Blocks between `<!-- generated:… -->` markers
+(tool catalog, README tool tables, agent-guide §0 batches) are rewritten from `tool-manifest.json` +
+`scripts/docs-spec.mjs` on every sync — edit those inputs, not the block. `docs/agent-guide.md` additionally has a
 byte-identical copy at `packages/mcp-server/assets/agent-guide.md` (the npm tarball has no `docs/`), which the
 server serves as `mimi-seed://agent/guide`.
 
@@ -175,7 +181,7 @@ dist-tags; stable versions alone update `latest`. Batch routine fixes before a s
 ```bash
 npm run build && npm test      # inside the package you changed
 npm run typecheck              # packages/cli only — tsup does not type-check (its `npm test` runs this first)
-npm run plugin:check           # if you touched docs/, skills/, manifests, or versions
+npm run plugin:check           # if you touched docs/, skills/, tool-manifest.json, plugin manifests, or versions
 npm test                       # root: plugin drift + both suites (the full gate)
 ```
 

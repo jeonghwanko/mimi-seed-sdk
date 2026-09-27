@@ -14,7 +14,9 @@ Claude Code lazy-loads large tool catalogs: the 150+ tool **names** are visible,
 - As a *consumer*: always `select:` before the first call ([[skills-plugins]], agent-guide §0).
 - As a *developer*: a newly added tool is invisible-until-selected for Claude Code users, so the `select:`
   batches in `docs/agent-guide.md` §0 are an **inventory contract, not a curated sample** — every registered
-  tool must appear in at least one batch, and `docs-drift.test.ts` fails until it does ([[testing]]).
+  tool must appear in at least one batch. The batches are generated (`scripts/gen-docs.mjs`): every domain has an
+  owning batch (`fallbackFor` in `scripts/docs-spec.mjs`) that picks up any new tool automatically, and
+  `docs-drift.test.ts` still checks the result ([[testing]]).
 - A tool can also be *genuinely* absent: `MIMI_SEED_TOOLSETS` / `MIMI_SEED_TOOLSETS_EXCLUDE` in the server's
   `env` drop whole domains at registration ([[architecture]]). `mimi_seed_status` prints the active toolsets —
   read it before calling a missing tool unregistered.
@@ -82,11 +84,12 @@ picks a run mode ([[architecture]]).
 
 That test guards manifest ↔ **server**, so the *docs* kept drifting behind it (a 2026-07 pass found a tool
 missing from the catalog and two stale per-domain counts; a later one found the two READMEs three releases
-behind). `src/__tests__/docs-drift.test.ts` now closes the loop: it diffs the manifest against [[tool-catalog]]
-— every registered tool must be listed, and the title total + "Counts by domain" table must match — **and**
-against the count columns of `README.md` / `README.ko.md`, matching each row to its domain by the tool names
-the row lists (so it works in both languages). ❌ Don't hard-code exact totals anywhere else; write "150+" or
-point to the manifest/[[tool-catalog]] ([[_index]] "Fact → SSOT → mirror" table, [[testing]]).
+behind; a test that parsed those docs caught the drift but still left the fix to a human). The docs are now
+**generated** instead of checked: `scripts/gen-docs.mjs` rewrites the [[tool-catalog]] listing, counts, and
+**W** / **D** markers, the three README tool tables, and the agent-guide `select:` batches from the manifest on
+`npm run plugin:sync`, and `gen-docs --check` (in `plugin:check` and `docs-drift.test.ts`) fails on any stale
+block. ❌ Don't edit inside a `<!-- generated:… -->` block and don't hard-code exact totals anywhere else; write
+"150+" or point to the manifest/[[tool-catalog]] ([[_index]] "Fact → SSOT → mirror" table, [[testing]]).
 
 ## 9. Tool name ≠ register file
 

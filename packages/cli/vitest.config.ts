@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config';
 //   npm run coverage
 export default defineConfig({
   test: {
+    // mcp-server 와 같은 이유 — 저장소를 읽는 가드가 부하 걸린 머신·windows-latest 에서 5초를 넘긴다.
+    testTimeout: 30_000,
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'html'],
