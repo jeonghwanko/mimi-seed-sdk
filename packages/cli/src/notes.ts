@@ -5,7 +5,7 @@ import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
-import { CLI_AI_MODEL } from "./ai-model.js";
+import { AI_MODEL, RELEASE_NOTES_MAX_TOKENS, type ReleaseNoteTone } from "#core/ai.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 // LLM 프롬프트도 여기 있다 — 사람이 읽는 결과물(릴리즈 노트)의 언어를 정하기 때문.
@@ -119,12 +119,8 @@ async function promptUser(question: string): Promise<string> {
   return answer.trim();
 }
 
-interface ReleaseNotesResult {
-  concise: string;
-  detailed: string;
-  marketing: string;
-  localized: Record<string, string>;
-}
+// 톤 키는 #core/ai.js 의 RELEASE_NOTE_TONES — 응답 JSON 파싱 계약이라 mcp-server 와 같아야 한다.
+type ReleaseNotesResult = Record<ReleaseNoteTone, string> & { localized: Record<string, string> };
 
 async function generateWithClaude(commitsText: string, locales: string[]): Promise<ReleaseNotesResult> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -132,10 +128,9 @@ async function generateWithClaude(commitsText: string, locales: string[]): Promi
   const localeList = locales.map((l) => M().localeHint(l)).join(",\n    ");
 
   const response = await client.messages.create({
-    model: CLI_AI_MODEL,
-    // mcp-server 의 generateReleaseNotes 기본값과 같아야 한다 — 낮으면 다국어 JSON 이
-    // CLI 경로에서만 잘린다. ai-parity.test.ts 가 두 값의 일치를 강제한다.
-    max_tokens: 2000,
+    model: AI_MODEL,
+    // mcp-server 의 generateReleaseNotes 기본값과 같은 상수 — 낮으면 다국어 JSON 이 한쪽 경로에서만 잘린다.
+    max_tokens: RELEASE_NOTES_MAX_TOKENS,
     system: M().system,
     messages: [{
       role: "user",

@@ -1,4 +1,5 @@
 import { requireApiKey, parseJsonResponse, LOCALE_NAMES, AI_MODEL } from './client.js';
+import { detectReviewSentiment, REVIEW_REPLY_MAX_TOKENS, type ReviewSentiment, type ReviewTone } from '#core/ai.js';
 
 export interface ReviewReplyResult {
   suggested: string;
@@ -12,7 +13,7 @@ const TONE_GUIDES: Record<string, string> = {
   professional: '정중하고 공식적으로. 문제를 인정하고 해결책을 제시.',
   empathetic:   '공감을 먼저 표현. 불편을 충분히 인정한 후 해결 의지를 보여줌.',
   brief:        '2~3문장으로 간결하게. 핵심 응답만.',
-};
+} satisfies Record<ReviewTone, string>;
 
 const SENTIMENT_PROMPTS: Record<string, string> = {
   positive:        '긍정적인 리뷰입니다. 감사 인사와 함께 앞으로도 좋은 경험을 제공하겠다는 의지를 표현하세요.',
@@ -20,16 +21,7 @@ const SENTIMENT_PROMPTS: Record<string, string> = {
   neutral:         '중립적인 리뷰입니다. 피드백에 감사하고 개선 노력을 약속하세요.',
   bug_report:      '버그 리포트입니다. 문제를 확인했음을 알리고, 수정 예정임을 전달하세요.',
   feature_request: '기능 요청입니다. 피드백에 감사하고, 검토하겠다고 약속하세요.',
-};
-
-function detectSentiment(text: string): string {
-  const lower = text.toLowerCase();
-  if (['버그', '오류', '안됨', 'crash', 'bug', 'error', 'broken'].some((w) => lower.includes(w))) return 'bug_report';
-  if (['추가', '원해', '있으면', 'wish', 'feature', 'add', 'would like'].some((w) => lower.includes(w))) return 'feature_request';
-  if (['별로', '실망', '짜증', 'terrible', 'worst', 'awful'].some((w) => lower.includes(w))) return 'negative';
-  if (['좋아', '최고', '훌륭', 'great', 'excellent', 'love', 'perfect'].some((w) => lower.includes(w))) return 'positive';
-  return 'neutral';
-}
+} satisfies Record<ReviewSentiment, string>;
 
 export async function generateReviewReply(opts: {
   reviewText: string;
@@ -42,12 +34,12 @@ export async function generateReviewReply(opts: {
   const client = requireApiKey();
   const { reviewText, rating, appName = '앱', tone = 'friendly', language = 'ko', developerName } = opts;
 
-  const sentiment = detectSentiment(reviewText);
+  const sentiment = detectReviewSentiment(reviewText);
   const langName = LOCALE_NAMES[language] ?? language;
 
   const response = await client.messages.create({
     model: AI_MODEL,
-    max_tokens: 500,
+    max_tokens: REVIEW_REPLY_MAX_TOKENS,
     system: `앱 개발자를 대신해 스토어 리뷰에 답변하는 전문가입니다. ${langName}로 150자 이내로 답변하세요. ${TONE_GUIDES[tone] ?? TONE_GUIDES.friendly} 개발자 이름: ${developerName ?? '개발팀'}`,
     messages: [{
       role: 'user',

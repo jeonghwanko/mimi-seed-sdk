@@ -1,4 +1,5 @@
 import { requireApiKey, parseJsonResponse, LOCALE_NAMES, AI_MODEL } from './client.js';
+import { RELEASE_NOTES_MAX_TOKENS, RELEASE_NOTE_TONES, type ReleaseNoteTone } from '#core/ai.js';
 
 export interface CommitEntry {
   hash?: string;
@@ -22,7 +23,7 @@ const TONE_DESCRIPTIONS: Record<string, string> = {
   concise: '간결한 버전 (3줄 이내, 불릿 포인트, 사용자 혜택 중심)',
   detailed: '상세 버전 (주요 변경사항 5~8개, 불릿 포인트, 구체적 기능 설명)',
   marketing: '마케팅 버전 (감탄사 포함, 가치 제안 강조, 업데이트를 기대하게 만드는 톤)',
-};
+} satisfies Record<ReleaseNoteTone, string>;
 
 function commitsToText(commits: CommitEntry[]): string {
   return commits
@@ -38,7 +39,7 @@ export async function generateReleaseNotesFromCommits(
   opts: { appName?: string; tones?: string[]; locales?: string[]; maxTokens?: number } = {},
 ): Promise<GeneratedReleaseNotes> {
   const client = requireApiKey();
-  const { appName = '앱', tones = ['concise', 'detailed', 'marketing'], locales = [], maxTokens = 2000 } = opts;
+  const { appName = '앱', tones = [...RELEASE_NOTE_TONES], locales = [], maxTokens = RELEASE_NOTES_MAX_TOKENS } = opts;
 
   const commitsText = commitsToText(commits.slice(0, 50));
   const localeList = locales.length > 0
@@ -78,7 +79,7 @@ ${commitsText}
 }
 
 export function formatGeneratedNotes(result: GeneratedReleaseNotes): string {
-  const toneLabels: Record<string, string> = { concise: '간결한 버전', detailed: '상세 버전', marketing: '마케팅 버전' };
+  const toneLabels: Record<string, string> = { concise: '간결한 버전', detailed: '상세 버전', marketing: '마케팅 버전' } satisfies Record<ReleaseNoteTone, string>;
   const lines: string[] = [`🤖 AI 릴리즈 노트 생성 완료 (커밋 ${result.rawCommitsUsed}개 분석)\n`];
 
   for (const tone of result.tones) {

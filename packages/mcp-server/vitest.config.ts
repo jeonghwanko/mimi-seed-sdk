@@ -15,7 +15,7 @@ export default defineConfig({
     alias: [{ find: /^#core\/(.+)\.js$/, replacement: `${coreSrc}$1.ts` }],
   },
   test: {
-    // 기본 5초는 저장소 전체를 읽는 가드(hygiene·ai-model-parity·docs-drift)에 빠듯하다 — 부하 걸린
+    // 기본 5초는 저장소 전체를 읽는 가드(hygiene·ai-model·docs-drift)에 빠듯하다 — 부하 걸린
     // 로컬 머신이나 느린 windows-latest 러너에서 로직과 무관한 타임아웃 실패가 났다. 행(hang) 감지용
     // 상한으로만 쓰므로 넉넉하게 잡는다.
     testTimeout: 30_000,
