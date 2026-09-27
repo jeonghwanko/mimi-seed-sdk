@@ -1,108 +1,70 @@
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { readToolManifest } from '../lib/package-root.js';
 
-// tool-manifest.json 은 등록 도구의 SSOT 이고, docs/domain/tool-catalog.md 는
-// "정확한 개수를 적어도 되는" 유일한 산문 문서다 (docs/domain/_index.md 규칙).
-// tool-manifest.test.ts 가 manifest ↔ 서버를 강제하는 것과 짝을 이뤄,
-// 이 테스트는 manifest ↔ 카탈로그 문서를 강제한다 — 도구를 추가하고 문서를
-// 갱신하지 않으면 여기서 깨진다.
+// tool-manifest.json 은 등록 도구의 SSOT 다. 그 사실을 옮겨 적는 문서 조각 — tool-catalog.md 의 총계·개수 표·
+// 도메인별 도구 목록(W/D 마커·폐기 별칭), 세 README 의 도구 표, agent-guide §0 의 `select:` 배치 — 은 이제
+// 손으로 맞추지 않고 scripts/gen-docs.mjs 가 `<!-- generated:<id>:start/end -->` 마커 사이에 생성한다.
+// 그래서 예전의 "문서를 파싱해 manifest 와 대조"하던 단언들은 "생성 결과가 최신인가" 하나로 모였다.
+// (tool-manifest.test.ts 가 manifest ↔ 서버를, 이 파일이 manifest ↔ 문서를 강제한다.)
 const manifest = readToolManifest();
+const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const readRepoFile = (rel: string) => readFileSync(new URL(`../../../../${rel}`, import.meta.url), 'utf8');
 
-const catalogUrl = new URL('../../../../docs/domain/tool-catalog.md', import.meta.url);
-const catalog = readFileSync(catalogUrl, 'utf8');
+const GENERATED_FILES = [
+  'docs/domain/tool-catalog.md',
+  'docs/agent-guide.md',
+  'README.md',
+  'README.ko.md',
+  'packages/mcp-server/README.md',
+] as const;
 
-const REGISTER_FILE_BY_DOMAIN: Record<string, string> = Object.fromEntries(
-  Object.keys(manifest.domains).map((d) => [d, `registers/${d}.ts`]),
-);
+describe('생성 문서 블록 (scripts/gen-docs.mjs) ↔ tool-manifest.json', () => {
+  it('gen-docs --check 가 통과한다 — 생성 블록이 최신이고, 스펙이 유효하고, 마커가 다 있다', () => {
+    let failure = '';
+    try {
+      execFileSync(process.execPath, ['scripts/gen-docs.mjs', '--check'], { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' });
+    } catch (err) {
+      const e = err as { stderr?: string; stdout?: string; message: string };
+      failure = e.stderr || e.stdout || e.message;
+    }
+    expect(failure, `생성 문서가 낡았거나 스펙이 틀렸습니다 — 루트에서 npm run plugin:sync:\n${failure}`).toBe('');
+  });
 
-describe('docs/domain/tool-catalog.md ↔ tool-manifest.json', () => {
+  // 마커가 깨지면(한쪽만 지움·중첩·중복) 생성기가 산문을 덮어쓰거나 블록을 못 찾는다.
+  it.each(GENERATED_FILES)('%s 의 generated 마커가 짝을 이룬다', (rel) => {
+    const problems: string[] = [];
+    let open: string | null = null;
+    const seen = new Set<string>();
+    for (const line of readRepoFile(rel).split(/\r?\n/)) {
+      const m = line.trim().match(/^<!-- generated:([a-z0-9:-]+):(start|end)\b.*-->$/);
+      if (!m) continue;
+      const [, id, edge] = m;
+      if (edge === 'start') {
+        if (open) problems.push(`${open} 이 닫히기 전에 ${id} 시작`);
+        if (seen.has(id)) problems.push(`${id} 중복`);
+        seen.add(id);
+        open = id;
+      } else if (open !== id) {
+        problems.push(`짝 없는 end: ${id}`);
+      } else {
+        open = null;
+      }
+    }
+    if (open) problems.push(`${open} 의 end 없음`);
+    expect(problems, `${rel}: ${problems.join(' · ')}`).toEqual([]);
+    expect(seen.size, `${rel}: 생성 블록이 하나도 없습니다`).toBeGreaterThan(0);
+  });
+
+  // 생성기와 독립적인 최소 확인 — 생성기 버그로 도구가 통째로 빠지는 경우를 잡는다.
   it('모든 등록 도구가 카탈로그에 나열된다', () => {
+    const catalog = readRepoFile('docs/domain/tool-catalog.md');
     const missing = Object.values(manifest.domains)
       .flatMap((d) => d.tools)
       .filter((name) => !catalog.includes(`\`${name}\``));
-    expect(
-      missing,
-      `tool-catalog.md 에 빠진 도구 — 해당 도메인 섹션에 추가하세요: ${missing.join(', ')}`,
-    ).toEqual([]);
-  });
-
-  it('카탈로그 제목의 총 개수가 manifest.total 과 같다', () => {
-    const title = catalog.match(/^# Tool catalog — (\d+) tools across (\d+) domains/m);
-    expect(title, 'tool-catalog.md 첫 줄의 제목 형식이 바뀌었습니다').not.toBeNull();
-    expect(Number(title![1]), '제목의 도구 총 개수가 manifest 와 다릅니다').toBe(manifest.total);
-    expect(Number(title![2]), '제목의 도메인 개수가 manifest 와 다릅니다').toBe(
-      Object.keys(manifest.domains).length,
-    );
-  });
-
-  it('"Counts by domain" 표의 도메인별 개수가 manifest 와 같다', () => {
-    // | App Store Connect | `registers/appstore.ts` | 34 |
-    const rows = [...catalog.matchAll(/^\|[^|]+\|\s*`(registers\/\w+\.ts)`\s*\|\s*(\d+)\s*\|/gm)];
-    const documented = new Map(rows.map((r) => [r[1], Number(r[2])]));
-
-    const mismatched: string[] = [];
-    for (const [domain, entry] of Object.entries(manifest.domains)) {
-      const file = REGISTER_FILE_BY_DOMAIN[domain];
-      const shown = documented.get(file);
-      if (shown !== entry.tools.length) {
-        mismatched.push(`${file}: 문서 ${shown ?? '없음'} ≠ 실제 ${entry.tools.length}`);
-      }
-    }
-    expect(mismatched, `Counts by domain 표가 실제와 다릅니다 — ${mismatched.join(' · ')}`).toEqual(
-      [],
-    );
-
-    const total = catalog.match(/^\|\s*\*\*Total\*\*\s*\|\s*\*\*(\d+) modules\*\*\s*\|\s*\*\*(\d+)\*\*/m);
-    expect(total, 'Counts by domain 표의 Total 행 형식이 바뀌었습니다').not.toBeNull();
-    expect(Number(total![1])).toBe(Object.keys(manifest.domains).length);
-    expect(Number(total![2])).toBe(manifest.total);
-  });
-
-  // W/D 마커는 사람이 읽는 카탈로그, manifest 의 write/destructive 목록은 MCP annotations 와
-  // confirm 가드의 입력이다. 둘이 어긋나면 "문서엔 파괴적인데 가드가 없는" 도구가 생긴다.
-  // 문법(카탈로그 머리말에 명시): 한 불릿(+들여쓴 연속 줄) 또는 한 표 행 안에서 **W** / **D** 는
-  // 다음 마커 전까지의 모든 도구 이름에 적용되고, 새 불릿·행은 읽기 전용으로 다시 시작한다.
-  it('카탈로그의 W/D 마커가 manifest 의 write/destructive 목록과 같다', () => {
-    const kindOf = new Map<string, 'R' | 'W' | 'D'>();
-    for (const d of Object.values(manifest.domains)) {
-      for (const t of d.tools) {
-        kindOf.set(t, (d.destructive ?? []).includes(t) ? 'D' : (d.write ?? []).includes(t) ? 'W' : 'R');
-      }
-    }
-
-    const text = catalog.replace(/\r\n/g, '\n');
-    const start = text.indexOf('\n## ', text.indexOf('## Counts by domain') + 1);
-    const end = text.indexOf('\n## Quirks');
-    expect(start > 0 && end > start, '카탈로그 섹션 구조(Counts by domain … Quirks)가 바뀌었습니다').toBe(true);
-
-    const rank = { R: 0, W: 1, D: 2 } as const;
-    const documented = new Map<string, 'R' | 'W' | 'D'>();
-    let marker: 'R' | 'W' | 'D' = 'R';
-    for (const line of text.slice(start, end).split('\n')) {
-      if (/^(- |\|)/.test(line)) marker = 'R';
-      else if (!/^\s+\S/.test(line)) {
-        marker = 'R';
-        continue;
-      }
-      for (const m of line.matchAll(/\*\*([WD])\*\*|`([a-z0-9_]+)`/g)) {
-        if (m[1]) {
-          marker = m[1] as 'W' | 'D';
-          continue;
-        }
-        if (!kindOf.has(m[2])) continue;
-        const prev = documented.get(m[2]);
-        documented.set(m[2], prev && rank[prev] > rank[marker] ? prev : marker);
-      }
-    }
-
-    const mismatched = [...kindOf]
-      .filter(([t, k]) => documented.get(t) !== k)
-      .map(([t, k]) => `${t}: 카탈로그 ${documented.get(t) ?? '없음'} ≠ manifest ${k}`);
-    expect(
-      mismatched,
-      `tool-catalog.md 의 W/D 마커와 tool-manifest.json 의 write/destructive 가 다릅니다 — 둘을 함께 고치세요:\n${mismatched.join('\n')}`,
-    ).toEqual([]);
+    expect(missing, `tool-catalog.md 에 빠진 도구: ${missing.join(', ')}`).toEqual([]);
   });
 });
 
@@ -173,63 +135,6 @@ describe('산문에 박힌 도구·도메인 개수', () => {
       hits,
       `${rel}: 개수를 산문에 박지 마세요 — "150+" 로 쓰거나 도메인을 나열하세요 (${hits.join(' · ')})`,
     ).toEqual([]);
-  });
-});
-
-// 루트 README 의 "도구 목록" 표는 tool-catalog.md 와 함께 **정확한 개수를 적는** 유일한 산문이다.
-// 예전엔 손으로 맞췄고 실제로 두 도메인(appstore/playstore)이 낡은 채 릴리스됐다.
-// 라벨은 언어마다 다르므로(영역/Domain) 행에 적힌 **도구 이름으로 도메인을 역추적**해 비교한다 —
-// 그래서 EN/KO 양쪽이 같은 규칙으로 걸린다.
-const DOMAIN_BY_TOOL = new Map(
-  Object.entries(manifest.domains).flatMap(([domain, d]) => d.tools.map((t) => [t, domain] as const)),
-);
-
-// npm 에 배포되는 패키지 README 도 같은 표를 싣는다 — 여기가 낡으면 npmjs.com 페이지가 낡는다.
-const README_FILES = ['README.md', 'README.ko.md', 'packages/mcp-server/README.md'] as const;
-const readRepoFile = (rel: string) => readFileSync(new URL(`../../../../${rel}`, import.meta.url), 'utf8');
-
-describe('README 도구 목록 ↔ tool-manifest.json', () => {
-  it.each(README_FILES)('%s 의 도메인별 개수가 manifest 와 같다', (file) => {
-    const md = readRepoFile(file);
-    // | **App Store Connect** | 37 | `appstore_submit_for_review` · … |
-    const rows = [...md.matchAll(/^\|[^|\n]+\|\s*(\d+)\s*\|([^\n]*)\|/gm)];
-
-    const documented = new Map<string, number>();
-    const mixed: string[] = [];
-
-    for (const row of rows) {
-      const domains = new Set(
-        [...row[2].matchAll(/`([a-z0-9_]+)`/g)]
-          .map((m) => DOMAIN_BY_TOOL.get(m[1]))
-          .filter((d): d is string => Boolean(d)),
-      );
-      if (domains.size === 0) continue; // 도구 목록 표가 아닌 행
-      if (domains.size > 1) {
-        mixed.push(`[${[...domains].join(', ')}] ← ${row[0].slice(0, 60)}…`);
-        continue;
-      }
-      documented.set([...domains][0], Number(row[1]));
-    }
-
-    expect(mixed, `${file}: 한 행에 여러 도메인의 도구가 섞였습니다 — 도메인당 한 행 ${mixed.join(' · ')}`).toEqual([]);
-
-    const wrong: string[] = [];
-    for (const [domain, entry] of Object.entries(manifest.domains)) {
-      const shown = documented.get(domain);
-      if (shown !== entry.tools.length) {
-        wrong.push(`${domain}: 문서 ${shown ?? '행 없음'} ≠ 실제 ${entry.tools.length}`);
-      }
-    }
-    expect(wrong, `${file} 의 도구 개수 열이 실제와 다릅니다 — ${wrong.join(' · ')}`).toEqual([]);
-  });
-
-  it.each(README_FILES)('%s 제목의 도메인 개수가 manifest 와 같다', (file) => {
-    // "## Local MCP Tool List (150+ tools · 19 domains)" / "## 도구 목록 (Local MCP · 150+ 개 · 19개 영역)"
-    const heading = readRepoFile(file).match(/^##.*150\+.*?(\d+)\s*(?:domains|개 영역)/m);
-    expect(heading, `${file}: 도구 목록 섹션 제목 형식이 바뀌었습니다`).not.toBeNull();
-    expect(Number(heading![1]), `${file} 제목의 도메인 개수가 manifest 와 다릅니다`).toBe(
-      Object.keys(manifest.domains).length,
-    );
   });
 });
 
