@@ -95,19 +95,48 @@ describe('syncRemoteCredentials — 허용 목록과 엔드포인트', () => {
     const result = await syncRemoteCredentials({ confirm: true, packageNames: ['../tokens'] }, deps);
 
     expect(read).not.toHaveBeenCalledWith('../tokens');
-    expect(deps.callRemote).not.toHaveBeenCalled();
+    expect(deps.callRemote).not.toHaveBeenCalledWith(
+      expect.anything(), 'import_playstore_service_account', expect.anything(),
+    );
     expect(result).toContain('등록되지 않은 패키지');
-    expect(result).toContain('아무것도 전송하지 않았습니다');
   });
 
-  it('등록된 이름과 섞여 있어도 하나라도 거부되면 전체를 멈춘다', async () => {
+  it('레거시 단일 SA 가 있어도 형식이 틀린 이름은 허용하지 않는다', async () => {
+    const deps = dependencies();
+    deps.hasDefaultServiceAccount = () => true;
+    const read = vi.fn(() => serviceAccountJson);
+    deps.getServiceAccountJson = read;
+    await syncRemoteCredentials({ confirm: true, packageNames: ['../tokens'] }, deps);
+    expect(read).not.toHaveBeenCalledWith('../tokens');
+  });
+
+  // 적대적 재검토에서 찾은 회귀: 미등록 이름 하나가 App Store 동기화까지 통째로 멈췄다.
+  it('미등록 이름은 건너뛰고 App Store 와 등록된 패키지는 보낸다', async () => {
     const deps = dependencies();
     const result = await syncRemoteCredentials(
       { confirm: true, packageNames: ['com.example.app', 'com.example.typo'] },
       deps,
     );
-    expect(deps.callRemote).not.toHaveBeenCalled();
-    expect(result).toContain('com.example.typo');
+    const tools = (deps.callRemote as ReturnType<typeof vi.fn>).mock.calls.map((c) => [c[1], c[2].package_name]);
+    expect(tools).toEqual([
+      ['import_appstore_credentials', undefined],
+      ['import_playstore_service_account', 'com.example.app'],
+    ]);
+    expect(result).toMatch(/com\.example\.typo.*건너뜀/);
+  });
+
+  // 레거시 단일 SA(play-service-account.json)만 쓰는 사용자 — getServiceAccountJson 이 그 SA 로
+  // 폴백하므로 형식이 맞는 패키지명은 예전처럼 동기화돼야 한다.
+  it('레거시 단일 SA 사용자는 등록 목록에 없는 패키지명도 동기화할 수 있다', async () => {
+    const deps = dependencies();
+    deps.listPackageNames = () => [];
+    deps.hasDefaultServiceAccount = () => true;
+    await syncRemoteCredentials({ confirm: true, packageNames: ['com.example.legacy'] }, deps);
+    expect(deps.callRemote).toHaveBeenCalledWith(
+      expect.anything(),
+      'import_playstore_service_account',
+      expect.objectContaining({ package_name: 'com.example.legacy' }),
+    );
   });
 
   it('미리보기에 전송 대상 호스트를 보여준다', async () => {

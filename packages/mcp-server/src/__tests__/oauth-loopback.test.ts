@@ -92,4 +92,19 @@ describe('OAuth 콜백 서버 바인딩', () => {
     await expect(flow.wait).rejects.toMatchObject({ payload: { code: 'CALLBACK_PORT_IN_USE' } });
     expect(h.servers.every((s) => s.closed)).toBe(true);
   });
+
+  // 적대적 재검토: [::1]:9876 만 다른 프로세스가 잡고 있으면 로그인이 실패한다. 실패 자체는
+  // 의도(그 주소로 가는 콜백이 남에게 간다)지만, 어느 주소인지와 할 일을 한/영으로 알려야 한다.
+  it('::1 만 점유돼도 실패하되, 주소와 조치를 한/영으로 알린다', async () => {
+    const flow = startAuth('example-client', 'example-secret', { timeoutMs: 60_000 });
+    const v6 = h.servers.find((s) => s.listenArgs[1] === '::1')!;
+    v6.handlers.error(Object.assign(new Error('listen EADDRINUSE: address already in use ::1:9876'), { code: 'EADDRINUSE' }));
+
+    const error = await flow.wait.then(() => null, (e: { payload: { message: string; hint: string } }) => e);
+    expect(error?.payload.message).toContain('[::1]:9876');
+    expect(error?.payload.message).toMatch(/사용 중/);
+    expect(error?.payload.message).toMatch(/already in use/);
+    expect(error?.payload.hint).toMatch(/lsof|netstat/);
+    expect(h.servers.every((s) => s.closed)).toBe(true);
+  });
 });

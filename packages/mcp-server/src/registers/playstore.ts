@@ -48,6 +48,16 @@ const playstore: typeof playstoreRaw = new Proxy(playstoreRaw, {
   },
 });
 
+/** 전부 읽었으면 예전처럼 배열 그대로, 페이지 상한에 걸렸으면 잘렸다는 사실을 앞에 붙인다. */
+function truncatedList<T>(result: { items: T[]; truncated: boolean }) {
+  if (!result.truncated) return result.items;
+  return {
+    truncated: true,
+    note: `목록이 너무 길어 앞쪽 ${result.items.length}개만 가져왔습니다 — 이 목록에 없다고 "존재하지 않는다"고 판단하지 마세요.`,
+    items: result.items,
+  };
+}
+
 export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_get_app',
@@ -351,8 +361,7 @@ export function registerPlaystoreTools(server: McpServer) {
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
-      const products = await playstore.listInAppProducts(auth, packageName);
-      return jsonResult(products);
+      return jsonResult(truncatedList(await playstore.listInAppProducts(auth, packageName)));
     },
   );
 
@@ -362,8 +371,7 @@ export function registerPlaystoreTools(server: McpServer) {
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
-      const subs = await playstore.listSubscriptions(auth, packageName);
-      return jsonResult(subs);
+      return jsonResult(truncatedList(await playstore.listSubscriptions(auth, packageName)));
     },
   );
 

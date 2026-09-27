@@ -26,6 +26,11 @@ export interface RemoteSyncDependencies {
   getConfig(): RemoteConfig | null;
   getAppStoreCredentials(): AppStoreCredentials | null;
   listPackageNames(): string[];
+  /**
+   * 레거시 단일 SA(`play-service-account.json`)가 있는가. 있으면 getServiceAccountJson 이
+   * 미등록 패키지에도 그 SA 로 폴백하므로, 형식이 맞는 패키지명은 동기화 대상으로 허용한다.
+   */
+  hasDefaultServiceAccount?(): boolean;
   getServiceAccountJson(packageName: string): string | null;
   callRemote(
     config: RemoteConfig,
@@ -138,6 +143,7 @@ const defaultDependencies: RemoteSyncDependencies = {
   getAppStoreCredentials,
   listPackageNames: () =>
     listRegisteredServiceAccounts().perPackage.map((entry) => entry.packageName),
+  hasDefaultServiceAccount: () => listRegisteredServiceAccounts().default !== null,
   getServiceAccountJson: (packageName) => getServiceAccountJson(packageName),
   callRemote,
 };
@@ -149,15 +155,19 @@ export async function syncRemoteCredentials(
   const includeAppStore = options.includeAppStore !== false;
   const includePlayStore = options.includePlayStore !== false;
   const appStore = includeAppStore ? dependencies.getAppStoreCredentials() : null;
-  // 허용 목록 = 실제로 등록된 패키지별 SA. 요청 이름을 그대로 파일 경로로 쓰면
-  // `../tokens` 가 ~/.mimi-seed/tokens.json(OAuth 리프레시 토큰)을 원격으로 보낸다.
+  // 허용 목록 = 실제로 등록된 패키지별 SA (+ 레거시 단일 SA 가 있으면 형식이 맞는 패키지명).
+  // 요청 이름을 검증 없이 파일 경로로 쓰면 `../tokens` 가 ~/.mimi-seed/tokens.json(OAuth
+  // 리프레시 토큰)을 원격으로 보낸다.
   const registered = new Set(dependencies.listPackageNames().filter(isValidAndroidPackageName));
+  const hasDefault = dependencies.hasDefaultServiceAccount?.() ?? false;
+  const isAllowed = (name: string) =>
+    registered.has(name) || (hasDefault && isValidAndroidPackageName(name));
   const requestedPackages = options.packageNames?.map((name) => name.trim()).filter(Boolean);
   const candidates = includePlayStore
     ? [...new Set(requestedPackages?.length ? requestedPackages : [...registered])]
     : [];
-  const rejected = candidates.filter((name) => !registered.has(name));
-  const packageNames = candidates.filter((name) => registered.has(name));
+  const rejected = candidates.filter((name) => !isAllowed(name));
+  const packageNames = candidates.filter(isAllowed);
   const playCredentials = packageNames
     .map((packageName) => ({ packageName, json: dependencies.getServiceAccountJson(packageName) }))
     .filter((entry): entry is { packageName: string; json: string } => Boolean(entry.json));
@@ -177,7 +187,7 @@ export async function syncRemoteCredentials(
     ...playCredentials.map((entry) => `  - ${entry.packageName}`),
     ...(rejected.length
       ? [
-          `- 등록되지 않은 패키지 ${rejected.length}개 — 거부 (playstore_list_service_accounts 로 등록 목록 확인):`,
+          `- 건너뜀: 등록되지 않은 패키지 ${rejected.length}개 (playstore_list_service_accounts 로 등록 목록 확인):`,
           ...rejected.map((name) => `  - ${JSON.stringify(name.slice(0, 80))}`),
         ]
       : []),
@@ -194,10 +204,9 @@ export async function syncRemoteCredentials(
   if (!endpoint?.ok) {
     return [...lines, '', `원격 엔드포인트를 신뢰할 수 없어 전송하지 않았습니다: ${endpoint?.reason}`].join('\n');
   }
-  if (rejected.length) {
-    // 일부만 보내고 넘어가면 사용자는 오타를 모른 채 "동기화됨"으로 믿는다 — 통째로 멈춘다.
-    return [...lines, '', '등록되지 않은 패키지명이 있어 아무것도 전송하지 않았습니다.'].join('\n');
-  }
+  // 미등록 이름은 **건너뛰고** 나머지(App Store, 등록된 패키지)는 보낸다. 위험(임의 파일 전송)은
+  // 허용 목록이 이미 막았으므로, 오타 하나로 App Store 동기화까지 멈출 이유가 없다. 대신 미리보기와
+  // 결과 양쪽에 건너뛴 이름을 남겨 "동기화됐다"고 오해하지 않게 한다.
 
   const results: string[] = [];
   if (appStore) {
@@ -218,6 +227,7 @@ export async function syncRemoteCredentials(
     results.push(`- Play ${entry.packageName}: ${result.isError ? '실패' : result.text}`);
   }
 
+  for (const name of rejected) results.push(`- Play ${JSON.stringify(name.slice(0, 80))}: 건너뜀 (등록되지 않은 패키지)`);
   if (results.length === 0) results.push('- 동기화할 로컬 자격증명이 없습니다.');
   return [
     ...lines,

@@ -63,7 +63,9 @@ export function registerBigqueryTools(server: McpServer) {
     'bigquery_run_query',
     'BigQuery 읽기 전용 SQL 쿼리 실행 — 단일 SELECT 문만 허용 (실행 전 dry run 으로 문장 유형을 확인해 ' +
       'DML/DDL/스크립트는 거부). GA4 analytics_* 테이블 분석에 사용. 30초 안에 안 끝나면 최대 2분 더 ' +
-      '기다리고, 그래도 미완료면 jobComplete=false 와 jobId 를 돌려준다. 서비스 계정(권장) 또는 사용자 OAuth 로 인증.',
+      '기다리고, 그래도 미완료면 jobComplete=false 와 jobId 를 돌려준다. 서비스 계정(권장) 또는 사용자 OAuth 로 인증. ' +
+      '⚠️ "SELECT 전용"은 데이터 변경(DML/DDL)이 없다는 뜻일 뿐 부작용이 없다는 뜻이 아니다 — 스캔 바이트만큼 과금되고, ' +
+      'SELECT 안에서 원격 함수·ML.GENERATE_TEXT 등 모델 호출·EXTERNAL_QUERY 를 부르면 외부 호출과 추가 비용이 그대로 발생한다.',
     {
       projectId: z.string().describe('GCP 프로젝트 ID (예: my-app-analytics)'),
       query: z.string().describe('실행할 StandardSQL 쿼리'),

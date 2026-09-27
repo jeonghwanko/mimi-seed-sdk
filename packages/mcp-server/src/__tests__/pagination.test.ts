@@ -30,7 +30,7 @@ vi.mock('../lib/googleapis-lite.js', () => ({
   },
 }));
 
-import { collectPages } from '../lib/paginate.js';
+import { collectPages, collectPagesUpTo, MAX_PAGES } from '../lib/paginate.js';
 import { listServiceAccounts } from '../iam/tools.js';
 import { listEnabledServices, listProjects } from '../firebase/tools.js';
 import { listInAppProducts, listSubscriptions } from '../playstore/tools.js';
@@ -94,12 +94,38 @@ describe('목록 래퍼가 모든 페이지를 모은다', () => {
   it('playstore listInAppProducts', async () => {
     mocks.onetimeList.mockImplementation(twoPages('oneTimeProducts', [{ productId: 'a' }], [{ productId: 'b' }]));
     const r = await listInAppProducts(auth, 'com.example.app');
-    expect(r.map((p) => p.productId)).toEqual(['a', 'b']);
+    expect(r.truncated).toBe(false);
+    expect(r.items.map((p) => p.productId)).toEqual(['a', 'b']);
   });
 
   it('playstore listSubscriptions', async () => {
     mocks.subsList.mockImplementation(twoPages('subscriptions', [{ productId: 'a' }], [{ productId: 'b' }]));
     const r = await listSubscriptions(auth, 'com.example.app');
-    expect(r.map((p) => p.productId)).toEqual(['a', 'b']);
+    expect(r.truncated).toBe(false);
+    expect(r.items.map((p) => p.productId)).toEqual(['a', 'b']);
+  });
+
+  // 상품 목록은 에러 대신 "잘렸음"을 표시해 돌려준다 (적대적 재검토 요청). 반복 토큰은 여전히 에러.
+  it('상품 목록이 페이지 상한을 넘으면 읽은 만큼 truncated:true 로 돌려준다', async () => {
+    let n = 0;
+    mocks.subsList.mockImplementation(async () => ({
+      data: { subscriptions: [{ productId: `p${n}` }], nextPageToken: `t${++n}` },
+    }));
+    const r = await listSubscriptions(auth, 'com.example.app');
+    expect(r.truncated).toBe(true);
+    expect(r.items).toHaveLength(MAX_PAGES);
+  });
+
+  it('상품 목록도 반복 토큰이면 에러', async () => {
+    mocks.onetimeList.mockResolvedValue({ data: { oneTimeProducts: [{ productId: 'a' }], nextPageToken: 'same' } });
+    await expect(listInAppProducts(auth, 'com.example.app')).rejects.toThrow(/반복/);
+  });
+});
+
+describe('collectPagesUpTo', () => {
+  it('상한에서 멈추고 truncated 를 표시한다', async () => {
+    let n = 0;
+    const r = await collectPagesUpTo(async () => ({ items: [n], nextPageToken: `t${++n}` }), 3);
+    expect(r).toEqual({ items: [0, 1, 2], truncated: true });
   });
 });

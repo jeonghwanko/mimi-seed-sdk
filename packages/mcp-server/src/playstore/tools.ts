@@ -3,7 +3,8 @@ import type { OAuth2Client, JWT } from 'google-auth-library';
 import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import { extractHttpStatus } from '../lib/google-errors.js';
-import { collectPages } from '../lib/paginate.js';
+import { collectPagesUpTo } from '../lib/paginate.js';
+import { GOOGLEAPIS_COMMIT_OPTIONS } from '../lib/google-timeouts.js';
 import { GOOGLEAPIS_MEDIA_OPTIONS } from '../lib/google-timeouts.js';
 
 export type PlayImageType =
@@ -92,12 +93,12 @@ async function commitEdit(
   editId: string,
 ): Promise<EditCommitInfo> {
   try {
-    await publisher().edits.commit({ auth, packageName, editId });
+    await publisher().edits.commit({ auth, packageName, editId }, GOOGLEAPIS_COMMIT_OPTIONS);
     return { changesNotSentForReview: false };
   } catch (err) {
     const msg = String((err as { message?: string })?.message ?? err);
     if (!/changesNotSentForReview/i.test(msg)) throw err;
-    await publisher().edits.commit({ auth, packageName, editId, changesNotSentForReview: true });
+    await publisher().edits.commit({ auth, packageName, editId, changesNotSentForReview: true }, GOOGLEAPIS_COMMIT_OPTIONS);
     return { changesNotSentForReview: true };
   }
 }
@@ -786,7 +787,7 @@ export async function replyToReview(
 // ─── 인앱 상품 조회 ───
 
 export async function listInAppProducts(auth: OAuth2Client | JWT, packageName: string) {
-  const products = await collectPages(async (pageToken) => {
+  const { items: products, truncated } = await collectPagesUpTo(async (pageToken) => {
     const res = await publisher().monetization.onetimeproducts.list({
       auth,
       packageName,
@@ -795,17 +796,20 @@ export async function listInAppProducts(auth: OAuth2Client | JWT, packageName: s
     });
     return { items: res.data.oneTimeProducts ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return products.map((p: any) => ({
-    productId: p.productId,
-    listings: p.listings,
-    purchaseOptions: p.purchaseOptions,
-  }));
+  return {
+    truncated,
+    items: products.map((p: any) => ({
+      productId: p.productId,
+      listings: p.listings,
+      purchaseOptions: p.purchaseOptions,
+    })),
+  };
 }
 
 // ─── 구독 조회 ───
 
 export async function listSubscriptions(auth: OAuth2Client | JWT, packageName: string) {
-  const subscriptions = await collectPages(async (pageToken) => {
+  const { items: subscriptions, truncated } = await collectPagesUpTo(async (pageToken) => {
     const res = await publisher().monetization.subscriptions.list({
       auth,
       packageName,
@@ -814,11 +818,14 @@ export async function listSubscriptions(auth: OAuth2Client | JWT, packageName: s
     });
     return { items: res.data.subscriptions ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return subscriptions.map((s) => ({
-    productId: s.productId,
-    basePlans: s.basePlans,
-    listings: s.listings,
-  }));
+  return {
+    truncated,
+    items: subscriptions.map((s) => ({
+      productId: s.productId,
+      basePlans: s.basePlans,
+      listings: s.listings,
+    })),
+  };
 }
 
 // ─── 인앱 상품 / 구독 현지화 ───

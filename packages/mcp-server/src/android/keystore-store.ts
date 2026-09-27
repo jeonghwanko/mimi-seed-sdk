@@ -76,7 +76,9 @@ export function resolveSecretInput(input: {
     if (!input.secretField) throw new Error('secret_file 을 쓰면 secret_field 도 필요합니다.');
     return readSigningSecret(input.secretFile, input.secretField);
   }
-  if (input.secret) return input.secret;
+  // 빈 문자열도 값이다 — main 의 `secret: z.string()` 은 ""(예: 비워 둔 플레이스홀더)를 그대로
+  // 저장했다. 없음(undefined)과 빈 값을 구분한다.
+  if (input.secret !== undefined) return input.secret;
   throw new Error('secret_file + secret_field(권장) 또는 secret 이 필요합니다.');
 }
 

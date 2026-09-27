@@ -161,6 +161,26 @@ export const OAUTH_CALLBACK_HOSTS = ['127.0.0.1', '::1'] as const;
 /** ::1 을 못 여는 머신(IPv6 비활성)에서 나는 에러 — 무시하고 127.0.0.1 만 쓴다. */
 const IPV6_UNAVAILABLE_CODES = new Set(['EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EINVAL']);
 
+/** 콜백 포트가 한 루프백 주소에서 점유됐을 때의 안내 (한/영). */
+export function callbackPortInUse(host: string, err: Error): AuthErrorPayload {
+  const address = host.includes(':') ? `[${host}]:${OAUTH_CALLBACK_PORT}` : `${host}:${OAUTH_CALLBACK_PORT}`;
+  return {
+    code: 'CALLBACK_PORT_IN_USE',
+    message:
+      `OAuth 콜백 주소 ${address} 를 다른 프로세스가 사용 중입니다. `
+      + `/ The OAuth callback address ${address} is already in use by another process.`,
+    hint:
+      `localhost 는 127.0.0.1 과 ::1 어느 쪽으로도 풀릴 수 있어 로그인은 두 주소의 ${OAUTH_CALLBACK_PORT} 포트를 모두 엽니다. `
+      + `점유 프로세스를 찾아 종료한 뒤 다시 시도하세요 — macOS/Linux: \`lsof -nP -i :${OAUTH_CALLBACK_PORT}\`, `
+      + `Windows: \`netstat -ano | findstr :${OAUTH_CALLBACK_PORT}\`. 중단된 이전 로그인이면 잠시 후 재시도해도 됩니다. `
+      + `/ Login listens on port ${OAUTH_CALLBACK_PORT} on both 127.0.0.1 and ::1 because localhost can resolve to either. `
+      + 'Find and stop the process holding it (commands above), or wait for an abandoned earlier login to time out, then retry.',
+    retriable: true,
+    needsReauth: false,
+    cause: err.message,
+  };
+}
+
 export function createOAuth2Client(clientId: string, clientSecret: string) {
   return new google.auth.OAuth2(clientId, clientSecret, OAUTH_REDIRECT_URI);
 }
@@ -381,6 +401,13 @@ export function startAuth(
         // IPv6 가 꺼진 머신에는 ::1 이 없다 — 그럴 땐 127.0.0.1 하나로 충분하다.
         if (host === '::1' && IPV6_UNAVAILABLE_CODES.has(err.code ?? '')) return;
         server.close();
+        if (err.code === 'EADDRINUSE') {
+          // 한 주소만 점유돼도 실패시킨다 — 그 주소로 풀리는 브라우저의 콜백(= 인가 코드)이
+          // 다른 프로세스로 가기 때문이다. 대신 어느 주소인지와 할 일을 분명히 알린다.
+          attempt.status = 'failed';
+          reject(new AuthError(callbackPortInUse(host, err)));
+          return;
+        }
         rejectAuth(err);
       });
       s.listen(OAUTH_CALLBACK_PORT, host);

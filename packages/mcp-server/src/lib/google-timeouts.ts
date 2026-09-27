@@ -21,6 +21,13 @@ export const GOOGLEAPIS_TIMEOUT_MS = HTTP_TIMEOUT_MS;
  */
 export const GOOGLEAPIS_MEDIA_TIMEOUT_MS = 30 * 60_000;
 
+/**
+ * Play `edits.commit` 용. 커밋은 서버가 edit 전체를 검증·반영하느라 60초를 넘기기도 하고,
+ * POST 라 재시도되지 않으므로 기본 상한에서 끊기면 결과를 알 수 없게 된다.
+ */
+export const GOOGLEAPIS_COMMIT_TIMEOUT_MS = 5 * 60_000;
+export const GOOGLEAPIS_COMMIT_OPTIONS = Object.freeze({ timeout: GOOGLEAPIS_COMMIT_TIMEOUT_MS });
+
 /** 미디어 업로드 호출의 두 번째 인자로 넘긴다: `api.upload(params, GOOGLEAPIS_MEDIA_OPTIONS)`. */
 export const GOOGLEAPIS_MEDIA_OPTIONS = Object.freeze({ timeout: GOOGLEAPIS_MEDIA_TIMEOUT_MS });
 

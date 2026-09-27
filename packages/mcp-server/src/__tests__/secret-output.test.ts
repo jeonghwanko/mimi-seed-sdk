@@ -68,7 +68,7 @@ import {
 import { keystoresDir, readKeystoreBase64, resolveSecretInput } from '../android/keystore-store.js';
 
 const PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nplaceholder-secret-material\n-----END PRIVATE KEY-----\n';
-const SA = '<service-account>@<project>.iam.gserviceaccount.com';
+const SA = 'ci-bot@example-project.iam.gserviceaccount.com';
 const keyJson = JSON.stringify({
   type: 'service_account',
   client_email: 'ci-bot@example-project.iam.gserviceaccount.com',
@@ -213,6 +213,21 @@ describe('android_generate_keystore → Jenkins', () => {
     expect(mocks.upsertSecretFile).toHaveBeenCalledWith(
       expect.anything(), 'myapp-android-keystore', Buffer.from('FAKE-KEYSTORE-BYTES').toString('base64'), 'upload.jks', '',
     );
+  });
+});
+
+describe('jenkins_create_credential — 기존 동작 유지', () => {
+  // 적대적 재검토: 경로 입력을 추가하면서 secret:"" 를 거부하는 회귀가 생겼다. main 은 저장했다.
+  it('secret:"" 는 예전처럼 빈 Secret text 로 저장한다', async () => {
+    const r = await call('jenkins_create_credential', { id: 'example-empty', secret: '' });
+    expect(r.isError).toBe(false);
+    expect(mocks.upsertSecretText).toHaveBeenCalledWith(expect.anything(), 'example-empty', '', '');
+  });
+
+  it('secret 도 secret_file 도 없으면 거부한다', async () => {
+    const r = await call('jenkins_create_credential', { id: 'example-none' });
+    expect(r.isError).toBe(true);
+    expect(mocks.upsertSecretText).not.toHaveBeenCalled();
   });
 });
 
