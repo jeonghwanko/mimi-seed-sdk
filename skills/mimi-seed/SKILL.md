@@ -51,7 +51,9 @@ ToolSearch(query="select:<tool>[,<tool>...]")
 `mimi_seed_remote_sync_credentials`를 `confirm=false`로 호출해 대상을 확인한다. 사용자에게
 Apple P8 키와 Play 서비스 계정 JSON이 원격 워크스페이스에 암호화 저장된다는 점을 알리고,
 명시 동의를 받은 뒤에만 `confirm=true`로 다시 호출한다. 특정 앱만 필요하면
-`package_names`를 지정한다.
+`package_names`를 지정한다 — `playstore_list_service_accounts`에 **등록된** 패키지명만 허용되며, 하나라도
+미등록이면 아무것도 보내지 않는다. 미리보기에 표시되는 **전송 대상 호스트**를 사용자에게 함께 보여준다
+(https만 허용, http는 localhost 개발 서버만).
 
 - 동기화 대상: `appstore.json`, `play-service-accounts/<packageName>.json`
 - 동기화 제외: `tokens.json`. 로컬 Google OAuth refresh token은 로컬 OAuth client에 묶여 있으므로
@@ -66,4 +68,7 @@ Apple P8 키와 Play 서비스 계정 JSON이 원격 워크스페이스에 암�
 - `mimi_seed_remote_sync_credentials(confirm=true)`는 비밀값을 외부에 저장하는 작업이므로 같은 턴의 명시 승인 없이는 실행하지 않는다.
 - 반복 작업 중에는 `status=draft`를 쓰고, `completed` 전환은 명시 요청 시에만.
 - 파일은 절대경로로 전달하고, 이미지 바이트를 대화 컨텍스트에 싣지 않는다.
+- 비밀값은 대화로 옮기지 않는다. `iam_create_key`·`android_generate_keystore`는 키·비밀번호를
+  `~/.mimi-seed/keys/`·`~/.mimi-seed/keystores/`에 0600 파일로 저장하고 **경로만** 돌려준다. 그 경로를
+  `serviceAccountJsonPath` / `service_account_json_path` / `keystore_path` / `secret_file`로 넘기고, 파일을 읽어 값을 복사하지 않는다.
 - mimi-seed는 **앱 바이너리를 빌드하지 않는다** (메타데이터·릴리스·credential 관리 전용). `.ipa`/`.aab`는 EAS·Xcode·CI/Jenkins 잡으로 만든다.

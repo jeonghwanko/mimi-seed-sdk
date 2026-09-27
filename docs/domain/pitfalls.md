@@ -230,3 +230,53 @@ blocks the same account + content hash while its state is pending, published, or
 `allowDuplicate` escape hatch to an unattended path; reconcile the provider status first. Deduplication must
 keep the atomic reservation in addition to the audit lookup, otherwise two workers can both pass a check before
 either has written its audit record.
+
+## 20. Tool arguments are attacker-controlled strings — validate at the schema *and* at the boundary
+
+Every tool argument can come from a prompt-injected page, a README, or a review the model just read. A 2026-09
+review found three places where a plain `z.string()` flowed into something dangerous:
+
+- **File paths.** `packageName` was joined into `play-service-accounts/<packageName>.json`, so `"../tokens"`
+  deleted, overwrote, or remote-synced `~/.mimi-seed/tokens.json`. Package/bundle ids now use the shared schemas
+  in `lib/package-name.ts`, **and** `playstore-auth.ts` re-validates and asserts the resolved path stays inside
+  its directory — the schema is only the first line, internal callers skip it. `security-package-param.test.ts`
+  boots the server and proves every tool with a package-like param rejects `../tokens`; a new tool that uses
+  `z.string()` for one fails it.
+- **URL paths.** Provider clients built `/appScreenshots/${id}`; an id containing `../` retargeted a `DELETE`
+  after URL normalization. Use `encodePathSegment()` (`lib/url-path.ts`) — plain `encodeURIComponent` still lets
+  an id of exactly `..` climb one level. `path-encoding.test.ts` rejects an unencoded `/${…}` segment in the
+  provider directories.
+- **Executables.** `ffmpegPath` was executed as given. It must now be named `ffmpeg`/`ffmpeg.exe`.
+
+Tools that accept a *file path* to a secret (`serviceAccountJsonPath`, `keystore_path`, `secret_file`) restrict it
+to the directory the SDK itself wrote (`lib/path-containment.ts`, realpath-based so a symlink cannot escape) —
+otherwise the tool becomes a way to ship any local file to Jenkins or Google.
+
+## 21. Secrets must not round-trip through the transcript
+
+A tool response is stored in the conversation, client logs, and sometimes synced chat history. `iam_create_key`
+used to return the whole service-account JSON and `android_generate_keystore` printed the store/key passwords and
+the keystore base64 — "delete this chat afterwards" is not a control. Tools that mint a secret now write it
+`0600` under `~/.mimi-seed/` (`keys/`, `keystores/`) and return a **path**; the consuming tool takes that path.
+Keep the string parameters working for back-compat, but document the path form as the preferred one. The same
+rule covers subprocesses: keytool gets passwords via `-storepass:env` / `-keypass:env`, not argv (visible in `ps`).
+Dry runs must not echo file content either (`playstore_upload_data_safety` used to print the first CSV line of
+any absolute path).
+
+## 22. googleapis has no default timeout
+
+`http-timeout.test.ts` guards raw `fetch`, but most Google calls go through googleapis/gaxios, which has **no**
+timeout by default — the same "hung socket blocks a stdio tool forever" defect. `lib/google-timeouts.ts` sets a
+60 s default and bounded retries through `google._options` in `googleapis-lite.ts` (googleapis-common merges
+`context.google._options` into every request made as `google.<api>(…)`). Media uploads pass
+`GOOGLEAPIS_MEDIA_OPTIONS` per call so large files are not cut off. If you ever call a googleapis constructor
+another way (not as a method of the `google` lite object), the default is lost — `googleapis-timeout.test.ts`
+checks the real request options.
+
+## 23. "Read-only" and "complete" must be enforced, not described
+
+`bigquery_run_query` said "SELECT" in its description and ran DML. It now dry-runs the SQL and refuses any
+`statementType` other than `SELECT`. List wrappers that read one page (IAM service accounts, Firebase
+projects/services, Play products/subscriptions) silently dropped the rest; `lib/paginate.ts` follows
+`nextPageToken` and **fails** rather than truncating at its page cap. A query that outlives its wait window
+returns `jobComplete=false` with a note — an empty row set must never look like an empty result.

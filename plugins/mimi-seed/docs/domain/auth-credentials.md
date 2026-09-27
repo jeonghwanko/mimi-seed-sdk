@@ -29,6 +29,8 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads credentials. One file can hold all three; `.mimi-seed.json.socialProfiles` selects each platform independently | `facebook_save_config` / `instagram_save_config` / `threads_save_config`, or `mimi-seed auth <platform> --profile <id>` |
 | `tiktok-business.json` | TikTok API for Business app secret + one-day access token + one-year refresh token (written `0600`) | `mimi-seed-tiktok-business-auth` / `mimi-seed auth tiktok` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
+| `keys/<sa-localpart>-<keyId>.json` | Service-account keys minted by `iam_create_key` (`0600`). The tool returns the **path only**; `playstore_register_service_account` / `playstore_verify_service_account` (`serviceAccountJsonPath`) and `jenkins_upload_playstore_sa` (`service_account_json_path`) read files **inside this directory only** (realpath containment, `lib/path-containment.ts`) | `iam/key-files.ts` |
+| `keystores/<app>-<timestamp>/upload.jks` + `signing.json` | Upload keystore and its alias / store / key passwords from `android_generate_keystore` (`0600`). The tool returns paths only; `jenkins_upload_keystore` (`keystore_path`) and `jenkins_create_credential` (`secret_file` + `secret_field`) read files inside `keystores/` only | `android/keystore-store.ts` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
 | `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
 | `settings.json` | **Not a credential** — user preference (`{ lang }`), deliberately separate so logout/re-auth never resets it. Read by both packages (`cli/src/settings.ts`, `mcp-server/src/lib/lang.ts`) | `mimi-seed lang` / the setup wizard's first prompt |
@@ -49,6 +51,12 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
   `playstore_list_service_accounts` shows the mapping. Resolution: look up
   `play-service-accounts/<packageName>.json` first, else fall back to `play-service-account.json`.
+  `<packageName>` is validated twice — by the zod schema on every tool (`lib/package-name.ts`) and again at the
+  file boundary (`serviceAccountPathForPackage` asserts the resolved path stays inside `play-service-accounts/`),
+  because `../tokens` once resolved to `tokens.json` ([[pitfalls]] §20).
+- **Remote sync allowlist.** `mimi_seed_remote_sync_credentials` sends only packages that
+  `listRegisteredServiceAccounts()` returns, refuses the whole batch on an unknown name, and requires an https
+  endpoint (http only for loopback).
 - **Project social-profile mapping wins over the legacy default.** If `.mimi-seed.json` declares
   `socialProfiles.facebook`, `.instagram`, or `.threads`, tools resolve only that profile and do not silently fall back to a
   different default account. An explicit MCP `profile` argument wins over the project mapping.
