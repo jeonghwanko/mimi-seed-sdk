@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
  * packages/core 경계 가드.
  *
  * core 는 두 패키지가 공유하는 **소스**다 — npm 에 올라가지 않고, 설치되지도 않는다. 각 패키지가
- * 자기 빌드에 컴파일해 넣는다(cli: tsup 번들, mcp-server: tsconfig.core.json → dist/core). 이 방식이
+ * 자기 빌드에 컴파일해 넣는다(cli: tsup 번들, mcp-server: tsconfig.core.json → dist/core, then tsconfig.build.json). 이 방식이
  * 성립하려면 아래 규칙이 전부 참이어야 하고, 하나라도 깨지면 **배포본이 설치 직후 죽는다** — 로컬
  * 체크아웃에서는 packages/core 가 옆에 있어서 멀쩡해 보이기 때문에 이 테스트 말고는 알려줄 게 없다.
  *
@@ -95,10 +95,23 @@ describe('packages/core 경계', () => {
       files: string[];
     };
     expect(pkg.imports).toEqual({ '#core/*': './dist/core/*' });
-    expect(pkg.scripts.build).toBe('tsc -p tsconfig.core.json && tsc');
+    // dist 를 먼저 비운다 — core 에서 지운 모듈이 dist/core 에 남아 배포되지 않게.
+    expect(pkg.scripts.build).toBe('npm run clean && tsc -p tsconfig.core.json && tsc -p tsconfig.build.json');
+    expect(pkg.scripts.clean).toContain("rmSync('dist'");
     expect(pkg.files).toContain('dist');
-    const coreConfig = readFileSync(path.join(repoRoot, 'packages/mcp-server/tsconfig.core.json'), 'utf8');
-    expect(coreConfig).toMatch(/"outDir":\s*"dist\/core"/);
+
+    const config = (name: string) =>
+      readJson(`packages/mcp-server/${name}`) as { extends?: string; compilerOptions: Record<string, unknown> };
+    // 에디터·타입체크·tsx 용 기본 설정: #core 를 **소스**로 푼다 → 빌드 전에도 동작하고, 정의로 가기가 낡은 .d.ts 로 안 간다.
+    const editor = config('tsconfig.json');
+    expect(editor.compilerOptions.noEmit).toBe(true);
+    expect(editor.compilerOptions.paths).toEqual({ '#core/*': ['../core/src/*'] });
+    // 배포 빌드: dist 레이아웃(bin 경로)을 고정하고, #core 는 imports → dist/core .d.ts 로 푼다.
+    const build = config('tsconfig.build.json');
+    expect(build.compilerOptions).toMatchObject({ noEmit: false, rootDir: 'src', outDir: 'dist', paths: {} });
+    const core = config('tsconfig.core.json');
+    expect(core.extends).toBe('./tsconfig.build.json');
+    expect(core.compilerOptions).toMatchObject({ rootDir: '../core/src', outDir: 'dist/core' });
   });
 
   it('core 는 private·무의존이고, 어느 배포 패키지도 그것에 의존하지 않는다', () => {

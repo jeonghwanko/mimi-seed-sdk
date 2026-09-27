@@ -24,9 +24,10 @@ cross-package contract used by `packages/cli/src/mcp-bin.ts`.
 
 Code shared with the CLI — Release Doctor policy and rendering, the `.mimi-seed.json` reader, `resolveLang`, the
 atomic credential writer, the AI contract, the CI/Jenkins config shapes — lives in `packages/core/src` and is
-imported as `#core/<path>.js`. `npm run build` compiles it into `dist/core/` first (`tsconfig.core.json`) and the
-`imports` field of `package.json` resolves `#core/*` there at runtime; typecheck, lint, vitest, and `npm run dev`
-read the core source directly. Keep core dependency-free (`node:` builtins only, no `fetch`) —
+imported as `#core/<path>.js`. `npm run build` clears `dist/`, compiles core into `dist/core/` (`tsconfig.core.json`), then the server
+(`tsconfig.build.json`); the `imports` field of `package.json` resolves `#core/*` there at runtime. The plain
+`tsconfig.json` is the editor/typecheck config (`noEmit`, `#core` → core source), so the editor, `npx tsx src/…`,
+typecheck, lint, and vitest read the core source directly — no build needed. Keep core dependency-free (`node:` builtins only, no `fetch`) —
 `core-boundary.test.ts` enforces it ([`architecture.md`](../../docs/domain/architecture.md) "Shared source").
 
 ## Adding or changing a tool

@@ -1,11 +1,5 @@
 {
-  "//": "린트/타입체크 전용 — 빌드 tsconfig 는 dist 에 테스트를 넣지 않으려고 src/__tests__ 를 exclude 한다. 그 결과 테스트는 지금까지 어떤 타입 검사도 받지 않았다(vitest 는 타입을 보지 않는다). 이 설정이 그 공백을 메운다. 또한 `#core/*` 를 빌드 산출물(dist/core)이 아니라 packages/core 소스로 풀어서, 빌드 없이도 타입체크·린트·`npm run dev`(tsx)가 core 소스를 보게 한다 — 그래서 rootDir 을 두 패키지를 덮는 상위로 연다(noEmit 이라 산출물 위치와 무관).",
+  "//": "린트/타입체크 진입점 — tsconfig.json 이 이미 테스트까지 포함하고 `#core/*` 를 core 소스로 풀지만(noEmit), cli 와 파일 이름을 맞춰 두 패키지의 린트·타입체크 진입점을 같게 한다. 빌드 설정(tsconfig.build.json)은 src/__tests__ 를 exclude 하므로 여기에 쓰면 안 된다 — 예전엔 테스트가 어떤 타입 검사도 받지 않았다.",
   "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "rootDir": "..",
-    "paths": { "#core/*": ["../core/src/*"] }
-  },
-  "include": ["src/**/*"],
-  "exclude": []
+  "include": ["src/**/*"]
 }

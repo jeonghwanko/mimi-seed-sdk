@@ -72,7 +72,7 @@ before changing any assertion.
 The compiler is a guard too: `catalog<T>(ko, en: NoInfer<T>)` makes a **missing English key a build error**, and
 ESM/NodeNext makes a missing `.js` import specifier fail the published build ([[pitfalls]] §11). For the CLI the
 compiler only counts if you *run* it — `tsup` strips types without checking them, so `packages/cli`'s `npm test`
-runs `npm run typecheck` (`tsc --noEmit`) first. The mcp-server build (`tsc`) excludes `src/__tests__`, and vitest
+runs `npm run typecheck` (`tsc --noEmit`) first. The mcp-server build (`tsconfig.build.json`) excludes `src/__tests__`, and vitest
 does not type-check, so its `npm test` also runs `npm run typecheck` (`tsc --noEmit -p tsconfig.lint.json`, which
 includes the tests) — before that step existed, test files had type errors nobody saw.
 

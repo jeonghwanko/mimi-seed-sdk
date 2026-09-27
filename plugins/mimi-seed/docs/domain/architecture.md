@@ -189,14 +189,19 @@ never `npm install`ed, and has no build of its own.
 
 - **cli** — `tsconfig.json` `paths` maps `#core/*` to `../core/src/*`. tsup (esbuild), tsx and `tsc` all read
   that mapping, so the bundle *contains* the core code and the published `dist/` has no `#core` specifier left.
-- **mcp-server** — `npm run build` is `tsc -p tsconfig.core.json && tsc`: the first pass compiles core into
-  **`dist/core/`** (emitted as ESM because `packages/core/package.json` says `"type": "module"`), the second
-  builds the server against the `.d.ts` files it produced. At runtime Node resolves `#core/*` through the
+- **mcp-server** — `npm run build` is `npm run clean && tsc -p tsconfig.core.json && tsc -p tsconfig.build.json`:
+  it deletes `dist/` (so a module removed from core never lingers in `dist/core/` and ships), compiles core into
+  **`dist/core/`** (emitted as ESM because `packages/core/package.json` says `"type": "module"`), then builds the
+  server against the `.d.ts` files that produced — `tsconfig.build.json` empties `paths` so `#core/*` resolves
+  through `imports`, since core's source sits outside its `rootDir: src`. At runtime Node resolves `#core/*` through the
   package's own `"imports": { "#core/*": "./dist/core/*" }`, which works identically from a checkout and from an
   installed tarball. Every `bin` path and every other `dist/` entry point is unchanged.
-- **Tooling reads the source, not a build.** mcp-server's `tsconfig.lint.json` (typecheck, eslint, `npm run
-  dev` via tsx) maps `#core/*` to the core source with `paths`, and both `vitest.config.ts` files do the same with
-  a `resolve.alias` — so tests and typechecks never need a prior build.
+- **Tooling reads the source, not a build.** mcp-server's plain `tsconfig.json` is the editor / typecheck / tsx
+  config: `noEmit`, tests included, and `paths` mapping `#core/*` to the core source — so `npx tsx src/…`,
+  `tsc -p tsconfig.json`, and go-to-definition work before any build and never land on a stale `dist/core`
+  `.d.ts` (`tsconfig.lint.json` just extends it, matching the CLI's lint entry point). Emit settings live only in
+  `tsconfig.build.json` / `tsconfig.core.json`. Both `vitest.config.ts` files do the same mapping with a
+  `resolve.alias`.
 - **Checked where it is consumed.** Each package's typecheck covers the core files it imports; mcp-server's
   `npm test` additionally typechecks all of core (`tsc -p ../core`) and lints it (`eslint . ../core` — core's
   `eslint.config.js` borrows mcp-server's config and toolchain). Core has no tests or `node_modules` of its own:
@@ -206,7 +211,8 @@ never `npm install`ed, and has no build of its own.
 coordinate for code nobody installs directly. An npm workspace would change how both packages install and lock.
 Switching mcp-server to a bundler would rewrite `dist/` (a dozen `bin` entry points, the deep imports of
 `scripts/googleads-report.mjs`, `package-bin-contract.test.ts`). tsc project references would need a separate
-core `outDir` copied into mcp-server's `dist/`. The chosen shape adds one tsconfig and one `imports` entry, and
+core `outDir` copied into mcp-server's `dist/`. The chosen shape adds one `imports` entry and splits mcp-server's tsconfig into editor (`tsconfig.json`) and emit
+(`tsconfig.build.json`, `tsconfig.core.json`) configs, and
 the only change to the published MCP tarball is the new `dist/core/` directory (the three Release Doctor files
 and a few `lib/` modules moved there from their old paths).
 

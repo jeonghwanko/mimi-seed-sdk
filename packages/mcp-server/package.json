@@ -30,9 +30,10 @@
   ],
   "scripts": {
     "report:googleads": "node scripts/googleads-report.mjs",
-    "build": "tsc -p tsconfig.core.json && tsc",
-    "dev": "tsx --tsconfig tsconfig.lint.json src/index.ts",
-    "auth": "tsx --tsconfig tsconfig.lint.json src/auth/cli.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.core.json && tsc -p tsconfig.build.json",
+    "dev": "tsx src/index.ts",
+    "auth": "tsx src/auth/cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.lint.json && tsc -p ../core",
     "test": "npm run typecheck && npm run lint && vitest run",
     "test:watch": "vitest",
