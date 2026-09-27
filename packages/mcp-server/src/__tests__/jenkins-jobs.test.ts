@@ -79,6 +79,12 @@ describe('http.ts — URL 계산', () => {
     expect(() => jobUrl(cfg, '')).toThrow(/비어/);
     expect(() => createItemUrl(cfg, '/')).toThrow(/비어/);
   });
+
+  // encodeURIComponent('..') 는 '..' 그대로라 URL 정규화가 상위 폴더(다른 잡)로 올라갔다.
+  it.each(['..', 'team-folder/..', '../other', 'a/./b'])('점 세그먼트 %j 는 거부한다', (job) => {
+    expect(() => jobUrl(cfg, job)).toThrow(/세그먼트/);
+    expect(() => createItemUrl(cfg, `${job}/leaf`)).toThrow(/세그먼트/);
+  });
 });
 
 describe('listJobs', () => {
