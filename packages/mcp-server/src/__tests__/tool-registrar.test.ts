@@ -10,6 +10,7 @@ import {
   annotationsFor,
   buildToolIndex,
   createToolRegistrar,
+  previewValue,
   toolTitle,
   type ToolRegistrar,
 } from '../lib/tool-registrar.js';
@@ -73,6 +74,25 @@ describe('annotations — manifest 분류에서 파생', () => {
     expect(toolTitle('tiktok_business_publish_video')).toBe('TikTok Business: Publish video');
     expect(toolTitle('release_status')).toBe('Release status');
     expect(annotationsFor(index.get('store_old_write')!).title).toMatch(/\(deprecated\)$/);
+  });
+});
+
+describe('previewValue — dry-run 인자 표시', () => {
+  it('최상위 비밀 키는 통째로 가린다 (기존 동작)', () => {
+    expect(previewValue('token', 'abc')).toBe('(redacted)');
+    expect(previewValue('keystore_base64', 'eA==')).toBe('(redacted)');
+  });
+
+  it('중첩 객체·배열 안의 비밀처럼 보이는 키도 가리고 나머지는 그대로 보여준다', () => {
+    const shown = previewValue('parameters', { DEPLOY_TOKEN: 'placeholder-secret', platform: 'android', nested: [{ password: 'p' }] });
+    expect(shown).not.toContain('placeholder-secret');
+    expect(JSON.parse(shown)).toEqual({ DEPLOY_TOKEN: '(redacted)', platform: 'android', nested: [{ password: '(redacted)' }] });
+  });
+
+  it('비밀 키가 없는 값은 예전과 똑같이 보인다', () => {
+    expect(previewValue('status', 'completed')).toBe('completed');
+    expect(previewValue('imageUrls', ['https://example.com/a.png'])).toBe('["https://example.com/a.png"]');
+    expect(previewValue('localizations', { ko: { whatsNew: 'x' } })).toBe('{"ko":{"whatsNew":"x"}}');
   });
 });
 
