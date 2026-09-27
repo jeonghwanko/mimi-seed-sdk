@@ -12,13 +12,13 @@ Routed by `main()` in `cli/src/index.ts`:
 
 | Command | Module | What it does |
 |---|---|---|
-| `init` | `index.ts` (`cmdInit`) | detect app → browser PAT handshake → register apps → scaffold project context files |
+| `init` | `init.ts` | detect app → browser PAT handshake → register apps → scaffold project context files |
 | `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
 | `lang` | `lang.ts` | CLI output language (`ko` / `en`) → `~/.mimi-seed/settings.json`. `setup` asks on first run; `MIMI_SEED_LANG` overrides |
 | `status` | `index.ts` (`cmdStatus`) | show connection + `list_apps` via the remote MCP |
 | `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` / `tiktok`; `meta` opens the combined Meta setup — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
-| `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI) |
+| `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI). Exits `0` by default even with ✗ rows — it is the final "verify" step of the install skill and getting-started guide, where a ✗ is often expected. `--strict` exits `1` on any ✗ (the CI gate); `--json` prints the report (with `ok`) instead. The cloud token is only a failure when remote use is configured (`MIMI_SEED_TOKEN`, `MIMI_SEED_WEB_BASE`, or a `.mimi-seed-link.json`) — local-stdio-only users get a ⚠. A platform credential (App Store Connect) fails only when that platform is detected in the project, the same rule as `setup` / `missingRequired()` |
 | `check` | `check.ts` | pre-release readiness. With no connected remote account (or `--local`), runs the bundled no-login Release Doctor in-process; connected users retain the remote score. `--fail-on-blocker` is the CI gate |
 | `telemetry` | `telemetry.ts` | opt-in SDK usage measurement and consent settings; projects are represented by installation-salted hashes |
 | `notes` | `notes.ts` | release notes: git log → AI → optional store apply |
@@ -29,10 +29,10 @@ Routed by `main()` in `cli/src/index.ts`:
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 
 Per-command options are the SSOT in the `usage.<command>` entries of the `catalog(ko, en)` block in
-`index.ts` — that string is exactly what `mimi-seed <cmd> --help` prints (`printCommandHelp`), and the one-line
+`help.ts` — that string is exactly what `mimi-seed <cmd> --help` prints (`printCommandHelp`), and the one-line
 summaries next to it in `help` are what a bare `mimi-seed` prints. `auth` is the exception: it owns its own
-detailed help in `auth.ts`. Adding a command means touching three places in `index.ts` (the `switch` case, the
-`usage` entry, the `help` line) — checklist in [[recipes]] §3.
+detailed help in `auth.ts`. Adding a command means touching three places: the `switch` case in `index.ts`, and the
+`usage` entry and `help` line in `help.ts` — checklist in [[recipes]] §3.
 
 ### Output language
 
@@ -69,6 +69,15 @@ CI, Google Ads, Facebook, Instagram, Threads, or TikTok Business at all. Each `C
 because the *validation* (probe the server, call the API, refuse to save a bad token) lives there. Duplicating a
 writer across the two packages is what produced the Jenkins dual-config bug ([[pitfalls]]). The one exception is
 `ci.json`, which the CLI both writes and reads at deploy time.
+
+`runMcpBin` (`mcp-bin.ts`) prefers a bin already on `PATH` (a global install or an `npm link`ed checkout). Otherwise
+it runs `npx -y @yoonion/mimi-seed-mcp@<the CLI's own version>` — pinned, with the version inlined from
+`package.json` at build time. Both packages ship under one version, so the matching server is always that exact
+version; an unpinned spec would pair an old or half-released CLI with whatever npm `latest` is.
+`MIMI_SEED_FORCE_NPX` (developer switch) still forces `@latest`, and so does running from a source checkout
+(no `node_modules` in the CLI's own path), with a one-line warning — a checkout's version is usually not on npm yet
+and the pinned spec would fail with `ETARGET`. The MCP *registration* spec stays `@latest` on purpose: it is a
+long-lived client setting that should not go stale on every CLI upgrade.
 
 Facebook, Instagram, and Threads support named local profiles. `mimi-seed auth facebook|instagram|threads
 --profile <id>` forwards the profile to the owning MCP setup binary. Without an explicit flag, the binary reads the current project's

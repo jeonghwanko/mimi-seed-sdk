@@ -15,7 +15,7 @@
 | Wiring a **new** register module into the server | `mcp-server/src/server.ts` (`buildServer`) | `mcp-server/src/index.ts` (stdio entry only) |
 | A credential's *writer* + validation | the `mcp-server` setup bin that owns it | a second writer in the CLI ([[pitfalls]] §12) |
 | A credential's *detection* + "how to fix" text | `cli/src/credentials.ts` (`CredSpec`) | ad-hoc `fs` checks in `doctor` / `setup` |
-| A CLI command's behavior | `cli/src/<command>.ts` | `cli/src/index.ts` (router + usage only) |
+| A CLI command's behavior | `cli/src/<command>.ts` | `cli/src/index.ts` (router only) |
 | User-facing Korean/English text | a `catalog(ko, en)` in the file that prints it | a bare string literal ([[cli-deploy]]) |
 | A shared onboarding string | `cli/src/i18n.ts` `t()` | duplicated per command |
 
@@ -44,6 +44,9 @@
    until every registered tool appears in at least one batch. Add a new row when no existing task fits.
 7. **Test** it next to the behavior in `mcp-server/src/__tests__/`.
 8. If step 6 touched `docs/`: `npm run plugin:sync` from the repo root, and commit `plugins/mimi-seed/`.
+9. **Changelog** — add the tool under `Tool changes` in `[Unreleased]` of the root
+   [`CHANGELOG.md`](../../CHANGELOG.md) (added / renamed `old` → `new` / removed). A rename or removal breaks every
+   prompt, skill, and `select:` batch that still names the old tool, so it must be spelled out, not implied.
 
 **Guards:** `tool-manifest.test.ts` (server ↔ manifest) · `docs-drift.test.ts` (manifest ↔ catalog ↔ READMEs) ·
 `prompts-resources.test.ts` (agent-guide copy) · `npm run plugin:check`.
@@ -87,7 +90,7 @@ to a source entrypoint and `dist` ships) · `setup.test.ts` (never spawns a bloc
 1. **Behavior** in `cli/src/<command>.ts`. All user-facing text goes through `catalog(ko, en)` in that file;
    shared onboarding strings live in `cli/src/i18n.ts` `t()`.
 2. **Router** — `cli/src/index.ts`: a `case` in `main()`'s `switch`.
-3. **Usage** — the `usage.<command>` entry in the same file's `catalog(...)`. That entry *is* the flag SSOT:
+3. **Usage** — the `usage.<command>` entry in `cli/src/help.ts`'s `catalog(...)`. That entry *is* the flag SSOT:
    `mimi-seed <cmd> --help` prints it. Add the one-line summary to the `help` block too.
 4. **Docs** — the command table in [[cli-deploy]]; the README quick reference only for headline commands.
 5. Non-interactive safety: a command must not spawn a stdin-blocking child when `--non-interactive` / not a TTY.
@@ -95,7 +98,8 @@ to a source entrypoint and `dist` ships) · `setup.test.ts` (never spawns a bloc
 **Guards:** the compiler (`catalog<T>(ko, en: NoInfer<T>)` — a missing English key fails the build) ·
 `i18n-coverage.test.ts` (a user-facing Hangul literal outside a `ko` catalog fails) · `deploy-args.test.ts`
 for `deploy` flag parsing.
-**Verify:** `npm run build && npm test` in `packages/cli`, plus `npx tsc --noEmit` — `tsup` does not type-check.
+**Verify:** `npm run build && npm test` in `packages/cli` — its `npm test` runs `npm run typecheck` first, because
+`tsup` does not type-check.
 
 ---
 
@@ -143,9 +147,14 @@ npm run version:set patch     # or minor | major | 0.14.0
 npm run version:check         # also enforced by version-sync.test.ts and plugin:check
 ```
 
-Then commit with a [Conventional Commit](https://www.conventionalcommits.org/) message — release notes are
-generated from it. CI publishes each package whose version is not yet on npm (idempotent, so version-less
-pushes are safe). Details and the rationale: [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).
+In the same commit, rename `[Unreleased]` in the root [`CHANGELOG.md`](../../CHANGELOG.md) to the new version and
+date, and open a fresh empty `[Unreleased]` above it.
+
+Then commit with a [Conventional Commit](https://www.conventionalcommits.org/) message on a release branch,
+merge it through a PR (`main` is protected), and push a `v<version>` tag on the merged commit. Only a tag push
+publishes: CI checks that the tag matches the root version and is on `main`, then publishes mcp-server and
+then cli, skipping any version already on npm. Details and the rationale:
+[`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 Intermediate validation uses `beta.N` or `next.N` versions. `scripts/release-channel.mjs` owns their npm
 dist-tags; stable versions alone update `latest`. Batch routine fixes before a stable release.
@@ -156,7 +165,7 @@ dist-tags; stable versions alone update `latest`. Batch routine fixes before a s
 
 ```bash
 npm run build && npm test      # inside the package you changed
-npx tsc --noEmit               # packages/cli only — tsup does not type-check
+npm run typecheck              # packages/cli only — tsup does not type-check (its `npm test` runs this first)
 npm run plugin:check           # if you touched docs/, skills/, manifests, or versions
 npm test                       # root: plugin drift + both suites (the full gate)
 ```

@@ -194,7 +194,7 @@ npm run build && npm test
 The CLI additionally needs a real typecheck, because `tsup` does **not** type-check:
 
 ```bash
-cd packages/cli && npx tsc --noEmit
+cd packages/cli && npm run typecheck
 ```
 
 Adding or renaming a tool? The inventory is test-enforced — see the tool-registration checklist in

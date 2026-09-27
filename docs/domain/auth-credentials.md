@@ -141,7 +141,9 @@ second call with `confirm=true`.
   truncates first: interrupt it (or let two processes overlap) and you get truncated JSON, which every reader in
   this codebase swallows as `null` — the user just sees an unexplained "not authenticated". That matters most for
   `tokens.json`, rewritten on every refresh (5-minute margin) by however many server instances and CLIs are
-  running. `atomic-write.test.ts` enforces this and keeps the writer list complete.
+  running. `atomic-write.test.ts` enforces this and keeps the writer list complete. The CLI's own files
+  (`config.json`, `ci.json`, `telemetry.json`) go through its copy, `cli/src/lib/atomic-write.ts`, guarded by the
+  CLI's `atomic-write.test.ts`.
 - ✅ Surface the **raw provider reason** on `401`/`403` via the friendly-error layer ([[external-apis]]).
 - ❌ Never log, echo, return, or embed a token / key / `.p8` / SA JSON — not in tool output, not in error
   messages, not in tests. Tests use placeholder fixtures only.

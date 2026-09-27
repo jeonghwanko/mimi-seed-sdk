@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { AppHint } from "./detect.js";
 import { catalog } from "./i18n.js";
+import { fetchWithTimeout } from "./lib/http.js";
 
 export const PROJECT_LINK_FILENAME = ".mimi-seed-link.json";
 
@@ -79,11 +80,10 @@ export async function linkProject(
   token: string,
   hint: AppHint,
 ): Promise<ProjectLink> {
-  const res = await fetch(new URL("/api/deploy/link", webBase), {
+  const res = await fetchWithTimeout(new URL("/api/deploy/link", webBase), {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ packageName: hint.packageName, bundleId: hint.bundleId }),
-    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(M().lookupFailed(res.status));
   const value: unknown = await res.json();

@@ -190,7 +190,7 @@ npm run build && npm test
 CLI 는 타입체크를 따로 돌려야 한다. `tsup` 은 타입을 **검사하지 않는다**:
 
 ```bash
-cd packages/cli && npx tsc --noEmit
+cd packages/cli && npm run typecheck
 ```
 
 도구를 추가·개명하는가? 인벤토리는 테스트로 강제된다 — [`../CONTRIBUTING.md`](../CONTRIBUTING.md) 의 도구 등록

@@ -8,6 +8,8 @@ dist/
 # Claude Code local settings (per-machine permission allowlist — not shared)
 .claude/settings.json
 .claude/settings.local.json
+# Agent worktrees (isolated checkouts of this repo — never commit them)
+.claude/worktrees/
 
 # Personal local tooling config / generated marketing assets (not part of the SDK)
 .codex/
@@ -16,3 +18,6 @@ artifacts/
 
 # vitest 커버리지 리포트 (로컬 진단용)
 coverage/
+
+# Local generated output (Release Doctor reports, rendered media, scratch exports)
+/output/

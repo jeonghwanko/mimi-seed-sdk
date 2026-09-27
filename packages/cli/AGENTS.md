@@ -8,7 +8,8 @@ detection, setup, init, or deploy. The ordered checklist is
 
 ## Responsibilities
 
-- `src/index.ts` owns command routing and `CMD_USAGE`, the source of truth for flags and help.
+- `src/index.ts` owns command routing only. `src/help.ts` owns the `usage.<command>` / `help` catalog — the
+  source of truth for flags and help — and `src/init.ts` owns `mimi-seed init`.
 - `src/credentials.ts` owns the credential registry consumed by `setup`, `doctor`, and auth status.
 - `src/mcp-bin.ts` launches credential setup binaries owned by the MCP server package.
 - `src/mcp-client.ts` talks to the remote HTTP MCP used for onboarding; it is not the local stdio MCP server.

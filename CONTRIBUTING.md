@@ -50,8 +50,8 @@ npm run build && npm test
 1. Branch off `main`.
 2. Keep changes scoped to one package where possible.
 3. **Build + test must pass** (`npm run build && npm test` in the affected package). The
-   mcp-server also type-checks via `tsc`; the CLI builds with `tsup` — run `npx tsc --noEmit`
-   there too, since `tsup` does not type-check.
+   mcp-server also type-checks via `tsc`; the CLI builds with `tsup`, which does not type-check — its
+   `npm test` runs `npm run typecheck` first, and you can run `npm run typecheck` alone while iterating.
 4. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`,
    `chore:`, `docs:`…). Release notes are auto-generated from commit messages.
 5. Adding/changing an MCP tool? Register it in `registers/<domain>.ts` (a **new** register
@@ -64,19 +64,34 @@ npm run build && npm test
    manifest is the single source of truth (see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8).
    The full step list — including the README count columns and when to re-run `npm run plugin:sync` — is
    [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
-6. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run
+6. User-visible change? Add a bullet to `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) (tool additions,
+   renames, and removals go under its `Tool changes` heading).
+7. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run
    `npm run plugin:sync` and commit the regenerated `plugins/mimi-seed/` — root `npm test` rejects drift.
 
 ## Releasing (maintainers)
 
-Releases are automated. **The root `package.json` version is the SDK's single version** — both
-packages and both plugin manifests follow it. Never edit those four files by hand:
+Releases are cut by pushing a **`v*` tag**; merging to `main` only runs the tests. `main` is protected —
+changes land through a PR with green CI. **The root `package.json` version is the SDK's single version** —
+both packages and both plugin manifests follow it. Never edit those four files by hand:
 
 ```bash
+git switch -c release/0.9.0
 npm run version:set 0.9.0     # or: patch | minor | major
 npm run version:check         # fails if anything drifted (also enforced by a test)
-git commit -am "feat(cli): ..." && git push origin main
+git commit -am "chore(release): 0.9.0"   # + the CHANGELOG rename below
+# open a PR, wait for green CI, merge it, then tag the merged commit on main:
+git switch main && git pull
+git tag v0.9.0 && git push origin v0.9.0
 ```
+
+The `publish` job refuses to run unless the tag equals `v<root package.json version>` and points at a commit
+that is already on `main`.
+
+In the same release commit, rename the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) to the new
+version and date and open a fresh empty `[Unreleased]` above it. Between releases, every PR with a user-visible
+change adds its bullet to `[Unreleased]`; an MCP tool that is added, renamed, or removed also goes under
+`Tool changes` there, because a rename silently breaks prompts, skills, and `select:` batches that name the old tool.
 
 The four followers are `packages/cli`, `packages/mcp-server`, `.claude-plugin/plugin.json`, and
 `.codex-plugin/plugin.json`. They used to drift apart (0.7.0 / 0.8.1 / 0.4.1), which left nobody able
@@ -85,12 +100,14 @@ to say which CLI matched which server; `version-sync.test.ts` now fails if they 
 One consequence of a single version: bumping it republishes **both** packages, even the one you didn't
 touch. That's the trade for never having to reason about cross-package compatibility.
 
-CI then, for each package whose `package.json` version is not yet on npm:
+On the tag push CI, once every test leg (Linux node 20/22, Windows node 22) and the repo guards are green, runs a single
+`publish` job that handles **mcp-server first, then cli** — if the mcp-server publish fails, cli is not
+published. For each package whose `package.json` version is not yet on npm it:
 - publishes to npm with **provenance** (signed via GitHub OIDC), and
 - creates a **GitHub Release** with auto-generated notes (`<package>-v<version>` tag).
 
-If the version already exists it's skipped (idempotent), so version-less pushes (docs, CI)
-are safe. Publishing uses npm trusted publishing (OIDC), without an `NPM_TOKEN` secret.
+If the version already exists it's skipped (idempotent), so re-pushing a tag after a partial failure
+only publishes what is missing. Publishing uses npm trusted publishing (OIDC), without an `NPM_TOKEN` secret.
 Both npm packages must trust GitHub repository `jeonghwanko/mimi-seed-sdk`, workflow `ci.yml`.
 CI keeps Node 20/22 for tests and switches to Node 24 (npm 11) for publishing.
 See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).

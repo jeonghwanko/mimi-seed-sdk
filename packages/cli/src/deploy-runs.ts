@@ -42,11 +42,10 @@ function parseRun(value: unknown): DeployRun {
 }
 
 export async function updateDeployRun(webBase: string, token: string, request: DeployRunRequest): Promise<DeployRun> {
-  const res = await fetch(new URL("/api/deploy/runs", webBase), {
+  const res = await fetchWithTimeout(new URL("/api/deploy/runs", webBase), {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(M().updateFailed(res.status));
   return parseRun(await res.json());
@@ -55,14 +54,14 @@ export async function updateDeployRun(webBase: string, token: string, request: D
 export async function getDeployRun(webBase: string, token: string, runId: string): Promise<DeployRun> {
   const url = new URL("/api/deploy", webBase);
   url.searchParams.set("jobId", runId);
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(M().lookupFailed(res.status));
   return parseRun(await res.json());
 }
 import { catalog } from "./i18n.js";
+import { fetchWithTimeout } from "./lib/http.js";
 
 const M = catalog({
   invalidResponse: "배포 기록 응답이 올바르지 않습니다.",

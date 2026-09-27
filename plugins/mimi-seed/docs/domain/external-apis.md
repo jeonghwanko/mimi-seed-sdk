@@ -73,7 +73,8 @@ write-up in [[pitfalls]] and [`../agent-guide.md`](../agent-guide.md) §6.
 Node's `fetch` has **no default response timeout**. Over stdio that is not a slow call, it is a dead session:
 the tool never returns and the MCP client has no way to cancel it. So there is exactly one entry point —
 `fetchWithTimeout(input, init?, timeoutMs?)` — and `http-timeout.test.ts` rejects a raw `fetch(` anywhere in
-`src/` outside that file.
+`src/` outside that file. The CLI has its own smaller copy (`cli/src/lib/http.ts`: timeout only, no retry — a
+human is watching, and the CI pollers already count consecutive errors) with its own guard of the same name.
 
 - `HTTP_TIMEOUT_MS` (60s) — the default; JSON/metadata calls.
 - `HTTP_TRANSFER_TIMEOUT_MS` (10m) — byte transfers. The signal stays armed while the body streams, so a 60s

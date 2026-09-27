@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
-import { mcpCall } from "./mcp-client.js";
+import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
 import { CLI_AI_MODEL } from "./ai-model.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
@@ -278,7 +278,7 @@ export async function cmdReview(argv: string[]): Promise<void> {
     package_name: packageName,
     review_id: reviewId,
     reply_text: reply,
-  });
+  }, { timeoutMs: MCP_WRITE_TIMEOUT_MS });
 
   process.stdout.write(r.isError ? kleur.red(M().postFailed(r.text)) : kleur.green(M().posted));
 }

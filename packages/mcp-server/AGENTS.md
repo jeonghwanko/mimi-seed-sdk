@@ -11,13 +11,15 @@ document matching the change. The ordered checklists are
 The normal tool path is:
 
 ```text
-src/index.ts
+src/server.ts (buildServer)
   -> src/registers/<domain>.ts       MCP name, description, zod schema, thin handler
   -> src/<domain>/tools.ts           business logic and API calls
   -> provider client                 Google APIs or App Store Connect REST
 ```
 
-`src/index.ts` also owns subcommand dispatch for setup/admin CLIs. The `bin` map in `package.json` is a
+Register modules are wired in `src/server.ts` (`buildServer`) — **not** `src/index.ts`, which is only the
+executable entry: it picks a run mode, hands `buildServer()` a transport, and owns the `SUBCOMMANDS` dispatch for
+setup/admin CLIs. Wiring a register module into `index.ts` registers nothing. The `bin` map in `package.json` is a
 cross-package contract used by `packages/cli/src/mcp-bin.ts`.
 
 Release Doctor policy and rendering source lives in `src/checks/`. The CLI bundles a
@@ -31,9 +33,11 @@ repository root and commit the mirror.
 2. Put API logic in the domain implementation and keep registration/response formatting thin.
 3. Add or change the zod input schema in `src/registers/<domain>.ts`.
 4. Update `tool-manifest.json` and the corresponding inventory in `docs/domain/tool-catalog.md`. If a domain
-   count changes, update the count columns in both root README language variants.
-5. Update ready-made runtime selections in `docs/agent-guide.md` only when discoverability or workflow order
-   changes. Keep other prose at “150+”; do not copy exact counts elsewhere.
+   count changes, update the count columns in both root README language variants and this package's
+   `README.md`.
+5. Add the tool to a `select:` batch in `docs/agent-guide.md` §0 — **required**, not optional:
+   `docs-drift.test.ts` fails until every registered tool is in at least one batch (a tool in no batch is
+   invisible to Claude Code's deferred loading). Keep other prose at “150+”; do not copy exact counts elsewhere.
 6. Add focused tests and run the manifest/drift tests through the full package suite.
 
 ## Auth, errors, and safety

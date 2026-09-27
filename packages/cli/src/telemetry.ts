@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { createHmac, randomUUID } from "node:crypto";
 import { catalog } from "./i18n.js";
+import { fetchWithTimeout } from "./lib/http.js";
+import { writeCredentialJson } from "./lib/atomic-write.js";
 import type { ReleaseDoctorReport } from "./checks/release-doctor.js";
 import { version } from "../package.json";
 
@@ -28,12 +30,9 @@ function readConsent(): Consent {
   try { return JSON.parse(fs.readFileSync(location(), "utf8")) as Consent; }
   catch { return { enabled: false }; }
 }
+// installationId + salt 는 프로젝트 해시를 역산하는 열쇠라 자격증명처럼 0600 으로 쓴다.
 function writeConsent(value: Consent): void {
-  const file = location();
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temp = `${file}.${randomUUID()}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify(value), { mode: 0o600 });
-  fs.renameSync(temp, file);
+  writeCredentialJson(location(), value);
 }
 export function telemetryEnabled(): boolean {
   if (process.env.MIMI_SEED_TELEMETRY !== undefined) return process.env.MIMI_SEED_TELEMETRY === "1";
@@ -92,10 +91,10 @@ export function usageRun(command: "check" | "setup", projectPath: string):
         codes: [...new Set(report?.findings.map(f => f.code).filter(c => /^[a-zA-Z0-9_]{1,80}$/.test(c)) ?? [])].slice(0, 60),
       };
       try {
-        await fetch(ENDPOINT, {
+        await fetchWithTimeout(ENDPOINT, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload), signal: AbortSignal.timeout(800), redirect: "error",
-        });
+          body: JSON.stringify(payload), redirect: "error",
+        }, 800);
       } catch { /* Measurement must never change the command's result or delay it indefinitely. */ }
     };
   } catch { return async () => {}; }

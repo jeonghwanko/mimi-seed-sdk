@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
+    # 릴리스는 `v*` 태그 푸시로만 한다 (main 푸시·PR 은 테스트만). 아래 publish 잡 참고.
+    tags: ['v*']
   pull_request:
 
 # 같은 ref 의 run 을 직렬화 — 연속 푸시 2건이 같은 패키지를 동시에 publish 하다
@@ -11,15 +13,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: false
 
+# 기본은 읽기 전용. 쓰기 권한(태그·Release, OIDC)은 publish 잡에만 준다.
+permissions:
+  contents: read
+
 jobs:
   # 루트 가드 — 패키지 잡은 working-directory 가 packages/<pkg> 라 루트 스크립트를
   # 절대 실행하지 않는다. plugins/mimi-seed(Codex 배포본) 드리프트를 잡는 테스트는
   # 어느 패키지 스위트에도 없으므로, 이 잡이 없으면 CLAUDE.md 규칙 #8(`plugin:sync`
-  # 후 재생성본 커밋)은 순전히 사람 손에만 의존한다.
+  # 후 재생성본 커밋)은 순전히 사람 손에만 의존한다. OS 매트릭스 밖에 있어서 한 번만 돈다.
   #
-  # build-test 가 이 잡에 needs 로 매달려 있다 — 드리프트난 커밋이 publish 까지 가면
-  # mcp-server 의 prepublishOnly 가 publish **도중** 터져서 cli 만 npm 에 올라간
-  # 반쪽 릴리즈가 된다. 게이트는 테스트 앞에 있어야 한다.
+  # build-test 가 이 잡에 needs 로 매달려 있다 — 드리프트난 커밋은 테스트 전에 막는다.
   repo-guards:
     name: repo guards (agent-guide · codex plugin · versions)
     runs-on: ubuntu-latest
@@ -35,13 +39,11 @@ jobs:
       - run: npm run plugin:check
       - run: node --test scripts/release-channel.test.mjs
 
+  # 테스트 전용 — 이 잡은 절대 publish 하지 않는다 (publish 잡이 따로 있다).
   build-test:
-    name: ${{ matrix.package }} (node ${{ matrix.node }})
+    name: ${{ matrix.package }} (node ${{ matrix.node }}, ${{ matrix.os }})
     needs: repo-guards
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write   # GitHub Release + 태그 생성
-      id-token: write   # npm trusted publishing + provenance
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -49,8 +51,15 @@ jobs:
         # 하한선(.nvmrc = engines.node = 20)과 상용 버전 양쪽. 20 을 빼면
         # "engines 는 >=20 인데 아무도 20 에서 돌려본 적 없음" 상태가 된다.
         node: [20, 22]
+        os: [ubuntu-latest]
+        # Windows 는 상용 버전 하나만. 사용자 상당수가 Windows 이고(PATH·.cmd shim·경로
+        # 구분자·CRLF), 그 경로는 리눅스 러너에서 절대 실행되지 않는다.
+        include:
+          - { package: cli, node: 22, os: windows-latest }
+          - { package: mcp-server, node: 22, os: windows-latest }
     defaults:
       run:
+        shell: bash
         working-directory: packages/${{ matrix.package }}
     steps:
       - uses: actions/checkout@v5
@@ -64,7 +73,8 @@ jobs:
       # `npm install` (not `npm ci`): @emnapi/* are optional deps of
       # platform-specific native packages (rolldown/oxc), and npm omits the
       # Linux variants from a Windows-generated lockfile — `npm ci` then fails
-      # the strict sync check. `npm install` reconciles per-platform.
+      # the strict sync check. `npm install` reconciles per-platform, which is
+      # also what makes the same lockfile install cleanly on the Windows leg.
       - name: Install
         run: npm install --no-audit --no-fund
 
@@ -74,58 +84,88 @@ jobs:
       - name: Test
         run: npm test
 
-      # main 푸시에서 package.json version 이 npm 에 아직 없으면 자동 publish.
-      # 버전이 그대로면 skip (idempotent) — 수동 `npm version patch` 후 푸시만 하면 배포됨.
+  # 배포는 **모든** 테스트 레그(OS·Node·패키지 전부)와 repo-guards 가 녹색일 때만, 한 잡에서
+  # 순서대로 한다: mcp-server 먼저, cli 나중. 예전엔 매트릭스 레그가 각자 자기 패키지를
+  # publish 해서(fail-fast: false) mcp-server 가 실패해도 cli 만 npm 에 올라가는 반쪽 릴리스가
+  # 가능했다. cli 는 mcp-server 의 bin 을 자기 버전으로 고정해 npx 로 부르므로(mcp-bin.ts),
+  # 짝이 되는 mcp-server 가 없으면 그 cli 는 설치 직후부터 깨진다. 같은 잡의 연속 step 이라
+  # mcp-server step 이 실패하면 cli step 은 실행되지 않는다.
+  #
+  # 트리거: `v*` 태그 푸시만. main 푸시는 테스트만 하고 배포하지 않는다 — 예전(main 푸시 =
+  # 즉시 latest)엔 하루 12번 릴리스·회귀 수정 연쇄가 그대로 사용자에게 나갔다. 태그는 루트
+  # package.json 버전과 같아야 하고 main 에 이미 병합된 커밋을 가리켜야 한다 (아래 첫 step).
+  # 프리릴리스(`-beta.N`/`-next.N`)는 scripts/release-channel.mjs 가 해당 dist-tag 로 보낸다.
+  publish:
+    name: publish (mcp-server → cli)
+    needs: [repo-guards, build-test]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # 워크플로 concurrency 는 ref 별이라 태그 두 개(v0.20.0, v0.20.1)를 연달아 푸시하면
+    # publish 가 동시에 돈다 — 2026-07-09 packument 409 경합의 재발 경로. publish 만 전역 직렬화.
+    concurrency:
+      group: npm-publish
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # GitHub Release + 태그 생성
+      id-token: write   # npm trusted publishing + provenance
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # 태그 커밋이 origin/main 조상인지 확인하려면 전체 이력이 필요
+
+      # 태그 ↔ 버전 ↔ main 정합성. 하나라도 어긋나면 아무것도 publish 하지 않는다.
+      - name: Verify release tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::tag $TAG does not match root package.json version v$VERSION"
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $TAG points at $GITHUB_SHA, which is not on main — merge the release PR first"
+            exit 1
+          fi
+          node scripts/version.mjs --check
+
+      # 빌드는 테스트한 상용 버전(22)에서 — 산출물이 테스트된 것과 같은 런타임으로 만들어진다.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/mcp-server/package-lock.json
+            packages/cli/package-lock.json
+
+      - name: Build mcp-server
+        working-directory: packages/mcp-server
+        run: npm install --no-audit --no-fund && npm run build
+
+      - name: Build cli
+        working-directory: packages/cli
+        run: npm install --no-audit --no-fund && npm run build
+
       # npm trusted publisher: jeonghwanko/mimi-seed-sdk, workflow ci.yml.
-      # Node 24 bundles npm 11 with OIDC authentication support. Keep test runtimes unchanged.
+      # Node 24 bundles npm 11 with OIDC authentication support. Test runtimes stay unchanged.
       - name: Set up trusted publishing runtime
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node == 22
         uses: actions/setup-node@v5
         with:
           node-version: 24
 
-      # matrix.node 를 늘렸으므로 publish 는 한 버전에서만 — 안 그러면 같은 패키지를
-      # 두 잡이 동시에 올려 409 packument 경합(2026-07-09 실사고)을 스스로 재현한다.
-      - name: Publish if version is new
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node == 22
+      # mcp-server 먼저. prepublishOnly(agent-guide 동기화 확인 + tsc)가 여기서 터지면
+      # 아래 cli step 은 실행되지 않는다.
+      - name: Publish mcp-server if version is new
+        working-directory: packages/mcp-server
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          NAME=$(node -p "require('./package.json').name")
-          VERSION=$(node -p "require('./package.json').version")
-          CHANNEL=$(node --input-type=module -e "import { releaseChannel } from '../../scripts/release-channel.mjs'; console.log(releaseChannel(process.argv[1]))" "$VERSION")
-          RELEASE_FLAGS=()
-          if [ "$CHANNEL" != "latest" ]; then RELEASE_FLAGS+=(--prerelease); fi
-          # 빠른 경로: 이미 있으면 publish 시도 자체를 생략 (--prefer-online 으로 캐시 우회)
-          if npm view "$NAME@$VERSION" version --prefer-online >/dev/null 2>&1; then
-            echo "• $NAME@$VERSION 이미 npm 에 존재 — skip"
-            exit 0
-          fi
-          # publish 는 최대 3회 시도. 실패 판정은 에러 메시지 문자열 grep 이 아니라
-          # "레지스트리에 실제로 올라갔는가"(npm view 재확인)로 한다 — 409 packument
-          # 경합("Failed to save packument"), OIDC 일시 오류(IDENTITY_TOKEN_READ_ERROR),
-          # 어느 쪽이든 메시지 포맷과 무관하게 안전. (둘 다 2026-07 실사고.)
-          for attempt in 1 2 3; do
-            echo "→ publishing $NAME@$VERSION (attempt $attempt)"
-            if npm publish --access public --provenance --tag "$CHANNEL"; then
-              echo "✓ published $NAME@$VERSION (provenance 서명됨)"
-              # 새 버전 publish 성공 시 GitHub Release 자동 생성 (자동 release notes).
-              # 실패해도 publish 는 이미 끝났으므로 비치명적 처리.
-              TAG="${{ matrix.package }}-v$VERSION"
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes "${RELEASE_FLAGS[@]}" \
-                || echo "⚠ GitHub Release 생성 실패 (publish 는 성공) — 무시"
-              exit 0
-            fi
-            sleep 15
-            if npm view "$NAME@$VERSION" version --prefer-online >/dev/null 2>&1; then
-              echo "• $NAME@$VERSION 레지스트리에 이미 존재 (경합/부분 성공) — publish no-op"
-              # 부분 성공(publish 는 됐는데 응답만 실패) 케이스에도 Release 는 남긴다.
-              # 이미 존재하면 gh 가 실패하고 || 가드가 삼킨다.
-              TAG="${{ matrix.package }}-v$VERSION"
-              gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes "${RELEASE_FLAGS[@]}" \
-                || echo "⚠ GitHub Release 생성 실패/이미 존재 — 무시"
-              exit 0
-            fi
-          done
-          echo "❌ $NAME@$VERSION publish 3회 실패"
-          exit 1
+        run: bash ../../.github/scripts/publish-if-new.sh mcp-server
+
+      - name: Publish cli if version is new
+        working-directory: packages/cli
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash ../../.github/scripts/publish-if-new.sh cli

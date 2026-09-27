@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { writeJsonAtomic } from "./lib/atomic-write.js";
 
 export type Lang = "ko" | "en";
 export const DEFAULT_LANG: Lang = "ko";
@@ -27,10 +28,9 @@ export function readSettings(home: string = os.homedir()): Settings {
 }
 
 export function writeSettings(next: Settings, home: string = os.homedir()): void {
-  const dir = path.join(home, ".mimi-seed");
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const merged = { ...readSettings(home), ...next };
-  fs.writeFileSync(settingsPath(home), JSON.stringify(merged, null, 2));
+  // 비밀은 아니라 0600 을 강제하지 않지만, 두 패키지가 읽는 파일이라 잘린 JSON 은 남기지 않는다.
+  writeJsonAtomic(settingsPath(home), merged, { dirMode: 0o700 });
 }
 
 /** 언어가 아직 한 번도 선택되지 않았는가 (= setup 이 물어봐야 하는가). */

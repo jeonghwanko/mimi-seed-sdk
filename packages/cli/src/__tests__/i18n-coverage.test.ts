@@ -82,17 +82,22 @@ function hangulLiterals(code: string): Array<{ index: number; text: string }> {
   return found;
 }
 
+/**
+ * src/*.ts 와 src/lib/*.ts. `checks/` 는 mcp-server 소스의 생성 미러라 여기서 보지 않는다
+ * (원본 쪽에서 관리된다). lib/ 를 빼면 공용 헬퍼의 사용자 출력이 이 가드를 통째로 피해 간다.
+ */
 function sourceFiles(): string[] {
-  return fs
-    .readdirSync(srcDir)
-    .filter((f) => f.endsWith('.ts'))
-    .map((f) => path.join(srcDir, f));
+  const inDir = (dir: string) =>
+    fs.existsSync(dir)
+      ? fs.readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => path.join(dir, f))
+      : [];
+  return [...inDir(srcDir), ...inDir(path.join(srcDir, 'lib'))];
 }
 
 /**
  * 번역 대상이 **아닌** 한국어 — 출력이 아니거나, 언어와 무관하게 한국어여야 하는 것들.
  *
- * - `agentMd` (index.ts): 사용자 **프로젝트**에 써주는 에이전트 컨텍스트 파일. 터미널 출력이 아니다.
+ * - `agentMd` (init.ts): 사용자 **프로젝트**에 써주는 에이전트 컨텍스트 파일. 터미널 출력이 아니다.
  * - `detectSentiment` (review.ts): 리뷰 감정 분류용 **매칭 키워드**. 번역하면 로직이 깨진다.
  * - "한국어": 언어 선택기에 쓰이는 언어 이름 자체 (영어 화면에서도 한국어라고 불러야 한다).
  */

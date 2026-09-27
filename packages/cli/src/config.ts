@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { writeCredentialJson } from "./lib/atomic-write.js";
 
 /**
  * @deprecated Jenkins 설정의 정본은 `~/.mimi-seed/jenkins.json` 이다 (`jenkins-config.ts`).
@@ -37,13 +38,12 @@ export async function readConfig(): Promise<MimiSeedConfig | null> {
   }
 }
 
+/**
+ * config.json 저장 (Mimi Seed PAT). CLI 가 이 파일의 유일한 writer 다 (`mimi-seed init`).
+ * 원자적 0600 — 예전엔 write 후 chmod 라 잠깐 world-readable 이었고, 중간에 끊기면 PAT 가 날아갔다.
+ */
 export async function writeConfig(cfg: MimiSeedConfig): Promise<void> {
-  await fs.mkdir(CONFIG_DIR, { recursive: true });
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2));
-  // Unix계열에서만 파일 권한 600 적용 (Windows는 ACL 기반으로 mode 무시)
-  if (process.platform !== "win32") {
-    await fs.chmod(CONFIG_PATH, 0o600);
-  }
+  writeCredentialJson(CONFIG_PATH, cfg);
 }
 
 export async function deleteConfig(): Promise<void> {

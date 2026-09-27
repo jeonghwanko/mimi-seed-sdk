@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { catalog } from "./i18n.js";
+import { fetchWithTimeout } from "./lib/http.js";
+import { writeCredentialJson } from "./lib/atomic-write.js";
 
 const CI_CONFIG_PATH = path.join(os.homedir(), ".mimi-seed", "ci.json");
 
@@ -62,17 +64,14 @@ export function normalizeHost(host?: string): string | undefined {
   return withScheme.replace(/\/+$/, "");
 }
 
+/**
+ * ci.json 저장 — CLI 가 소유하는 유일한 외부 자격증명 파일(문서화된 예외, docs/domain/pitfalls.md §12).
+ * PAT 가 들어 있으므로 원자적 0600 쓰기: 중간에 끊겨도 잘린 JSON 이 남지 않는다.
+ */
 export function saveCiProviderConfig(cfg: CiProviderConfig): void {
-  const dir = path.dirname(CI_CONFIG_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  }
   const normalized: CiProviderConfig = { ...cfg, host: normalizeHost(cfg.host) };
   if (!normalized.host) delete normalized.host;
-  fs.writeFileSync(CI_CONFIG_PATH, JSON.stringify(normalized, null, 2));
-  if (process.platform !== "win32") {
-    fs.chmodSync(CI_CONFIG_PATH, 0o600);
-  }
+  writeCredentialJson(CI_CONFIG_PATH, normalized);
 }
 
 /**
@@ -91,7 +90,7 @@ export async function verifyCiToken(
 
   try {
     if (probe.provider === "github") {
-      const res = await fetch(`${ghBase(probe)}/user`, {
+      const res = await fetchWithTimeout(`${ghBase(probe)}/user`, {
         headers: { Authorization: `Bearer ${probe.token}`, Accept: "application/vnd.github+json" },
       });
       if (!res.ok) {
@@ -107,7 +106,7 @@ export async function verifyCiToken(
       return { ok: true, login: user.login };
     }
 
-    const res = await fetch(`${glBase(probe)}/user`, { headers: { "PRIVATE-TOKEN": probe.token } });
+    const res = await fetchWithTimeout(`${glBase(probe)}/user`, { headers: { "PRIVATE-TOKEN": probe.token } });
     if (!res.ok) {
       return { ok: false, reason: M().badToken("GitLab", res.status) };
     }
@@ -144,7 +143,7 @@ export async function ghTriggerWorkflow(
 ): Promise<{ runId: number; url: string } | null> {
   const startTime = new Date();
   const wfId = /^\d+$/.test(workflow) ? Number(workflow) : workflow;
-  const dispatchRes = await fetch(
+  const dispatchRes = await fetchWithTimeout(
     `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/dispatches`,
     {
       method: "POST",
@@ -156,7 +155,7 @@ export async function ghTriggerWorkflow(
     throw new Error(`GitHub dispatch ${dispatchRes.status}: ${await dispatchRes.text()}`);
   }
   await new Promise((r) => setTimeout(r, 3000));
-  const runsRes = await fetch(
+  const runsRes = await fetchWithTimeout(
     `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/workflows/${wfId}/runs?per_page=5`,
     { headers: ghHeaders(cfg.token) },
   );
@@ -182,7 +181,7 @@ export async function ghPollRun(
     await new Promise((r) => setTimeout(r, intervalMs));
     let res: Response;
     try {
-      res = await fetch(
+      res = await fetchWithTimeout(
         `${ghBase(cfg)}/repos/${cfg.owner}/${cfg.repo}/actions/runs/${runId}`,
         { headers: ghHeaders(cfg.token) },
       );
@@ -226,7 +225,7 @@ export async function glTriggerPipeline(
   const vars = Object.entries(variables).map(([key, value]) => ({ key, value }));
   const body: Record<string, unknown> = { ref };
   if (vars.length > 0) body.variables = vars;
-  const res = await fetch(`${glBase(cfg)}/projects/${glProjectId(cfg)}/pipeline`, {
+  const res = await fetchWithTimeout(`${glBase(cfg)}/projects/${glProjectId(cfg)}/pipeline`, {
     method: "POST",
     headers: { "PRIVATE-TOKEN": cfg.token, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -249,7 +248,7 @@ export async function glPollPipeline(
     await new Promise((r) => setTimeout(r, intervalMs));
     let res: Response;
     try {
-      res = await fetch(
+      res = await fetchWithTimeout(
         `${glBase(cfg)}/projects/${glProjectId(cfg)}/pipelines/${pipelineId}`,
         { headers: { "PRIVATE-TOKEN": cfg.token } },
       );
