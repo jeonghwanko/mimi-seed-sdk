@@ -7,7 +7,8 @@ npx -y mimi-seed@latest check --local
 ```
 
 Run in an Expo, React Native, Android, iOS or Unity app repository. Requires Node 20+.
-Release Doctor reports identifiers, Target API and detectable Play Billing evidence with suggested actions.
+Release Doctor reports identifiers, Target API, detectable Play Billing evidence, the pinned Xcode against the App
+Store Connect SDK minimum, and legacy Firebase Cloud Messaging API usage, with suggested actions.
 Unresolved evidence remains a warning. A local pass does not guarantee store approval.
 
 The checker is bundled; it does not install the full MCP server. Optional usage measurement is off by

@@ -55,7 +55,9 @@ npx mimi-seed check --local
 ```
 
 Release Doctor inspects deterministic repository evidence before asking you to connect anything. The first
-release checks cover app identifiers, Android Target API requirements, and Google Play Billing support dates.
+release checks cover app identifiers, Android Target API requirements, Google Play Billing support dates, the App Store
+Connect Xcode / SDK upload minimum (from Xcode versions pinned in CI, fastlane, Codemagic, or `eas.json`), and legacy
+Firebase Cloud Messaging API usage (`fcm/send`, Instance ID, pre-14.5 `firebase-admin` topic calls).
 The checker is bundled in the CLI, so it does not install the full MCP package or call the network during the
 repository-only scan. Every policy finding includes its evidence file, a suggested action, and the official source. Use
 `--fail-on-blocker` in CI, `--json` for machine-readable output, or `--path apps/mobile` in a monorepo.
