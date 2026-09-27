@@ -1,7 +1,7 @@
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
-import { renderReleaseDoctor } from "./checks/release-doctor-render.js";
-import { scanReleaseDoctor } from "./checks/release-doctor.js";
+import { renderReleaseDoctor } from "#core/checks/release-doctor-render.js";
+import { scanReleaseDoctor } from "#core/checks/release-doctor.js";
 import { catalog } from "./i18n.js";
 import { mcpCall } from "./mcp-client.js";
 import { resolveLang } from "#core/lang.js";

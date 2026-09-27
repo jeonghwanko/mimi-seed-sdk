@@ -5,7 +5,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { catalog } from "./i18n.js";
 import { fetchWithTimeout } from "./lib/http.js";
 import { writeCredentialJson } from "./lib/atomic-write.js";
-import type { ReleaseDoctorReport } from "./checks/release-doctor.js";
+import type { ReleaseDoctorReport } from "#core/checks/release-doctor.js";
 import { version } from "../package.json";
 
 const ENDPOINT = "https://mimi-seed.pryzm.gg/api/sdk-usage";

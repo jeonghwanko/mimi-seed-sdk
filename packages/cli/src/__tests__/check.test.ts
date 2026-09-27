@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../config.js', () => ({ getEffectiveConfig: mocks.getEffectiveConfig }));
-vi.mock('../checks/release-doctor.js', () => ({ scanReleaseDoctor: mocks.scanReleaseDoctor }));
+vi.mock('#core/checks/release-doctor.js', () => ({ scanReleaseDoctor: mocks.scanReleaseDoctor }));
 vi.mock('../mcp-client.js', () => ({ mcpCall: mocks.mcpCall }));
 
 import { cmdCheck, parseCheckArgs } from '../check.js';

@@ -7,7 +7,7 @@ import { requireAuth, requirePlayStoreAuth } from '../helpers.js';
 import * as appstore from '../appstore/tools.js';
 import * as playstore from '../playstore/tools.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
-import { checkBillingCompliance } from '../checks/billing.js';
+import { checkBillingCompliance } from '#core/checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
 export function registerChecksTools(server: ToolRegistrar) {

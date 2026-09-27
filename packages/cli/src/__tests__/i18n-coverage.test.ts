@@ -83,8 +83,9 @@ function hangulLiterals(code: string): Array<{ index: number; text: string }> {
 }
 
 /**
- * src/*.ts 와 src/lib/*.ts. `checks/` 는 mcp-server 소스의 생성 미러라 여기서 보지 않는다
- * (원본 쪽에서 관리된다). lib/ 를 빼면 공용 헬퍼의 사용자 출력이 이 가드를 통째로 피해 간다.
+ * src/*.ts 와 src/lib/*.ts. packages/core(`#core/…`)는 여기서 보지 않는다 — 두 패키지 공용이라
+ * `catalog` 를 쓸 수 없고, 사람용 문구는 Release Doctor 처럼 ko/en 을 스스로 함께 들고 있다.
+ * lib/ 를 빼면 공용 헬퍼의 사용자 출력이 이 가드를 통째로 피해 간다.
  */
 function sourceFiles(): string[] {
   const inDir = (dir: string) =>
