@@ -141,6 +141,9 @@ be removed in the next minor release.
   `instagram_post_carousel`, `threads_post`, `threads_post_video`, `threads_post_carousel`.
 - `jenkins_create_credential` / `jenkins_upload_keystore` still create a **new** id directly, but replacing an
   **existing** id now needs `confirm: true` (with either the value or the file input style).
+- `jenkins_upload_playstore_sa` follows the same rule: it gains a `confirm` parameter and is now classified
+  destructive. A new credential id is still created directly, but an id that already exists returns an
+  "already exists" dry-run instead of being silently replaced; call again with `confirm: true` to replace it.
 - `youtube_upload_video` / `youtube_update_video_privacy` are classified as writes, not destructive (private is
   reversible); public / unlisted still require `confirmVisible: true`.
 - Other parameter and output changes:

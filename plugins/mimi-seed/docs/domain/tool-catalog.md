@@ -153,7 +153,7 @@
 |---|---|
 | CI (GitHub Actions / GitLab) (`ci.ts`) — **not** Jenkins builds | `ci_list_workflows` · `ci_get_build_status` · `ci_list_recent_builds` · **W** `ci_save_config` · **W** `ci_trigger_build` · **D** `ci_cancel_build` |
 | Jenkins (credentials + jobs) (`jenkins.ts`) — **no build trigger** | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · **W** `jenkins_save_config` · **D** `jenkins_create_credential` · **D** `jenkins_upload_keystore` (새 id 는 바로 생성, 기존 id 교체만 confirm) · **D** `jenkins_delete_credential` · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) |
-| Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **W** `jenkins_upload_playstore_sa` |
+| Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **D** `jenkins_upload_playstore_sa` (새 id 는 바로 생성, 기존 id 교체만 confirm) |
 <!-- generated:catalog-table:build:end -->
 
 ## Cross-cutting

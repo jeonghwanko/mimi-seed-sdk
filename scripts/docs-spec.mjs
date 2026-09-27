@@ -239,6 +239,7 @@ export const catalog = {
     threads_post_carousel: 'public; 2–20',
     // Build / CI / signing
     jenkins_upload_keystore: '새 id 는 바로 생성, 기존 id 교체만 confirm',
+    jenkins_upload_playstore_sa: '새 id 는 바로 생성, 기존 id 교체만 confirm',
     jenkins_create_job: '`overwrite=true` replaces',
     jenkins_update_job: 'replaces config.xml',
     // Cross-cutting

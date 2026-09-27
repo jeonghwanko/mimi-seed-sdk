@@ -167,6 +167,7 @@ describe('키/keystore 경로 입력 — 봉쇄', () => {
     expect(text).not.toContain('PRIVATE KEY');
     expect(mocks.upsertSecretFile).toHaveBeenCalledWith(
       expect.anything(), 'app-playstore-sa', Buffer.from(keyJson).toString('base64'), 'com.example.app-sa.json',
+      '', { allowReplace: false },
     );
   });
 });
