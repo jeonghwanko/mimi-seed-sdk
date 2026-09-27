@@ -100,7 +100,7 @@ export function registerPrompts(server: McpServer) {
             '',
             '진행 순서:',
             '1. playstore_list_reviews 또는 appstore_list_reviews 로 최근 리뷰 조회',
-            '2. 미답변 리뷰를 별점 낮은 순으로 정렬',
+            '2. 미답변 리뷰만 골라 별점 낮은 순으로 정렬 — Play 는 developerComment, App Store 는 response 가 null 인 리뷰. 이미 답변이 있는 리뷰에 다시 답하면 기존 답변이 교체된다',
             '3. 각 리뷰에 generate_review_reply 로 답변 초안 생성',
             `   톤: ${tone ?? 'empathetic'}`,
             '4. 초안 보여주고 게시 여부 확인 (비가역 — 반드시 동의 받을 것)',

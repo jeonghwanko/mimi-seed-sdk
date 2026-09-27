@@ -65,7 +65,8 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
 
 ## 리뷰 · 통계
 
-`playstore_list_reviews`로 미답변 리뷰를 모으고, 초안은 `generate_review_reply`(`ANTHROPIC_API_KEY` 필요)로
+`playstore_list_reviews`로 미답변 리뷰(`developerComment`가 `null`)를 모으고 — 이미 답변된 리뷰에 다시 답하면
+기존 답변이 교체된다 — 초안은 `generate_review_reply`(`ANTHROPIC_API_KEY` 필요)로
 만든 뒤 **사용자 확인을 거쳐** `playstore_reply_review`로 게시한다. 답변은 공개되고 수정 이력이 남는다.
 설치·평점 추이는 `playstore_get_statistics`로 읽는다.
 
