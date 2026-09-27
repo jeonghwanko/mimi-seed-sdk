@@ -89,6 +89,9 @@ const SOURCE_READ_CONCURRENCY = 32;
 const EXCLUDED_EVIDENCE_DIRS = new Set([
   '.cache', '.turbo', '.venv', '.vercel', '__pycache__', '__tests__', '__mocks__', '__fixtures__', 'coverage',
   'e2e', 'fixtures', 'Library', 'mocks', 'obj', 'out', 'spec', 'Temp', 'target', 'test', 'tests', 'vendor', 'venv',
+  // Documentation and sample projects show pins and endpoints without building or running them. (An example app's
+  // manifests are still read, so a library repo's xample/ app is detected as before.)
+  'doc', 'docs', 'example', 'examples', 'sample', 'samples',
   // Third-party checkouts that carry their own CI and Xcode pins.
   'Carthage', '.build', '.symlinks', '.dart_tool', '.swiftpm',
 ]);
@@ -762,11 +765,13 @@ function iosXcodeFindings(files: ProjectFile[], now: Date): ReleaseDoctorFinding
   const sorted = [...resolved].sort((left, right) => left.major - right.major);
   const below = sorted.filter((row) => row.major < minimumXcode);
   const meeting = sorted.filter((row) => row.major >= minimumXcode);
+  const unresolved = evidence.filter((row) => row.major === undefined);
   const lowest = sorted[0];
 
-  // Only a repository whose every pin is too old is a definite blocker. Mixed pins usually mean a compatibility
-  // job, an unused variable, or a secondary lane next to the release job — which one uploads is not knowable here.
-  if (below.length > 0 && meeting.length === 0) {
+  // A definite blocker needs every piece of Xcode evidence to be a resolved pin below the minimum. A newer pin, or an
+  // unpinned/auto-selected build (EAS without ios.image, an unpinned macOS runner), may be the one that uploads;
+  // mixed evidence usually means a compatibility job, an unused variable, or a secondary lane.
+  if (below.length > 0 && meeting.length === 0 && unresolved.length === 0) {
     return [{
       code: 'IOS_XCODE_BELOW_MINIMUM',
       severity: 'blocker',
@@ -787,14 +792,24 @@ function iosXcodeFindings(files: ProjectFile[], now: Date): ReleaseDoctorFinding
     return [{
       code: 'IOS_XCODE_MIXED_PINS',
       severity: 'warning',
-      title: `Some pinned Xcode versions are below the App Store Connect upload minimum (Xcode ${minimumXcode})`,
-      detail: `Below the minimum: ${describePins(below)}. At or above it: ${describePins(meeting)}. Release Doctor cannot tell which job or lane uploads to App Store Connect.`,
+      title: `A pinned Xcode is below the App Store Connect upload minimum (Xcode ${minimumXcode}), next to other Xcode evidence`,
+      detail: [
+        `Below the minimum: ${describePins(below)}.`,
+        meeting.length ? `At or above it: ${describePins(meeting)}.` : '',
+        unresolved.length ? `No fixed version (auto-selected or unpinned): ${describePins(unresolved)}.` : '',
+        'Release Doctor cannot tell which job or lane uploads to App Store Connect.',
+      ].filter(Boolean).join(' '),
       action: `Make sure the job that archives and uploads the release uses Xcode ${minimumXcode} or later; older pins are fine only for test or compatibility jobs.`,
       file: below[0].file,
       sourceUrl,
       ko: {
-        title: `일부 Xcode 고정값이 App Store Connect 업로드 최소 기준(Xcode ${minimumXcode})보다 낮음`,
-        detail: `기준 미달: ${describePins(below)}. 기준 충족: ${describePins(meeting)}. 어느 job 또는 lane이 App Store Connect에 업로드하는지는 저장소만으로 알 수 없습니다.`,
+        title: `다른 Xcode 근거와 함께 App Store Connect 업로드 최소 기준(Xcode ${minimumXcode}) 미달 고정값이 있음`,
+        detail: [
+          `기준 미달: ${describePins(below)}.`,
+          meeting.length ? `기준 충족: ${describePins(meeting)}.` : '',
+          unresolved.length ? `고정 버전 없음(자동 선택 또는 미고정): ${describePins(unresolved)}.` : '',
+          '어느 job 또는 lane이 App Store Connect에 업로드하는지는 저장소만으로 알 수 없습니다.',
+        ].filter(Boolean).join(' '),
         action: `릴리스를 archive·업로드하는 job이 Xcode ${minimumXcode} 이상을 쓰는지 확인하세요. 낮은 버전은 테스트나 호환성 job에서만 괜찮습니다.`,
       },
     }];

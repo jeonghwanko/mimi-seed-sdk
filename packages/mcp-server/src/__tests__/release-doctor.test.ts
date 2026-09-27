@@ -622,6 +622,60 @@ describe('Release Doctor local scan', () => {
       expect(report.counts.blocker).toBe(0);
     });
 
+    // Regression review: main exited 0 under --fail-on-blocker for these, the branch exited 1.
+    describe('자동 선택(미고정) 근거가 있으면 블로커로 올리지 않는다', () => {
+      const expoProduction = {
+        'app.json': JSON.stringify({ expo: { ios: { bundleIdentifier: 'com.example.expo' } } }),
+        'eas.json': JSON.stringify({ build: { production: {} } }),
+      };
+
+      it.each([
+        ['(a) fastlane 핀 + EAS 자동 이미지', { 'fastlane/Fastfile': 'lane :release do\n  xcversion(version: "15.4")\nend\n' }],
+        ['(b) 데스크톱 워크플로 핀 + EAS 자동 이미지', { '.github/workflows/desktop.yml': 'jobs:\n  mac:\n    steps:\n      - uses: maxim-lobanov/setup-xcode@v1\n        with:\n          xcode-version: 15.4\n' }],
+      ])('%s → 경고', async (_name, files) => {
+        const root = await fixture({ ...expoProduction, ...files });
+
+        const report = await scanReleaseDoctor(root, at);
+        const finding = report.findings.find((row) => row.code === 'IOS_XCODE_MIXED_PINS');
+
+        expect(finding).toMatchObject({ severity: 'warning' });
+        expect(finding?.detail).toContain('No fixed version (auto-selected or unpinned): eas.json (build.production');
+        expect(finding?.ko?.detail).toContain('고정 버전 없음');
+        expect(report.counts.blocker).toBe(0);
+      });
+
+      it('(c) docs/examples의 Fastfile은 근거로 쓰지 않는다', async () => {
+        const root = await fixture({ ...expoProduction, 'docs/examples/Fastfile': 'xcversion(version: "14.3")\n' });
+
+        const report = await scanReleaseDoctor(root, at);
+
+        expect(xcodeCodes(report)).toEqual([['IOS_XCODE_UNRESOLVED', 'info', 'eas.json']]);
+        expect(report.counts.blocker).toBe(0);
+      });
+
+      it('docs/example 제외는 근거 탐색에만 적용되고 example 앱 감지는 유지한다', async () => {
+        const root = await fixture({
+          'example/ios/Example.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.demo;\n',
+          'example/.xcode-version': '14.0\n',
+          'docs/push.md.ts': "fetch('https://fcm.googleapis.com/fcm/send')",
+        });
+
+        const report = await scanReleaseDoctor(root, at);
+
+        expect(report.identifiers.iosBundleIds).toEqual(['com.example.demo']);
+        expect(xcodeCodes(report)).toEqual([['IOS_XCODE_UNRESOLVED', 'info', undefined]]);
+        expect(report.findings.map((row) => row.code)).not.toContain('FCM_LEGACY_SEND_API');
+      });
+
+      it('다른 근거 없이 유일한 실제 핀이 기준 미달이면 여전히 블로커다', async () => {
+        const root = await fixture({ ...ios, 'fastlane/Fastfile': 'lane :release do\n  xcversion(version: "15.4")\nend\n' });
+
+        const report = await scanReleaseDoctor(root, at);
+
+        expect(xcodeCodes(report)).toEqual([['IOS_XCODE_BELOW_MINIMUM', 'blocker', 'fastlane/Fastfile']]);
+      });
+    });
+
     it('첫 정책 행 이전 날짜에는 Xcode 결과를 내지 않는다', async () => {
       const root = await fixture({ ...ios, '.xcode-version': '15.4\n' });
 
