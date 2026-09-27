@@ -5,19 +5,25 @@ import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
-import { AI_MODEL, RELEASE_NOTES_MAX_TOKENS, type ReleaseNoteTone } from "#core/ai.js";
+import { AI_MODEL, RELEASE_NOTES_MAX_TOKENS, RELEASE_NOTE_TONES, type ReleaseNoteTone } from "#core/ai.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 // LLM 프롬프트도 여기 있다 — 사람이 읽는 결과물(릴리즈 노트)의 언어를 정하기 때문.
-// JSON 키(concise/detailed/marketing/localized)는 파싱 계약이라 번역하지 않는다.
+// JSON 키(concise/detailed/marketing/localized)는 파싱 계약이라 번역하지 않는다 — 프롬프트의 JSON 뼈대는
+// #core/ai.js 의 RELEASE_NOTE_TONES 로 조립하고(buildReleaseNotesPrompt), 번역하는 건 각 톤의 설명뿐이다.
 const M = catalog(
   {
     // Claude 프롬프트
     localeHint: (l: string) => `"${l}": "해당 언어로 번역된 간결한 버전"`,
     system:
       "앱 스토어 릴리즈 노트 전문 카피라이터입니다. 커밋 내역을 사용자 친화적인 언어로 변환합니다. 항상 유효한 JSON으로만 응답하세요.",
-    userPrompt: (commitsText: string, localeList: string) =>
-      `다음 커밋 내역으로 릴리즈 노트를 3가지 톤으로 작성하세요:\n\n${commitsText}\n\nJSON:\n{\n  "concise": "간결한 버전 (3줄 이내, 불릿)",\n  "detailed": "상세 버전 (5개 이내, 불릿)",\n  "marketing": "마케팅 버전 (열정적 톤)",\n  "localized": {\n    ${localeList}\n  }\n}`,
+    toneHints: {
+      concise: "간결한 버전 (3줄 이내, 불릿)",
+      detailed: "상세 버전 (5개 이내, 불릿)",
+      marketing: "마케팅 버전 (열정적 톤)",
+    } satisfies Record<ReleaseNoteTone, string>,
+    userPrompt: (toneCount: number, commitsText: string, skeleton: string) =>
+      `다음 커밋 내역으로 릴리즈 노트를 ${toneCount}가지 톤으로 작성하세요:\n\n${commitsText}\n\nJSON:\n${skeleton}`,
     parseFailed: "AI 응답 파싱 실패",
 
     // 템플릿 폴백
@@ -54,8 +60,13 @@ const M = catalog(
     localeHint: (l: string) => `"${l}": "the concise version, translated into that language"`,
     system:
       "You are an expert app store release-notes copywriter. You turn commit history into user-friendly language. Always respond with valid JSON only.",
-    userPrompt: (commitsText: string, localeList: string) =>
-      `Write release notes in 3 tones from the following commit history:\n\n${commitsText}\n\nJSON:\n{\n  "concise": "concise version (3 bullets max)",\n  "detailed": "detailed version (5 bullets max)",\n  "marketing": "marketing version (enthusiastic tone)",\n  "localized": {\n    ${localeList}\n  }\n}`,
+    toneHints: {
+      concise: "concise version (3 bullets max)",
+      detailed: "detailed version (5 bullets max)",
+      marketing: "marketing version (enthusiastic tone)",
+    },
+    userPrompt: (toneCount: number, commitsText: string, skeleton: string) =>
+      `Write release notes in ${toneCount} tones from the following commit history:\n\n${commitsText}\n\nJSON:\n${skeleton}`,
     parseFailed: "Failed to parse the AI response",
 
     // Template fallback
@@ -122,10 +133,25 @@ async function promptUser(question: string): Promise<string> {
 // 톤 키는 #core/ai.js 의 RELEASE_NOTE_TONES — 응답 JSON 파싱 계약이라 mcp-server 와 같아야 한다.
 type ReleaseNotesResult = Record<ReleaseNoteTone, string> & { localized: Record<string, string> };
 
+/**
+ * Claude 에 보낼 사용자 프롬프트. JSON 뼈대의 톤 키는 RELEASE_NOTE_TONES 에서 나온다 — 여기 키를 손으로
+ * 적으면 core 의 톤 목록이 바뀌어도 프롬프트만 옛 키를 요구하게 된다(파싱은 새 키를 기대하는데).
+ */
+export function buildReleaseNotesPrompt(commitsText: string, locales: string[]): string {
+  const m = M();
+  const toneHints: Record<ReleaseNoteTone, string> = m.toneHints;
+  const localeList = locales.map((l) => m.localeHint(l)).join(",\n    ");
+  const skeleton = [
+    "{",
+    ...RELEASE_NOTE_TONES.map((tone) => `  "${tone}": "${toneHints[tone]}",`),
+    `  "localized": {\n    ${localeList}\n  }`,
+    "}",
+  ].join("\n");
+  return m.userPrompt(RELEASE_NOTE_TONES.length, commitsText, skeleton);
+}
+
 async function generateWithClaude(commitsText: string, locales: string[]): Promise<ReleaseNotesResult> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-  const localeList = locales.map((l) => M().localeHint(l)).join(",\n    ");
 
   const response = await client.messages.create({
     model: AI_MODEL,
@@ -134,7 +160,7 @@ async function generateWithClaude(commitsText: string, locales: string[]): Promi
     system: M().system,
     messages: [{
       role: "user",
-      content: M().userPrompt(commitsText, localeList),
+      content: buildReleaseNotesPrompt(commitsText, locales),
     }],
   });
 
