@@ -40,7 +40,7 @@ CI 실행 번호는 스토어 빌드 번호가 아니다. 실제 산출물 버�
    - Android: `playstore_update_release_notes`(versionCode 생략 = 최신 릴리스) → `playstore_promote_release`/`submit_release`
    - iOS: `appstore_attach_build`(buildId 생략 = 최신 VALID 빌드) → `appstore_update_whats_new` → `appstore_submit_for_review`
    - 출시 도구(`promote_release`/`submit_release`/`submit_for_review`)는 **먼저 `confirm` 없이** 호출해 dry-run preview 를 받고,
-     사용자에게 보여 승인받은 뒤 같은 인자 + `confirm: true` 로 다시 호출한다. `status="draft"` 는 확인 없이 실행된다.
+     사용자에게 보여 승인받은 뒤 같은 인자 + `confirm: true` 로 다시 호출한다. `status="draft"` 도 예외 없이 확인을 거친다.
 
 ## 안전 규칙
 

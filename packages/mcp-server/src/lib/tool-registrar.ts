@@ -14,10 +14,11 @@ import type { ToolsetSelection } from './toolsets.js';
  *
  * 1. **annotations + title** — manifest 의 write / destructive / local / idempotent 목록에서
  *    readOnlyHint · destructiveHint · idempotentHint · openWorldHint 를 파생한다.
- * 2. **confirm 가드** — destructive 도구가 자체 confirm 류 파라미터를 갖고 있지 않으면
- *    `confirm` 을 스키마에 주입하고, confirm !== true 호출은 핸들러를 부르지 않고
- *    dry-run preview 만 돌려준다. 파괴적 도구가 가드 없이 등록되는 경로를 구조적으로 없앤다.
- * 3. **toolset 필터** — MIMI_SEED_TOOLSETS 로 꺼진 도메인의 도구는 등록하지 않는다.
+ * 2. **confirm 가드** — destructive 도구에는 `confirm` 을 스키마에 주입하고, confirm !== true 호출은
+ *    핸들러를 부르지 않고 dry-run preview 만 돌려준다 (인자에 따른 예외 없음). manifest `ownGate` 로
+ *    "자기 confirm 이 모든 파괴적 경로를 막는다" 고 선언한 도구만 주입을 생략하고, 선언과 스키마가
+ *    어긋나면 throw — 파괴적 도구가 가드 없이 등록되는 경로를 구조적으로 없앤다.
+ * 3. **toolset 필터** — MIMI_SEED_TOOLSETS 로 꺼진 도구는 등록하지 않는다 (도메인 + alsoInToolsets 소속 기준).
  * 4. **폐기 예정 별칭** — manifest `deprecated` 의 옛 이름을 정식 도구의 스키마·핸들러로
  *    함께 등록한다 (설명에 [DEPRECATED …] 접두).
  *
@@ -33,32 +34,22 @@ export interface ToolMeta {
   /** 외부 서비스를 호출하지 않음 (openWorldHint: false). */
   local: boolean;
   idempotent: boolean;
+  /**
+   * destructive 도구가 자기 confirm 류 파라미터로 **모든 파괴적 경로**를 스스로 막는다 (manifest `ownGate`).
+   * 레지스트라는 이런 도구에만 가드 주입을 생략한다 — 선언 없이 confirm 파라미터만 있으면 throw.
+   */
+  ownGate: boolean;
   /** 이 이름이 폐기 예정 별칭이면 정식 도구 이름. */
   deprecatedFor?: string;
   /** 이 도구를 가리키는 폐기 예정 별칭들. */
   aliases: string[];
 }
 
-/** 자체 확인 파라미터 — 이 중 하나라도 스키마에 있으면 핸들러가 스스로 preview 를 책임진다. */
+/** 자체 확인 파라미터 이름 — manifest `ownGate` 도구는 이 중 하나를 스키마에 가져야 한다. */
 export const CONFIRM_KEYS = ['confirm', 'confirmPublish', 'confirmVisible'] as const;
 
 /** 레지스트라가 주입한 가드의 preview 첫 줄. 테스트와 에이전트가 이 문자열로 dry-run 을 식별한다. */
 export const CONFIRM_PREVIEW_MARKER = '🛑 DRY-RUN';
-
-/**
- * 인자에 따라 파괴성이 달라지는 도구 — 여기 적힌 조건이 참일 때만 confirm 을 요구한다.
- * (draft 로 바꾸는 호출까지 막으면 "draft 로 반복 작업" 흐름이 매번 두 번 호출이 된다.)
- */
-const CONFIRM_REQUIRED_WHEN: Record<string, { when: (args: Record<string, unknown>) => boolean; note: string }> = {
-  playstore_submit_release: {
-    when: (a) => (a.status ?? 'completed') !== 'draft',
-    note: 'status="draft" 는 가드 없이 실행',
-  },
-  playstore_promote_release: {
-    when: (a) => (a.status ?? 'completed') !== 'draft',
-    note: 'status="draft" 는 가드 없이 실행',
-  },
-};
 
 export function buildToolIndex(manifest: ToolManifest): Map<string, ToolMeta> {
   const index = new Map<string, ToolMeta>();
@@ -71,6 +62,7 @@ export function buildToolIndex(manifest: ToolManifest): Map<string, ToolMeta> {
     const destructive = new Set(entry.destructive ?? []);
     const local = new Set(entry.local ?? []);
     const idempotent = new Set(entry.idempotent ?? []);
+    const ownGate = new Set(entry.ownGate ?? []);
     for (const name of entry.tools) {
       const kind: ToolKind = destructive.has(name) ? 'destructive' : write.has(name) ? 'write' : 'read';
       index.set(name, {
@@ -79,6 +71,7 @@ export function buildToolIndex(manifest: ToolManifest): Map<string, ToolMeta> {
         kind,
         local: local.has(name),
         idempotent: kind === 'read' || idempotent.has(name),
+        ownGate: ownGate.has(name),
         deprecatedFor: manifest.deprecated?.[name],
         aliases: aliasesOf.get(name) ?? [],
       });
@@ -162,14 +155,8 @@ export function confirmPreview(name: string, args: Record<string, unknown>): Cal
   return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
 
-function guardDescription(name: string): string {
-  const conditional = CONFIRM_REQUIRED_WHEN[name];
-  return [
-    '⚠️ 안전 가드: confirm 생략/false 면 아무것도 바꾸지 않고 dry-run preview 만 반환한다.',
-    '사용자 명시 승인 후 confirm: true 로 재호출.',
-    conditional ? `(${conditional.note})` : '',
-  ].filter(Boolean).join(' ');
-}
+const GUARD_DESCRIPTION =
+  '⚠️ 안전 가드: confirm 생략/false 면 아무것도 바꾸지 않고 dry-run preview 만 반환한다. 사용자 명시 승인 후 confirm: true 로 재호출.';
 
 // ── registrar ──────────────────────────────────────────────────────────────
 
@@ -211,7 +198,7 @@ export function createToolRegistrar(
     shape: ZodRawShapeCompat,
     handler: AnyHandler,
   ) => {
-    if (!toolsets.enabled.has(meta.domain)) return;
+    if (!toolsets.isToolEnabled(meta.name)) return;
     server.registerTool<ZodRawShapeCompat, ZodRawShapeCompat>(
       meta.name,
       { title: annotationsFor(meta).title, description, inputSchema: shape, annotations: annotationsFor(meta) },
@@ -234,10 +221,21 @@ export function createToolRegistrar(
       let finalDescription = description;
       let finalHandler = handler as unknown as AnyHandler;
 
-      const selfGuarded = CONFIRM_KEYS.some((k) => k in shape);
-      if (meta.kind === 'destructive' && !selfGuarded) {
+      // 파괴적 도구는 (a) 레지스트라 가드를 주입받거나 (b) manifest ownGate 로 "자기 confirm 이 모든
+      // 파괴적 경로를 막는다" 고 선언해야 한다. confirm 파라미터가 있다는 사실만으로 가드를 건너뛰면
+      // 일부 경로만 막는 도구가 조용히 통과한다 (예: 공개 업로드만 막고 비공개 업로드는 그냥 실행).
+      const hasConfirmParam = CONFIRM_KEYS.some((k) => k in shape);
+      if (meta.kind === 'destructive' && meta.ownGate && !hasConfirmParam) {
+        throw new Error(`"${name}" 은(는) manifest ownGate 인데 confirm 류 파라미터(${CONFIRM_KEYS.join('/')})가 없습니다.`);
+      }
+      if (meta.kind === 'destructive' && !meta.ownGate && hasConfirmParam) {
+        throw new Error(
+          `"${name}" 은(는) 자체 confirm 파라미터가 있는 destructive 도구입니다 — 그 가드가 모든 파괴적 경로를 막으면 ` +
+            `manifest ownGate 에 추가하고, 아니면 파라미터를 없애 레지스트라 가드를 받으세요.`,
+        );
+      }
+      if (meta.kind === 'destructive' && !meta.ownGate) {
         const run = finalHandler;
-        const conditional = CONFIRM_REQUIRED_WHEN[name];
         finalShape = {
           ...shape,
           confirm: z
@@ -245,10 +243,9 @@ export function createToolRegistrar(
             .optional()
             .describe('true 명시 시에만 실제 실행. 생략/false 면 dry-run preview 만 반환 (비가역·공개 사고 차단).'),
         };
-        finalDescription = `${description} ${guardDescription(name)}`;
+        finalDescription = `${description} ${GUARD_DESCRIPTION}`;
         finalHandler = async (args, extra) => {
-          const needsConfirm = conditional ? conditional.when(args) : true;
-          if (needsConfirm && args.confirm !== true) return confirmPreview(name, args);
+          if (args.confirm !== true) return confirmPreview(name, args);
           return run(args, extra);
         };
       }

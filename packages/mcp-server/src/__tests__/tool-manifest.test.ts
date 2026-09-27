@@ -49,10 +49,10 @@ describe('tool-manifest (boot smoke test)', () => {
     });
   });
 
-  it('분류 목록(write/destructive/local/idempotent)은 같은 도메인의 tools 안에 있고 서로 모순이 없다', () => {
+  it('분류 목록(write/destructive/ownGate/local/idempotent)은 같은 도메인의 tools 안에 있고 서로 모순이 없다', () => {
     const problems: string[] = [];
     for (const [domain, d] of Object.entries(manifest.domains)) {
-      for (const key of ['write', 'destructive', 'local', 'idempotent'] as const) {
+      for (const key of ['write', 'destructive', 'ownGate', 'local', 'idempotent'] as const) {
         for (const name of d[key] ?? []) {
           if (!d.tools.includes(name)) problems.push(`${domain}.${key}: ${name} 은(는) ${domain}.tools 에 없음`);
         }
@@ -60,6 +60,9 @@ describe('tool-manifest (boot smoke test)', () => {
       const write = new Set(d.write ?? []);
       for (const name of d.destructive ?? []) {
         if (write.has(name)) problems.push(`${domain}: ${name} 이 write 와 destructive 양쪽에 있음 (destructive 는 write 를 함의 — 한쪽만)`);
+      }
+      for (const name of d.ownGate ?? []) {
+        if (!(d.destructive ?? []).includes(name)) problems.push(`${domain}.ownGate: ${name} 은 destructive 가 아님 — ownGate 는 파괴적 도구의 자체 가드 선언`);
       }
       for (const name of d.idempotent ?? []) {
         if (!write.has(name) && !(d.destructive ?? []).includes(name)) {
@@ -92,6 +95,14 @@ describe('tool-manifest (boot smoke test)', () => {
       for (const d of domains) if (!manifest.domains[d]) problems.push(`toolsets.${group}: 없는 도메인 ${d}`);
     }
     for (const d of manifest.alwaysOn ?? []) if (!manifest.domains[d]) problems.push(`alwaysOn: 없는 도메인 ${d}`);
+    for (const [tool, domains] of Object.entries(manifest.alsoInToolsets ?? {})) {
+      const home = index.get(tool)?.domain;
+      if (!home) problems.push(`alsoInToolsets: 없는 도구 ${tool}`);
+      for (const d of domains) {
+        if (!manifest.domains[d]) problems.push(`alsoInToolsets.${tool}: 없는 도메인 ${d}`);
+        if (d === home) problems.push(`alsoInToolsets.${tool}: 자기 도메인 ${d} 은 적지 않는다`);
+      }
+    }
     expect(problems, problems.join('\n')).toEqual([]);
   });
 

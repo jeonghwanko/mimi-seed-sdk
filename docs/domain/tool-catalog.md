@@ -12,7 +12,8 @@
 >
 > Marker grammar (the drift test parses it): within one bullet (and its indented continuation lines) or one
 > table row, a `**W**` / `**D**` applies to every tool name after it until the next marker; a new bullet or
-> row starts over as read-only.
+> row starts over as read-only. **D** tools that gate themselves (`ownGate` in the manifest) are listed in
+> [`../agent-guide.md`](../agent-guide.md) §5.
 
 ## Counts by domain
 
@@ -57,10 +58,10 @@
   `playstore_create_onetime_product` · `playstore_create_subscription` · `playstore_update_product` ·
   `playstore_update_product_listing` · `playstore_update_subscription_listing` ·
   `playstore_update_product_state` (DRAFT ↔ 활성) ·
-  `playstore_register_service_account` · `setup_playstore_connection`
-- **D** `playstore_deploy_recovery_action` (원격 인앱 업데이트 실배포) ·
-  `playstore_cancel_recovery_action` · `playstore_submit_release` · `playstore_promote_release` (둘 다 status="draft"
-  는 가드 없이 실행) · `playstore_delete_all_images` · `playstore_replace_images` (기존 이미지 deleteall 후 업로드) ·
+  `playstore_register_service_account`
+- **D** `setup_playstore_connection` (SA 키 발급 + 로컬 등록 SA 덮어쓰기) · `playstore_deploy_recovery_action` (원격 인앱 업데이트 실배포) ·
+  `playstore_cancel_recovery_action` · `playstore_submit_release` · `playstore_promote_release` (draft 포함 모든 status 가
+  confirm 필요) · `playstore_delete_all_images` · `playstore_replace_images` (기존 이미지 deleteall 후 업로드) ·
   `playstore_upload_data_safety` (데이터 안전 CSV — 기존 제출 전체 덮어씀) · `playstore_reply_review` (public) ·
   `playstore_delete_product` · `playstore_delete_service_account` (로컬 SA 파일 삭제)
 - `playstore_list_products` (서비스 계정 전용, 구독+일회성 요약) and `playstore_list_inapp_products` (OAuth 가능,
@@ -135,7 +136,7 @@
 | Domain (file) | Tools |
 |---|---|
 | CI (`ci.ts`) — **GitHub Actions / GitLab only** | `ci_list_workflows` · `ci_get_build_status` · `ci_list_recent_builds` · **W** `ci_save_config` · **W** `ci_trigger_build` · **D** `ci_cancel_build` |
-| Jenkins (`jenkins.ts`) — **credentials + job definitions, no build trigger** | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · **W** `jenkins_save_config` · **W** `jenkins_create_credential` · **W** `jenkins_upload_keystore` · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) · **D** `jenkins_delete_credential` |
+| Jenkins (`jenkins.ts`) — **credentials + job definitions, no build trigger** | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · **W** `jenkins_save_config` · **D** `jenkins_create_credential` · **D** `jenkins_upload_keystore` (새 id 는 바로 생성, 기존 id 교체만 confirm) · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) · **D** `jenkins_delete_credential` |
 | Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **W** `jenkins_upload_playstore_sa` |
 
 ## Cross-cutting
@@ -151,8 +152,9 @@
 - Read: `youtube_get_video_status` · `video_job_status` · `video_validate`
 - **W** research (saves under `research/`): `video_research_youtube` (metadata/reference-only) ·
   `video_search_stock_assets`
-- **D** `youtube_upload_video` (profile로 계정 선택, expectedChannelId 필수·실제 채널 검증, 기본 private, public/unlisted는 명시 확인 필수) ·
-  `youtube_update_video_privacy` (public/unlisted는 명시 확인 필수)
+- **W** `youtube_upload_video` (profile로 계정 선택, expectedChannelId 필수·실제 채널 검증, 기본 private, public/unlisted는 명시 확인 필수) ·
+  `youtube_update_video_privacy` (public/unlisted는 명시 확인 필수) — private 업로드·비공개 전환은 되돌릴 수 있어 W;
+  공개 경로는 `confirmVisible` 이 막는다
 - **W** `video_plan_from_story` (Anthropic + local project) · `video_save_plan` (agent-authored storyboard,
   no API key — free-path default) · `video_synthesize_research` (metadata/user notes →
   bounded brief) · `video_download_stock_assets` (Pexels, preview then

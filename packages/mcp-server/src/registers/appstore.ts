@@ -183,7 +183,14 @@ export function registerAppstoreTools(server: ToolRegistrar) {
       minBuildNumber: z.number().int().optional().describe('buildId 생략 시 자동 선택 후보의 최소 buildNumber (예: 186 — 이전 빌드 무시)'),
     },
     async ({ versionId, buildId, minBuildNumber }) => {
-      if (buildId) {
+      // 빈 문자열도 '지정됨' 으로 본다 — 병합 전처럼 API 가 거부하게 두고, 최신 빌드로 몰래 바꿔 붙이지 않는다.
+      if (buildId !== undefined) {
+        if (minBuildNumber !== undefined) {
+          return {
+            content: [{ type: 'text', text: '❌ minBuildNumber 는 buildId 생략(최신 VALID 빌드 자동 선택) 시에만 쓸 수 있다 — API 호출 안 함.' }],
+            isError: true,
+          };
+        }
         const result = await appstore.attachBuildToVersion(versionId, buildId);
         return {
           content: [
@@ -936,7 +943,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
             `versionId: ${result.versionId}`,
             `versionString: ${result.versionString}`,
             result.state ? `state: ${result.state}` : '',
-            '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_latest_build).',
+            '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_build — buildId 생략 시 최신 VALID 빌드).',
           ].filter(Boolean).join('\n'),
         }],
       };
@@ -1048,7 +1055,7 @@ export function registerAppstoreTools(server: ToolRegistrar) {
         if (preview.attachedBuild) {
           lines.push(`  attachedBuild: #${preview.attachedBuild.buildNumber ?? '?'} (id=${preview.attachedBuild.id}, state=${preview.attachedBuild.processingState ?? '?'})`);
         } else {
-          lines.push(`  attachedBuild: ⚠️ 미연결 — appstore_attach_latest_build 필요`);
+          lines.push(`  attachedBuild: ⚠️ 미연결 — appstore_attach_build 필요 (buildId 생략 = 최신 VALID 빌드)`);
         }
         if (preview.whatsNewByLocale.length === 0) {
           lines.push(`  whatsNew     : ⚠️ 등록된 로컬라이제이션 없음`);

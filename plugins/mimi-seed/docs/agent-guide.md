@@ -190,6 +190,9 @@ The server can expose only the domains a project needs — set these in the MCP 
 | `MIMI_SEED_TOOLSETS` | Comma-separated domain keys from `mimi-seed://tools/catalog` (`playstore`, `appstore`, `firebase`, …) and/or groups: `store` (playstore · appstore · android · ai), `google` (firebase · admob · iam · billing · bigquery · ga4 · gsc · googleads), `social` (facebook · instagram · threads · tiktok · youtube), `media` (video · youtube), `build` (ci · jenkins · android), `all`. Unset = everything (default). |
 | `MIMI_SEED_TOOLSETS_EXCLUDE` | Same syntax; removed from the include set. |
 
+A few tools also belong to a second toolset: `youtube_upload_video` / `youtube_get_video_status` /
+`youtube_update_video_privacy` (`video` domain) are also in `youtube`, and `jenkins_upload_playstore_sa` (`android`)
+is also in `jenkins` — a tool is on when any of its toolsets is included and off when any is excluded.
 `auth` and `checks` are always on. Unknown keys are ignored with a warning on stderr (and if no include key is
 valid, everything stays on). `mimi_seed_status` prints the active toolsets on its second line — if a tool you
 expect is missing from the deferred list, check that line before concluding the tool doesn't exist.
@@ -233,9 +236,10 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 ### Play Store release / promote
 1. `playstore_list_tracks` — see current track/version state.
 2. `playstore_check_submission_risks` (or `playstore_plan_release`) — surface blockers.
-3. Write missing listing/notes (`playstore_update_listing`, `playstore_update_release_notes` — omit `versionCode` for the latest release, `playstore_upload_image`).
+3. Write missing listing/notes (`playstore_update_listing`, `playstore_update_release_notes` — omit `versionCode` for the latest
+   release; `syncTracks` only works without `versionCode` — `playstore_upload_image`).
 4. `playstore_promote_release` / `playstore_submit_release` **without** `confirm` → show the returned dry-run preview to the user →
-   after an explicit go-ahead, call again with the same arguments plus `confirm: true` (see §5). `status="draft"` runs without confirm.
+   after an explicit go-ahead, call again with the same arguments plus `confirm: true` (see §5). This applies to every status, including `draft`.
 
 ### App Store TestFlight → review
 1. `appstore_list_apps` → `appstore_list_versions` (or `appstore_create_version`).
@@ -308,7 +312,8 @@ contact sheet; codec validation alone is not a quality pass.
 ## 5. Safety — irreversible actions need explicit confirmation
 
 Every tool marked **D** in the [tool catalog](domain/tool-catalog.md) — submit/promote/release, deletes,
-public posts and review replies, IAM keys and bindings, Jenkins job overwrites, beta invites — is
+public posts and review replies, IAM keys and bindings, Jenkins job/credential overwrites, Play service-account
+setup, beta invites — is
 **confirm-gated by the server**, and its MCP annotations say `destructiveHint: true`. Call order:
 
 1. Call the tool **without** `confirm`. Nothing changes; it returns a dry-run preview (the generic one starts
@@ -316,10 +321,13 @@ public posts and review replies, IAM keys and bindings, Jenkins job overwrites, 
 2. Show that preview to the user and get an explicit go-ahead **in the same turn**.
 3. Call again with the **same arguments** plus `confirm: true`.
 
-A few tools use a more specific flag instead of `confirm`: `tiktok_business_publish_video` (`confirmPublish`),
-`youtube_upload_video` / `youtube_update_video_privacy` (`confirmVisible`, only for public/unlisted).
-Conditional gates: `playstore_submit_release` / `playstore_promote_release` with `status="draft"` and
-`appstore_phased_release` with `pause`/`resume`/`enable`/`status` run without confirmation.
+Some **D** tools gate themselves (`ownGate` in the manifest) and ask for confirmation only on the dangerous
+path: `tiktok_business_publish_video` uses `confirmPublish`; `appstore_phased_release` runs
+`pause`/`resume`/`enable`/`status` directly; `jenkins_create_credential` / `jenkins_upload_keystore` create a
+**new** id directly but return a dry-run when the id already exists (replacing it needs `confirm: true`).
+There is no argument-based exemption otherwise — `playstore_submit_release` / `playstore_promote_release` need
+`confirm: true` even with `status="draft"`. `youtube_upload_video` / `youtube_update_video_privacy` are writes,
+not **D** (private is reversible), but public/unlisted still needs `confirmVisible: true`.
 
 Never pass `confirm: true` on the first call, and never retry an uncertain public write automatically.
 

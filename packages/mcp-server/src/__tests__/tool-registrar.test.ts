@@ -19,9 +19,10 @@ import {
  * tool-manifest.test.ts, 파괴적 도구 전수 가드는 destructive-confirm.test.ts 가 맡는다.
  */
 const manifest: ToolManifest = {
-  total: 6,
+  total: 7,
   alwaysOn: ['core'],
   toolsets: { bundle: ['store'] },
+  alsoInToolsets: { other_read: ['store'] },
   deprecated: { store_old_write: 'store_write' },
   domains: {
     core: { label: 'Core', credential: '-', summary: '-', tools: ['core_read'], local: ['core_read'] },
@@ -29,9 +30,10 @@ const manifest: ToolManifest = {
       label: 'Store',
       credential: '-',
       summary: '-',
-      tools: ['store_write', 'store_old_write', 'store_delete', 'playstore_submit_release'],
+      tools: ['store_write', 'store_old_write', 'store_delete', 'store_own', 'playstore_submit_release'],
       write: ['store_write', 'store_old_write'],
-      destructive: ['store_delete', 'playstore_submit_release'],
+      destructive: ['store_delete', 'store_own', 'playstore_submit_release'],
+      ownGate: ['store_own'],
       idempotent: ['store_write', 'store_old_write'],
     },
     other: { label: 'Other', credential: '-', summary: '-', tools: ['other_read'] },
@@ -119,13 +121,13 @@ describe('createToolRegistrar', () => {
     }
   });
 
-  it('자체 confirm 파라미터가 있으면 가드를 겹치지 않는다 (핸들러가 preview 를 책임짐)', async () => {
+  it('ownGate 로 선언된 도구는 자기 confirm 을 쓰고 가드를 겹치지 않는다', async () => {
     const handler = vi.fn(ok('own preview'));
     const { client, close } = await boot((r) =>
-      r.tool('store_delete', '삭제', { id: z.string(), confirmPublish: z.boolean().default(false) }, handler),
+      r.tool('store_own', '삭제', { id: z.string(), confirmPublish: z.boolean().default(false) }, handler),
     );
     try {
-      const res = await client.callTool({ name: 'store_delete', arguments: { id: 'a' } });
+      const res = await client.callTool({ name: 'store_own', arguments: { id: 'a' } });
       expect(JSON.stringify(res.content)).toContain('own preview');
       expect(handler).toHaveBeenCalledTimes(1);
     } finally {
@@ -133,22 +135,29 @@ describe('createToolRegistrar', () => {
     }
   });
 
-  it('조건부 가드: submit_release 의 status="draft" 는 confirm 없이 실행된다', async () => {
+  it('confirm 파라미터만 있고 ownGate 선언이 없는 destructive 도구는 throw — 일부 경로만 막는 도구가 조용히 통과하지 않게', async () => {
+    await expect(
+      boot((r) => r.tool('store_delete', 'd', { confirmVisible: z.boolean().default(false) }, ok('x'))),
+    ).rejects.toThrow(/ownGate/);
+  });
+
+  it('ownGate 인데 confirm 파라미터가 없으면 throw', async () => {
+    await expect(boot((r) => r.tool('store_own', 'd', { id: z.string() }, ok('x')))).rejects.toThrow(/ownGate/);
+  });
+
+  it('status="draft" 도 예외 없이 confirm 을 요구한다', async () => {
     const handler = vi.fn(ok('submitted'));
     const { client, close } = await boot((r) =>
       r.tool('playstore_submit_release', '제출', { status: z.string().optional() }, handler),
     );
     try {
       const draft = await client.callTool({ name: 'playstore_submit_release', arguments: { status: 'draft' } });
-      expect(JSON.stringify(draft.content)).toContain('submitted');
-      const full = await client.callTool({ name: 'playstore_submit_release', arguments: {} });
-      expect(JSON.stringify(full.content)).toContain(CONFIRM_PREVIEW_MARKER);
-      expect(handler).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(draft.content)).toContain(CONFIRM_PREVIEW_MARKER);
+      expect(handler).not.toHaveBeenCalled();
     } finally {
       await close();
     }
   });
-
   it('폐기 별칭을 정식 도구의 스키마·핸들러로 함께 등록한다', async () => {
     const handler = vi.fn(ok('wrote'));
     const { client, close } = await boot((r) => r.tool('store_write', '쓰기', { v: z.string() }, handler));
@@ -180,4 +189,21 @@ describe('createToolRegistrar', () => {
       await close();
     }
   });
-});
+
+  it('alsoInToolsets: 다른 도메인 도구도 그 toolset 으로 켜지고, 그 toolset 을 exclude 하면 꺼진다', async () => {
+    const register = (r: ToolRegistrar) => {
+      r.tool('core_read', 'c', {}, ok('c'));
+      r.tool('store_write', 'w', {}, ok('w'));
+      r.tool('other_read', 'o', {}, ok('o'));
+    };
+    const names = async (env: NodeJS.ProcessEnv) => {
+      const { client, close } = await boot(register, env);
+      try {
+        return (await client.listTools()).tools.map((t) => t.name).sort();
+      } finally {
+        await close();
+      }
+    };
+    expect(await names({ MIMI_SEED_TOOLSETS: 'store' })).toEqual(['core_read', 'other_read', 'store_old_write', 'store_write']);
+    expect(await names({ MIMI_SEED_TOOLSETS_EXCLUDE: 'store' })).toEqual(['core_read']);
+  });});

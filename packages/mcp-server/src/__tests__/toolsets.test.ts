@@ -78,6 +78,23 @@ describe('buildServer 가 toolset 을 존중한다', () => {
     expect(names.sort()).toEqual(expected.sort());
   });
 
+  // 도구가 등록 파일(도메인)과 다른 toolset 에도 속하는 경우 — video.ts 의 YouTube 업로드/상태/공개 전환,
+  // android.ts 의 Jenkins SA 업로드. 도메인만 보면 이 조합에서 빠진다.
+  it.each([
+    ['youtube', ['youtube_upload_video', 'youtube_get_video_status', 'youtube_update_video_privacy', 'youtube_list_videos']],
+    ['social', ['youtube_upload_video', 'youtube_get_video_status', 'youtube_update_video_privacy', 'threads_post']],
+    ['jenkins', ['jenkins_upload_playstore_sa', 'jenkins_create_job']],
+  ])('MIMI_SEED_TOOLSETS=%s 는 다른 도메인 소속 도구도 포함한다', async (key, expected) => {
+    const names = await listNames({ MIMI_SEED_TOOLSETS: key });
+    for (const tool of expected) expect(names, tool).toContain(tool);
+    expect(names).not.toContain('video_render');
+  });
+
+  it('EXCLUDE=youtube 는 video 도메인의 YouTube 업로드도 뺀다', async () => {
+    const names = await listNames({ MIMI_SEED_TOOLSETS_EXCLUDE: 'youtube' });
+    expect(names).not.toContain('youtube_upload_video');
+    expect(names).toContain('video_render');
+  });
   it('기본값은 manifest 전체', async () => {
     expect((await listNames({})).length).toBe(manifest.total);
   });

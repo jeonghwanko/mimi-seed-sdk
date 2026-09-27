@@ -49,7 +49,7 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
    - 같은 트랙 출시: `playstore_submit_release`
    - 트랙 간 승격: `playstore_promote_release` (fromTrack→toTrack, versionCode)
    - 먼저 `confirm` 없이 호출하면 서버가 아무것도 바꾸지 않고 dry-run preview 를 돌려준다. 그 내용을 사용자에게
-     보여 명시 승인을 받은 뒤 같은 인자 + `confirm: true` 로 재호출한다 (`status="draft"` 는 확인 없이 실행).
+     보여 명시 승인을 받은 뒤 같은 인자 + `confirm: true` 로 재호출한다 (`status="draft"` 포함 모든 status).
    - `playstore_replace_images` / `playstore_delete_all_images` / `playstore_reply_review` 도 같은 확인 절차를 거친다.
 
 ## 인앱 상품 · 구독

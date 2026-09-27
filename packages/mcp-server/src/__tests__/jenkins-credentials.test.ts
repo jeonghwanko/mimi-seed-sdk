@@ -1,6 +1,14 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { upsertSecretText, upsertSecretFile, listCredentials } from '../jenkins/credentials.js';
-import { withoutBackoff } from './helpers.js';
+import { withClient, withoutBackoff } from './helpers.js';
+
+vi.mock('../jenkins/config.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../jenkins/config.js')>()),
+  requireJenkinsConfig: () => ({ url: 'https://jenkins.example.com', username: 'ci', token: 't' }),
+}));
 
 /**
  * Jenkins credential upsert. 여기서 종류를 안 보면 **말없이 값을 파괴한다** —
@@ -118,5 +126,78 @@ describe('listCredentials', () => {
     fetchMock.mockImplementation(() => Promise.resolve(new Response('nope', { status: 500 })));
 
     await expect(withoutBackoff(() => listCredentials(cfg))).rejects.toThrow(/조회 실패 \(500\)/);
+  });
+});
+
+// 같은 종류의 기존 값(서명 keystore, 비밀값)을 조용히 갈아끼우는 것도 되돌릴 수 없다.
+// MCP 도구는 새 id 생성은 그대로 두고, 기존 id 교체만 confirm 뒤로 보낸다.
+describe('allowReplace=false — 기존 id 는 쓰지 않는다', () => {
+  const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
+
+  it('같은 종류로 이미 있으면 exists 를 돌려주고 POST 하지 않는다', async () => {
+    arrange({ _class: FILE_CLASS });
+    await expect(upsertSecretFile(cfg, 'my-app-keystore', 'x', 'k.jks', '', { allowReplace: false })).resolves.toBe('exists');
+    arrange({ _class: TEXT_CLASS });
+    await expect(upsertSecretText(cfg, 'my-app-store-password', 's', '', { allowReplace: false })).resolves.toBe('exists');
+    expect(posted()).toBe(false);
+  });
+
+  it('없으면 확인 없이 만든다', async () => {
+    arrange(null);
+    await expect(upsertSecretFile(cfg, 'my-app-keystore', 'x', 'k.jks', '', { allowReplace: false })).resolves.toBe('created');
+    expect(posted()).toBe(true);
+  });
+});
+
+describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 confirm', () => {
+  const text = (r: { content: unknown }) => (r.content as Array<{ text?: string }>).map((x) => x.text ?? '').join('\n');
+  const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
+
+  it('기존 keystore 가 있으면 confirm 없이는 dry-run 만', async () => {
+    arrange({ _class: FILE_CLASS });
+    await withClient(async (client) => {
+      const r = await client.callTool({ name: 'jenkins_upload_keystore', arguments: { id: 'my-app-keystore', keystore_base64: 'eA==' } });
+      expect(text(r)).toMatch(/dry-run[\s\S]*이미 존재/);
+      expect(posted()).toBe(false);
+
+      const ok = await client.callTool({ name: 'jenkins_upload_keystore', arguments: { id: 'my-app-keystore', keystore_base64: 'eA==', confirm: true } });
+      expect(text(ok)).toContain('updated');
+      expect(posted()).toBe(true);
+    });
+  });
+
+  it('keystore_path 입력(#36 파일 방식)도 같은 교체 가드를 탄다', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'mimi-seed-jenkins-'));
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    try {
+      mkdirSync(path.join(home, '.mimi-seed', 'keystores'), { recursive: true });
+      const keystorePath = path.join(home, '.mimi-seed', 'keystores', 'upload.jks');
+      writeFileSync(keystorePath, Buffer.from('keystore-bytes'));
+      arrange({ _class: FILE_CLASS });
+      await withClient(async (client) => {
+        const r = await client.callTool({ name: 'jenkins_upload_keystore', arguments: { id: 'my-app-keystore', keystore_path: keystorePath } });
+        expect(text(r)).toMatch(/dry-run[\s\S]*이미 존재/);
+        expect(posted()).toBe(false);
+        const ok = await client.callTool({
+          name: 'jenkins_upload_keystore',
+          arguments: { id: 'my-app-keystore', keystore_path: keystorePath, confirm: true },
+        });
+        expect(text(ok)).toContain('updated');
+        expect(posted()).toBe(true);
+      });
+    } finally {
+      process.env.HOME = saved.HOME;
+      process.env.USERPROFILE = saved.USERPROFILE;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+  it('새 id 는 confirm 없이 생성된다', async () => {
+    arrange(null);
+    await withClient(async (client) => {
+      const r = await client.callTool({ name: 'jenkins_create_credential', arguments: { id: 'my-app-new', secret: 's' } });
+      expect(text(r)).toContain('created');
+    });
   });
 });

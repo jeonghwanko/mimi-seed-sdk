@@ -232,3 +232,37 @@ describe('README 도구 목록 ↔ tool-manifest.json', () => {
     );
   });
 });
+
+// 폐기 예정 별칭은 한 마이너 릴리스 동안 **등록만** 유지한다. 코드 안내 문구·문서·스킬이 옛 이름을 계속
+// 가리키면 에이전트가 계속 옛 이름을 쓰고, 별칭을 지우는 날 그 안내가 전부 깨진다. 허용: manifest(별칭 등록
+// 자체), 테스트, 그리고 "deprecated" 를 적은 줄(CHANGELOG 식 안내 — 예: 카탈로그의 alias 표기).
+describe('폐기 예정 별칭 이름이 안내 문구에 남지 않는다', () => {
+  const aliases = Object.keys(manifest.deprecated ?? {});
+  const repo = new URL('../../../../', import.meta.url);
+  const walk = (rel: string, ext: RegExp): string[] =>
+    (readdirSync(new URL(rel, repo), { recursive: true }) as string[])
+      .map((p) => `${rel}${p.replace(/\\/g, '/')}`)
+      .filter((p) => ext.test(p) && !p.includes('/__tests__/') && !p.includes('node_modules'));
+  const files = [
+    ...walk('packages/mcp-server/src/', /\.ts$/),
+    ...walk('packages/cli/src/', /\.ts$/),
+    ...walk('docs/', /\.md$/),
+    ...walk('skills/', /\.md$/),
+    'README.md', 'README.ko.md', 'packages/mcp-server/README.md', 'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md',
+  ];
+
+  it('별칭이 있을 때만 의미가 있다', () => {
+    expect(files.length).toBeGreaterThan(50);
+  });
+
+  it.each(aliases)('%s', (alias) => {
+    const hits = files.flatMap((rel) =>
+      readRepoFile(rel)
+        .split(/\r?\n/)
+        .map((line, i) => ({ line, at: `${rel}:${i + 1}` }))
+        .filter(({ line }) => line.includes(alias) && !/deprecated/i.test(line))
+        .map(({ at }) => at),
+    );
+    expect(hits, `${alias} 대신 정식 이름(${manifest.deprecated![alias]})을 쓰세요: ${hits.join(', ')}`).toEqual([]);
+  });
+});

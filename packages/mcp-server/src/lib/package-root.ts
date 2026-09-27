@@ -31,6 +31,11 @@ export type DomainEntry = {
   destructive?: string[];
   /** 외부 서비스를 호출하지 않는 도구 (openWorldHint: false). 나머지는 모두 open-world. */
   local?: string[];
+  /**
+   * destructive 중 자기 confirm 류 파라미터(confirm / confirmPublish / confirmVisible)가 **모든 파괴적 경로**를
+   * 막는 도구. 레지스트라는 이 도구들에만 confirm 가드 주입을 생략한다.
+   */
+  ownGate?: string[];
   /** 같은 인자로 반복 호출해도 추가 효과가 없는 **쓰기** 도구. 읽기 도구는 자동으로 idempotent. */
   idempotent?: string[];
 };
@@ -41,6 +46,11 @@ export type ToolManifest = {
   domains: Record<string, DomainEntry>;
   /** MIMI_SEED_TOOLSETS 편의 그룹 → 도메인 키 목록. `all` 은 내장 키워드라 여기 없다. */
   toolsets?: Record<string, string[]>;
+  /**
+   * 등록 파일(도메인)과 별개로 다른 toolset 키에도 속하는 도구 — 예: video.ts 가 등록하는 YouTube 업로드는
+   * `youtube` 로도 켜진다. 값은 도메인 키 목록.
+   */
+  alsoInToolsets?: Record<string, string[]>;
   /** toolset 필터와 무관하게 항상 켜지는 도메인. */
   alwaysOn?: string[];
   /**

@@ -12,6 +12,9 @@ import type { ToolManifest } from './package-root.js';
  * - `MIMI_SEED_TOOLSETS_EXCLUDE` 같은 문법. include 결과에서 뺀다.
  * - manifest `alwaysOn`(auth · checks)은 어떤 설정이든 켜져 있다 — 상태 진단과 로그인이
  *   없으면 나머지 도메인을 쓸 수 없다.
+ * - 도구 단위 판정: 도구는 자기 도메인 + manifest `alsoInToolsets` 의 도메인들에 속한다. 그중 하나라도
+ *   include 되면 켜지고, 하나라도 exclude 되면 꺼진다 (alwaysOn 소속이면 항상 켜짐). 예: video.ts 가 등록하는
+ *   `youtube_upload_video` 는 `youtube` 로도 켜지고, android.ts 의 `jenkins_upload_playstore_sa` 는 `jenkins` 로도 켜진다.
  * - 모르는 키는 stderr 경고 후 무시한다. include 에 유효한 키가 하나도 없으면(오타 등)
  *   조용히 거의 빈 서버가 되는 대신 전부를 켠다.
  */
@@ -19,8 +22,10 @@ export const TOOLSETS_ENV = 'MIMI_SEED_TOOLSETS';
 export const TOOLSETS_EXCLUDE_ENV = 'MIMI_SEED_TOOLSETS_EXCLUDE';
 
 export interface ToolsetSelection {
-  /** 켜진 도메인 키 집합 (alwaysOn 포함). */
+  /** 켜진 도메인 키 집합 (alwaysOn 포함). 도메인 밖 도구의 소속(alsoInToolsets)은 isToolEnabled 가 본다. */
   enabled: ReadonlySet<string>;
+  /** 이 도구를 등록할지 — 소속 도메인 중 하나가 include 되고 어느 것도 exclude 되지 않았으면 true. */
+  isToolEnabled(name: string): boolean;
   /** 모든 도메인이 켜져 있는가 (기본값). */
   all: boolean;
   /** 사용자가 준 원문 (정규화된 키 목록). */
@@ -71,17 +76,34 @@ export function resolveToolsets(
     return out;
   };
 
-  let enabled = include.length > 0 ? expand(include, TOOLSETS_ENV) : new Set(allDomains);
-  if (include.length > 0 && enabled.size === 0) {
+  let included = include.length > 0 ? expand(include, TOOLSETS_ENV) : new Set(allDomains);
+  if (include.length > 0 && included.size === 0) {
     warnings.push(`${TOOLSETS_ENV}: 유효한 toolset 이 없어 전체 도메인을 켭니다.`);
-    enabled = new Set(allDomains);
+    included = new Set(allDomains);
   }
-  for (const d of expand(exclude, TOOLSETS_EXCLUDE_ENV)) enabled.delete(d);
-  for (const d of alwaysOn) enabled.add(d);
+  const excluded = expand(exclude, TOOLSETS_EXCLUDE_ENV);
+  const always = new Set(alwaysOn);
+
+  const enabled = new Set([...included].filter((d) => !excluded.has(d)));
+  for (const d of always) enabled.add(d);
+
+  // 도구 → 소속 도메인들 (등록 도메인 + alsoInToolsets).
+  const membership = new Map<string, string[]>();
+  for (const [domain, entry] of Object.entries(manifest.domains)) {
+    for (const tool of entry.tools) membership.set(tool, [domain, ...(manifest.alsoInToolsets?.[tool] ?? [])]);
+  }
+  const isToolEnabled = (name: string): boolean => {
+    const domains = membership.get(name) ?? [];
+    if (domains.some((d) => always.has(d))) return true;
+    if (domains.some((d) => excluded.has(d))) return false;
+    return domains.some((d) => included.has(d));
+  };
 
   return {
     enabled,
-    all: allDomains.every((d) => enabled.has(d)),
+    isToolEnabled,
+    // exclude 된 도메인이 있으면 다른 도메인 소속 도구(alsoInToolsets)도 빠질 수 있어 'all' 이 아니다.
+    all: allDomains.every((d) => enabled.has(d)) && [...excluded].every((d) => always.has(d)),
     include,
     exclude,
     warnings,

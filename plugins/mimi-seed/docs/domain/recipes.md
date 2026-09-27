@@ -33,7 +33,8 @@
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
 3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then
    **classify** it: `write` (changes state), `destructive` (irreversible / outward-facing / deletes or overwrites —
-   the registrar confirm-gates it), `local` (no external service), `idempotent` (a write that is safe to repeat).
+   the registrar confirm-gates it; list it in `ownGate` only if its own `confirm` flag covers every destructive
+   path), `local` (no external service), `idempotent` (a write that is safe to repeat).
    Unlisted = read-only. An unclassified-but-registered name throws at boot. A new domain also needs `label` /
    `credential` / `summary` (the `mimi-seed://tools/catalog` resource serves that file verbatim) and, if it fits
    one, a `toolsets` group.

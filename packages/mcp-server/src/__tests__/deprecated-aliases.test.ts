@@ -42,11 +42,32 @@ beforeEach(() => {
 describe('playstore_update_release_notes ← playstore_update_latest_release_notes', () => {
   const base = { packageName: 'com.example.app', track: 'internal', language: 'ko-KR', text: '버그 수정' };
 
-  it('versionCode 를 주면 그 릴리스를 갱신한다 (기존 동작)', async () => {
+  it('versionCode 를 주면 그 릴리스를 갱신하고, 응답 모양도 병합 전과 같다', async () => {
     await withClient(async (client) => {
       const r = await client.callTool({ name: 'playstore_update_release_notes', arguments: { ...base, versionCode: '40' } });
-      expect(textOf(r)).toContain('versionCodes=["40"]');
+      expect(textOf(r)).toBe('✅ com.example.app internal v40 ko-KR 노트 반영\n\n' + JSON.stringify({ track: 'internal' }, null, 2));
       expect(m.updateReleaseNotes).toHaveBeenCalledWith({}, 'com.example.app', 'internal', '40', 'ko-KR', '버그 수정');
+      expect(m.updateLatestReleaseNotes).not.toHaveBeenCalled();
+    });
+  });
+
+  it('versionCode: "" 는 최신 릴리스로 바꿔치지 않는다 (병합 전처럼 그 값으로 시도)', async () => {
+    await withClient(async (client) => {
+      await client.callTool({ name: 'playstore_update_release_notes', arguments: { ...base, versionCode: '' } });
+      expect(m.updateReleaseNotes).toHaveBeenCalledWith({}, 'com.example.app', 'internal', '', 'ko-KR', '버그 수정');
+      expect(m.updateLatestReleaseNotes).not.toHaveBeenCalled();
+    });
+  });
+
+  it('versionCode + syncTracks 는 API 호출 없이 거부', async () => {
+    await withClient(async (client) => {
+      const r = await client.callTool({
+        name: 'playstore_update_release_notes',
+        arguments: { ...base, versionCode: '40', syncTracks: ['production'] },
+      });
+      expect(r.isError).toBe(true);
+      expect(textOf(r)).toMatch(/함께 쓸 수 없다/);
+      expect(m.updateReleaseNotes).not.toHaveBeenCalled();
       expect(m.updateLatestReleaseNotes).not.toHaveBeenCalled();
     });
   });
@@ -81,6 +102,17 @@ describe('appstore_attach_build ← appstore_attach_latest_build', () => {
     await withClient(async (client) => {
       await client.callTool({ name: 'appstore_attach_build', arguments: { versionId: 'v1', buildId: 'b1' } });
       expect(m.attachBuildToVersion).toHaveBeenCalledWith('v1', 'b1');
+      expect(m.attachLatestValidBuild).not.toHaveBeenCalled();
+    });
+  });
+
+  it('buildId: "" 는 자동 선택하지 않는다 / buildId + minBuildNumber 는 거부', async () => {
+    await withClient(async (client) => {
+      await client.callTool({ name: 'appstore_attach_build', arguments: { versionId: 'v1', buildId: '' } });
+      expect(m.attachBuildToVersion).toHaveBeenCalledWith('v1', '');
+      const r = await client.callTool({ name: 'appstore_attach_build', arguments: { versionId: 'v1', buildId: 'b1', minBuildNumber: 5 } });
+      expect(r.isError).toBe(true);
+      expect(m.attachBuildToVersion).toHaveBeenCalledTimes(1);
       expect(m.attachLatestValidBuild).not.toHaveBeenCalled();
     });
   });
