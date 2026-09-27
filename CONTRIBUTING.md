@@ -16,6 +16,7 @@ agent should call* the tools, see [`docs/agent-guide.md`](docs/agent-guide.md).
 packages/
   cli/          # `mimi-seed` — CLI (tsup build)
   mcp-server/   # `@yoonion/mimi-seed-mcp` — local stdio + remote MCP tools (tsc build)
+  core/         # private shared source compiled into both (never published) — see docs/domain/architecture.md
 skills/         # Claude Code / Codex skills
 .claude-plugin/ # Claude Code plugin + marketplace manifests
 .codex-plugin/  # Codex plugin manifest
@@ -49,7 +50,9 @@ npm run build && npm test
 ## Pull requests
 
 1. Branch off `main`.
-2. Keep changes scoped to one package where possible.
+2. Keep changes scoped to one package where possible. Never copy code from one package into the other: if both
+   need it, move it into `packages/core` ([`recipes.md`](docs/domain/recipes.md) §8) and build + test **both**
+   packages.
 3. **Build + test must pass** (`npm run build && npm test` in the affected package). The
    Both packages' `npm test` run `npm run typecheck` first, test files included (the CLI builds with `tsup`,
    which does not type-check; the mcp-server build config excludes `src/__tests__`, so its typecheck uses

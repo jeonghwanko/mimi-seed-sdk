@@ -22,9 +22,12 @@ executable entry: it picks a run mode, hands `buildServer()` a transport, and ow
 setup/admin CLIs. Wiring a register module into `index.ts` registers nothing. The `bin` map in `package.json` is a
 cross-package contract used by `packages/cli/src/mcp-bin.ts`.
 
-Release Doctor policy and rendering source lives in `src/checks/`. The CLI bundles a
-generated mirror for a fast no-login path; after changing those files, run `npm run release-doctor:sync` at the
-repository root and commit the mirror.
+Code shared with the CLI — Release Doctor policy and rendering, the `.mimi-seed.json` reader, `resolveLang`, the
+atomic credential writer, the AI contract, the CI/Jenkins config shapes — lives in `packages/core/src` and is
+imported as `#core/<path>.js`. `npm run build` compiles it into `dist/core/` first (`tsconfig.core.json`) and the
+`imports` field of `package.json` resolves `#core/*` there at runtime; typecheck, lint, vitest, and `npm run dev`
+read the core source directly. Keep core dependency-free (`node:` builtins only, no `fetch`) —
+`core-boundary.test.ts` enforces it ([`architecture.md`](../../docs/domain/architecture.md) "Shared source").
 
 ## Adding or changing a tool
 

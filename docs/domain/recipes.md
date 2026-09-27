@@ -18,6 +18,7 @@
 | A CLI command's behavior | `cli/src/<command>.ts` | `cli/src/index.ts` (router only) |
 | User-facing Korean/English text | a `catalog(ko, en)` in the file that prints it | a bare string literal ([[cli-deploy]]) |
 | A shared onboarding string | `cli/src/i18n.ts` `t()` | duplicated per command |
+| Code **both** packages need (a schema, a rule, a pure helper) | `packages/core/src/`, imported as `#core/<path>.js` (§8) | a copy in each package, or an import across packages |
 
 ---
 
@@ -190,5 +191,29 @@ npm test                       # root: plugin drift + both suites (the full gate
 ```
 
 - `git status --short` first; leave unrelated changes alone and never hand-edit `plugins/mimi-seed/`.
-- Keep the change inside the owning package — the two packages do not import each other.
+- Keep the change inside the owning package — the two packages do not import each other. A change under
+  `packages/core/` belongs to **both**: build and test both (§8).
 - Never commit a secret, a real identifier, or private web-console internals ([[pitfalls]] §13).
+
+---
+
+## 8. Share code between the two packages (`packages/core`)
+
+When both packages need the same schema, rule, or pure helper, it goes into `packages/core` once — never a second
+copy plus a parity test. The why and the build wiring are in [[architecture]] "Shared source".
+
+1. **Move, don't copy** — `git mv` the file into `packages/core/src/` (subfolders are fine: `checks/…`). It may
+   import only `node:` builtins and other core files with `.js` specifiers; no npm package, no `fetch`, no
+   package-only helper such as the CLI's `catalog()`. Wording that must differ per package is passed in by the
+   caller (see `manifestSocialProfile`'s message set).
+2. **Point every importer at it** — `#core/<path>.js` in both packages (tests and `vi.mock(…)` paths too).
+   Delete the old copies. Keep a re-export only when many importers use a package-local name (e.g.
+   `mcp-server/src/ai/client.ts` → `AI_MODEL`).
+3. **Keep the tests where they were** — they now import `#core/…`. Core has no test runner of its own.
+4. **Delete the parity guard** that only existed because of the copy, and update its rows in [[testing]] and the
+   drift map in [[_index]]; add the module to the table in [[architecture]].
+
+**Guards:** `core-boundary.test.ts` (imports, no `fetch`, `#core/…` only, mcp-server `imports` + build wiring) ·
+both packages' typecheck · mcp-server's `tsc -p ../core` and `eslint . ../core`.
+**Verify:** **both** packages — `npm run build && npm test` in `packages/mcp-server` **and** `packages/cli`. Then
+check `npm pack --dry-run` in mcp-server lists the file under `dist/core/`.

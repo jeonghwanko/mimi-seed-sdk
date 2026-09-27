@@ -314,5 +314,18 @@ returns `jobComplete=false` with a note — an empty row set must never look lik
 `EPERM`/`EBUSY`/`EACCES` while another process holds a read handle — antivirus, the search indexer, OneDrive, or
 another mimi-seed process reading the token — and the refresh looked like a random auth failure. The rename now
 retries only those codes (`RENAME_RETRY_CODES`) on `RENAME_RETRY_DELAYS_MS` (10/20/40/80/160/320/370 ms, exactly
-1 s) and still deletes the temp file if it gives up. The CLI has its own copy of the atomic writer; **keep both
-constants identical** — `rename-retry-parity.test.ts` compares the literals once both copies exist.
+1 s) and still deletes the temp file if it gives up. The CLI used to carry its own copy of the atomic writer, held
+in step by a parity test; both packages now import the one implementation in `packages/core` (`#core/atomic-write.js`),
+so there is no second schedule to drift.
+
+## 25. `packages/core` works in a checkout and can still break the installed package
+
+`packages/core` is never published — each package compiles it into its own output ([[architecture]] "Shared
+source"). In a clone, core sits next to both packages, so almost any mistake still *runs*: an `import` of an npm
+package from core resolves through a neighbor's `node_modules`, and a relative `../../core/src/…` import finds the
+file. After `npm install @yoonion/mimi-seed-mcp` neither is true — core has no `node_modules`, and a relative path
+points outside the package's `dist/`. `core-boundary.test.ts` rejects both, and also a `fetch` in core (network
+policy differs per package). The other trap is the module format: tsc decides ESM vs CommonJS from the **source**
+file's nearest `package.json`, so `packages/core/package.json` must keep `"type": "module"` — without it, core is
+emitted as CommonJS into `dist/core/` and every named import from it fails at startup. Before trusting a change to
+core, run the packed-install check in [[recipes]] §8, not just the tests.

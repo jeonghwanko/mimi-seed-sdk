@@ -33,7 +33,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `keystores/<app>-<timestamp>/upload.jks` + `signing.json` | Upload keystore and its alias / store / key passwords from `android_generate_keystore` (`0600`). The tool returns paths only; `jenkins_upload_keystore` (`keystore_path`) and `jenkins_create_credential` (`secret_file` + `secret_field`) read files inside `keystores/` only | `android/keystore-store.ts` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
 | `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
-| `settings.json` | **Not a credential** — user preference (`{ lang }`), deliberately separate so logout/re-auth never resets it. Read by both packages (`cli/src/settings.ts`, `mcp-server/src/lib/lang.ts`) | `mimi-seed lang` / the setup wizard's first prompt |
+| `settings.json` | **Not a credential** — user preference (`{ lang }`), deliberately separate so logout/re-auth never resets it. Read by both packages through the one rule in `core/src/lang.ts`; written only by the CLI (`cli/src/settings.ts`) | `mimi-seed lang` / the setup wizard's first prompt |
 
 > Treat every file above as a secret. A repo `.gitignore` should keep them out even if a user runs the CLI
 > inside a project; the SDK itself never writes them into the repo tree.
@@ -143,15 +143,15 @@ second call with `confirm=true`.
   JWT minter). Don't re-read `~/.mimi-seed/*.json` ad hoc in a new tool.
 - ✅ Treat App Store re-authentication as a merge: replacing the primary key must preserve an existing
   `vendorNumber` and role-specific `reportsKey`. Validate the candidate against Apple before saving it.
-- ✅ **Write** through `lib/atomic-write.ts` (`writeCredentialJson` for objects, `writeCredentialFile` for an
+- ✅ **Write** through `#core/atomic-write.js` (`packages/core/src/atomic-write.ts`; `writeCredentialJson` for objects, `writeCredentialFile` for an
   already-serialized key). It writes a temp file, chmods it `0600`, then `rename(2)`s — so a reader sees the old
   content or the new one, never a half-written file, and the file is never briefly world-readable. `writeFileSync`
   truncates first: interrupt it (or let two processes overlap) and you get truncated JSON, which every reader in
   this codebase swallows as `null` — the user just sees an unexplained "not authenticated". That matters most for
   `tokens.json`, rewritten on every refresh (5-minute margin) by however many server instances and CLIs are
   running. `atomic-write.test.ts` enforces this and keeps the writer list complete. The CLI's own files
-  (`config.json`, `ci.json`, `telemetry.json`) go through its copy, `cli/src/lib/atomic-write.ts`, guarded by the
-  CLI's `atomic-write.test.ts`.
+  (`config.json`, `ci.json`, `telemetry.json`) go through the same shared module, guarded by the CLI's own
+  `atomic-write.test.ts`.
 - ✅ Surface the **raw provider reason** on `401`/`403` via the friendly-error layer ([[external-apis]]).
 - ❌ Never log, echo, return, or embed a token / key / `.p8` / SA JSON — not in tool output, not in error
   messages, not in tests. Tests use placeholder fixtures only.
