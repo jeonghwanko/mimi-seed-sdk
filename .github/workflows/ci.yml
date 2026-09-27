@@ -99,6 +99,11 @@ jobs:
     name: publish (mcp-server → cli)
     needs: [repo-guards, build-test]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # 워크플로 concurrency 는 ref 별이라 태그 두 개(v0.20.0, v0.20.1)를 연달아 푸시하면
+    # publish 가 동시에 돈다 — 2026-07-09 packument 409 경합의 재발 경로. publish 만 전역 직렬화.
+    concurrency:
+      group: npm-publish
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write   # GitHub Release + 태그 생성
