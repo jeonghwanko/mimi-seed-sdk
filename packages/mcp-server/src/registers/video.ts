@@ -311,7 +311,6 @@ export function registerVideoTools(server: McpServer) {
     {
       projectDir: absolutePath,
       outputFileName: z.string().default('output.mp4'),
-      ffmpegPath: z.string().optional().describe('FFmpeg 실행 파일 경로. 생략하면 MIMI_SEED_FFMPEG_PATH 또는 PATH 사용'),
       overwriteOutput: z.boolean().default(false).describe('기존 출력 MP4 덮어쓰기 여부'),
       confirm: z.boolean().default(false),
     },
@@ -347,8 +346,8 @@ export function registerVideoTools(server: McpServer) {
     'ffprobe로 완성된 영상의 길이·해상도·코덱·픽셀 포맷을 검사합니다. H.264와 yuv420p가 아니면 이슈로 표시합니다.',
     {
       filePath: absolutePath,
-      ffmpegPath: z.string().optional().describe('FFmpeg 절대경로를 주면 같은 폴더의 ffprobe를 사용'),
     },
-    async ({ filePath, ffmpegPath }) => text(await validateVideo(filePath, ffmpegPath)),
+    // ffmpegPath 는 받지 않는다 — 임의 실행 파일 실행 통로였다. MIMI_SEED_FFPROBE_PATH / PATH 만 쓴다.
+    async ({ filePath }) => text(await validateVideo(filePath)),
   );
 }

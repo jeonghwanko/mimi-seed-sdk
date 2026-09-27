@@ -408,8 +408,13 @@ export OPENAI_API_KEY=<openai-api-key>
 `.jks` 를 만들어줄 수 있지만, Java 의 **`keytool` 이 PATH 에 있어야** 한다(JDK 설치). 없으면 키스토어를 직접
 만들어야 한다.
 
+생성된 키스토어와 비밀번호는 `~/.mimi-seed/keystores/<앱>-<시각>/` 아래 `0600` 파일(`upload.jks`,
+`signing.json`)로 저장되고, 도구는 비밀번호가 아니라 **경로만** 출력한다. **이 폴더를 반드시 백업**하라 —
+잃어버리면 업데이트에 서명할 수 없다.
+
 만든 뒤엔 `jenkins_upload_keystore` 와 `jenkins_create_credential` 로 키스토어와 비밀번호들을 Jenkins 에
-올린다.
+올린다. 생성한 키스토어라면 값을 대화에 복사하지 말고 경로(`keystore_path`, `secret_file` + `secret_field`)를
+넘긴다.
 
 끝까지 수동으로 남는 단계가 둘 있다: Play Console 권한 부여([Play 서비스 계정](#play-service-account) 참고),
 그리고 **완전히 새 앱**이라면 **첫 AAB 를 Play Console 에 손으로 업로드**하는 것. API 는 한 번도 게시된 적 없는

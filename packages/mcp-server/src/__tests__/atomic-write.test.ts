@@ -93,12 +93,14 @@ describe('원자적 쓰기', () => {
 describe('자격증명 writer 가드', () => {
   // facebook/instagram/threads 는 여기 없다 — 셋 다 social/profile-store.ts 를 거친다.
   const CREDENTIAL_WRITERS = [
+    'android/keystore-store.ts',
     'appstore/auth.ts',
     'auth/bigquery-auth.ts',
     'auth/google-auth.ts',
     'auth/playstore-auth.ts',
     'ci/config.ts',
     'googleads/config.ts',
+    'iam/key-files.ts',
     'jenkins/config.ts',
     'social/profile-store.ts',
     'tiktok-business/config.ts',

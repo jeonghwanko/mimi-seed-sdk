@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 /**
  * App Store Connect API — Screenshot upload
@@ -60,7 +61,7 @@ async function req<T = any>(pathOrUrl: string, init: RequestInit = {}): Promise<
 
 export async function listScreenshotSets(localizationId: string) {
   const data = await req(
-    `/appStoreVersionLocalizations/${localizationId}/appScreenshotSets` +
+    `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/appScreenshotSets` +
       `?include=appScreenshots` +
       `&fields[appScreenshotSets]=screenshotDisplayType,appScreenshots` +
       `&fields[appScreenshots]=fileName,fileSize,assetDeliveryState,imageAsset`,
@@ -170,7 +171,7 @@ export async function uploadScreenshot(
   await uploadChunks(absPath, ops);
 
   // commit
-  await req(`/appScreenshots/${screenshotId}`, {
+  await req(`/appScreenshots/${encodePathSegment(screenshotId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -188,11 +189,11 @@ export async function uploadScreenshot(
 // ─── 삭제 ───
 
 export async function deleteScreenshot(screenshotId: string) {
-  await req(`/appScreenshots/${screenshotId}`, { method: 'DELETE' });
+  await req(`/appScreenshots/${encodePathSegment(screenshotId)}`, { method: 'DELETE' });
   return { ok: true, id: screenshotId };
 }
 
 export async function deleteScreenshotSet(setId: string) {
-  await req(`/appScreenshotSets/${setId}`, { method: 'DELETE' });
+  await req(`/appScreenshotSets/${encodePathSegment(setId)}`, { method: 'DELETE' });
   return { ok: true, id: setId };
 }

@@ -8,6 +8,7 @@
 // 하나라도 비면 제출이 막히거나 반려된다. 그래서 상태 조회를 "뭐가 비었는지" 중심으로 만든다.
 
 import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 /** 외부 빌드 상태 → 사람이 읽을 뜻 + 다음 행동. */
 const EXTERNAL_STATE: Record<string, string> = {
@@ -75,13 +76,13 @@ export async function getBetaStatus(args: { buildId: string; appId?: string }): 
   const { buildId, appId } = args;
 
   const detail = await getOrNull<{ id: string; attributes?: Record<string, unknown> }>(
-    `/builds/${buildId}/buildBetaDetail`,
+    `/builds/${encodePathSegment(buildId)}/buildBetaDetail`,
   );
   const submission = await getOrNull<{ id: string; attributes?: Record<string, unknown> }>(
-    `/builds/${buildId}/betaAppReviewSubmission`,
+    `/builds/${encodePathSegment(buildId)}/betaAppReviewSubmission`,
   );
   const locs = await get<{ data?: Array<{ attributes?: { locale?: string; whatsNew?: string } }> }>(
-    `/builds/${buildId}/betaBuildLocalizations`,
+    `/builds/${encodePathSegment(buildId)}/betaBuildLocalizations`,
   );
 
   const externalState = detail?.attributes?.externalBuildState as string | undefined;
@@ -99,7 +100,7 @@ export async function getBetaStatus(args: { buildId: string; appId?: string }): 
 
   if (appId) {
     const rd = await getOrNull<{ id: string; attributes?: Record<string, unknown> }>(
-      `/apps/${appId}/betaAppReviewDetail`,
+      `/apps/${encodePathSegment(appId)}/betaAppReviewDetail`,
     );
     if (rd) {
       const a = rd.attributes ?? {};
@@ -114,7 +115,7 @@ export async function getBetaStatus(args: { buildId: string; appId?: string }): 
     }
 
     const appLocs = await get<{ data?: Array<{ attributes?: { locale?: string; feedbackEmail?: string } }> }>(
-      `/apps/${appId}/betaAppLocalizations`,
+      `/apps/${encodePathSegment(appId)}/betaAppLocalizations`,
     );
     status.testInfoLocales = (appLocs.data ?? []).map((l) => l.attributes?.locale ?? '?');
   }
@@ -130,14 +131,14 @@ export async function updateBetaReviewDetail(args: {
   const attributes = Object.fromEntries(Object.entries(args.fields).filter(([, v]) => v !== undefined));
   if (Object.keys(attributes).length === 0) throw new Error('바꿀 항목이 없다.');
 
-  const rd = await getOrNull<{ id: string }>(`/apps/${args.appId}/betaAppReviewDetail`);
+  const rd = await getOrNull<{ id: string }>(`/apps/${encodePathSegment(args.appId)}/betaAppReviewDetail`);
   if (!rd) throw new Error(`앱 ${args.appId} 의 betaAppReviewDetail 을 찾지 못했다.`);
 
-  await send('PATCH', `/betaAppReviewDetails/${rd.id}`, {
+  await send('PATCH', `/betaAppReviewDetails/${encodePathSegment(rd.id)}`, {
     data: { type: 'betaAppReviewDetails', id: rd.id, attributes },
   });
   const after = await getOrNull<{ id: string; attributes?: Record<string, unknown> }>(
-    `/apps/${args.appId}/betaAppReviewDetail`,
+    `/apps/${encodePathSegment(args.appId)}/betaAppReviewDetail`,
   );
   return { id: rd.id, attributes: after?.attributes ?? {} };
 }
@@ -150,13 +151,13 @@ export async function upsertBetaTestInfo(args: {
 }): Promise<{ id: string; created: boolean; locale: string }> {
   const { appId, locale, fields } = args;
   const existing = await get<{ data?: Array<{ id: string; attributes?: { locale?: string } }> }>(
-    `/apps/${appId}/betaAppLocalizations`,
+    `/apps/${encodePathSegment(appId)}/betaAppLocalizations`,
   );
   const hit = (existing.data ?? []).find((l) => l.attributes?.locale === locale);
   const attributes = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
 
   if (hit) {
-    await send('PATCH', `/betaAppLocalizations/${hit.id}`, {
+    await send('PATCH', `/betaAppLocalizations/${encodePathSegment(hit.id)}`, {
       data: { type: 'betaAppLocalizations', id: hit.id, attributes },
     });
     return { id: hit.id, created: false, locale };
@@ -180,12 +181,12 @@ export async function upsertWhatsToTest(args: {
 }): Promise<{ id: string; created: boolean; locale: string }> {
   const { buildId, locale, whatsNew } = args;
   const existing = await get<{ data?: Array<{ id: string; attributes?: { locale?: string } }> }>(
-    `/builds/${buildId}/betaBuildLocalizations`,
+    `/builds/${encodePathSegment(buildId)}/betaBuildLocalizations`,
   );
   const hit = (existing.data ?? []).find((l) => l.attributes?.locale === locale);
 
   if (hit) {
-    await send('PATCH', `/betaBuildLocalizations/${hit.id}`, {
+    await send('PATCH', `/betaBuildLocalizations/${encodePathSegment(hit.id)}`, {
       data: { type: 'betaBuildLocalizations', id: hit.id, attributes: { whatsNew } },
     });
     return { id: hit.id, created: false, locale };
@@ -226,7 +227,7 @@ export async function setBetaGroupBuild(args: {
   action: 'add' | 'remove';
 }): Promise<{ groupId: string; buildId: string; action: string }> {
   const { groupId, buildId, action } = args;
-  await send(action === 'add' ? 'POST' : 'DELETE', `/betaGroups/${groupId}/relationships/builds`, {
+  await send(action === 'add' ? 'POST' : 'DELETE', `/betaGroups/${encodePathSegment(groupId)}/relationships/builds`, {
     data: [{ type: 'builds', id: buildId }],
   });
   return { groupId, buildId, action };

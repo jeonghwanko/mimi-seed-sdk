@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import type { ReadStream } from 'node:fs';
+import { GOOGLEAPIS_MEDIA_TIMEOUT_MS } from '../lib/google-timeouts.js';
 
 const { channelsList, playlistItemsList, videosList, videosUpdate, thumbnailsSet, reportsQuery } = vi.hoisted(() => ({
   channelsList: vi.fn(), playlistItemsList: vi.fn(), videosList: vi.fn(), videosUpdate: vi.fn(), thumbnailsSet: vi.fn(), reportsQuery: vi.fn(),
@@ -127,7 +128,7 @@ describe('YouTube management writes', () => {
         return { data: { items: [{ high: { url: 'https://example.test/new' } }] } };
       });
       expect((await setYouTubeThumbnail(auth, { ...input, confirm: true })).status).toBe('updated');
-      expect(thumbnailsSet).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'video-1', media: expect.objectContaining({ mimeType: 'image/png' }) }));
+      expect(thumbnailsSet).toHaveBeenCalledWith(expect.objectContaining({ videoId: 'video-1', media: expect.objectContaining({ mimeType: 'image/png' }) }), { timeout: GOOGLEAPIS_MEDIA_TIMEOUT_MS });
       writeFileSync(filePath, Buffer.from('not an image'));
       await expect(setYouTubeThumbnail(auth, input)).rejects.toThrow('contents do not match');
     } finally { rmSync(dir, { recursive: true, force: true }); }

@@ -42,6 +42,12 @@ describe('Play 릴리스 제출', () => {
     const result = await submitRelease(auth, 'com.example.app', 'production', '11');
     expect(result).toMatchObject({ committed: true, changesNotSentForReview: true });
     expect(result.nextAction).toContain('Play Console');
+    // 폴백 커밋도 5분 상한 — POST 라 재시도되지 않으므로 60초에서 끊기면 결과를 알 수 없다.
+    expect(api.commit.mock.calls[1][1]).toEqual({ timeout: 5 * 60_000 });
+  });
+  it('커밋은 기본 60초가 아니라 5분 상한으로 보낸다', async () => {
+    await submitRelease(auth, 'com.example.app', 'production', '11', 'completed');
+    expect(api.commit.mock.calls[0][1]).toEqual({ timeout: 5 * 60_000 });
   });
   it('커밋 실패를 성공으로 반환하지 않는다', async () => {
     api.commit.mockRejectedValue(new Error('Permission denied'));

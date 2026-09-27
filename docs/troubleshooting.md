@@ -143,10 +143,12 @@ The stored grant is unusable for silent refresh. Log in again — the flow alway
 
 ### `CALLBACK_PORT_IN_USE` — port 9876 is taken
 
-The login flow listens on **9876** for Google's redirect. Something else has it — often an abandoned earlier
-login attempt.
+The login flow listens on **9876** for Google's redirect — on **both** `127.0.0.1` and `[::1]`, because
+`localhost` can resolve to either. Something else holds one of them (the error names which) — often an
+abandoned earlier login attempt.
 
-**What you do:** kill that process, or wait a moment and retry.
+**What you do:** find and stop that process (`lsof -nP -i :9876` on macOS/Linux, `netstat -ano | findstr :9876`
+on Windows), or wait a moment and retry.
 
 <a id="callback-timeout"></a>
 

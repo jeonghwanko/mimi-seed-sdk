@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { notDotSegment } from '../lib/resource-id.js';
 
 /**
  * Google Search Console (Webmasters) API v1 래퍼.
@@ -22,18 +23,22 @@ export async function listSites(auth: GscAuth) {
 // ─── 사이트맵 ───
 
 export async function listSitemaps(auth: GscAuth, siteUrl: string, sitemapIndex?: string) {
-  const res = await sc().sitemaps.list({ auth, siteUrl, sitemapIndex });
+  const res = await sc().sitemaps.list({ auth, siteUrl: notDotSegment(siteUrl, 'siteUrl'), sitemapIndex });
   return res.data.sitemap ?? [];
 }
 
 export async function getSitemap(auth: GscAuth, siteUrl: string, feedpath: string) {
-  const res = await sc().sitemaps.get({ auth, siteUrl, feedpath });
+  const res = await sc().sitemaps.get({
+    auth, siteUrl: notDotSegment(siteUrl, 'siteUrl'), feedpath: notDotSegment(feedpath, 'feedpath'),
+  });
   return res.data;
 }
 
 /** 사이트맵 제출 — webmasters(read-write) 스코프 필요. 응답 본문은 없음(204). */
 export async function submitSitemap(auth: GscAuth, siteUrl: string, feedpath: string) {
-  await sc().sitemaps.submit({ auth, siteUrl, feedpath });
+  await sc().sitemaps.submit({
+    auth, siteUrl: notDotSegment(siteUrl, 'siteUrl'), feedpath: notDotSegment(feedpath, 'feedpath'),
+  });
   return { submitted: feedpath, siteUrl };
 }
 
@@ -66,7 +71,7 @@ export interface SearchAnalyticsParams {
 export async function searchAnalytics(auth: GscAuth, siteUrl: string, params: SearchAnalyticsParams) {
   const res = await sc().searchanalytics.query({
     auth,
-    siteUrl,
+    siteUrl: notDotSegment(siteUrl, 'siteUrl'),
     requestBody: {
       startDate: params.startDate,
       endDate: params.endDate,

@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { androidPackageName, iosBundleId } from '../lib/package-name.js';
 import * as firebaseRaw from '../firebase/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
@@ -134,7 +135,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase에 새 Android 앱 등록',
     {
       projectId: z.string().describe('Firebase 프로젝트 ID'),
-      packageName: z.string().describe('Android 패키지명 (예: com.example.myapp)'),
+      packageName: androidPackageName.describe('Android 패키지명 (예: com.example.myapp)'),
       displayName: z.string().describe('앱 표시 이름'),
     },
     async ({ projectId, packageName, displayName }) => {
@@ -188,7 +189,7 @@ export function registerFirebaseTools(server: McpServer) {
     'Firebase에 새 iOS 앱 등록',
     {
       projectId: z.string().describe('Firebase 프로젝트 ID'),
-      bundleId: z.string().describe('iOS Bundle ID (예: com.example.myapp)'),
+      bundleId: iosBundleId.describe('iOS Bundle ID (예: com.example.myapp)'),
       displayName: z.string().describe('앱 표시 이름'),
     },
     async ({ projectId, bundleId, displayName }) => {

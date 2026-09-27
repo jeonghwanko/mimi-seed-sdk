@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { androidPackageName, iosBundleId } from '../lib/package-name.js';
 import * as ga4Raw from '../ga4/tools.js';
 import { requireAuth } from '../helpers.js';
 import { friendlyGoogleError } from '../lib/google-errors.js';
@@ -77,8 +78,8 @@ export function registerGa4Tools(server: McpServer) {
       platform: z.enum(['web', 'android', 'ios']).describe('스트림 플랫폼'),
       displayName: z.string().describe('스트림 표시 이름'),
       defaultUri: z.string().optional().describe('web 전용 — 사이트 URL (예: https://example.com)'),
-      packageName: z.string().optional().describe('android 전용 — 패키지명 (예: com.example.app)'),
-      bundleId: z.string().optional().describe('ios 전용 — Bundle ID (예: com.example.app)'),
+      packageName: androidPackageName.optional().describe('android 전용 — 패키지명 (예: com.example.app)'),
+      bundleId: iosBundleId.optional().describe('ios 전용 — Bundle ID (예: com.example.app)'),
     },
     async ({ propertyId, platform, displayName, defaultUri, packageName, bundleId }) => {
       const auth = await requireAuth(ga4Raw.GA4_SCOPE);

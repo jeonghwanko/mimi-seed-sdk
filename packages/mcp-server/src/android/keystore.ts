@@ -11,6 +11,10 @@ export interface GeneratedKeystore {
   keyPassword: string;
 }
 
+/** keytool `-storepass:env` / `-keypass:env` 로 넘기는 환경변수 이름. */
+export const STOREPASS_ENV = 'MIMI_SEED_KEYTOOL_STOREPASS';
+export const KEYPASS_ENV = 'MIMI_SEED_KEYTOOL_KEYPASS';
+
 function randomPassword(len = 20): string {
   // alphanumeric — avoid quoting/escape issues in shell / Gradle properties
   return randomBytes(32).toString('base64url').replace(/[^a-zA-Z0-9]/g, '').slice(0, len);
@@ -48,12 +52,18 @@ export function generateKeystore(opts: {
         '-keysize', '2048',
         '-validity', '10000',
         '-alias', keyAlias,
-        '-storepass', storePassword,
-        '-keypass', keyPassword,
+        // 비밀번호를 argv 에 실으면 같은 머신의 다른 사용자가 `ps` 로 볼 수 있다.
+        // keytool 의 `:env` 형식은 환경변수 이름만 인자로 받는다.
+        '-storepass:env', STOREPASS_ENV,
+        '-keypass:env', KEYPASS_ENV,
         '-dname', dname,
         '-storetype', 'JKS',
       ],
-      { stdio: 'pipe', encoding: 'buffer' },
+      {
+        stdio: 'pipe',
+        encoding: 'buffer',
+        env: { ...process.env, [STOREPASS_ENV]: storePassword, [KEYPASS_ENV]: keyPassword },
+      },
     );
 
     if (result.status !== 0) {

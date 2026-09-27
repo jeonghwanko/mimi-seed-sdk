@@ -1,6 +1,7 @@
 import type { ThreadsConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 // Threads Graph API. Instagram 과 달리 base 가 하나뿐이라 토큰 prefix 분기가 없다.
 //   graph.threads.net/v1.0
@@ -60,7 +61,7 @@ export interface ThreadsAccount {
 }
 
 export async function getAccount(cfg: ThreadsConfig): Promise<ThreadsAccount> {
-  return thFetch<ThreadsAccount>(cfg.accessToken, `/${cfg.userId}`, {
+  return thFetch<ThreadsAccount>(cfg.accessToken, `/${encodePathSegment(cfg.userId)}`, {
     fields: 'id,username,name,threads_profile_picture_url,threads_biography',
     access_token: cfg.accessToken,
   });
@@ -127,7 +128,7 @@ async function fetchPermalink(cfg: ThreadsConfig, mediaId: string): Promise<stri
   try {
     const meta = await thFetch<{ permalink: string }>(
       cfg.accessToken,
-      `/${mediaId}`,
+      `/${encodePathSegment(mediaId)}`,
       { fields: 'permalink', access_token: cfg.accessToken },
     );
     return meta.permalink;
@@ -144,7 +145,7 @@ async function waitForContainer(cfg: ThreadsConfig, containerId: string): Promis
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const { status, error_message } = await thFetch<{ status: string; error_message?: string }>(
       cfg.accessToken,
-      `/${containerId}`,
+      `/${encodePathSegment(containerId)}`,
       { fields: 'status,error_message', access_token: cfg.accessToken },
     );
     if (status === 'FINISHED') return;

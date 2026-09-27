@@ -3,6 +3,10 @@ import type { OAuth2Client, JWT } from 'google-auth-library';
 import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import { extractHttpStatus } from '../lib/google-errors.js';
+import { collectPagesUpTo } from '../lib/paginate.js';
+import { guardDotSegmentParams } from '../lib/resource-id.js';
+import { GOOGLEAPIS_COMMIT_OPTIONS } from '../lib/google-timeouts.js';
+import { mediaUploadOptions } from '../lib/google-timeouts.js';
 
 export type PlayImageType =
   | 'featureGraphic'
@@ -30,7 +34,8 @@ function mimeTypeFor(filePath: string): string {
  * 여기서는 기존 앱의 메타데이터, 빌드, 출시를 관리.
  */
 
-export const publisher = () => google.androidpublisher('v3');
+// 모든 호출에서 경로 파라미터가 정확히 '.'/'..' 이면 요청 전에 거부 (lib/resource-id.ts).
+export const publisher = () => guardDotSegmentParams(google.androidpublisher('v3'));
 
 export type PlayVitalsMetricSet = 'anrRate' | 'crashRate' | 'errorCount';
 
@@ -90,12 +95,12 @@ async function commitEdit(
   editId: string,
 ): Promise<EditCommitInfo> {
   try {
-    await publisher().edits.commit({ auth, packageName, editId });
+    await publisher().edits.commit({ auth, packageName, editId }, GOOGLEAPIS_COMMIT_OPTIONS);
     return { changesNotSentForReview: false };
   } catch (err) {
     const msg = String((err as { message?: string })?.message ?? err);
     if (!/changesNotSentForReview/i.test(msg)) throw err;
-    await publisher().edits.commit({ auth, packageName, editId, changesNotSentForReview: true });
+    await publisher().edits.commit({ auth, packageName, editId, changesNotSentForReview: true }, GOOGLEAPIS_COMMIT_OPTIONS);
     return { changesNotSentForReview: true };
   }
 }
@@ -450,7 +455,7 @@ export async function uploadImage(
           mimeType: mimeTypeFor(filePath),
           body: fs.createReadStream(filePath),
         },
-      });
+      }, mediaUploadOptions());
       return res.data.image;
     },
     true,
@@ -505,7 +510,7 @@ export async function replaceImages(
             mimeType: mimeTypeFor(filePath),
             body: fs.createReadStream(filePath),
           },
-        });
+        }, mediaUploadOptions());
         uploaded.push(res.data.image ?? {});
       }
       return { imageType, count: uploaded.length, uploaded };
@@ -784,31 +789,45 @@ export async function replyToReview(
 // ─── 인앱 상품 조회 ───
 
 export async function listInAppProducts(auth: OAuth2Client | JWT, packageName: string) {
-  const res = await publisher().monetization.onetimeproducts.list({
-    auth,
-    packageName,
-    pageSize: 100,
+  const { items: products, truncated } = await collectPagesUpTo(async (pageToken) => {
+    const res = await publisher().monetization.onetimeproducts.list({
+      auth,
+      packageName,
+      pageSize: 100,
+      ...(pageToken && { pageToken }),
+    });
+    return { items: res.data.oneTimeProducts ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return (res.data.oneTimeProducts ?? []).map((p: any) => ({
-    productId: p.productId,
-    listings: p.listings,
-    purchaseOptions: p.purchaseOptions,
-  }));
+  return {
+    truncated,
+    items: products.map((p: any) => ({
+      productId: p.productId,
+      listings: p.listings,
+      purchaseOptions: p.purchaseOptions,
+    })),
+  };
 }
 
 // ─── 구독 조회 ───
 
 export async function listSubscriptions(auth: OAuth2Client | JWT, packageName: string) {
-  const res = await publisher().monetization.subscriptions.list({
-    auth,
-    packageName,
-    pageSize: 100,
+  const { items: subscriptions, truncated } = await collectPagesUpTo(async (pageToken) => {
+    const res = await publisher().monetization.subscriptions.list({
+      auth,
+      packageName,
+      pageSize: 100,
+      ...(pageToken && { pageToken }),
+    });
+    return { items: res.data.subscriptions ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return (res.data.subscriptions ?? []).map((s) => ({
-    productId: s.productId,
-    basePlans: s.basePlans,
-    listings: s.listings,
-  }));
+  return {
+    truncated,
+    items: subscriptions.map((s) => ({
+      productId: s.productId,
+      basePlans: s.basePlans,
+      listings: s.listings,
+    })),
+  };
 }
 
 // ─── 인앱 상품 / 구독 현지화 ───

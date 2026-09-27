@@ -70,34 +70,35 @@ export function registerIamTools(server: McpServer) {
   server.tool(
     'iam_create_key',
     [
-      '주어진 서비스 계정의 새 JSON 키를 발급. 응답에 전체 JSON 포함 — 그대로 onesub의 GOOGLE_SERVICE_ACCOUNT_KEY 환경변수로 쓸 수 있음.',
-      '주의: 반환된 JSON은 영구 자격증명이므로 안전하게 보관. 한 서비스 계정당 키 최대 10개 (기존 키 회수 후 발급 필요하면 iam_list_keys로 먼저 확인).',
+      '주어진 서비스 계정의 새 JSON 키를 발급해 ~/.mimi-seed/keys/<계정>-<keyId>.json (0600) 에 저장하고 경로만 반환.',
+      '개인키는 응답에 포함되지 않음 — 다음 단계는 경로를 넘긴다: playstore_register_service_account(serviceAccountJsonPath=…) /',
+      'playstore_verify_service_account(serviceAccountJsonPath=…) / jenkins_upload_playstore_sa(service_account_json_path=…).',
+      '한 서비스 계정당 키 최대 10개 (기존 키 회수 후 발급 필요하면 iam_list_keys로 먼저 확인).',
     ].join(' '),
     {
       serviceAccount: z.string().describe('서비스 계정 이메일'),
     },
     async ({ serviceAccount }) => {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
-      const key = await iam.createServiceAccountKey(auth, serviceAccount);
+      const key = await iam.createServiceAccountKeyFile(auth, serviceAccount);
       return {
         content: [
           {
             type: 'text',
             text: [
-              '✓ 새 키 발급 완료 — 아래 JSON을 안전하게 보관하세요. **다시 볼 수 없습니다.**',
+              '✓ 새 키 발급 완료 — 개인키는 파일로만 저장했습니다 (응답에 싣지 않음).',
               '',
               `**keyId**: \`${key.keyId}\``,
               `**clientEmail**: \`${key.clientEmail}\``,
               `**projectId**: \`${key.projectId}\``,
+              `**저장 경로**: \`${key.path}\` (0600)`,
               '',
-              '## Service account JSON',
-              '```json',
-              key.json,
-              '```',
-              '',
-              'onesub 서버 `GOOGLE_SERVICE_ACCOUNT_KEY` env에 한 줄로 넣을 때:',
+              '다음 단계 — JSON 을 복사하지 말고 경로를 넘기세요:',
+              `- 로컬 등록: \`playstore_register_service_account(packageName, serviceAccountJsonPath="${key.path}")\``,
+              `- Jenkins 업로드: \`jenkins_upload_playstore_sa(package_name, service_account_json_path="${key.path}")\``,
+              '- 서버 env(예: onesub `GOOGLE_SERVICE_ACCOUNT_KEY`)에 넣을 때는 사용자가 터미널에서 직접:',
               '```bash',
-              "cat service-account.json | tr -d '\\n' | jq -c .",
+              `jq -c . "${key.path}"`,
               '```',
             ].join('\n'),
           },

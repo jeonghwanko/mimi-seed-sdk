@@ -2,6 +2,7 @@ import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getGoogl
 import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { androidPackageName } from '../lib/package-name.js';
 import { getMcpOAuthClient } from '../auth/constants.js';
 import { classifyError } from '../auth/errors.js';
 import {
@@ -487,7 +488,7 @@ export function registerAuthTools(server: McpServer) {
       confirm: z.boolean().optional().describe('true일 때만 원격에 비밀값을 전송하고 저장'),
       include_appstore: z.boolean().optional().describe('App Store 키 포함 (기본 true)'),
       include_playstore: z.boolean().optional().describe('Play 서비스 계정 포함 (기본 true)'),
-      package_names: z.array(z.string()).optional().describe('특정 Play 패키지만 동기화'),
+      package_names: z.array(androidPackageName).optional().describe('특정 Play 패키지만 동기화 — playstore_register_service_account 로 등록된 패키지명만 허용'),
     },
     async ({ confirm, include_appstore, include_playstore, package_names }) => ({
       content: [

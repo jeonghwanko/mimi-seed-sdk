@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { androidPackageName } from '../lib/package-name.js';
 import { checkPlayStoreRisks, checkAppStoreRisks, formatRisks } from '../checks/risks.js';
 import { validateAppStoreScreenshots, validatePlayStoreScreenshots, formatValidationResults } from '../checks/screenshots.js';
 import { requireAuth, requirePlayStoreAuth } from '../helpers.js';
@@ -35,7 +36,7 @@ export function registerChecksTools(server: McpServer) {
       '점검 항목: 리스팅 완성도(제목/설명/짧은설명), 스크린샷 수, 아이콘, 빌드 존재 여부, 연락처.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: com.example.myapp)'),
+      packageName: androidPackageName.describe('Android 패키지명 (예: com.example.myapp)'),
       language: z.string().optional().describe('언어 코드 (기본: ko-KR)'),
     },
     async ({ packageName, language }) => {
@@ -112,7 +113,7 @@ export function registerChecksTools(server: McpServer) {
     {
       version: z.string().describe('조회할 버전명 (예: "1.4.9"). App Store versionString + Play release.name 매칭에 사용.'),
       appId: z.string().optional().describe('App Store appId (appstore_list_apps 결과). 없으면 App Store 영역 skip.'),
-      packageName: z.string().optional().describe('Play 패키지명 (예: com.example.app). 없으면 Play 영역 skip.'),
+      packageName: androidPackageName.optional().describe('Play 패키지명 (예: com.example.app). 없으면 Play 영역 skip.'),
     },
     async ({ version, appId, packageName }) => {
       if (!appId && !packageName) {

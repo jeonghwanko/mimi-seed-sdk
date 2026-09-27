@@ -81,7 +81,7 @@ you can paste. Pick the row for the job; batching two rows in one `select:` call
 | TikTok Business video publish | `select:tiktok_business_auth_status,tiktok_business_get_account,tiktok_business_get_video_settings,tiktok_business_plan_video_post,tiktok_business_publish_video,tiktok_business_get_publish_status,tiktok_business_list_publish_audits` |
 | Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_delete_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds,ci_cancel_build` |
-| Android signing / keystore | `select:android_signing_setup,android_generate_keystore,jenkins_upload_keystore,jenkins_upload_playstore_sa` |
+| Android signing / keystore | `select:android_signing_setup,android_generate_keystore,jenkins_upload_keystore,jenkins_create_credential,jenkins_upload_playstore_sa` |
 | Service account end-to-end | `select:iam_list_service_accounts,iam_create_service_account,iam_list_keys,iam_create_key,iam_add_iam_policy_binding,setup_playstore_connection,playstore_register_service_account,playstore_verify_service_account,playstore_list_service_accounts,playstore_delete_service_account` |
 | Story → researched video | `select:video_save_plan,video_plan_from_story,video_research_youtube,video_search_stock_assets,video_synthesize_research,video_download_stock_assets,video_generate_image,video_add_local_asset,video_build_timeline,video_render,video_job_status,video_validate` |
 | YouTube upload / publish | `select:youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,youtube_update_video_metadata,youtube_set_thumbnail,youtube_schedule_video,mimi_seed_auth_start,mimi_seed_auth_status` |
@@ -161,6 +161,8 @@ Credentials live under `~/.mimi-seed/` (legacy `~/.preseed/` is still read):
 | `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads tokens selected by the current project's `.mimi-seed.json` |
 | `tiktok-business.json` | TikTok API for Business app credentials + short-term/refresh tokens (0600) |
 | `tiktok-business/plans`, `tiktok-business/audit`, `tiktok-business/locks` | Expiring post plans, deduplication/audit records, and atomic publish reservations; signed URL query strings are not written to audit records |
+| `keys/<sa>-<keyId>.json` | Service-account keys issued by `iam_create_key` (0600). The tool returns only this path |
+| `keystores/<app>-<timestamp>/upload.jks` + `signing.json` | Upload keystore and its alias/passwords from `android_generate_keystore` (0600). The tool returns only these paths |
 
 Notes that matter in practice:
 
@@ -174,6 +176,9 @@ Notes that matter in practice:
   `YOUTUBE_API_KEY` (reference research), `PEXELS_API_KEY` (licensed stock search), and
   `OPENAI_API_KEY` (generated images). Rendering needs FFmpeg on `PATH` or
   `MIMI_SEED_FFMPEG_PATH`.
+- Google API calls time out after 60 s by default. Media uploads (YouTube video/thumbnail, Play images) get
+  **3 hours** per call; set `MIMI_SEED_UPLOAD_TIMEOUT_MS` (milliseconds, positive integer) in the MCP server's
+  environment to change it for very large files or slow links.
 
 ---
 
@@ -217,6 +222,22 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 2. `appstore_list_builds` → `appstore_attach_latest_build` (only `processingState=VALID`).
 3. `appstore_update_whats_new`, screenshots if needed.
 4. `appstore_check_submission_risks` → `appstore_submit_for_review` — **confirm first**.
+
+### Service account key → Play / Jenkins (secrets stay on disk)
+1. `iam_create_service_account` (or reuse one) → `iam_create_key`. The key is written to
+   `~/.mimi-seed/keys/…json` and **only its path** comes back — the private key never enters the conversation.
+2. Pass that path, not the JSON: `playstore_verify_service_account(serviceAccountJsonPath=…)` →
+   `playstore_register_service_account(packageName, serviceAccountJsonPath=…)`, and/or
+   `jenkins_upload_playstore_sa(package_name, service_account_json_path=…)`.
+   Path params accept files **inside `~/.mimi-seed/keys/` only**. (`setup_playstore_connection` does
+   steps 1–2 in one call without surfacing the key.)
+
+### Android upload keystore → Jenkins
+1. `android_generate_keystore` → returns the paths of `upload.jks` and `signing.json` under
+   `~/.mimi-seed/keystores/`; passwords are not printed.
+2. `jenkins_upload_keystore(keystore_path=…)` and `jenkins_create_credential(secret_file=<signing.json>,
+   secret_field=storePassword|keyAlias|keyPassword)` — path params accept files **inside
+   `~/.mimi-seed/keystores/` only**. Never read `signing.json` into the chat to copy a value.
 
 ### Release notes from git
 `generate_release_notes_from_commits` (pass commit array + locales) → review with user →
@@ -279,6 +300,19 @@ General rules:
   blockers to the user as a checklist first.
 - Pass file paths as **absolute paths**; never load image bytes into the conversation.
 - Prefer `status=draft` while iterating; flip to `completed` only on explicit request.
+- **Never copy a secret through the chat.** Tools that mint secrets (`iam_create_key`,
+  `android_generate_keystore`) write them to `~/.mimi-seed/` and return paths; hand those paths to the
+  consuming tool's `*_path` / `secret_file` parameter instead of reading the file.
+- `bigquery_run_query` is **read-only**: it dry-runs the SQL first and refuses anything that is not a
+  single `SELECT` (DML, DDL, scripts). "Read-only" means no data change, not no side effects: a `SELECT`
+  still bills scanned bytes, and one that calls remote functions, `ML.GENERATE_TEXT`-style model calls, or
+  `EXTERNAL_QUERY` still makes those external calls and costs. If it returns `jobComplete=false` with a
+  `jobId`, the rows are empty because the job did not finish — not because the result is empty.
+- `mimi_seed_remote_sync_credentials` only sends Play service accounts that are **registered**
+  (`playstore_list_service_accounts`), or — when the legacy single `play-service-account.json` exists — any
+  well-formed package name (it falls back to that SA). Other names are **skipped and listed**; App Store and the
+  allowed packages still sync. The preview shows the destination host, and the endpoint must be https (http only
+  for localhost).
 
 ---
 
@@ -302,6 +336,14 @@ General rules:
   against editing the same app with both tools at once. Do all listing writes via the
   API, or finish & publish your Console edits first — never interleave them.
 - **`ci_*` is GitHub/GitLab only.** It does not trigger Jenkins builds.
+- **Identifiers are validated at the schema.** `packageName` / `package_name(s)` must look like an
+  Android application id (`com.example.app`) and `bundleId` like an iOS bundle id; anything else
+  (`../x`, slashes, empty segments) is rejected with `Input validation error` before the tool runs.
+  Google resource ids (project, app, service-account email, AdMob/GA4/billing account) must be a single segment
+  (`A-Z a-z 0-9 - _ . : @`) — `../` is refused before any request. BigQuery ids follow BigQuery's own naming
+  rules (table names may contain Unicode and spaces), and Play ids may not be exactly `.` or `..`.
+- **FFmpeg location is configuration, not a tool argument.** The video/TikTok tools no longer take
+  `ffmpegPath`; set `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` or put FFmpeg on `PATH`.
 - **Reward/cash-out apps** are a sensitive Play category — flag policy implications to
   the user, but it does not block test-track distribution.
 

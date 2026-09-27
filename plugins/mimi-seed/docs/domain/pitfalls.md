@@ -230,3 +230,77 @@ blocks the same account + content hash while its state is pending, published, or
 `allowDuplicate` escape hatch to an unattended path; reconcile the provider status first. Deduplication must
 keep the atomic reservation in addition to the audit lookup, otherwise two workers can both pass a check before
 either has written its audit record.
+
+## 20. Tool arguments are attacker-controlled strings — validate at the schema *and* at the boundary
+
+Every tool argument can come from a prompt-injected page, a README, or a review the model just read. A 2026-09
+review found three places where a plain `z.string()` flowed into something dangerous:
+
+- **File paths.** `packageName` was joined into `play-service-accounts/<packageName>.json`, so `"../tokens"`
+  deleted, overwrote, or remote-synced `~/.mimi-seed/tokens.json`. Package/bundle ids now use the shared schemas
+  in `lib/package-name.ts`, **and** `playstore-auth.ts` re-validates and asserts the resolved path stays inside
+  its directory — the schema is only the first line, internal callers skip it. `security-package-param.test.ts`
+  boots the server and proves every tool with a package-like param rejects `../tokens`; a new tool that uses
+  `z.string()` for one fails it.
+- **URL paths.** Provider clients built `/appScreenshots/${id}`; an id containing `../` retargeted a `DELETE`
+  after URL normalization. Use `encodePathSegment()` (`lib/url-path.ts`) — plain `encodeURIComponent` still lets
+  an id of exactly `..` climb one level. `path-encoding.test.ts` rejects an unencoded `/${…}` segment in the
+  provider directories.
+- **Google resource names.** googleapis puts `name`/`parent`/`resource`/`projectId`/`datasetId`… into the URL
+  with *reserved* expansion (`{+name}`), which does **not** encode `/`: `firebase_delete_android_app` with
+  `appId: "../../B/androidApps/Z"` removed an app in **another project**. Encoding is no fix (Google does not
+  decode `%2F` there), so these ids are *validated* as a single segment with `resourceSegment()` /
+  `resourceName()` (`lib/resource-id.ts`). The same `path-encoding.test.ts` scans the Google domain folders, and
+  `google-resource-id.test.ts` drives the real googleapis client to prove the request never leaves. BigQuery is
+  the exception to the generic segment rule: its "flexible" table names allow Unicode letters/marks/numbers,
+  connector punctuation, dashes and spaces, so `bigquery/ids.ts` mirrors BigQuery's own naming rules (which
+  already exclude `/ \ ? #`, control characters and `.`). Play (androidpublisher) uses *simple* expansion, which
+  does encode `/`; the remaining level-climb — a value of exactly `.` or `..` — is refused for every call by
+  `guardDotSegmentParams()` around the `publisher()` client.
+- **Executables.** `ffmpegPath` was executed as given; a basename check still let `\\host\share\ffmpeg.exe`
+  (UNC/WebDAV — remote binary plus an NTLM hash leak) through. The MCP tools no longer accept it at all (FFmpeg is
+  configured by env var / `PATH`); the internal parameter requires a local absolute path, rejects UNC/device
+  prefixes before touching the filesystem, then checks realpath + regular file + `ffmpeg` name.
+
+Tools that accept a *file path* to a secret (`serviceAccountJsonPath`, `keystore_path`, `secret_file`) restrict it
+to the directory the SDK itself wrote (`lib/path-containment.ts`, realpath-based so a symlink cannot escape) —
+otherwise the tool becomes a way to ship any local file to Jenkins or Google.
+
+## 21. Secrets must not round-trip through the transcript
+
+A tool response is stored in the conversation, client logs, and sometimes synced chat history. `iam_create_key`
+used to return the whole service-account JSON and `android_generate_keystore` printed the store/key passwords and
+the keystore base64 — "delete this chat afterwards" is not a control. Tools that mint a secret now write it
+`0600` under `~/.mimi-seed/` (`keys/`, `keystores/`) and return a **path**; the consuming tool takes that path.
+Keep the string parameters working for back-compat, but document the path form as the preferred one. The same
+rule covers subprocesses: keytool gets passwords via `-storepass:env` / `-keypass:env`, not argv (visible in `ps`).
+Dry runs must not echo file content either (`playstore_upload_data_safety` used to print the first CSV line of
+any absolute path).
+
+## 22. googleapis has no default timeout
+
+`http-timeout.test.ts` guards raw `fetch`, but most Google calls go through googleapis/gaxios, which has **no**
+timeout by default — the same "hung socket blocks a stdio tool forever" defect. `lib/google-timeouts.ts` sets a
+60 s default and bounded retries through `google._options` in `googleapis-lite.ts` (googleapis-common merges
+`context.google._options` into every request made as `google.<api>(…)`). Media uploads pass
+`mediaUploadOptions()` per call — 3 hours by default, overridable with `MIMI_SEED_UPLOAD_TIMEOUT_MS` — so large
+files on slow links are not cut off (main had no cap at all; a 30 min cap was a regression). If you ever call a googleapis constructor
+another way (not as a method of the `google` lite object), the default is lost — `googleapis-timeout.test.ts`
+checks the real request options.
+
+## 23. "Read-only" and "complete" must be enforced, not described
+
+`bigquery_run_query` said "SELECT" in its description and ran DML. It now dry-runs the SQL and refuses any
+`statementType` other than `SELECT`. List wrappers that read one page (IAM service accounts, Firebase
+projects/services, Play products/subscriptions) silently dropped the rest; `lib/paginate.ts` follows
+`nextPageToken` and **fails** rather than truncating at its page cap. A query that outlives its wait window
+returns `jobComplete=false` with a note — an empty row set must never look like an empty result.
+
+## 24. Windows refuses to rename over a file someone is reading
+
+`writeFileAtomic` replaces `tokens.json` and friends with `rename(2)`. On Windows that fails with
+`EPERM`/`EBUSY`/`EACCES` while another process holds a read handle — antivirus, the search indexer, OneDrive, or
+another mimi-seed process reading the token — and the refresh looked like a random auth failure. The rename now
+retries only those codes (`RENAME_RETRY_CODES`) on `RENAME_RETRY_DELAYS_MS` (10/20/40/80/160/320/370 ms, exactly
+1 s) and still deletes the temp file if it gives up. The CLI has its own copy of the atomic writer; **keep both
+constants identical** — `rename-retry-parity.test.ts` compares the literals once both copies exist.

@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { resourceName, resourceSegment } from '../lib/resource-id.js';
 
 /**
  * Cloud Billing + Billing Budgets 래퍼.
@@ -46,8 +47,7 @@ function quotaHeaders(quotaProjectId?: string) {
 
 /** `01F1F4-FD007B-2973A7` / `billingAccounts/01F1F4-...` 어느 형태로 줘도 정규화. */
 export function normalizeBillingAccount(input: string): string {
-  const trimmed = input.trim();
-  return trimmed.startsWith('billingAccounts/') ? trimmed : `billingAccounts/${trimmed}`;
+  return resourceName(input, 'billingAccounts', '결제 계정 ID');
 }
 
 export type BillingInfo = {
@@ -67,7 +67,7 @@ export async function getBillingInfo(
   // 소비할 수 없는 대상은 별도의 Blaze quota 프로젝트를 지정할 수 있다.
   const res = await billing().projects.getBillingInfo({
     auth,
-    name: `projects/${projectId}`,
+    name: `projects/${resourceSegment(projectId)}`,
     ...quotaHeaders(quotaProjectId),
   });
   const enabled = res.data.billingEnabled ?? false;
@@ -160,7 +160,7 @@ export async function createBudget(auth: OAuth2Client, input: CreateBudgetInput)
       budgetFilter: {
         // projects 는 `projects/<번호 또는 ID>` 형태를 받는다.
         ...(input.projectIds?.length
-          ? { projects: input.projectIds.map((p) => (p.startsWith('projects/') ? p : `projects/${p}`)) }
+          ? { projects: input.projectIds.map((p) => resourceName(p, 'projects', 'GCP 프로젝트 ID')) }
           : {}),
       },
       amount: {

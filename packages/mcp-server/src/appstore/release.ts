@@ -8,6 +8,7 @@
 // Play 는 userFraction/halted 로 3번이 되는데 iOS 만 비어 있었다.
 
 import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 export type AppleReleaseType = 'MANUAL' | 'AFTER_APPROVAL' | 'SCHEDULED';
 export type PhasedReleaseState = 'INACTIVE' | 'ACTIVE' | 'PAUSED' | 'COMPLETE';
@@ -61,7 +62,7 @@ async function send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?:
 
 export async function getVersionSummary(versionId: string): Promise<VersionReleaseSummary> {
   const data = await get<{ data?: { id: string; attributes?: Record<string, string> } }>(
-    `/appStoreVersions/${versionId}`,
+    `/appStoreVersions/${encodePathSegment(versionId)}`,
     { 'fields[appStoreVersions]': 'versionString,appStoreState,releaseType,earliestReleaseDate' },
   );
   const a = data.data?.attributes ?? {};
@@ -78,7 +79,7 @@ export async function getVersionSummary(versionId: string): Promise<VersionRelea
 async function getPhasedRelease(versionId: string): Promise<PhasedReleaseSummary | null> {
   try {
     const data = await get<{ data?: { id: string; attributes?: Record<string, unknown> } | null }>(
-      `/appStoreVersions/${versionId}/appStoreVersionPhasedRelease`,
+      `/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionPhasedRelease`,
     );
     if (!data.data) return null;
     const a = (data.data.attributes ?? {});
@@ -159,7 +160,7 @@ export async function updateReleaseType(args: {
   if (releaseType === 'SCHEDULED') attributes.earliestReleaseDate = earliestReleaseDate;
   else if (earliestReleaseDate === undefined) attributes.earliestReleaseDate = null;
 
-  await send('PATCH', `/appStoreVersions/${versionId}`, {
+  await send('PATCH', `/appStoreVersions/${encodePathSegment(versionId)}`, {
     data: { type: 'appStoreVersions', id: versionId, attributes },
   });
 
@@ -209,7 +210,7 @@ export async function setPhasedRelease(args: {
   }
 
   if (action === 'disable') {
-    await send('DELETE', `/appStoreVersionPhasedReleases/${current.id}`);
+    await send('DELETE', `/appStoreVersionPhasedReleases/${encodePathSegment(current.id)}`);
     return { action, phased: null, version };
   }
 
@@ -220,7 +221,7 @@ export async function setPhasedRelease(args: {
 }
 
 async function patchState(phasedReleaseId: string, state: PhasedReleaseState): Promise<void> {
-  await send('PATCH', `/appStoreVersionPhasedReleases/${phasedReleaseId}`, {
+  await send('PATCH', `/appStoreVersionPhasedReleases/${encodePathSegment(phasedReleaseId)}`, {
     data: {
       type: 'appStoreVersionPhasedReleases',
       id: phasedReleaseId,

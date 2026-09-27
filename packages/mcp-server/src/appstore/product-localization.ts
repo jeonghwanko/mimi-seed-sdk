@@ -1,5 +1,6 @@
 import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow } from './http.js';
 import type { AppStoreProductType } from './http.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 /**
  * IAP/구독 상품의 App Store 현지화(표시 이름·설명).
@@ -38,7 +39,7 @@ function localizationResource(productType: AppStoreProductType) {
       relationship: 'subscription',
       relatedType: 'subscriptions',
       listBase: V1_BASE,
-      listPath: (internalId: string) => `/subscriptions/${internalId}/subscriptionLocalizations`,
+      listPath: (internalId: string) => `/subscriptions/${encodePathSegment(internalId)}/subscriptionLocalizations`,
     };
   }
   return {
@@ -48,7 +49,7 @@ function localizationResource(productType: AppStoreProductType) {
     relatedType: 'inAppPurchases',
     // 일회성 IAP 는 v2 리소스라 목록만 v2 에서 읽는다. 쓰기는 v1 이다.
     listBase: V2_BASE,
-    listPath: (internalId: string) => `/inAppPurchases/${internalId}/inAppPurchaseLocalizations`,
+    listPath: (internalId: string) => `/inAppPurchases/${encodePathSegment(internalId)}/inAppPurchaseLocalizations`,
   };
 }
 
@@ -121,7 +122,7 @@ export async function upsertProductLocalization(args: {
     if (description !== undefined) attributes.description = description;
     const updated = await apiRequest<{ data?: LocalizationPayload }>(
       V1_BASE,
-      `${resource.path}/${existing.id}`,
+      `${resource.path}/${encodePathSegment(existing.id)}`,
       authHeaders,
       {
         method: 'PATCH',
@@ -174,6 +175,6 @@ export async function deleteProductLocalization(args: {
   const { localizationId, productType } = args;
   const resource = localizationResource(productType);
   const authHeaders = await authHeadersOrThrow();
-  await apiRequest(V1_BASE, `${resource.path}/${localizationId}`, authHeaders, { method: 'DELETE' });
+  await apiRequest(V1_BASE, `${resource.path}/${encodePathSegment(localizationId)}`, authHeaders, { method: 'DELETE' });
   return { localizationId };
 }

@@ -8,6 +8,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  realpathSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -139,11 +140,54 @@ export function buildFfmpegPlan(
   return { args, outputPath, subtitlePath };
 }
 
+const FFMPEG_BASENAME = /^ffmpeg(\.exe)?$/i;
+
+/**
+ * 도구 인자로 받은 ffmpegPath 검증 (2026-09 보안 점검).
+ *
+ * 예전엔 ffmpegPath 를 그대로 execFile 했다 — `-version` 을 붙여 실행하므로 모델이나
+ * 프롬프트 주입이 넘긴 임의 실행 파일(`/bin/sh`, 받은 스크립트 등)이 그대로 돌았다.
+ * 이제 MCP 도구 스키마에서는 ffmpegPath 를 아예 받지 않는다 (환경변수 / PATH 만). 이 검사는
+ * 내부 호출부(startRender / validateVideo 의 인자)를 위한 두 번째 방어선이다.
+ *
+ * 파일 이름만 보면 부족하다: Windows 에서 `\\host\share\ffmpeg.exe`, `//host/share/ffmpeg.exe`,
+ * `\\host@SSL\DavWWWRoot\ffmpeg.exe` 는 원격 바이너리 실행이 되고, 경로에 접근하는 순간
+ * NTLM 해시가 원격 호스트로 나간다. 그래서 **파일시스템에 손대기 전에** UNC·장치 경로를
+ * 거부하고, 로컬 절대경로만 realpath 로 풀어 실제 파일인지·이름이 ffmpeg 인지 확인한다.
+ * 환경변수(MIMI_SEED_FFMPEG_PATH 등)는 사용자가 직접 설정한 값이라 여기서 막지 않는다.
+ */
+export function assertFfmpegPath(ffmpegPath: string): string {
+  const reject = (why: string): never => {
+    throw new Error(`ffmpegPath 는 로컬 ffmpeg 실행 파일(ffmpeg 또는 ffmpeg.exe)의 절대경로여야 합니다 (${why}): ${ffmpegPath}`);
+  };
+  // 구분자는 양쪽 다 본다 — POSIX 의 path.basename 은 백슬래시를 구분자로 보지 않는다.
+  const baseName = (p: string) => p.split(/[\\/]/).pop() ?? '';
+  if (/^[\\/]{2}/.test(ffmpegPath)) reject('UNC·네트워크·장치 경로는 허용하지 않음');
+  if (ffmpegPath.includes('\0')) reject('NUL 문자');
+  const localAbsolute = process.platform === 'win32'
+    ? /^[A-Za-z]:[\\/]/.test(ffmpegPath)
+    : ffmpegPath.startsWith('/');
+  if (!localAbsolute) reject('로컬 절대경로가 아님');
+  if (!FFMPEG_BASENAME.test(baseName(ffmpegPath))) reject('파일 이름이 ffmpeg 가 아님');
+
+  let real: string;
+  try {
+    real = realpathSync(ffmpegPath);
+  } catch {
+    return reject('파일이 없음');
+  }
+  // 심볼릭 링크·정션이 네트워크 경로나 다른 실행 파일로 이어지는 경우도 막는다.
+  if (/^[\\/]{2}/.test(real)) reject('링크가 네트워크 경로를 가리킴');
+  if (!FFMPEG_BASENAME.test(baseName(real))) reject('링크 대상 이름이 ffmpeg 가 아님');
+  if (!statSync(real).isFile()) reject('일반 파일이 아님');
+  return real;
+}
+
 async function verifyExecutable(command: string): Promise<void> {
   try {
     await execFileAsync(command, ['-version'], { timeout: 10_000, windowsHide: true });
   } catch (error) {
-    throw new Error(`FFmpeg를 실행할 수 없습니다: ${command}\nFFmpeg를 설치하거나 ffmpegPath를 지정하세요.`, { cause: error });
+    throw new Error(`FFmpeg를 실행할 수 없습니다: ${command}\nFFmpeg를 설치해 PATH 에 두거나 MIMI_SEED_FFMPEG_PATH (ffprobe 는 MIMI_SEED_FFPROBE_PATH) 환경변수에 절대경로를 지정하세요. / Install FFmpeg on PATH or set MIMI_SEED_FFMPEG_PATH (and MIMI_SEED_FFPROBE_PATH) to its absolute path.`, { cause: error });
   }
 }
 
@@ -191,7 +235,8 @@ export async function startRender(input: StartRenderInput): Promise<VideoRenderJ
   const projectDir = path.resolve(input.projectDir);
   loadProject(projectDir);
   loadTimeline(projectDir);
-  const ffmpeg = input.ffmpegPath ?? process.env.MIMI_SEED_FFMPEG_PATH ?? 'ffmpeg';
+  const ffmpeg = (input.ffmpegPath !== undefined ? assertFfmpegPath(input.ffmpegPath) : undefined)
+    ?? process.env.MIMI_SEED_FFMPEG_PATH ?? 'ffmpeg';
   await verifyExecutable(ffmpeg);
 
   const safeOutputName = (input.outputFileName ?? 'output.mp4')
@@ -296,11 +341,14 @@ export function getRenderJob(projectDir: string, jobId: string): VideoRenderJob 
 }
 
 function ffprobeFor(ffmpegPath?: string): string {
+  // 환경변수보다 먼저 검사한다 — 잘못된 인자가 환경변수 때문에 조용히 무시되면 안 된다.
+  const checked = ffmpegPath !== undefined ? assertFfmpegPath(ffmpegPath) : undefined;
   const configured = process.env.MIMI_SEED_FFPROBE_PATH;
   if (configured) return configured;
-  if (ffmpegPath && path.isAbsolute(ffmpegPath)) {
-    const ext = path.extname(ffmpegPath);
-    return path.join(path.dirname(ffmpegPath), `ffprobe${ext}`);
+  if (checked) {
+    // 검증된(realpath 로 푼) 로컬 ffmpeg 옆의 ffprobe — 원격/링크 우회 경로를 다시 쓰지 않는다.
+    const ext = path.extname(checked);
+    return path.join(path.dirname(checked), `ffprobe${ext}`);
   }
   return 'ffprobe';
 }

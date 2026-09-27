@@ -24,6 +24,7 @@
  * - 다른 파일에서 `from 'googleapis'` 값 import 는 금지 — 반드시 이 모듈을 거친다.
  */
 import { createRequire } from 'node:module';
+import { GOOGLEAPIS_DEFAULT_OPTIONS } from './google-timeouts.js';
 
 const require = createRequire(import.meta.url);
 
@@ -51,6 +52,11 @@ export type { youtubeAnalytics_v2 } from 'googleapis/build/src/apis/youtubeAnaly
  * 각 프로퍼티는 getter 라서, 실제로 그 API 를 쓰는 도구가 호출될 때까지 아무것도 로드하지 않는다.
  */
 export const google = {
+  /**
+   * googleapis-common 이 읽는 전역 옵션 — 타임아웃·재시도 기본값 (google-timeouts.ts 참고).
+   * `google.<api>(...)` 호출의 context.google 이 이 객체이므로 이름을 바꾸면 적용이 끊긴다.
+   */
+  _options: GOOGLEAPIS_DEFAULT_OPTIONS,
   // auth 는 AuthPlus 인스턴스. 어느 서브패스든 같은 걸 내보내지만,
   // 기존 동작과 동일하게 firebase 서브패스에서 가져온다.
   get auth(): typeof import('googleapis/build/src/apis/firebase/index.js').auth {

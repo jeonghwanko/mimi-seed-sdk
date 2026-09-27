@@ -27,11 +27,56 @@ export interface AtomicWriteOptions {
   mode?: number;
   /** 상위 디렉터리를 만들 때 쓸 권한. 이미 있으면 건드리지 않는다. */
   dirMode?: number;
+  /** 테스트용 주입 — 기본은 fs.renameSync. */
+  rename?: (from: string, to: string) => void;
+  /** 테스트용 주입 — 기본은 Atomics.wait 기반 동기 대기. */
+  sleep?: (ms: number) => void;
+}
+
+/**
+ * Windows 에서 rename 이 일시적으로 실패할 때의 대기 간격(ms). 합계 정확히 1000ms.
+ *
+ * 왜: Windows 는 다른 프로세스가 대상 파일을 열고 있으면(백신·검색 인덱서·OneDrive, 또는
+ * tokens.json 을 읽는 중인 다른 mimi-seed 프로세스) rename 을 EPERM/EBUSY/EACCES 로 거절한다.
+ * 그 핸들은 보통 수십~수백 ms 안에 닫히므로, 짧게 물러났다 다시 시도하면 대부분 통과한다.
+ *
+ * ⚠️ CLI 쪽 원자적 쓰기 사본(packages/cli)과 **이름·값이 완전히 같아야 한다**
+ * (RENAME_RETRY_CODES / RENAME_RETRY_DELAYS_MS / renameWithRetry). 한쪽을 바꾸면 다른 쪽도 맞출 것 —
+ * 두 패키지는 서로 import 하지 않으므로 이 상수가 유일한 동기화 지점이다.
+ */
+export const RENAME_RETRY_DELAYS_MS = [10, 20, 40, 80, 160, 320, 370] as const;
+/** 재시도할 오류 코드. ENOENT 등은 잠금이 아니라 진짜 실패이므로 즉시 던진다. */
+export const RENAME_RETRY_CODES: ReadonlySet<string> = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+function sleepSync(ms: number): void {
+  // 동기 API(writeFileAtomic)를 유지하려고 이벤트 루프를 막는 대기를 쓴다 — 최악 1000ms.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export type RenameRetryDeps = Pick<AtomicWriteOptions, 'rename' | 'sleep'>;
+
+/**
+ * 일시적 잠금 오류(EPERM/EBUSY/EACCES)에만 정해진 간격으로 재시도하고, 그 외 오류는 즉시 던진다.
+ * 마지막 시도가 실패하면 그 오류를 그대로 던진다 — temp 정리는 호출부(writeFileAtomic)의 catch 가 한다.
+ */
+export function renameWithRetry(from: string, to: string, deps: RenameRetryDeps = {}): void {
+  const rename = deps.rename ?? renameSync;
+  const sleep = deps.sleep ?? sleepSync;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? '';
+      if (!RENAME_RETRY_CODES.has(code) || attempt >= RENAME_RETRY_DELAYS_MS.length) throw error;
+      sleep(RENAME_RETRY_DELAYS_MS[attempt]);
+    }
+  }
 }
 
 export function writeFileAtomic(
   filePath: string,
-  contents: string,
+  contents: string | Uint8Array,
   options: AtomicWriteOptions = {},
 ): void {
   mkdirSync(path.dirname(filePath), { recursive: true, ...(options.dirMode !== undefined && { mode: options.dirMode }) });
@@ -46,8 +91,9 @@ export function writeFileAtomic(
     });
     // writeFileSync 의 mode 는 umask 로 깎이고 파일이 이미 있으면 무시된다 — 명시적으로 못 박는다.
     if (options.mode !== undefined && process.platform !== 'win32') chmodSync(tempPath, options.mode);
-    renameSync(tempPath, filePath);
+    renameWithRetry(tempPath, filePath, options);
   } catch (error) {
+    // 재시도까지 다 실패해도 temp 는 지운다 — 대상 파일은 옛 내용 그대로 남는다.
     try {
       unlinkSync(tempPath);
     } catch {
@@ -70,7 +116,7 @@ export function writeCredentialJson(filePath: string, value: unknown): void {
   writeJsonAtomic(filePath, value, { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
 }
 
-/** 이미 직렬화된 자격증명(서비스 계정 키 원본 등) 저장. */
-export function writeCredentialFile(filePath: string, contents: string): void {
+/** 이미 직렬화된 자격증명(서비스 계정 키 원본, keystore 바이너리 등) 저장. */
+export function writeCredentialFile(filePath: string, contents: string | Uint8Array): void {
   writeFileAtomic(filePath, contents, { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
 }

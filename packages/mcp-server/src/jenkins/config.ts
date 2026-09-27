@@ -42,6 +42,42 @@ function stripUndefined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
+function isPrivateIPv4(host: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 10
+    || a === 127
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 169 && b === 254)
+    || (a === 100 && b >= 64 && b <= 127); // CGNAT — Tailscale 등 사설 오버레이망
+}
+
+function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '::1') return true;
+  if (isPrivateIPv4(host)) return true;
+  if (/^(fc|fd)[0-9a-f]{2}:/.test(host) || /^fe80:/.test(host)) return true; // IPv6 ULA / link-local
+  if (!host.includes('.')) return true; // 단일 라벨 호스트명 — 사내 DNS
+  return /\.(local|lan|internal|intranet|home\.arpa|ts\.net)$/.test(host);
+}
+
+/**
+ * 평문 http 로 공인 호스트에 붙으면 API 토큰이 네트워크에 그대로 실린다.
+ * 사내망(LAN/Tailscale) 컨트롤러는 http 가 흔하고 정당하므로 **막지 않고** 경고만 한다.
+ */
+export function jenkinsUrlWarning(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' || isPrivateHost(parsed.hostname)) return null;
+  return `⚠️ ${parsed.host} 는 사설망 주소가 아닌데 http 입니다 — API 토큰이 암호화 없이 전송됩니다. 가능하면 https URL 을 쓰세요.`;
+}
+
 export function requireJenkinsConfig(): JenkinsConfig {
   const cfg = loadJenkinsConfig();
   if (!cfg) {

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { androidPackageName } from '../lib/package-name.js';
 import * as playstoreRaw from '../playstore/tools.js';
 import { friendlyPlayError } from '../playstore/errors.js';
 import {
@@ -17,6 +18,7 @@ import { requirePlayStoreAuth, requireServiceAccountJson, requireAuth } from '..
 import { PLAY_DEVELOPER_REPORTING_SCOPE } from '../auth/scopes.js';
 import * as playFinancials from '../playstore/financials.js';
 import * as iam from '../iam/tools.js';
+import { resolveServiceAccountJsonInput } from '../iam/key-files.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
@@ -46,11 +48,21 @@ const playstore: typeof playstoreRaw = new Proxy(playstoreRaw, {
   },
 });
 
+/** 전부 읽었으면 예전처럼 배열 그대로, 페이지 상한에 걸렸으면 잘렸다는 사실을 앞에 붙인다. */
+function truncatedList<T>(result: { items: T[]; truncated: boolean }) {
+  if (!result.truncated) return result.items;
+  return {
+    truncated: true,
+    note: `목록이 너무 길어 앞쪽 ${result.items.length}개만 가져왔습니다 — 이 목록에 없다고 "존재하지 않는다"고 판단하지 마세요.`,
+    items: result.items,
+  };
+}
+
 export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_get_app',
     'Google Play 앱 세부정보 조회 — 개발자 연락처(이메일·전화·웹사이트)·기본 언어 등 (edits.details). 수정은 playstore_update_details.',
-    { packageName: z.string().describe('패키지명 (예: com.findthem.app)') },
+    { packageName: androidPackageName.describe('패키지명 (예: com.example.app)') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const details = await playstore.getAppDetails(auth, packageName);
@@ -62,7 +74,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_update_details',
     'Google Play 앱 세부정보(개발자 연락처·기본 언어) 수정 — 연락처 이메일/전화/웹사이트, 기본 언어. 스토어 리스팅(제목·설명)과는 별개이며, 넘긴 필드만 부분 갱신(edits.details.patch). ⚠️ Console 에서 같은 앱을 편집·미게시 중이면 충돌할 수 있음.',
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       contactEmail: z.string().optional().describe('개발자 연락처 이메일 (스토어 등록정보에 공개)'),
       contactPhone: z.string().optional().describe('개발자 연락처 전화번호 (선택)'),
       contactWebsite: z.string().optional().describe('개발자 웹사이트 URL (예: https://example.com)'),
@@ -81,7 +93,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_get_listing',
     'Google Play 스토어 리스팅 조회 (제목, 설명문 등)',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       language: z.string().default('ko-KR').describe('언어 코드 (기본: ko-KR)'),
     },
     async ({ packageName, language }) => {
@@ -95,7 +107,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_update_listing',
     'Google Play 스토어 리스팅 수정 또는 새 언어 생성. 기존 언어는 넘긴 필드만 부분 갱신(edits.listings.patch)해 생략한 필드와 프로모 영상(video)을 보존한다. 새 언어는 title·shortDescription·fullDescription을 모두 전달해야 하며 전체 리스팅을 생성한다. ⚠️ Play API 편집과 Console 동시 편집은 충돌 — Console에서 같은 리스팅을 편집·미게시 중이면 그 변경이 덮어써질 수 있음.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       language: z.string().describe('언어 코드 (예: ko-KR, en-US)'),
       title: z.string().optional().describe('앱 제목 (30자 이내)'),
       shortDescription: z.string().optional().describe('짧은 설명 (80자 이내)'),
@@ -113,7 +125,7 @@ export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_list_tracks',
     'Google Play 릴리스 트랙 현황 (프로덕션/베타/알파/내부)',
-    { packageName: z.string().describe('패키지명') },
+    { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const tracks = await playstore.listTracks(auth, packageName);
@@ -125,7 +137,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_get_statistics',
     'Google Play Developer Reporting API / Android vitals 통계 조회. ANR/Crash/Error count를 기간·버전·기기·국가 등으로 분해해 확인',
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       metricSet: z.enum(['anrRate', 'crashRate', 'errorCount'])
         .default('anrRate')
         .describe('조회할 Vitals metric set. 기본: anrRate'),
@@ -175,7 +187,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_list_images',
     'Google Play 리스팅 이미지 목록 조회 (imageType별)',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       language: z.string().describe('언어 코드 (예: ko-KR)'),
       imageType: z.enum(['featureGraphic', 'icon', 'phoneScreenshots', 'promoGraphic', 'sevenInchScreenshots', 'tenInchScreenshots', 'tvBanner', 'tvScreenshots', 'wearScreenshots']).describe('이미지 타입'),
     },
@@ -190,7 +202,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_upload_image',
     'Google Play 리스팅 이미지 단일 업로드 (기존 이미지 유지). featureGraphic 1024x500 / icon 512x512 / phoneScreenshots 320~3840px. ⚠️ 이 작업은 edit을 commit하므로 Play Console의 미게시(저장 전) 리스팅 변경을 덮어쓸 수 있음 — Console에서 같은 앱을 편집 중이면 먼저 저장·게시하거나 텍스트도 update_listing으로 처리하세요.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       language: z.string().describe('언어 코드'),
       imageType: z.enum(['featureGraphic', 'icon', 'phoneScreenshots', 'promoGraphic', 'sevenInchScreenshots', 'tenInchScreenshots', 'tvBanner', 'tvScreenshots', 'wearScreenshots']),
       filePath: z.string().describe('업로드할 이미지 절대 경로'),
@@ -206,7 +218,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_delete_all_images',
     'Google Play 리스팅 특정 imageType의 이미지 전체 삭제 (교체 전 정리). ⚠️ commit이 Play Console의 미게시 리스팅 변경을 덮어쓸 수 있음.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       language: z.string().describe('언어 코드'),
       imageType: z.enum(['featureGraphic', 'icon', 'phoneScreenshots', 'promoGraphic', 'sevenInchScreenshots', 'tenInchScreenshots', 'tvBanner', 'tvScreenshots', 'wearScreenshots']),
     },
@@ -221,7 +233,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_replace_images',
     'Google Play 리스팅 이미지 일괄 교체 (한 edit 세션: deleteall → 순서대로 upload → commit). 스크린샷 5~8장 한 번에 교체 시 효율적. 업로드 순서가 스토어 노출 순서. ⚠️ commit이 Play Console의 미게시 리스팅 변경을 덮어쓸 수 있음.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       language: z.string().describe('언어 코드'),
       imageType: z.enum(['featureGraphic', 'icon', 'phoneScreenshots', 'promoGraphic', 'sevenInchScreenshots', 'tenInchScreenshots', 'tvBanner', 'tvScreenshots', 'wearScreenshots']),
       filePaths: z.array(z.string()).describe('업로드할 이미지 절대 경로 배열 (순서 = 노출 순서)'),
@@ -237,7 +249,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_update_release_notes',
     "Google Play 트랙 릴리스의 '최근 변경사항'(releaseNotes) 업데이트. versionCode로 타겟 릴리스 지정. 다른 언어/release는 보존. 이미 라이브(completed) 상태도 noteOnly 편집 가능",
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('릴리스 트랙'),
       versionCode: z.string().describe('대상 versionCode (문자열, 예: "40")'),
       language: z.string().describe('언어 코드 (예: ko-KR, en-US)'),
@@ -269,7 +281,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '동일 노트를 여러 트랙에 즉시 반영하려면 syncTracks 옵션 사용 — 지정 트랙들에 대해 순차로 같은 노트 적용.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('1차 적용 트랙'),
       language: z.string().describe('언어 코드 (예: ko-KR)'),
       text: z.string().describe('릴리스 노트 본문 (500자 이내)'),
@@ -320,7 +332,7 @@ export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_list_reviews',
     'Google Play 리뷰 목록 조회',
-    { packageName: z.string().describe('패키지명') },
+    { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const reviews = await playstore.listReviews(auth, packageName);
@@ -332,7 +344,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_reply_review',
     'Google Play 리뷰에 답변',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       reviewId: z.string().describe('리뷰 ID'),
       replyText: z.string().describe('답변 내용'),
     },
@@ -346,22 +358,20 @@ export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_list_inapp_products',
     'Google Play 인앱 상품 목록',
-    { packageName: z.string().describe('패키지명') },
+    { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
-      const products = await playstore.listInAppProducts(auth, packageName);
-      return jsonResult(products);
+      return jsonResult(truncatedList(await playstore.listInAppProducts(auth, packageName)));
     },
   );
 
   server.tool(
     'playstore_list_subscriptions',
     'Google Play 구독 상품 목록',
-    { packageName: z.string().describe('패키지명') },
+    { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
-      const subs = await playstore.listSubscriptions(auth, packageName);
-      return jsonResult(subs);
+      return jsonResult(truncatedList(await playstore.listSubscriptions(auth, packageName)));
     },
   );
 
@@ -372,7 +382,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'Play Console 권한: "Manage store presence" 필요. 생성 후 Console에서 활성화 필요.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       productId: z
         .string()
         .describe('상품 ID (소문자/숫자/언더스코어/점, 예: premium_unlock). 한 번 정하면 변경 불가.'),
@@ -432,7 +442,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '이미 같은 productId가 있으면 생성 실패 (Play API 특성상 upsert 미지원).',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       productId: z
         .string()
         .describe('구독 상품 ID (소문자/숫자/언더스코어/점, 예: premium_monthly)'),
@@ -477,15 +487,20 @@ export function registerPlaystoreTools(server: McpServer) {
       '(이 도구는 서비스 계정 자격증명만 사용 — 로그인한 사용자의 OAuth 토큰은 건드리지 않음)',
     ].join(' '),
     {
+      serviceAccountJsonPath: z
+        .string()
+        .optional()
+        .describe('권장 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 개인키가 대화에 남지 않음'),
       serviceAccountJson: z
         .string()
-        .describe('서비스 계정 JSON 전체 내용 (문자열). Google Cloud Console → IAM & Admin → Service Accounts → Keys → Create new key → JSON으로 다운받은 파일의 내용'),
-      packageName: z
-        .string()
-        .describe('검증할 Android 앱의 패키지명 (예: com.findthem.app)'),
+        .optional()
+        .describe('서비스 계정 JSON 전체 내용 (문자열). serviceAccountJsonPath 와 둘 중 하나. 문자열로 넘기면 개인키가 대화 기록에 남는다'),
+      packageName: androidPackageName
+        .describe('검증할 Android 앱의 패키지명 (예: com.example.app)'),
     },
-    async ({ serviceAccountJson, packageName }) => {
-      const result = await playstore.verifyServiceAccountJson(serviceAccountJson, packageName);
+    async ({ serviceAccountJson, serviceAccountJsonPath, packageName }) => {
+      const json = resolveServiceAccountJsonInput({ json: serviceAccountJson, jsonPath: serviceAccountJsonPath });
+      const result = await playstore.verifyServiceAccountJson(json, packageName);
       if (result.ok) {
         return {
           content: [
@@ -546,11 +561,13 @@ export function registerPlaystoreTools(server: McpServer) {
       '먼저 playstore_verify_service_account 로 권한 확인 후 등록을 권장.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: com.example.app)'),
-      serviceAccountJson: z.string().describe('서비스 계정 JSON 전체 내용 (문자열)'),
+      packageName: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
+      serviceAccountJsonPath: z.string().optional().describe('권장 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 개인키가 대화에 남지 않음'),
+      serviceAccountJson: z.string().optional().describe('서비스 계정 JSON 전체 내용 (문자열). serviceAccountJsonPath 와 둘 중 하나'),
       skipVerify: z.boolean().optional().describe('true면 사전 검증 건너뜀 (기본 false: 등록 전 verifyServiceAccountJson 실행)'),
     },
-    async ({ packageName, serviceAccountJson, skipVerify }) => {
+    async ({ packageName, serviceAccountJson: jsonInput, serviceAccountJsonPath, skipVerify }) => {
+      const serviceAccountJson = resolveServiceAccountJsonInput({ json: jsonInput, jsonPath: serviceAccountJsonPath });
       if (!skipVerify) {
         const verify = await playstore.verifyServiceAccountJson(serviceAccountJson, packageName);
         if (!verify.ok) {
@@ -613,7 +630,7 @@ export function registerPlaystoreTools(server: McpServer) {
       if (info.perPackage.length === 0) {
         lines.push('**Per-package**: 없음');
         lines.push('');
-        lines.push('등록 방법: `playstore_register_service_account(packageName, serviceAccountJson)`');
+        lines.push('등록 방법: `playstore_register_service_account(packageName, serviceAccountJsonPath)`');
       } else {
         lines.push(`**Per-package** (${info.perPackage.length}개):`);
         for (const item of info.perPackage) {
@@ -628,7 +645,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_delete_service_account',
     '등록된 패키지별 서비스 계정 삭제. default(레거시) SA는 영향 없음.',
     {
-      packageName: z.string().describe('삭제할 패키지명'),
+      packageName: androidPackageName.describe('삭제할 패키지명'),
     },
     async ({ packageName }) => {
       const deleted = deleteServiceAccountJsonForPackage(packageName);
@@ -653,7 +670,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'playstore_submit_release 등)를 호출하세요. submit_release(status=completed)는 비가역이므로 반드시 명시 동의 필요.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
       versionCode: z.string().optional().describe('확인할 versionCode. 미지정 시 트랙 최신 release 검사'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).optional().describe('대상 트랙 (기본: production)'),
       language: z.string().optional().describe('점검할 리스팅 언어 (기본: ko-KR)'),
@@ -681,7 +698,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'playstore_check_submission_risks로 사전 점검 권장.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       track: z.enum(['production', 'beta', 'alpha', 'internal']).describe('릴리스 트랙'),
       versionCode: z.string().describe('대상 versionCode (문자열)'),
       status: z.enum(['draft', 'inProgress', 'completed', 'halted']).optional().describe('새 status (기본: completed)'),
@@ -706,7 +723,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'source 트랙 노트가 버전 문자열뿐인 플레이스홀더면 warnings 로 알린다 — 그대로 승격하면 대상 트랙의 다국어 노트가 덮인다.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       fromTrack: z.enum(['production', 'beta', 'alpha', 'internal']).describe('출처 트랙 (예: internal)'),
       toTrack: z.enum(['production', 'beta', 'alpha', 'internal']).describe('대상 트랙 (예: production)'),
       versionCode: z.string().describe('promote할 versionCode (문자열)'),
@@ -737,7 +754,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_list_products',
     'Google Play의 모든 IAP 상품(구독 + 일회성) 통합 조회. productId / name / status / type / price / currency 반환.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
     },
     async ({ packageName }) => {
       const json = requireServiceAccountJson(packageName);
@@ -752,7 +769,7 @@ export function registerPlaystoreTools(server: McpServer) {
     '리스팅이 없는 언어의 사용자에게는 앱 기본 언어 리스팅이 대신 보인다 — 번역을 넣어야 그 나라 결제창이 그 나라 말로 나온다. ' +
     '구독은 playstore_update_subscription_listing 을 쓴다.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       productId: z.string().describe('상품 ID (playstore_list_inapp_products 결과)'),
       listings: z.array(z.object({
         languageCode: z.string().describe('언어 코드 (예: ko-KR, en-US, ja-JP, zh-TW)'),
@@ -782,7 +799,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'Google Play 구독 상품의 언어별 제목·설명·혜택(benefits)을 갱신. 넘긴 로케일만 덮어쓰고 나머지 언어는 보존한다. ' +
     'benefits 는 스토어 구매창에 불릿으로 나오는 항목이라 한 줄에 몰아넣지 말고 항목을 나눠 넣는다 (최대 4개).',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       productId: z.string().describe('구독 상품 ID (playstore_list_subscriptions 결과)'),
       listings: z.array(z.object({
         languageCode: z.string().describe('언어 코드 (예: ko-KR, en-US, ja-JP, zh-TW)'),
@@ -815,7 +832,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'DRAFT 인 상품은 가격이 앱에 안 내려오므로 만들고 활성화하지 않으면 상점 화면이 비어 보인다. ' +
     'purchaseOptionId 는 playstore_list_inapp_products 의 purchaseOptions[].purchaseOptionId (보통 "base").',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       productId: z.string().describe('상품 ID'),
       purchaseOptionId: z.string().default('base').describe('구매 옵션 ID (기본 "base")'),
       action: z.enum(['activate', 'deactivate']).describe('활성화 / 비활성화'),
@@ -837,7 +854,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'Google Play IAP 상품의 표시 이름 변경 (현재 name 필드만 수정 가능). productId / type / 가격은 변경 불가. ' +
     '언어별 제목·설명은 playstore_update_product_listing / playstore_update_subscription_listing 을 쓴다.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       productId: z.string().describe('상품 ID'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
       name: z.string().describe('새 표시 이름'),
@@ -858,7 +875,7 @@ export function registerPlaystoreTools(server: McpServer) {
     'playstore_delete_product',
     '⚠️ 비가역. Google Play IAP 상품 삭제. 활성 baseplan + 구독자 있는 구독은 삭제 불가.',
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       productId: z.string().describe('상품 ID'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
     },
@@ -883,7 +900,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '이미 같은 accountId의 SA가 존재하면 키만 새로 발급하고 등록합니다.',
     ].join(' '),
     {
-      packageName: z.string().describe('Android 패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
       projectId: z.string().describe('Google Cloud 프로젝트 ID (예: my-project-123). Firebase 콘솔 → 프로젝트 설정에서 확인.'),
       accountId: z
         .string()
@@ -949,7 +966,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '콘텐츠 등급·타깃 연령 설문은 여전히 API 가 없다 (Console 전용).',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명 (예: com.example.app)'),
+      packageName: androidPackageName.describe('패키지명 (예: com.example.app)'),
       csvPath: z
         .string()
         .optional()
@@ -972,7 +989,8 @@ export function registerPlaystoreTools(server: McpServer) {
               '🛑 데이터 안전 업로드 dry-run — 아직 보내지 않았다.',
               `  패키지: ${packageName}`,
               `  CSV: ${lines.length}줄 / ${Buffer.byteLength(content, 'utf8')} bytes`,
-              `  첫 줄: ${lines[0]?.slice(0, 120) ?? '(비어 있음)'}`,
+              // 원문은 싣지 않는다 — CSV 가 사설 데이터 처리 내역을 담고 있고, 대화 기록에 남는다.
+              `  열 수(첫 줄 기준): ${lines[0] ? lines[0].split(',').length : 0}`,
               '',
               '⚠️ 업로드하면 기존 데이터 안전 제출을 통째로 덮어쓴다.',
               '실행하려면 confirm: true 로 다시 호출.',
@@ -1006,7 +1024,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '상태(DRAFT/ACTIVE/CANCELED)·생성·배포·취소 시각과 대상을 보여준다.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       versionCode: z.string().optional().describe('특정 버전 코드로 필터'),
     },
     async ({ packageName, versionCode }) => {
@@ -1042,7 +1060,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '이건 롤백이 아니라 "고친 버전으로 강제 업데이트"다 — 먼저 정상 빌드를 올려 둬야 의미가 있다.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       allUsers: z.boolean().optional().describe('전체 사용자 대상 (버전 지정과 함께 쓸 수 없음)'),
       versionCodes: z.array(z.string()).optional().describe('대상 버전 코드 목록'),
       versionRangeStart: z.string().optional().describe('대상 버전 범위 시작'),
@@ -1100,7 +1118,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '배포 전 playstore_list_recovery_actions 로 대상 범위를 반드시 재확인할 것. confirm 필요.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       appRecoveryId: z.string().describe('복구 액션 ID'),
       confirm: z.boolean().optional().describe('true 명시 시에만 배포'),
     },
@@ -1122,7 +1140,7 @@ export function registerPlaystoreTools(server: McpServer) {
       'confirm 필요.',
     ].join(' '),
     {
-      packageName: z.string().describe('패키지명'),
+      packageName: androidPackageName.describe('패키지명'),
       appRecoveryId: z.string().describe('복구 액션 ID'),
       confirm: z.boolean().optional().describe('true 명시 시에만 취소'),
     },
@@ -1151,7 +1169,7 @@ export function registerPlaystoreTools(server: McpServer) {
       '재무 리포트는 월 마감 후에 올라오므로 이번 달 파일이 없는 것은 정상이다.',
     ].join(' '),
     {
-      packageName: z.string().optional().describe('패키지명 — 패키지별 서비스 계정·버킷 설정을 고를 때 사용'),
+      packageName: androidPackageName.optional().describe('패키지명 — 패키지별 서비스 계정·버킷 설정을 고를 때 사용'),
       bucket: z.string().optional().describe('버킷 이름 또는 gs:// URI. 생략 시 저장된 설정 사용'),
       reportType: z
         .enum(['earnings', 'sales'])
@@ -1175,7 +1193,7 @@ export function registerPlaystoreTools(server: McpServer) {
     ].join(' '),
     {
       yearMonth: z.string().describe('YYYYMM 또는 YYYY-MM'),
-      packageName: z.string().optional().describe('패키지명 — 패키지별 서비스 계정·버킷 설정을 고를 때 사용'),
+      packageName: androidPackageName.optional().describe('패키지명 — 패키지별 서비스 계정·버킷 설정을 고를 때 사용'),
       bucket: z.string().optional().describe('버킷 이름 또는 gs:// URI. 생략 시 저장된 설정 사용'),
       reportType: z
         .enum(['earnings', 'sales'])

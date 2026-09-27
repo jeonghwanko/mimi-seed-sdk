@@ -107,9 +107,9 @@
 | Domain (file) | Tools (W = write, D = destructive) |
 |---|---|
 | AdMob (`admob.ts`) | `admob_list_accounts` · `admob_list_apps` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` · **W** `admob_create_app` · **W** `admob_create_ad_unit` |
-| IAM (`iam.ts`) | `iam_list_service_accounts` · `iam_list_keys` · **W** `iam_create_service_account` · **W** `iam_create_key` (sensitive — issues a private key) · **W** `iam_add_iam_policy_binding` |
+| IAM (`iam.ts`) | `iam_list_service_accounts` · `iam_list_keys` · **W** `iam_create_service_account` · **W** `iam_create_key` (sensitive — issues a private key, saved to `~/.mimi-seed/keys/`; only the path is returned) · **W** `iam_add_iam_policy_binding` |
 | GCP Billing (`billing.ts`) | `gcp_get_billing_info` · `gcp_list_billing_projects` (공용 결제계정 판별) · `gcp_list_budgets` · **W** `gcp_create_budget` (알림만 — 지출 차단 아님) |
-| BigQuery (`bigquery.ts`) | `bigquery_run_query` (can incur cost) · `bigquery_list_datasets` · `bigquery_list_tables` · `bigquery_get_table_schema` · `bigquery_auth_status` |
+| BigQuery (`bigquery.ts`) | `bigquery_run_query` (read-only — single `SELECT` enforced by a dry run; can incur cost) · `bigquery_list_datasets` · `bigquery_list_tables` · `bigquery_get_table_schema` · `bigquery_auth_status` |
 | GA4 (`ga4.ts`) | `ga4_list_account_summaries` · `ga4_list_properties` · `ga4_list_data_streams` · `ga4_run_report` · `ga4_plan_bigquery_link` · **W** `ga4_create_property` · **W** `ga4_create_data_stream` · **W** `ga4_create_bigquery_link` (confirm 필요, 기존 링크는 no-op) |
 | Search Console (`gsc.ts`) | `gsc_list_sites` · `gsc_list_sitemaps` · `gsc_get_sitemap` · `gsc_inspect_url` · `gsc_search_analytics` · **W** `gsc_submit_sitemap` |
 | Google Ads (`googleads.ts`) | `googleads_list_campaigns` · `googleads_get_campaign_report` · `googleads_get_uac_report` · `googleads_list_accessible_customers` · `googleads_config_status` · **W** `googleads_save_config` (local config) |

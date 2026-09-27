@@ -416,8 +416,13 @@ Rendering requires `ffmpeg` and `ffprobe` on `PATH`. If they live elsewhere, set
 create a `.jks` for you, but only if Java's **`keytool` is on your PATH** (install a JDK). Otherwise, generate
 the keystore by hand.
 
+A generated keystore and its passwords are saved as `0600` files under `~/.mimi-seed/keystores/<app>-<time>/`
+(`upload.jks`, `signing.json`); the tool prints only their paths, never the passwords. **Back that folder up** —
+losing it means losing the ability to sign updates.
+
 Once you have it, upload it and its passwords into Jenkins with `jenkins_upload_keystore` and
-`jenkins_create_credential`.
+`jenkins_create_credential`. For a generated keystore, pass the paths (`keystore_path`, and
+`secret_file` + `secret_field`) instead of copying values into the chat.
 
 Two steps stay irreducibly manual: the Play Console permission grant (see
 [Play service account](#play-service-account)), and — for a brand-new app — uploading the **first** AAB to Play

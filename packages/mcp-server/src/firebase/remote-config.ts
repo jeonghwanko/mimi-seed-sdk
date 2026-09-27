@@ -1,6 +1,8 @@
 import type { OAuth2Client } from 'google-auth-library';
 import { google } from '../lib/googleapis-lite.js';
 import { getBillingInfo } from '../billing/tools.js';
+import { resourceSegment } from '../lib/resource-id.js';
+import { encodePathSegment } from '../lib/url-path.js';
 
 const FREE_DAILY_FETCHES = 100_000;
 const FIRST_PAID_TIER_END = 10_000_000;
@@ -148,7 +150,7 @@ async function fetchDailyUsage(
     const monitoring = google.monitoring('v3');
     const response = await monitoring.projects.timeSeries.list({
       auth,
-      name: `projects/${projectId}`,
+      name: `projects/${resourceSegment(projectId)}`,
       filter: 'metric.type="firebaseremoteconfig.googleapis.com/project/fetch_request_count"',
       'interval.startTime': start.toISOString(),
       'interval.endTime': end.toISOString(),
@@ -190,8 +192,8 @@ export async function getRemoteConfigOverview(
   // resource project is the safest default; Spark projects can point this at a
   // separate Blaze project with the relevant APIs enabled.
   const quotaProjectId = input.quotaProjectId ?? input.projectId;
-  const encodedProject = encodeURIComponent(input.projectId);
-  const encodedNamespace = encodeURIComponent(namespace);
+  const encodedProject = encodePathSegment(input.projectId);
+  const encodedNamespace = encodePathSegment(namespace);
   const parent = `${REMOTE_CONFIG_BASE}/projects/${encodedProject}/namespaces/${encodedNamespace}`;
 
   // The rollout beta endpoint rejects project IDs even though the REST path uses
