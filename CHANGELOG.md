@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-27
+
 ### Upgrading from 0.19.x
 
 Agent prompts, skills, and scripts written against 0.19.x need these changes (details under `Tool changes`):
