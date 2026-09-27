@@ -81,7 +81,7 @@ ASC는 버전을 바로 제출하지 않고 **심사 제출 묶음(reviewSubmiss
 빌드 단위로 갈려 있어 하나라도 비면 막힌다. 순서는 항상 상태 조회부터다.
 
 ```
-ToolSearch(query="select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers")
+ToolSearch(query="select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers,appstore_declare_encryption")
 ```
 
 1. `appstore_beta_status`(buildId + appId) — 외부 상태와 빈 필드를 확인한다.

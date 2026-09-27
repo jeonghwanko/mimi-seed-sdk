@@ -85,7 +85,7 @@ cd packages/mcp-server && npm install && npm run build
 
 런타임이 `dist/`이므로 **클론 수정 후 `npm run build`는 필수**다. 빼먹으면 옛 코드가 조용히 돈다. `dist/index.js`가 `src/**`보다 오래됐는지 확인하면 잡힌다.
 
-새 버전 **퍼블리시는 이 스킬의 범위가 아니다.** `main` 푸시 시 `ci.yml`이 package.json 버전이 올라가 있으면 npm publish를 자동 수행한다.
+새 버전 **퍼블리시는 이 스킬의 범위가 아니다.** 릴리스는 태그 전용이다 — `main` 푸시는 테스트만 돌고, 루트 버전과 같은 `v<버전>` 태그를 `main` 위 커밋에 푸시해야 `ci.yml`이 mcp-server → cli 순으로 npm publish 한다. 그래서 npm `latest`는 **그 태그 publish가 끝난 뒤에야** 새 버전을 가리킨다 — 머지 직후 `npm view @yoonion/mimi-seed-mcp version`이 아직 옛 버전이면 태그 publish를 기다리거나 확인한다.
 
 ## 3. 적용 — 새 서버를 실제로 띄운다
 
@@ -96,7 +96,7 @@ cd packages/mcp-server && npm install && npm run build
 
 ## 4. 검증 (건너뛰지 말 것)
 
-1. `mimi_seed_status` 호출 — 서버가 응답하는지, 서비스 연결이 그대로인지.
+1. `mimi_seed_status` 호출(`ToolSearch(query="select:mimi_seed_status")` 로 먼저 로드) — 서버가 응답하는지, 서비스 연결이 그대로인지.
 2. 최신 버전에서 새로 추가된 도구가 실제로 잡히는지 확인한다: `ToolSearch(query="select:<신규 도구명>")`. 스키마가 로드되면 새 서버가 돌고 있는 것이다. 안 잡히면 옛 프로세스이거나 npx 캐시다 → 2C·3번을 다시 한다.
 3. 전역 설치라면 `npm ls -g --depth=0`의 버전이 `npm view @yoonion/mimi-seed-mcp version`과 같은지 대조한다.
 4. 도구가 끝내 안 잡히면 **프로세스를 직접 본다** — 원칙("돌고 있는 버전")의 실행법이다.

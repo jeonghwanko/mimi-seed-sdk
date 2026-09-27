@@ -11,7 +11,9 @@ Produce an intentional video rather than a slideshow of generated cards. Preserv
 
 1. Check scope and connection.
    - Separate create/render from upload/publication; treat public or unlisted upload as irreversible.
-   - Load required deferred schemas in one batch, then call `mimi_seed_status`.
+   - Load required deferred schemas in one batch, then call `mimi_seed_status`. Production:
+     `ToolSearch(query="select:mimi_seed_status,video_save_plan,video_plan_from_story,video_add_local_asset,video_search_stock_assets,video_download_stock_assets,video_generate_image,video_synthesize_research,video_build_timeline,video_render,video_job_status,video_validate")`
+     — YouTube, additionally: `ToolSearch(query="select:youtube_get_content_insights,youtube_upload_video,youtube_get_video_status,youtube_update_video_privacy,mimi_seed_auth_start")`.
    - For production, load `video_save_plan` (or `video_plan_from_story`), research/asset tools actually needed, `video_build_timeline`, `video_render`, `video_job_status`, and `video_validate`.
    - For YouTube, also load `youtube_get_content_insights` when planning from channel performance, plus `youtube_upload_video`, `youtube_get_video_status`, `youtube_update_video_privacy`, and `mimi_seed_auth_start`.
 
