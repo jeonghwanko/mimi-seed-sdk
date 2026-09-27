@@ -2,19 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
+import type { JenkinsConfig } from '#core/jenkins.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const JENKINS_CONFIG_PATH = path.join(CONFIG_DIR, 'jenkins.json');
 
-export interface JenkinsConfig {
-  url: string;        // Jenkins 기본 URL (e.g. https://jenkins.example.com)
-  username: string;   // Jenkins 사용자 ID
-  token: string;      // Jenkins API Token
-  // 아래 둘은 CLI(mimi-seed deploy)가 빌드를 트리거할 잡 이름. MCP 도구는 쓰지 않지만
-  // 설정 파일은 하나(jenkins.json)뿐이므로 여기서 함께 들고 간다.
-  jobAndroid?: string;
-  jobIos?: string;
-}
+// jenkins.json 의 모양은 이 파일을 읽는 CLI 와 공유한다 (#core/jenkins.js).
+export type { JenkinsConfig } from '#core/jenkins.js';
 
 export function loadJenkinsConfig(): JenkinsConfig | null {
   try {
