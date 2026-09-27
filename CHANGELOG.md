@@ -27,22 +27,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Releases publish only on a `v*` tag push (the tag must equal the root version and point at a commit on `main`);
-  pushing to `main` runs tests only. Both packages publish from one job, mcp-server first, so a failed
-  mcp-server publish no longer leaves a lone cli release.
+  pushing to `main` runs tests only. Both packages publish from one job that runs only after every test leg
+  passes, mcp-server first, so a failed mcp-server publish stops the cli publish instead of leaving a lone cli
+  release.
 - `mimi-seed doctor` exits with code 1 when any ✗ check fails, so it can gate CI. The Mimi Seed cloud token is
   only treated as required when remote use is configured (`MIMI_SEED_TOKEN`, `MIMI_SEED_WEB_BASE`, or a
-  `.mimi-seed-link.json` in the project); local-stdio-only setups now get a warning instead of a failure.
+  `.mimi-seed-link.json` in the project); local-stdio-only setups now get a warning instead of a failure. App
+  Store Connect only fails when the project has an iOS app, so Android-only projects pass.
 - When a setup binary is not on `PATH`, the CLI runs `npx @yoonion/mimi-seed-mcp@<its own version>` instead of
-  whatever npm `latest` is, so a CLI is never paired with a mismatched MCP server.
-- Publishing is one ordered CI job that runs only after every test leg passes: mcp-server first, then cli. A
-  failed mcp-server publish now stops the cli publish instead of leaving a half-released version.
+  whatever npm `latest` is, so a CLI is never paired with a mismatched MCP server. A CLI run from a source
+  checkout (whose version may not be on npm yet) uses `@latest` and says so.
+- Remote MCP calls from the CLI wait up to 2 minutes, and store writes (`apply_release_notes`,
+  `playstore_reply_review`, `sync_apps`) up to 5 minutes, so a slow write is not cut off with an unknown outcome.
 - The CLI's command help moved to `packages/cli/src/help.ts` and `mimi-seed init` to `packages/cli/src/init.ts`
   (internal refactor; no behavior change).
 
 ### Fixed
 
 - Every outbound HTTP call in the CLI (GitHub, GitLab, Jenkins, the web console, telemetry) now has a timeout, so
-  a hung server can no longer freeze `deploy`, `doctor`, or `init` indefinitely.
+  a hung server can no longer freeze `deploy`, `doctor`, or `init` indefinitely. A timeout while a response is
+  still streaming shows the same readable message instead of a raw `AbortError`.
 - Jenkins queue and build-status lookups failed for a controller URL saved with a trailing slash; all Jenkins
   calls now normalize the URL the same way.
 - The CLI's credential files (`ci.json`, `config.json`, `telemetry.json`, and the legacy Jenkins migration) are
@@ -71,18 +75,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.19.17] - 2026-09-21
 
-### Fixed
-
-- Partial store setup is reported as partial instead of looking complete; provider dependencies upgraded. (#30)
-- CI publishes to npm with trusted publishing (OIDC) instead of a long-lived token. (#31)
-
-### Tool changes
-
-- None.
-
-## [0.19.16] - 2026-09-20
-
-Released without a git tag.
+0.19.15 and 0.19.16 were set in `package.json` but never published to npm, so their changes first shipped here.
 
 ### Added
 
@@ -90,25 +83,16 @@ Released without a git tag.
 
 ### Fixed
 
+- Partial store setup is reported as partial instead of looking complete; provider dependencies upgraded. (#30)
+- CI publishes to npm with trusted publishing (OIDC) instead of a long-lived token. (#31)
 - Existing store review submissions are reused, and completed releases are replaced rather than duplicated.
+- Google Ads cost reports restored; malformed report responses are rejected and diagnostics preserved.
 
 ### Tool changes
 
 - Added: `youtube_get_channel`, `youtube_list_videos`, `youtube_get_analytics_report`,
   `youtube_update_video_metadata`, `youtube_set_thumbnail`, `youtube_schedule_video`, `youtube_list_comments`,
   `youtube_list_comment_replies`, `youtube_reply_comment`, `youtube_get_content_insights`.
-
-## [0.19.15] - 2026-09-16
-
-Released without a git tag.
-
-### Fixed
-
-- Google Ads cost reports restored; malformed report responses are rejected and diagnostics preserved.
-
-### Tool changes
-
-- None.
 
 ## [0.19.14] - 2026-09-10
 
