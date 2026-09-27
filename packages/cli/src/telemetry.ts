@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHmac, randomUUID } from "node:crypto";
 import { catalog } from "./i18n.js";
+import { fetchWithTimeout } from "./lib/http.js";
 import type { ReleaseDoctorReport } from "./checks/release-doctor.js";
 import { version } from "../package.json";
 
@@ -92,10 +93,10 @@ export function usageRun(command: "check" | "setup", projectPath: string):
         codes: [...new Set(report?.findings.map(f => f.code).filter(c => /^[a-zA-Z0-9_]{1,80}$/.test(c)) ?? [])].slice(0, 60),
       };
       try {
-        await fetch(ENDPOINT, {
+        await fetchWithTimeout(ENDPOINT, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload), signal: AbortSignal.timeout(800), redirect: "error",
-        });
+          body: JSON.stringify(payload), redirect: "error",
+        }, 800);
       } catch { /* Measurement must never change the command's result or delay it indefinitely. */ }
     };
   } catch { return async () => {}; }

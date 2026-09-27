@@ -9,7 +9,8 @@ import { detectHints } from "./detect.js";
 import { getDeployRun, updateDeployRun, type DeployRunFailureReason } from "./deploy-runs.js";
 import { loadJenkinsConfig, migrateLegacyJenkins, type JenkinsConfig } from "./jenkins-config.js";
 import { runMcpBin } from "./mcp-bin.js";
-import { resolveProjectJenkins, jenkinsJobPath, jenkinsBuildParameters } from "./jenkins-project.js";
+import { resolveProjectJenkins, jenkinsBase, jenkinsJobPath, jenkinsBuildParameters } from "./jenkins-project.js";
+import { fetchWithTimeout, HTTP_STREAM_TIMEOUT_MS } from "./lib/http.js";
 import {
   loadCiProviderConfig,
   saveCiProviderConfig,
@@ -254,9 +255,9 @@ function jenkinsHeaders(cfg: JenkinsConfig) {
 
 async function triggerBuild(cfg: JenkinsConfig, jobName: string, params: Record<string, string>): Promise<string> {
   const qs = new URLSearchParams(params).toString();
-  const url = `${cfg.url.replace(/\/+$/, "")}/${jenkinsJobPath(jobName)}/buildWithParameters`;
-  const res = await fetch(url, {
-    method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
+  const url = `${jenkinsBase(cfg.url)}/${jenkinsJobPath(jobName)}/buildWithParameters`;
+  const res = await fetchWithTimeout(url, {
+    method: "POST", redirect: "error",
     headers: { ...jenkinsHeaders(cfg), "Content-Type": "application/x-www-form-urlencoded" }, body: qs,
   });
   if (!res.ok) {
@@ -269,8 +270,8 @@ async function triggerBuild(cfg: JenkinsConfig, jobName: string, params: Record<
 }
 
 async function getQueueBuildNumber(cfg: JenkinsConfig, queueItemId: string): Promise<number | null> {
-  const url = `${cfg.url}/queue/item/${queueItemId}/api/json`;
-  const res = await fetch(url, { headers: jenkinsHeaders(cfg), redirect: "error", signal: AbortSignal.timeout(30_000) });
+  const url = `${jenkinsBase(cfg.url)}/queue/item/${queueItemId}/api/json`;
+  const res = await fetchWithTimeout(url, { headers: jenkinsHeaders(cfg), redirect: "error" });
   if (!res.ok) return null;
   const data = await res.json() as { executable?: { number?: number } };
   return data.executable?.number ?? null;
@@ -281,8 +282,8 @@ async function getBuildStatus(cfg: JenkinsConfig, jobName: string, buildNumber: 
   result: string | null;
   duration: number;
 }> {
-  const url = `${cfg.url}/${jenkinsJobPath(jobName)}/${buildNumber}/api/json`;
-  const res = await fetch(url, { headers: jenkinsHeaders(cfg), redirect: "error", signal: AbortSignal.timeout(30_000) });
+  const url = `${jenkinsBase(cfg.url)}/${jenkinsJobPath(jobName)}/${buildNumber}/api/json`;
+  const res = await fetchWithTimeout(url, { headers: jenkinsHeaders(cfg), redirect: "error" });
   if (!res.ok) throw new Error(M().buildStatusFailed(res.status));
   const data = await res.json() as { building?: boolean; result?: string | null; duration?: number };
   return {
@@ -327,14 +328,15 @@ async function pollBuildComplete(
 // ── SSE 스트림 파싱 ──
 
 async function streamDeploy(webBase: string, token: string, appId: string, body: object, linkAlreadyPrinted = false): Promise<void> {
-  const res = await fetch(`${webBase}/api/deploy`, {
+  const res = await fetchWithTimeout(`${webBase}/api/deploy`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
-  });
+    // SSE: signal 은 스트림을 다 읽을 때까지 유효하다 — 기본 30초면 파이프라인 도중에 잘린다.
+  }, HTTP_STREAM_TIMEOUT_MS);
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");

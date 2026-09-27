@@ -57,6 +57,17 @@ function validateJob(job: unknown): string {
   return job;
 }
 
+/**
+ * Jenkins 컨트롤러 base URL — 끝 슬래시를 **모든** 호출에서 같은 규칙으로 뗀다.
+ *
+ * 예전엔 트리거만 끝 슬래시를 떼고 큐·빌드 상태 조회는 `cfg.url` 을 그대로 붙여서,
+ * `https://jenkins.example.com/` 로 저장한 사용자는 빌드는 시작되는데 `//queue/...` 조회가
+ * 실패하는 상태가 됐다 (Jenkins 는 `//` 경로를 404 로 돌려준다).
+ */
+export function jenkinsBase(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
 export function jenkinsJobPath(job: string): string {
   return validateJob(job).split("/").map(part => `job/${encodeURIComponent(part)}`).join("/");
 }

@@ -3,6 +3,7 @@
 // 서버가 sessionIdGenerator: undefined (stateless) 모드이므로 initialize 불필요.
 
 import { catalog } from "./i18n.js";
+import { fetchWithTimeout } from "./lib/http.js";
 
 const M = catalog(
   { noSseData: "MCP SSE 응답에 data 없음" },
@@ -30,7 +31,7 @@ export async function mcpCall(
   name: string,
   args: Record<string, unknown>,
 ): Promise<McpCallResult> {
-  const res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
