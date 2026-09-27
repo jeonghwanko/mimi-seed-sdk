@@ -7,7 +7,7 @@ before any real release.
 
 | Check | What it covers |
 |---|---|
-| `mimi-seed check --local` | No-login repository evidence: app identifiers, Android Target API, and Google Play Billing policy |
+| `mimi-seed check --local` | No-login repository evidence: app identifiers, Android Target API, Google Play Billing policy, pinned Xcode vs. the App Store SDK minimum, and legacy FCM API usage |
 | Connected `mimi-seed check` | Remote app registration, integration, copy, screenshots, checklist, and blockers |
 | Local MCP risk checks | Actual Play/App Store version, build, metadata, and submission conditions |
 

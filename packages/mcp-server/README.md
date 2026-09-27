@@ -8,7 +8,8 @@ Start with a lightweight, account-free check in your app repository (Node 20+):
 npx -y mimi-seed@latest check --local
 ```
 
-Review identifiers, Target API and detectable Play Billing evidence first. Then connect stores for
+Review identifiers, Target API, detectable Play Billing, pinned Xcode / App Store SDK minimum and legacy FCM API
+evidence first. Then connect stores for
 metadata, screenshot and uploaded-build checks. Local results do not guarantee store approval.
 
 [Install the plugin for Claude Code or Codex](https://github.com/jeonghwanko/mimi-seed-sdk#30-second-setup)
@@ -40,7 +41,8 @@ MCP 패키지를 이미 설치했다면 같은 검사기의 직접 bin도 사용
 npx -y @yoonion/mimi-seed-mcp mimi-seed-release-doctor .
 ```
 
-앱 식별자, 일반 Android 앱의 Target API 제출 기준, Google Play Billing 지원 마감을 확인하며 정책
+앱 식별자, 일반 Android 앱의 Target API 제출 기준, Google Play Billing 지원 마감, 고정된 Xcode의 App Store
+SDK 최소 요건, 레거시 FCM API 사용을 확인하며 정책
 결과에는 근거 파일과 공식 출처를 함께 표시합니다. 모노레포에서는 `.` 대신 앱 경로를 전달하세요.
 CI에서는 `--fail-on-blocker`, 기계가 읽는 결과에는 `--json`을 추가할 수 있습니다. Wear OS, Android
 TV, Android Automotive OS, Android XR은 Target API 예외가 있으므로 카테고리 확인 경고를 냅니다.

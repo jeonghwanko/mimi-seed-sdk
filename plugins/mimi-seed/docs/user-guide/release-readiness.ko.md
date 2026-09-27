@@ -6,7 +6,7 @@
 
 | 점검 | 확인하는 것 |
 |---|---|
-| `mimi-seed check --local` | 로그인 없는 저장소 증거: 앱 식별자, Android Target API, Google Play Billing 정책 |
+| `mimi-seed check --local` | 로그인 없는 저장소 증거: 앱 식별자, Android Target API, Google Play Billing 정책, 고정된 Xcode의 App Store SDK 최소 요건, 레거시 FCM API 사용 |
 | 연결 후 `mimi-seed check` | Remote 앱 등록, 연동, 문구, 스크린샷, 체크리스트의 준비도와 블로커 |
 | Local MCP 위험 점검 | Play/App Store의 실제 버전, 빌드, 메타데이터, 심사 제출 조건 |
 

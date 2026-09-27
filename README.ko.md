@@ -55,7 +55,9 @@ npx mimi-seed check --local
 ```
 
 Release Doctor는 계정 연결을 요구하기 전에 저장소에서 확정할 수 있는 증거부터 검사합니다. 첫 검사 범위는
-앱 식별자, Android Target API 제출 기준, Google Play Billing 지원 마감입니다. 정책 관련 결과마다 근거 파일,
+앱 식별자, Android Target API 제출 기준, Google Play Billing 지원 마감, App Store Connect의 Xcode / SDK 업로드 최소
+요건(CI·fastlane·Codemagic·`eas.json`에 고정된 Xcode 버전 기준), 레거시 Firebase Cloud Messaging API 사용(`fcm/send`,
+Instance ID, 14.5 미만 `firebase-admin`의 토픽 호출)입니다. 정책 관련 결과마다 근거 파일,
 권장 조치, 공식 출처를 함께 표시합니다. 검사기는 CLI에 번들되어 저장소 전용 검사 중 전체 MCP 패키지를
 추가 설치하거나 네트워크를 호출하지 않습니다. CI에서는 `--fail-on-blocker`, 기계가 읽는 결과에는 `--json`을
 사용할 수 있으며 모노레포에서는 `--path apps/mobile`로 앱 경로를 지정할 수 있습니다.
