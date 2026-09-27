@@ -40,6 +40,10 @@
    one, a `toolsets` group.
    *Renaming?* keep the old name for one minor release: leave it in `tools` with the same classification and add
    `"deprecated": { "<old>": "<new>" }` — the registrar registers the alias; remove its own `server.tool` call.
+   *Removing an alias (next minor)?* delete the old name from `deprecated`, its domain's `tools`, and every
+   classification list, update `total`, and add it to `REMOVED_TOOLS` in `docs-drift.test.ts` for one release so a
+   skill, prompt, or doc that brings the old name back fails CI. Keep the (possibly empty) `deprecated` map and the
+   registrar's alias support — they are fixture-tested and the next rename reuses them.
 4. **Regenerate the docs** — `npm run plugin:sync` from the repo root. `scripts/gen-docs.mjs` rewrites every
    `<!-- generated:… -->` block from the manifest: the [[tool-catalog]] listing (with **W** / **D** and the
    deprecated-alias note), its counts and total, the tool-count tables in `README.md`, `README.ko.md`, and the
@@ -61,7 +65,7 @@
 **Guards:** `tool-manifest.test.ts` (server ↔ manifest, classification lists, live annotations) ·
 `gen-docs --check` — in `npm run plugin:check` **and** `docs-drift.test.ts` (a stale or missing generated block, a
 spec entry naming an unknown or deprecated tool, a domain no batch owns) · `docs-drift.test.ts` (every tool in a
-batch, no hard-coded counts in prose, no deprecated alias in guidance) · `destructive-confirm.test.ts` (every
+batch, no hard-coded counts in prose, no deprecated alias or recently removed tool in guidance) · `destructive-confirm.test.ts` (every
 **D** tool previews without `confirm`) · `prompts-resources.test.ts` (agent-guide copy).
 **Verify:** `npm run build && npm test` in `packages/mcp-server`, then root `npm test`.
 
