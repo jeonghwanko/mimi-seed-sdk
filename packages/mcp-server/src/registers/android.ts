@@ -6,6 +6,8 @@ import { requirePlayStoreAuth } from '../helpers.js';
 import { getServiceAccountJson, serviceAccountPathForPackage } from '../auth/playstore-auth.js';
 import { getAppDetails } from '../playstore/tools.js';
 import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
+import { persistGeneratedKeystore } from '../android/keystore-store.js';
+import { readServiceAccountKeyFile } from '../iam/key-files.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
 import { upsertSecretFile } from '../jenkins/credentials.js';
 
@@ -119,12 +121,16 @@ export function registerAndroidTools(server: McpServer) {
             '── 신규 앱 설정 순서 ─────────────────────────────',
             jenkinsCfg ? '' : '  0. jenkins_status → jenkins_save_config (Jenkins 먼저 설정)',
             keytoolOk
-              ? `  1. android_generate_keystore(app_name="${prefix}") → keystore + 비밀번호 자동 생성`
+              ? `  1. android_generate_keystore(app_name="${prefix}") → keystore + 비밀번호를 ~/.mimi-seed/keystores/ 에 파일로 생성`
               : '  1. ⚠️  수동 keystore 생성 후 base64로 인코딩해서 제공 (keytool -genkeypair ...)',
-            `  2. jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_base64=..., file_name="upload.jks")`,
-            `  3. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
-            `  4. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
-            `  5. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
+            keytoolOk
+              ? `  2~5. android_generate_keystore 응답의 경로로 jenkins_upload_keystore(keystore_path=…) + jenkins_create_credential(secret_file=…, secret_field=storePassword|keyAlias|keyPassword) — id 는 "${prefix}-android-keystore" / "-store-password" / "-key-alias" / "-key-password"`
+              : `  2. jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_base64=..., file_name="upload.jks")`,
+            ...(keytoolOk ? [] : [
+              `  3. jenkins_create_credential(id="${prefix}-android-store-password", secret=...)`,
+              `  4. jenkins_create_credential(id="${prefix}-android-key-alias", secret=...)`,
+              `  5. jenkins_create_credential(id="${prefix}-android-key-password", secret=...)`,
+            ]),
             project_id
               ? `  6. setup_playstore_connection(packageName="${package_name}", projectId="${project_id}")`
               : `  6. setup_playstore_connection(packageName="${package_name}", projectId="<GCP 프로젝트 ID>")`,
@@ -145,9 +151,8 @@ export function registerAndroidTools(server: McpServer) {
     [
       '새 Android upload keystore (.jks)를 자동 생성합니다.',
       'Java JDK의 keytool이 설치돼 있어야 합니다.',
-      '생성 후 반환된 keystoreBase64 / storePassword / keyAlias / keyPassword를',
-      'jenkins_upload_keystore 와 jenkins_create_credential 로 Jenkins에 등록하세요.',
-      '비밀번호는 이 응답에서만 확인 가능하니 반드시 Jenkins에 즉시 등록하세요.',
+      'keystore 와 비밀번호는 ~/.mimi-seed/keystores/<앱>-<시각>/ 에 0600 파일로 저장되고 응답에는 경로만 나옵니다.',
+      '그 경로를 jenkins_upload_keystore(keystore_path) 와 jenkins_create_credential(secret_file, secret_field) 에 넘겨 Jenkins에 등록하세요.',
     ].join(' '),
     {
       app_name: z.string().describe('앱 이름 — keystore dname CN에 사용 (예: MyApp)'),
@@ -174,36 +179,25 @@ export function registerAndroidTools(server: McpServer) {
         };
       }
 
-      const ks = generateKeystore({ appName: app_name, org, country });
+      const saved = persistGeneratedKeystore(generateKeystore({ appName: app_name, org, country }), prefix);
 
       return {
         content: [{
           type: 'text',
           text: [
-            '✅ Android upload keystore 생성 완료',
+            '✅ Android upload keystore 생성 완료 — 비밀번호와 keystore 는 파일로만 저장했습니다 (응답에 싣지 않음).',
             '',
-            '🔒 아래 비밀번호는 채팅 기록에 평문으로 남습니다.',
-            '   Jenkins 등록을 마친 뒤에는 이 대화/세션을 삭제하는 것을 권장합니다.',
-            '   keystore 파일과 비밀번호는 분실 시 앱 서명을 영구히 잃으니 별도 안전한 곳에도 백업하세요.',
+            `keystore:     ${saved.keystorePath} (0600)`,
+            `비밀번호 파일: ${saved.secretsPath} (0600 — keyAlias / storePassword / keyPassword)`,
+            `keyAlias:     ${saved.keyAlias}`,
             '',
-            '── 생성된 값 (지금 바로 Jenkins에 등록하세요) ────',
-            `keyAlias:      ${ks.keyAlias}`,
-            `storePassword: ${ks.storePassword}`,
-            `keyPassword:   ${ks.keyPassword}`,
-            `keystoreBase64 길이: ${ks.keystoreBase64.length}자 (파일 기준 약 ${Math.round(ks.keystoreBase64.length * 0.75 / 1024)}KB)`,
+            '🔒 분실하면 앱 서명을 영구히 잃습니다. 위 폴더를 비밀번호 관리자 등 안전한 곳에 백업하세요.',
             '',
-            '── 다음 단계 — 아래 순서대로 호출하세요 ──────────',
-            `  jenkins_upload_keystore(`,
-            `    id="${prefix}-android-keystore",`,
-            `    keystore_base64="${ks.keystoreBase64.slice(0, 20)}...",`,
-            `    file_name="upload.jks"`,
-            `  )`,
-            `  jenkins_create_credential(id="${prefix}-android-store-password", secret="${ks.storePassword}")`,
-            `  jenkins_create_credential(id="${prefix}-android-key-alias",       secret="${ks.keyAlias}")`,
-            `  jenkins_create_credential(id="${prefix}-android-key-password",    secret="${ks.keyPassword}")`,
-            '',
-            '⚠️  keystoreBase64 전체 값은 아래 별도 블록으로 제공합니다.',
-            `KEYSTORE_BASE64=${ks.keystoreBase64}`,
+            '── 다음 단계 — 값을 복사하지 말고 경로를 넘기세요 ──',
+            `  jenkins_upload_keystore(id="${prefix}-android-keystore", keystore_path="${saved.keystorePath}", file_name="upload.jks")`,
+            `  jenkins_create_credential(id="${prefix}-android-store-password", secret_file="${saved.secretsPath}", secret_field="storePassword")`,
+            `  jenkins_create_credential(id="${prefix}-android-key-alias",      secret_file="${saved.secretsPath}", secret_field="keyAlias")`,
+            `  jenkins_create_credential(id="${prefix}-android-key-password",   secret_file="${saved.secretsPath}", secret_field="keyPassword")`,
           ].join('\n'),
         }],
       };
@@ -217,6 +211,7 @@ export function registerAndroidTools(server: McpServer) {
       'setup_playstore_connection으로 생성한 Play Store 서비스 계정 JSON을',
       'Jenkins Secret File credential로 업로드합니다.',
       '~/.mimi-seed/play-service-accounts/{package_name}.json 을 읽어 base64로 변환 후 등록합니다.',
+      'iam_create_key 로 막 발급한 키를 올리려면 service_account_json_path 에 그 경로(~/.mimi-seed/keys/ 안)를 넘기세요.',
       'setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요.',
     ].join(' '),
     {
@@ -224,11 +219,15 @@ export function registerAndroidTools(server: McpServer) {
       // 기본값을 하드코딩 문자열에서 패키지명 파생으로 바꿨다 — 예전 기본값은 한 사설 앱
       // 이름이었고, 여러 앱을 쓰는 사용자는 모든 SA 가 그 이름 하나로 덮였다.
       credential_id: z.string().optional().describe('Jenkins Credential ID (생략 시 "<앱>-playstore-sa")'),
+      service_account_json_path: z
+        .string()
+        .optional()
+        .describe('선택 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 생략하면 패키지별 등록 SA 사용'),
     },
-    async ({ package_name, credential_id: credentialIdInput }) => {
+    async ({ package_name, credential_id: credentialIdInput, service_account_json_path }) => {
       const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-playstore-sa`;
-      const saPath = serviceAccountPathForPackage(package_name);
-      if (!existsSync(saPath)) {
+      const saPath = service_account_json_path ?? serviceAccountPathForPackage(package_name);
+      if (!service_account_json_path && !existsSync(saPath)) {
         return {
           content: [{
             type: 'text',
@@ -242,7 +241,9 @@ export function registerAndroidTools(server: McpServer) {
         };
       }
 
-      const saJsonRaw = readFileSync(saPath, 'utf-8');
+      const saJsonRaw = service_account_json_path
+        ? readServiceAccountKeyFile(service_account_json_path)
+        : readFileSync(saPath, 'utf-8');
       let clientEmail = '(파싱 실패)';
       try {
         clientEmail = (JSON.parse(saJsonRaw) as { client_email?: string }).client_email ?? clientEmail;

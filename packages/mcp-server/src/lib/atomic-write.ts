@@ -31,7 +31,7 @@ export interface AtomicWriteOptions {
 
 export function writeFileAtomic(
   filePath: string,
-  contents: string,
+  contents: string | Uint8Array,
   options: AtomicWriteOptions = {},
 ): void {
   mkdirSync(path.dirname(filePath), { recursive: true, ...(options.dirMode !== undefined && { mode: options.dirMode }) });
@@ -70,7 +70,7 @@ export function writeCredentialJson(filePath: string, value: unknown): void {
   writeJsonAtomic(filePath, value, { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
 }
 
-/** 이미 직렬화된 자격증명(서비스 계정 키 원본 등) 저장. */
-export function writeCredentialFile(filePath: string, contents: string): void {
+/** 이미 직렬화된 자격증명(서비스 계정 키 원본, keystore 바이너리 등) 저장. */
+export function writeCredentialFile(filePath: string, contents: string | Uint8Array): void {
   writeFileAtomic(filePath, contents, { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
 }

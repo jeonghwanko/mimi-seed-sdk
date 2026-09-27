@@ -14,7 +14,7 @@ import path from 'node:path';
 const mocks = vi.hoisted(() => ({ spawnSync: vi.fn() }));
 vi.mock('node:child_process', () => ({ spawnSync: mocks.spawnSync }));
 
-import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
+import { generateKeystore, isKeytoolAvailable, KEYPASS_ENV, STOREPASS_ENV } from '../android/keystore.js';
 
 /** keytool 호출 인자를 `-flag value` 맵으로. */
 function argMap(): Record<string, string> {
@@ -95,14 +95,22 @@ describe('generateKeystore', () => {
     expect(ks.keyAlias).toBe('upload');
   });
 
-  it('생성한 비밀번호를 keytool 인자에 그대로 넘긴다', () => {
+  // argv 는 같은 머신의 다른 사용자가 `ps` 로 볼 수 있다 (2026-09 보안 점검).
+  it('비밀번호를 argv 가 아니라 환경변수(:env)로 keytool 에 넘긴다', () => {
     keytoolWrites();
 
     const ks = generateKeystore({ appName: 'MyApp' });
     const args = argMap();
+    const call = mocks.spawnSync.mock.calls.find((c) => c[0] === 'keytool');
+    const argv = call?.[1] as string[];
+    const env = (call?.[2] as { env: Record<string, string> }).env;
 
-    expect(args['-storepass']).toBe(ks.storePassword);
-    expect(args['-keypass']).toBe(ks.keyPassword);
+    expect(argv).not.toContain(ks.storePassword);
+    expect(argv).not.toContain(ks.keyPassword);
+    expect(args['-storepass:env']).toBe(STOREPASS_ENV);
+    expect(args['-keypass:env']).toBe(KEYPASS_ENV);
+    expect(env[STOREPASS_ENV]).toBe(ks.storePassword);
+    expect(env[KEYPASS_ENV]).toBe(ks.keyPassword);
     expect(args['-alias']).toBe('upload');
     expect(args['-keyalg']).toBe('RSA');
     expect(args['-keysize']).toBe('2048');

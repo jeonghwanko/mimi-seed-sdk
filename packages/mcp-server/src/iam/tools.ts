@@ -1,6 +1,7 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { collectPages } from '../lib/paginate.js';
+import { saveServiceAccountKey } from './key-files.js';
 
 /**
  * Google Cloud IAM + Cloud Resource Manager 래퍼.
@@ -84,6 +85,24 @@ export async function createServiceAccountKey(
     clientEmail: parsed.client_email as string | undefined,
     projectId: parsed.project_id as string | undefined,
     json: jsonString,
+  };
+}
+
+/**
+ * 키를 발급해 ~/.mimi-seed/keys/ 에 0600 으로 저장하고 **경로만** 돌려준다.
+ * 도구 응답에는 개인키가 절대 실리지 않는다 (iam_create_key).
+ */
+export async function createServiceAccountKeyFile(
+  auth: OAuth2Client,
+  serviceAccountEmail: string,
+) {
+  const key = await createServiceAccountKey(auth, serviceAccountEmail);
+  const filePath = saveServiceAccountKey(key.json, key.clientEmail ?? serviceAccountEmail, key.keyId);
+  return {
+    keyId: key.keyId,
+    clientEmail: key.clientEmail,
+    projectId: key.projectId,
+    path: filePath,
   };
 }
 

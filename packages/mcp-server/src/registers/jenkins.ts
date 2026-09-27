@@ -4,6 +4,7 @@ import { loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig } from '../j
 import * as creds from '../jenkins/credentials.js';
 import * as jobs from '../jenkins/jobs.js';
 import { textResult } from '../lib/mcp-response.js';
+import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from '../android/keystore-store.js';
 
 export function registerJenkinsTools(server: McpServer) {
   // ── 0. 상태 확인 (항상 첫 번째로 호출) ─────────────────────────────────────
@@ -119,12 +120,21 @@ export function registerJenkinsTools(server: McpServer) {
     ].join(' '),
     {
       id: z.string().describe('Credential ID (예: my-app-android-key-password)'),
-      secret: z.string().describe('저장할 비밀값'),
+      secret: z.string().optional().describe('저장할 비밀값. secret_file 과 둘 중 하나'),
+      secret_file: z
+        .string()
+        .optional()
+        .describe('권장 — android_generate_keystore 가 만든 signing.json 절대경로 (~/.mimi-seed/keystores/ 안만 허용). 비밀값이 대화에 남지 않음'),
+      secret_field: z
+        .enum(SIGNING_SECRET_FIELDS)
+        .optional()
+        .describe('secret_file 에서 꺼낼 필드 (storePassword / keyPassword / keyAlias)'),
       description: z.string().optional().describe('설명 (선택)'),
     },
-    async ({ id, secret, description }) => {
+    async ({ id, secret, secret_file, secret_field, description }) => {
+      const value = resolveSecretInput({ secret, secretFile: secret_file, secretField: secret_field });
       const cfg = requireJenkinsConfig();
-      const result = await creds.upsertSecretText(cfg, id, secret, description ?? '');
+      const result = await creds.upsertSecretText(cfg, id, value, description ?? '');
       return textResult(`✅ Jenkins credential ${result}: \`${id}\``);
     },
   );
@@ -140,13 +150,18 @@ export function registerJenkinsTools(server: McpServer) {
     ].join(' '),
     {
       id: z.string().describe('Credential ID (예: my-app-android-keystore)'),
-      keystore_base64: z.string().describe('keystore 파일 내용을 base64로 인코딩한 값'),
+      keystore_base64: z.string().optional().describe('keystore 파일 내용을 base64로 인코딩한 값. keystore_path 와 둘 중 하나'),
+      keystore_path: z
+        .string()
+        .optional()
+        .describe('권장 — android_generate_keystore 가 만든 keystore 절대경로 (~/.mimi-seed/keystores/ 안만 허용)'),
       file_name: z.string().default('keystore.jks').describe('파일명 (기본: keystore.jks)'),
       description: z.string().optional().describe('설명 (선택)'),
     },
-    async ({ id, keystore_base64, file_name, description }) => {
+    async ({ id, keystore_base64, keystore_path, file_name, description }) => {
+      const keystore = resolveKeystoreInput({ base64: keystore_base64, path: keystore_path });
       const cfg = requireJenkinsConfig();
-      const result = await creds.upsertSecretFile(cfg, id, keystore_base64, file_name, description ?? '');
+      const result = await creds.upsertSecretFile(cfg, id, keystore, file_name, description ?? '');
       return textResult(`✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`);
     },
   );

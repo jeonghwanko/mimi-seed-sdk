@@ -18,6 +18,7 @@ import { requirePlayStoreAuth, requireServiceAccountJson, requireAuth } from '..
 import { PLAY_DEVELOPER_REPORTING_SCOPE } from '../auth/scopes.js';
 import * as playFinancials from '../playstore/financials.js';
 import * as iam from '../iam/tools.js';
+import { resolveServiceAccountJsonInput } from '../iam/key-files.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
@@ -478,14 +479,20 @@ export function registerPlaystoreTools(server: McpServer) {
       '(이 도구는 서비스 계정 자격증명만 사용 — 로그인한 사용자의 OAuth 토큰은 건드리지 않음)',
     ].join(' '),
     {
+      serviceAccountJsonPath: z
+        .string()
+        .optional()
+        .describe('권장 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 개인키가 대화에 남지 않음'),
       serviceAccountJson: z
         .string()
-        .describe('서비스 계정 JSON 전체 내용 (문자열). Google Cloud Console → IAM & Admin → Service Accounts → Keys → Create new key → JSON으로 다운받은 파일의 내용'),
+        .optional()
+        .describe('서비스 계정 JSON 전체 내용 (문자열). serviceAccountJsonPath 와 둘 중 하나. 문자열로 넘기면 개인키가 대화 기록에 남는다'),
       packageName: androidPackageName
         .describe('검증할 Android 앱의 패키지명 (예: com.findthem.app)'),
     },
-    async ({ serviceAccountJson, packageName }) => {
-      const result = await playstore.verifyServiceAccountJson(serviceAccountJson, packageName);
+    async ({ serviceAccountJson, serviceAccountJsonPath, packageName }) => {
+      const json = resolveServiceAccountJsonInput({ json: serviceAccountJson, jsonPath: serviceAccountJsonPath });
+      const result = await playstore.verifyServiceAccountJson(json, packageName);
       if (result.ok) {
         return {
           content: [
@@ -547,10 +554,12 @@ export function registerPlaystoreTools(server: McpServer) {
     ].join(' '),
     {
       packageName: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
-      serviceAccountJson: z.string().describe('서비스 계정 JSON 전체 내용 (문자열)'),
+      serviceAccountJsonPath: z.string().optional().describe('권장 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 개인키가 대화에 남지 않음'),
+      serviceAccountJson: z.string().optional().describe('서비스 계정 JSON 전체 내용 (문자열). serviceAccountJsonPath 와 둘 중 하나'),
       skipVerify: z.boolean().optional().describe('true면 사전 검증 건너뜀 (기본 false: 등록 전 verifyServiceAccountJson 실행)'),
     },
-    async ({ packageName, serviceAccountJson, skipVerify }) => {
+    async ({ packageName, serviceAccountJson: jsonInput, serviceAccountJsonPath, skipVerify }) => {
+      const serviceAccountJson = resolveServiceAccountJsonInput({ json: jsonInput, jsonPath: serviceAccountJsonPath });
       if (!skipVerify) {
         const verify = await playstore.verifyServiceAccountJson(serviceAccountJson, packageName);
         if (!verify.ok) {
@@ -613,7 +622,7 @@ export function registerPlaystoreTools(server: McpServer) {
       if (info.perPackage.length === 0) {
         lines.push('**Per-package**: 없음');
         lines.push('');
-        lines.push('등록 방법: `playstore_register_service_account(packageName, serviceAccountJson)`');
+        lines.push('등록 방법: `playstore_register_service_account(packageName, serviceAccountJsonPath)`');
       } else {
         lines.push(`**Per-package** (${info.perPackage.length}개):`);
         for (const item of info.perPackage) {
@@ -972,7 +981,8 @@ export function registerPlaystoreTools(server: McpServer) {
               '🛑 데이터 안전 업로드 dry-run — 아직 보내지 않았다.',
               `  패키지: ${packageName}`,
               `  CSV: ${lines.length}줄 / ${Buffer.byteLength(content, 'utf8')} bytes`,
-              `  첫 줄: ${lines[0]?.slice(0, 120) ?? '(비어 있음)'}`,
+              // 원문은 싣지 않는다 — CSV 가 사설 데이터 처리 내역을 담고 있고, 대화 기록에 남는다.
+              `  열 수(첫 줄 기준): ${lines[0] ? lines[0].split(',').length : 0}`,
               '',
               '⚠️ 업로드하면 기존 데이터 안전 제출을 통째로 덮어쓴다.',
               '실행하려면 confirm: true 로 다시 호출.',
