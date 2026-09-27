@@ -1,10 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createHash, createHmac } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { JenkinsConfig } from '../jenkins/config.js';
-import { buildRequestsDir, getBuildStatus, getQueueItem, triggerBuild } from '../jenkins/builds.js';
+import { PENDING_WINDOW_MS, buildRequestsDir, getBuildStatus, getQueueItem, triggerBuild } from '../jenkins/builds.js';
 import { CONFIRM_PREVIEW_MARKER } from '../lib/tool-registrar.js';
 import { withClient } from './helpers.js';
 
@@ -32,14 +33,22 @@ vi.mock('../jenkins/config.js', async (original) => {
   return { ...actual, requireJenkinsConfig: () => fixture, loadJenkinsConfig: () => fixture };
 });
 
+/** crumb 을 뺀 요청(POST·조회). 기존 단언은 이것의 호출 수를 센다. */
 let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
+/** crumbIssuer 요청 — 기본은 404 (crumb issuer 꺼짐). */
+let crumbMock: ReturnType<typeof vi.fn<typeof fetch>>;
+/** 전역 fetch — 모든 네트워크 호출. "아무 요청도 없다" 는 이것으로 단언한다. */
+let networkMock: ReturnType<typeof vi.fn<typeof fetch>>;
 let home: string;
 
 beforeEach(() => {
   home = mkdtempSync(path.join(os.tmpdir(), 'mimi-jenkins-builds-'));
   vi.spyOn(os, 'homedir').mockReturnValue(home);
   fetchMock = vi.fn<typeof fetch>();
-  vi.stubGlobal('fetch', fetchMock);
+  crumbMock = vi.fn<typeof fetch>(() => Promise.resolve(response(404)));
+  networkMock = vi.fn<typeof fetch>((input, init) =>
+    String(input).endsWith('/crumbIssuer/api/json') ? crumbMock(input, init) : fetchMock(input, init));
+  vi.stubGlobal('fetch', networkMock);
 });
 
 afterEach(() => {
@@ -118,11 +127,19 @@ describe('triggerBuild — 빌드 요청', () => {
 
     const firstPromise = triggerBuild(cfg, input);
     const secondPromise = triggerBuild(cfg, input);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    // 처리 중인 예약은 "도중에 죽음(unknown)" 이 아니라 pending 으로 안내한다.
+    const second = await secondPromise;
+    expect(second).toMatchObject({ state: 'pending', replayed: true });
+    expect(second.message).toMatch(/처리 중/);
+    // 예약이 창(PENDING_WINDOW_MS)보다 오래됐는데도 결과가 없으면 도중에 죽은 것으로 본다.
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + PENDING_WINDOW_MS + 1_000);
+    expect(await triggerBuild(cfg, input)).toMatchObject({ state: 'unknown', replayed: true });
+    vi.mocked(Date.now).mockRestore();
     finishPost(response(201, { location: '/queue/item/19/' }));
-    const [first, second] = await Promise.all([firstPromise, secondPromise]);
-    expect(first).toMatchObject({ state: 'queued', replayed: false });
-    expect(second).toMatchObject({ state: 'unknown', replayed: true });
+    expect(await firstPromise).toMatchObject({ state: 'queued', replayed: false });
+    expect(await triggerBuild(cfg, input)).toMatchObject({ state: 'queued', replayed: true, queue_id: 19 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -159,7 +176,7 @@ describe('triggerBuild — 빌드 요청', () => {
 
   it.each(['', '.', '..', 'a/../b', 'a//b', 'a\\b', 'a/ /b', 'a\u0000b', 'a\nb', 'a\u007fb'])('잘못된 잡 경로 %j는 네트워크 호출 전에 거절한다', async job => {
     await expect(triggerBuild(cfg, { job, request_id: 'invalid_path' })).rejects.toThrow();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(networkMock).not.toHaveBeenCalled();
   });
 
   it('잘못된 request_id와 Jenkins 기본 URL은 네트워크 호출 전에 거절한다', async () => {
@@ -167,7 +184,7 @@ describe('triggerBuild — 빌드 요청', () => {
     await expect(triggerBuild({ ...cfg, url: 'https://user:secret@jenkins.example.test' }, {
       job: 'release', request_id: 'valid_1',
     })).rejects.toThrow(/인증정보/);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(networkMock).not.toHaveBeenCalled();
   });
 
   it('영속 receipt에는 토큰이나 파라미터 원문을 저장하지 않는다', async () => {
@@ -184,16 +201,25 @@ describe('triggerBuild — 빌드 요청', () => {
     expect(JSON.parse(receiptText)).toMatchObject({ state: 'queued', queue_id: 61 });
   });
 
-  it.each(['누락', '잘린'])('%s receipt는 접수 여부 불명으로 처리하고 재POST하지 않는다', async damage => {
+  it.each([
+    ['누락', '최근', 'pending'],
+    ['누락', '오래된', 'unknown'],
+    ['잘린', '최근', 'pending'],
+    ['잘린', '오래된', 'unknown'],
+  ])('%s receipt(%s 예약)는 %s 로 처리하고 재POST하지 않는다', async (damage, age, expected) => {
     fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/62/' }));
     const input = { job: 'release', request_id: 'receipt_damaged' };
     await triggerBuild(cfg, input);
     const [file] = receiptFiles(path.join(home, '.mimi-seed', 'jenkins-build-requests'));
     if (damage === '누락') unlinkSync(file);
     else writeFileSync(file, '{"fingerprint":', 'utf8');
+    if (age === '오래된') {
+      const old = new Date(Date.now() - PENDING_WINDOW_MS - 60_000);
+      utimesSync(path.dirname(file), old, old);
+    }
 
     const replay = await triggerBuild(cfg, input);
-    expect(replay).toMatchObject({ state: 'unknown', replayed: true });
+    expect(replay).toMatchObject({ state: expected, replayed: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -220,6 +246,129 @@ describe('triggerBuild — 빌드 요청', () => {
     });
     expect(rotatedToken).toMatchObject({ state: 'queued', replayed: true, queue_id: 64 });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('triggerBuild — POST 이후에는 던지지 않는다', () => {
+  it('201 뒤 결과 기록 저장이 실패해도 queued + queue_id 를 돌려준다 (persisted: false)', async () => {
+    fetchMock.mockImplementationOnce(async () => {
+      // POST 가 나가는 동안 receipt.json 자리를 비어 있지 않은 디렉터리로 바꿔 최종 rename 을 실패시킨다.
+      const [file] = receiptFiles(buildRequestsDir());
+      rmSync(file);
+      mkdirSync(file);
+      writeFileSync(path.join(file, 'blocker'), 'x');
+      return response(201, { location: '/queue/item/71/' });
+    });
+    const input = { job: 'release', request_id: 'save_fails_1' };
+    const first = await triggerBuild(cfg, input);
+    expect(first).toMatchObject({ state: 'queued', queue_id: 71, replayed: false, persisted: false });
+    expect(first.message).toMatch(/do not retrigger/);
+    expect(first.message).toMatch(/다시 트리거하지 마세요/);
+    expect(JSON.stringify(first)).not.toContain(home);
+    expect(JSON.stringify(first)).not.toContain(path.basename(home));
+
+    // 기록이 없으니 재호출은 알 수 없음 계열로 보이지만, 절대 다시 POST 하지 않는다.
+    expect(await triggerBuild(cfg, input)).toMatchObject({ state: 'pending', replayed: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('응답 해석 중 예외가 나도 던지지 않고 unknown 으로 남긴다', async () => {
+    fetchMock.mockResolvedValueOnce({
+      status: 201,
+      headers: { get: () => { throw new Error('boom /private/path'); } },
+    } as unknown as Response);
+    const r = await triggerBuild(cfg, { job: 'release', request_id: 'classify_throws' });
+    expect(r).toMatchObject({ state: 'unknown', http_status: 201, replayed: false });
+    expect(JSON.stringify(r)).not.toContain('/private/path');
+  });
+
+  it('리버스 프록시가 컨텍스트 경로를 바꾼 Location 에서도 큐 ID 만 꺼내고, 조회는 설정한 base 로 한다', async () => {
+    const proxied: JenkinsConfig = { ...cfg, url: 'https://jenkins.example.test/jenkins' };
+    fetchMock.mockResolvedValueOnce(response(201, { location: 'https://internal-host.example.test/queue/item/5/' }));
+    const r = await triggerBuild(proxied, { job: 'release', request_id: 'proxy_ctx' });
+    expect(r).toMatchObject({ state: 'queued', queue_id: 5, queue_url: 'https://jenkins.example.test/jenkins/queue/item/5/' });
+    expect(networkMock.mock.calls.every(([url]) => !String(url).includes('internal-host'))).toBe(true);
+  });
+
+  it.each([
+    ['쿼리가 붙은 Location', 'https://jenkins.example.test/queue/item/5/?x=1'],
+    ['큐 경로가 아닌 Location', 'https://jenkins.example.test/queue/item/5/extra'],
+    ['http(s) 가 아닌 Location', 'ftp://jenkins.example.test/queue/item/5/'],
+  ])('%s 는 queued 로 믿지 않는다', async (_label, location) => {
+    fetchMock.mockResolvedValueOnce(response(201, { location }));
+    expect(await triggerBuild(cfg, { job: 'release', request_id: 'bad_location' })).toMatchObject({ state: 'unknown' });
+  });
+});
+
+describe('triggerBuild — CSRF crumb', () => {
+  const crumbUrl = 'https://jenkins.example.test/crumbIssuer/api/json';
+
+  it('crumb 이 필요한 서버면 POST 에 crumb 헤더를 싣고, 리다이렉트는 따라가지 않는다', async () => {
+    crumbMock.mockResolvedValueOnce(jsonResponse({ crumbRequestField: 'Jenkins-Crumb', crumb: 'crumb-value-1' }));
+    fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/81/' }));
+    expect(await triggerBuild(cfg, { job: 'release', request_id: 'crumb_on' })).toMatchObject({ state: 'queued' });
+    expect(crumbMock.mock.calls[0][0]).toBe(crumbUrl);
+    expect(crumbMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
+    expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ 'Jenkins-Crumb': 'crumb-value-1' });
+  });
+
+  it('crumb issuer 가 꺼진 서버(404)면 crumb 없이 POST 한다', async () => {
+    fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/82/' }));
+    expect(await triggerBuild(cfg, { job: 'release', request_id: 'crumb_off' })).toMatchObject({ state: 'queued' });
+    expect(crumbMock).toHaveBeenCalledTimes(1);
+    expect(Object.keys(fetchMock.mock.calls[0][1]?.headers ?? {})).not.toContain('Jenkins-Crumb');
+  });
+
+  it.each([
+    ['403', () => response(403)],
+    ['리다이렉트', () => response(302, { location: 'https://elsewhere.example.test/login' })],
+    ['형식이 이상한 crumb', () => jsonResponse({ crumbRequestField: 'Bad Header\n', crumb: 'x' })],
+  ])('crumb 조회가 %s 면 POST 하지 않고 던지며, 예약을 풀어 같은 request_id 로 다시 시도할 수 있다', async (_label, make) => {
+    crumbMock.mockResolvedValueOnce(make());
+    const input = { job: 'release', request_id: 'crumb_fail' };
+    await expect(triggerBuild(cfg, input)).rejects.toThrow(/crumb/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(receiptFiles(buildRequestsDir())).toEqual([]);
+
+    fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/83/' }));
+    expect(await triggerBuild(cfg, input)).toMatchObject({ state: 'queued', replayed: false, queue_id: 83 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('triggerBuild — 파라미터 지문은 설치별 키로 HMAC', () => {
+  it('처음 쓸 때 .key(0600)를 만들고 receipt 지문은 그 키의 HMAC 이다 (평문 sha256 아님)', async () => {
+    fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/91/' }));
+    await triggerBuild(cfg, { job: 'release', request_id: 'hmac_1', parameters: { version: '1' } });
+
+    const keyFile = path.join(buildRequestsDir(), '.key');
+    const keyHex = readFileSync(keyFile, 'utf8').trim();
+    expect(keyHex).toMatch(/^[0-9a-f]{64}$/);
+    if (process.platform !== 'win32') expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+
+    const payload = JSON.stringify(['release', true, [['version', '1']]]);
+    const [file] = receiptFiles(buildRequestsDir());
+    const { fingerprint } = JSON.parse(readFileSync(file, 'utf8')) as { fingerprint: string };
+    expect(fingerprint).toBe(createHmac('sha256', Buffer.from(keyHex, 'hex')).update(payload).digest('hex'));
+    expect(fingerprint).not.toBe(createHash('sha256').update(payload).digest('hex'));
+    expect(readdirSync(buildRequestsDir()).filter(name => name.endsWith('.new') || name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('키는 한 번만 만들고 재사용한다', async () => {
+    fetchMock.mockResolvedValue(response(201, { location: '/queue/item/92/' }));
+    await triggerBuild(cfg, { job: 'release', request_id: 'hmac_2' });
+    const keyFile = path.join(buildRequestsDir(), '.key');
+    const before = readFileSync(keyFile, 'utf8');
+    await triggerBuild(cfg, { job: 'release', request_id: 'hmac_3' });
+    expect(readFileSync(keyFile, 'utf8')).toBe(before);
+  });
+
+  it('손상된 키 파일이면 예약·네트워크 전에 멈춘다', async () => {
+    mkdirSync(buildRequestsDir(), { recursive: true });
+    writeFileSync(path.join(buildRequestsDir(), '.key'), 'not-a-key');
+    await expect(triggerBuild(cfg, { job: 'release', request_id: 'bad_key' })).rejects.toThrow(/키 파일이 손상/);
+    expect(networkMock).not.toHaveBeenCalled();
+    expect(receiptFiles(buildRequestsDir())).toEqual([]);
   });
 });
 
@@ -260,7 +409,7 @@ describe('getQueueItem — 큐 상태 조회', () => {
   it('잘못된 queue_id와 응답 ID 불일치를 거절한다', async () => {
     await expect(getQueueItem(cfg, 0)).rejects.toThrow();
     await expect(getQueueItem(cfg, 1.5)).rejects.toThrow();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(networkMock).not.toHaveBeenCalled();
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ id: 46 }));
     await expect(getQueueItem(cfg, 45)).rejects.toThrow(/ID가 일치/);
@@ -294,7 +443,7 @@ describe('getBuildStatus — 빌드 상태 조회', () => {
     await expect(getBuildStatus(cfg, '../escape', 7)).rejects.toThrow();
     await expect(getBuildStatus(cfg, 'release', 0)).rejects.toThrow();
     await expect(getBuildStatus(cfg, 'release', Number.MAX_SAFE_INTEGER + 1)).rejects.toThrow();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(networkMock).not.toHaveBeenCalled();
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ number: 78, building: false, result: 'SUCCESS' }));
     await expect(getBuildStatus(cfg, 'release', 77)).rejects.toThrow(/번호가 일치/);
@@ -329,7 +478,7 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
         expect(textOf(preview)).toContain(CONFIRM_PREVIEW_MARKER);
         expect(textOf(preview)).toContain('release_2026_1');
       }
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(networkMock).not.toHaveBeenCalled();
       expect(existsSync(buildRequestsDir())).toBe(false);
 
       fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/7/' }));
@@ -351,6 +500,21 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
     });
   });
 
+  it('dry-run preview 는 비밀처럼 보이는 빌드 파라미터 값을 가린다', async () => {
+    await withClient(async client => {
+      const preview = await client.callTool({
+        name: 'jenkins_trigger_build',
+        arguments: { job: 'my-app', request_id: 'redact_1', parameters: { DEPLOY_TOKEN: 'placeholder-secret-value', platform: 'ios' } },
+      });
+      const text = textOf(preview);
+      expect(text).toContain(CONFIRM_PREVIEW_MARKER);
+      expect(text).not.toContain('placeholder-secret-value');
+      expect(text).toContain('"DEPLOY_TOKEN":"(redacted)"');
+      expect(text).toContain('"platform":"ios"');
+    });
+    expect(networkMock).not.toHaveBeenCalled();
+  });
+
   // security-package-param.test.ts 와 같은 방식: 경로를 벗어나는 값은 스키마에서 막혀 핸들러·네트워크에 닿지 않는다.
   it.each(['../tokens', 'team-folder/../other-job', './my-app', 'a//b', 'a\\b', 'my-app/\u0000', ''])(
     '잡 경로 %j 는 스키마에서 거절된다 (confirm: true 여도)',
@@ -365,7 +529,7 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
         expect(status.isError).toBe(true);
         expect(textOf(status)).toMatch(/validation/i);
       });
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(networkMock).not.toHaveBeenCalled();
       expect(existsSync(buildRequestsDir())).toBe(false);
     },
   );
@@ -377,7 +541,7 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
       const status = await client.callTool({ name: 'jenkins_get_build_status', arguments: { job: 'my-app', build_number: value } });
       expect(status.isError).toBe(true);
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(networkMock).not.toHaveBeenCalled();
   });
 
   it.each(['../escape', 'a b', 'x'.repeat(129)])('request_id %j 는 스키마에서 거절된다', async requestId => {
@@ -388,7 +552,7 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
       });
       expect(r.isError).toBe(true);
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(networkMock).not.toHaveBeenCalled();
     expect(existsSync(buildRequestsDir())).toBe(false);
   });
 });

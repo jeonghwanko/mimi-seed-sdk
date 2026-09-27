@@ -95,7 +95,8 @@ MCP에서는 `ci_*` 도구로 GitHub/GitLab 빌드를 다룬다. Jenkins는 에�
 `jenkins_get_build_status` 순서로 진행한다. CLI `deploy`도 Jenkins 빌드를 실행·추적한다.
 
 MCP 트리거는 요청마다 `request_id`를 가진다. 같은 `request_id`로 재호출하면 잡을 다시 실행하지 않고 기록된
-결과를 돌려준다. 결과가 `unknown`이면 Jenkins에서 확인하고, 새 ID로 다시 실행하지 않는다. 기록은 같은
+결과를 돌려준다. `pending`은 그 요청이 아직 전송 중이라는 뜻이니 잠시 뒤 같은 ID로 다시 확인한다.
+결과가 `unknown`이면 Jenkins에서 확인하고, 새 ID로 다시 실행하지 않는다. 기록은 같은
 Jenkins URL·사용자 기준으로 이 PC의 `~/.mimi-seed/jenkins-build-requests/`에 남으며 다른 PC까지 보장하지 않는다.
 재시도를 위해 기록을 삭제하지 않는다.
 

@@ -30,11 +30,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   the id under `~/.mimi-seed/jenkins-build-requests/` (per Jenkins URL and user) and records the outcome there;
   any later call with the same `request_id` returns that record (`replayed: true`) instead of starting the job
   again, and reusing it with a different job or parameters is refused. The preview does not reserve the id, so
-  preview and confirm with the same `request_id`. An outcome that cannot be confirmed (timeout, network error,
-  5xx, 429, redirect, or a `201` without a queue location) is reported as `state: "unknown"` and is never
-  retried automatically — check Jenkins before doing anything. The record holds only hashes, the state, the
-  queue id, and the HTTP status, never parameters or the API token. This is local deduplication, not a Jenkins
-  guarantee: another machine or a deleted record can run the same request again.
+  preview and confirm with the same `request_id`. A replay while the first call is still in flight reports
+  `state: "pending"`. An outcome that cannot be confirmed (timeout, network error, 5xx, 429, redirect, or a `201`
+  without a queue location) is reported as `state: "unknown"` and is never retried automatically — check Jenkins
+  before doing anything. Once the request may have reached Jenkins the tool always returns a result: if only the
+  local record fails to save it answers `persisted: false`, and a queued build keeps its `queue_id` with a "do not
+  retrigger" note. It sends the CSRF crumb when the server issues one (without following redirects) and stops
+  before the POST if the crumb cannot be fetched. It reads the queue id from `Location` even when a reverse proxy
+  rewrites the context path, but always polls the configured URL. The record holds only an HMAC fingerprint
+  (keyed by a random per-install `.key`), the state, the queue id, and the HTTP status, never parameters or the
+  API token. This is local deduplication, not a Jenkins guarantee: another machine or a deleted record can run the
+  same request again.
 
 ### Security
 
@@ -43,6 +49,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   path-segment encoder, which refuses `.` and `..` segments. Before, `team-folder/..` was sent unchanged and URL
   normalization could point the request at another job or folder. The new build tools also refuse empty segments,
   backslashes, and control characters, and take `queue_id` / `build_number` only as positive integers.
+- Dry-run previews of confirm-gated tools now also redact secret-looking keys nested inside object or array
+  arguments (for example `parameters: { DEPLOY_TOKEN: … }`), not only top-level ones. Previews without such keys
+  are unchanged.
 
 ### Fixed
 

@@ -19,19 +19,53 @@ export function authHeaders(cfg: JenkinsConfig): Record<string, string> {
  * 구버전 Jenkins / 비밀번호 인증 환경에서 POST 403 방지.
  */
 export async function getCrumb(cfg: JenkinsConfig): Promise<Record<string, string>> {
+  const result = await requestCrumb(cfg);
+  return result.kind === 'ok' ? result.headers : {};
+}
+
+/** crumb 조회 결과 — `disabled` 는 crumb issuer 가 꺼져 있음(404), `failed` 는 그 밖의 모든 실패. */
+export type CrumbResult =
+  | { kind: 'ok'; headers: Record<string, string> }
+  | { kind: 'disabled' }
+  | { kind: 'failed'; status?: number };
+
+/** 헤더 이름·값으로 안전한가 — 서버가 준 문자열을 그대로 헤더에 넣으면 fetch 가 요청 도중 던질 수 있다. */
+const CRUMB_FIELD = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/;
+const CRUMB_VALUE = /^[\x21-\x7e]{1,512}$/;
+
+/**
+ * crumb 을 결과 종류와 함께 돌려준다. getCrumb 은 이것의 best-effort 판(실패 = 빈 객체)이다.
+ * jenkins_trigger_build 는 `redirect: 'manual'` 로 불러 인증 헤더를 단 채 다른 곳으로 따라가지 않고,
+ * `failed` 면 POST 하지 않는다.
+ */
+export async function requestCrumb(
+  cfg: JenkinsConfig,
+  options: { redirect?: RequestRedirect; maxAttempts?: number } = {},
+): Promise<CrumbResult> {
+  let res: Response;
   try {
-    const res = await fetchWithTimeout(`${baseUrl(cfg)}/crumbIssuer/api/json`, {
-      headers: authHeaders(cfg),
-    });
-    if (!res.ok) return {};
-    const data = (await res.json()) as { crumbRequestField?: string; crumb?: string };
-    if (data.crumbRequestField && data.crumb) {
-      return { [data.crumbRequestField]: data.crumb };
-    }
-    return {};
+    res = await fetchWithTimeout(
+      `${baseUrl(cfg)}/crumbIssuer/api/json`,
+      { headers: authHeaders(cfg), ...(options.redirect && { redirect: options.redirect }) },
+      options.maxAttempts ? { maxAttempts: options.maxAttempts } : {},
+    );
   } catch {
-    return {};
+    return { kind: 'failed' };
   }
+  if (res.status === 404) return { kind: 'disabled' };
+  if (!res.ok) return { kind: 'failed', status: res.status };
+  try {
+    const data = (await res.json()) as { crumbRequestField?: unknown; crumb?: unknown };
+    if (
+      typeof data.crumbRequestField === 'string' && CRUMB_FIELD.test(data.crumbRequestField)
+      && typeof data.crumb === 'string' && CRUMB_VALUE.test(data.crumb)
+    ) {
+      return { kind: 'ok', headers: { [data.crumbRequestField]: data.crumb } };
+    }
+  } catch {
+    // JSON 아님
+  }
+  return { kind: 'failed', status: res.status };
 }
 
 /**

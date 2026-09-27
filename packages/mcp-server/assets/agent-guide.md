@@ -340,8 +340,11 @@ Never pass `confirm: true` on the first call, and never retry an uncertain publi
 `jenkins_trigger_build` also takes a caller-chosen `request_id` (one per logical build request). The dry-run does
 **not** reserve it, so preview and confirm with the same `request_id`. Once a confirmed call has used it, every
 later call with that `request_id` returns the recorded result (`replayed: true`) instead of POSTing again — the
-record lives under `~/.mimi-seed/jenkins-build-requests/`, per Jenkins URL and user, on this machine only. If the
-result is `state: "unknown"`, check Jenkins before doing anything; do not retry with a new `request_id`.
+record lives under `~/.mimi-seed/jenkins-build-requests/`, per Jenkins URL and user, on this machine only.
+`state: "pending"` means another call with that `request_id` is still in flight — call again with the same
+`request_id` shortly. `state: "unknown"` means the outcome could not be confirmed — check Jenkins before doing
+anything; do not retry with a new `request_id`. `persisted: false` means only the local record failed: a `queued`
+build is already in the queue, so track its `queue_id` and do not retrigger.
 
 | Action | Why |
 |--------|-----|

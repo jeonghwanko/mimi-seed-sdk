@@ -54,20 +54,38 @@ service account, secrets) and **job definitions** (`jenkins_list_jobs` / `jenkin
 A Jenkins `POST …/build` has no idempotency key, and a timeout or 5xx does not say whether the job was queued —
 blindly retrying a deploy job runs it twice. So `jenkins_trigger_build` (`jenkins/builds.ts`) takes a caller-chosen
 `request_id` and reserves it with an atomic `mkdir` under `~/.mimi-seed/jenkins-build-requests/<sha256(url, user,
-request_id)>/` **before** the POST, then records the outcome in `receipt.json` (0600, via `#core/atomic-write.js`).
-Any later call with the same `request_id` returns that record (`replayed: true`) and never POSTs; the same key with
-a different job or parameters is refused. Outcomes it cannot classify — network error, 5xx, 429, a redirect, a 201
-without a queue `Location`, a missing or torn receipt — stay `unknown` and fail closed: check Jenkins, don't delete
-the reservation to retry. The receipt holds only hashes and bounded response metadata (state, queue id, HTTP
-status), never parameters or the API token. The POST uses API-token auth (exempt from CSRF crumbs), no redirects,
-and a single attempt.
+request_id)>/` **before** the POST, writes a `pending` receipt, then records the outcome in `receipt.json` (0600, via
+`#core/atomic-write.js`). Any later call with the same `request_id` returns that record (`replayed: true`) and never
+POSTs; the same key with a different job or parameters is refused.
+
+- **Before the POST** (pending receipt write, CSRF crumb fetch) a failure releases the reservation and throws —
+  nothing was sent, so the same `request_id` may be retried. The crumb is fetched with `redirect: 'manual'`
+  (credentials never follow a redirect); a 404 means the crumb issuer is off and the POST goes without one; any
+  other crumb failure stops before the POST.
+- **After the POST may have been sent** the function never throws. Outcomes it cannot classify — network error,
+  5xx, 429, a redirect, a 201 without a usable queue `Location` — are `unknown`. If the final receipt write fails,
+  the in-memory result is returned with `persisted: false` (a `queued` build keeps its `queue_id` and a "do not
+  retrigger" note); throwing there once lost the queue id and invited a retry with a new `request_id` — a second
+  deploy.
+- **Replays without a final record** are `pending` while the reservation is younger than `PENDING_WINDOW_MS`
+  (another call is in flight) and `unknown` after that (it died mid-flight). Fail closed: check Jenkins, don't
+  delete the reservation to retry.
+- **Reverse proxies** may rewrite the host and context path of the `Location` header. Only the trailing
+  `/queue/item/<id>/` is read; every follow-up request goes to the configured base, never to the `Location` host.
+- The receipt holds only an HMAC-SHA256 fingerprint of the job + parameters (keyed by a random per-install
+  `jenkins-build-requests/.key`, 0600, published once with `link(2)` so concurrent first uses agree on one key) and
+  bounded response metadata (state, reservation time, queue id, HTTP status) — never parameters or the API token.
+  The reservation directory name does **not** use that key, so losing `.key` never re-opens a used `request_id`
+  (its replays are refused as a different payload instead). The POST uses API-token auth, no redirects, and a single
+  attempt.
 
 It is **not** Jenkins-side exactly-once: another machine, another Jenkins user, or a deleted
 `jenkins-build-requests/` directory can dispatch the same logical request again.
 
 - **The confirm gate composes with it.** The tool is **D**; the registrar's injected gate returns the dry-run
-  before the handler runs, so a preview never reserves the `request_id` or writes a receipt. Preview and confirm
-  with the same `request_id`.
+  before the handler runs, so a preview never reserves the `request_id` or writes a receipt (or the `.key`).
+  Preview and confirm with the same `request_id`. The preview redacts secret-looking keys inside `parameters` too
+  (the registrar's preview redaction is recursive).
 - **Follow the queue item, not `lastBuild`.** The queue id from the trigger leads to the exact build number
   (`jenkins_get_queue_item`); `lastBuild` may belong to someone else's run.
 
