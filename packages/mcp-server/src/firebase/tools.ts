@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { collectPages } from '../lib/paginate.js';
 
 /**
  * Firebase Management API + Cloud Resource Manager 래퍼
@@ -8,8 +9,11 @@ import type { OAuth2Client } from 'google-auth-library';
 // ─── 프로젝트 ───
 
 export async function listProjects(auth: OAuth2Client) {
-  const res = await google.firebase('v1beta1').projects.list({ auth });
-  return (res.data.results ?? []).map((p) => ({
+  const projects = await collectPages(async (pageToken) => {
+    const res = await google.firebase('v1beta1').projects.list({ auth, ...(pageToken && { pageToken }) });
+    return { items: res.data.results ?? [], nextPageToken: res.data.nextPageToken };
+  });
+  return projects.map((p) => ({
     projectId: p.projectId,
     displayName: p.displayName,
     state: p.state,
@@ -297,13 +301,17 @@ export async function enableService(auth: OAuth2Client, projectId: string, servi
 
 export async function listEnabledServices(auth: OAuth2Client, projectId: string) {
   const serviceusage = google.serviceusage('v1');
-  const res = await serviceusage.services.list({
-    auth,
-    parent: `projects/${projectId}`,
-    filter: 'state:ENABLED',
-    pageSize: 200,
+  const services = await collectPages(async (pageToken) => {
+    const res = await serviceusage.services.list({
+      auth,
+      parent: `projects/${projectId}`,
+      filter: 'state:ENABLED',
+      pageSize: 200,
+      ...(pageToken && { pageToken }),
+    });
+    return { items: res.data.services ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return (res.data.services ?? []).map((s) => ({
+  return services.map((s) => ({
     name: s.config?.name,
     title: s.config?.title,
   }));

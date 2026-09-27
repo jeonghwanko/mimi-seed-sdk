@@ -3,6 +3,7 @@ import type { OAuth2Client, JWT } from 'google-auth-library';
 import { newJWT } from '../lib/google-auth-lite.js';
 import fs from 'node:fs';
 import { extractHttpStatus } from '../lib/google-errors.js';
+import { collectPages } from '../lib/paginate.js';
 
 export type PlayImageType =
   | 'featureGraphic'
@@ -784,12 +785,16 @@ export async function replyToReview(
 // ─── 인앱 상품 조회 ───
 
 export async function listInAppProducts(auth: OAuth2Client | JWT, packageName: string) {
-  const res = await publisher().monetization.onetimeproducts.list({
-    auth,
-    packageName,
-    pageSize: 100,
+  const products = await collectPages(async (pageToken) => {
+    const res = await publisher().monetization.onetimeproducts.list({
+      auth,
+      packageName,
+      pageSize: 100,
+      ...(pageToken && { pageToken }),
+    });
+    return { items: res.data.oneTimeProducts ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return (res.data.oneTimeProducts ?? []).map((p: any) => ({
+  return products.map((p: any) => ({
     productId: p.productId,
     listings: p.listings,
     purchaseOptions: p.purchaseOptions,
@@ -799,12 +804,16 @@ export async function listInAppProducts(auth: OAuth2Client | JWT, packageName: s
 // ─── 구독 조회 ───
 
 export async function listSubscriptions(auth: OAuth2Client | JWT, packageName: string) {
-  const res = await publisher().monetization.subscriptions.list({
-    auth,
-    packageName,
-    pageSize: 100,
+  const subscriptions = await collectPages(async (pageToken) => {
+    const res = await publisher().monetization.subscriptions.list({
+      auth,
+      packageName,
+      pageSize: 100,
+      ...(pageToken && { pageToken }),
+    });
+    return { items: res.data.subscriptions ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return (res.data.subscriptions ?? []).map((s) => ({
+  return subscriptions.map((s) => ({
     productId: s.productId,
     basePlans: s.basePlans,
     listings: s.listings,

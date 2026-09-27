@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { collectPages } from '../lib/paginate.js';
 
 /**
  * Google Cloud IAM + Cloud Resource Manager 래퍼.
@@ -16,12 +17,16 @@ const crm = () => google.cloudresourcemanager('v1');
 // ─── 서비스 계정 조회 ───
 
 export async function listServiceAccounts(auth: OAuth2Client, projectId: string) {
-  const res = await iam().projects.serviceAccounts.list({
-    auth,
-    name: `projects/${projectId}`,
-    pageSize: 100,
+  const accounts = await collectPages(async (pageToken) => {
+    const res = await iam().projects.serviceAccounts.list({
+      auth,
+      name: `projects/${projectId}`,
+      pageSize: 100,
+      ...(pageToken && { pageToken }),
+    });
+    return { items: res.data.accounts ?? [], nextPageToken: res.data.nextPageToken };
   });
-  return (res.data.accounts ?? []).map((a) => ({
+  return accounts.map((a) => ({
     email: a.email,
     displayName: a.displayName,
     uniqueId: a.uniqueId,
