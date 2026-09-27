@@ -29,7 +29,8 @@ source here — don't move it back into the web repo.
 
 ## Development setup
 
-Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22).
+Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22). The dev toolchain (eslint, vitest) needs
+**20.19 or newer** within the 20.x line — the published packages still run on any Node 20.
 
 ```bash
 npm run setup     # installs + builds both packages, npm links them, registers the MCP server

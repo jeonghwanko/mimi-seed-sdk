@@ -24,7 +24,8 @@ walks both packages for you.
 
 ## 1. Prerequisites
 
-- **Node 20+.** `.nvmrc` is the source of truth — run `nvm use` in the repo root.
+- **Node 20+.** `.nvmrc` is the source of truth — run `nvm use` in the repo root. Building and testing from
+  source needs **20.19 or newer** on the 20.x line (eslint and vitest require it).
 - Git.
 - A JDK (for `keytool`) **only** if you'll touch Android signing.
 

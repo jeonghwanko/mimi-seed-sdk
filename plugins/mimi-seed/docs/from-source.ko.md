@@ -23,7 +23,8 @@
 
 ## 1. 사전 조건
 
-- **Node 20+.** `.nvmrc` 가 SSOT 다 — 리포 루트에서 `nvm use`.
+- **Node 20+.** `.nvmrc` 가 SSOT 다 — 리포 루트에서 `nvm use`. 소스에서 빌드·테스트하려면 20.x 중
+  **20.19 이상**이 필요하다 (eslint·vitest 요구사항).
 - Git.
 - Android 서명을 건드릴 때**만** JDK(`keytool`).
 
