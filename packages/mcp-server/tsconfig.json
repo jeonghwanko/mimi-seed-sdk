@@ -8,6 +8,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "declaration": true,
     "rootDir": "..",
     "paths": { "#core/*": ["../core/src/*"] }
   },
