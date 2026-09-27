@@ -134,8 +134,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 <!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | 영역 | 도구 수 | 주요 도구 |
 |------|---------|-----------|
-| App Store Connect | 64 | `appstore_submit_for_review` / `appstore_get_weekly_insight` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
-| Google Play | 39 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
+| App Store Connect | 63 | `appstore_submit_for_review` / `appstore_get_weekly_insight` / `appstore_update_product_review_note` / `appstore_upload_product_review_screenshot` |
+| Google Play | 38 | `playstore_submit_release` / `playstore_promote_release` / `playstore_replace_images` / `playstore_reply_review` / `playstore_verify_service_account` |
 | Firebase | 21 | `firebase_create_project` / `firebase_get_remote_config_overview` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI (GitHub Actions / GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |

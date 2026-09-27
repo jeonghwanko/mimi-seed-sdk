@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * 거의 같은 도구 두 개를 하나로 합치고 옛 이름은 한 마이너 릴리스 동안 별칭으로 남긴다.
- * 함정: 별칭이 "이름만 같은 다른 도구"가 되면 옛 호출자가 조용히 다른 동작을 받는다 —
- * 그래서 옛 이름의 **옛 인자 모양 그대로** 호출해 옛 경로(latest)로 가는지를 본다.
+ * 0.20.0 에서 거의 같은 도구 두 개씩을 하나로 합쳤다 (옛 latest 전용 이름은 0.21.0 에서 제거).
+ * 합친 도구는 선택 인자 하나로 두 경로를 가른다 — 지정 id 면 그 대상, 생략하면 최신 대상.
+ * 함정: 빈 문자열 id 를 "생략" 으로 취급해 최신 대상으로 몰래 바꿔치면 안 되고, 두 경로의
+ * 응답 모양은 병합 전 그대로여야 한다 (파싱하는 호출자가 있다).
  */
 const m = vi.hoisted(() => ({
   updateReleaseNotes: vi.fn(),
@@ -39,7 +40,7 @@ beforeEach(() => {
   m.attachLatestValidBuild.mockResolvedValue({ buildNumber: 186, attachedBuildId: 'b-186' });
 });
 
-describe('playstore_update_release_notes ← playstore_update_latest_release_notes', () => {
+describe('playstore_update_release_notes — versionCode 지정 / 생략(최신 릴리스)', () => {
   const base = { packageName: 'com.example.app', track: 'internal', language: 'ko-KR', text: '버그 수정' };
 
   it('versionCode 를 주면 그 릴리스를 갱신하고, 응답 모양도 병합 전과 같다', async () => {
@@ -72,6 +73,16 @@ describe('playstore_update_release_notes ← playstore_update_latest_release_not
     });
   });
 
+  // 옛 별칭(playstore_update_latest_release_notes)이 지키던 기본 경로 — 별칭을 지우면서 이 단언을 잃지 않게.
+  it('versionCode 를 생략하면 트랙 최신 릴리스만 갱신한다 (syncTracks 없음)', async () => {
+    await withClient(async (client) => {
+      const r = await client.callTool({ name: 'playstore_update_release_notes', arguments: { ...base } });
+      expect(r.isError).toBeFalsy();
+      expect(m.updateLatestReleaseNotes).toHaveBeenCalledTimes(1);
+      expect(m.updateReleaseNotes).not.toHaveBeenCalled();
+    });
+  });
+
   it('versionCode 를 생략하면 최신 릴리스 + syncTracks', async () => {
     await withClient(async (client) => {
       const r = await client.callTool({
@@ -82,22 +93,9 @@ describe('playstore_update_release_notes ← playstore_update_latest_release_not
       expect(textOf(r)).toContain('sync production');
     });
   });
-
-  it('옛 이름은 같은 인자로 같은 경로를 탄다', async () => {
-    await withClient(async (client) => {
-      const { tools } = await client.listTools();
-      const alias = tools.find((t) => t.name === 'playstore_update_latest_release_notes')!;
-      expect(alias.description).toMatch(/^\[DEPRECATED — use playstore_update_release_notes;/);
-
-      const r = await client.callTool({ name: 'playstore_update_latest_release_notes', arguments: base });
-      expect(r.isError).toBeFalsy();
-      expect(m.updateLatestReleaseNotes).toHaveBeenCalledTimes(1);
-      expect(m.updateReleaseNotes).not.toHaveBeenCalled();
-    });
-  });
 });
 
-describe('appstore_attach_build ← appstore_attach_latest_build', () => {
+describe('appstore_attach_build — buildId 지정 / 생략(최신 VALID 빌드)', () => {
   it('buildId 를 주면 그 빌드를 붙인다', async () => {
     await withClient(async (client) => {
       await client.callTool({ name: 'appstore_attach_build', arguments: { versionId: 'v1', buildId: 'b1' } });
@@ -117,15 +115,15 @@ describe('appstore_attach_build ← appstore_attach_latest_build', () => {
     });
   });
 
-  it('buildId 생략 = 최신 VALID 빌드, 옛 이름도 minBuildNumber 를 그대로 받는다', async () => {
+  it('buildId 생략 = 최신 VALID 빌드, minBuildNumber 를 자동 선택의 floor 로 넘긴다', async () => {
     await withClient(async (client) => {
       const r = await client.callTool({ name: 'appstore_attach_build', arguments: { versionId: 'v1' } });
       expect(textOf(r)).toContain('#186');
-      const old = await client.callTool({
-        name: 'appstore_attach_latest_build',
+      const floored = await client.callTool({
+        name: 'appstore_attach_build',
         arguments: { versionId: 'v2', minBuildNumber: 180 },
       });
-      expect(old.isError).toBeFalsy();
+      expect(floored.isError).toBeFalsy();
       expect(m.attachLatestValidBuild).toHaveBeenLastCalledWith('v2', { minBuildNumber: 180 });
       expect(m.attachBuildToVersion).not.toHaveBeenCalled();
     });

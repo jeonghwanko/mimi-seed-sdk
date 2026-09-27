@@ -18,6 +18,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Removed
+
+- The deprecated aliases announced in 0.20.0 are gone: `playstore_update_latest_release_notes` (use
+  `playstore_update_release_notes` and omit `versionCode` — `syncTracks` works the same) and
+  `appstore_attach_latest_build` (use `appstore_attach_build` and omit `buildId` — `minBuildNumber` works the
+  same). Calling an old name now fails as an unknown tool. The MCP server registers 2 fewer tools.
+
+### Tool changes
+
+- **Removed** `playstore_update_latest_release_notes` → use `playstore_update_release_notes`.
+- **Removed** `appstore_attach_latest_build` → use `appstore_attach_build`.
+- No tools were added or renamed. The tool count drops from 244 to 242.
+
 ## [0.20.0] - 2026-09-27
 
 ### Upgrading from 0.19.x
