@@ -2,16 +2,24 @@
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import { apiGet, apiPatch, apiPost } from './client.js';
+import type { AscListDocument, AscResource, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 // ─── 앱 ───
 
+interface AppAttributes {
+  name?: string;
+  bundleId?: string;
+  sku?: string;
+  primaryLocale?: string;
+}
+
 export async function listApps() {
-  const data = await apiGet('/apps', {
+  const data = (await apiGet('/apps', {
     'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
     'limit': '200',
-  });
-  return (data.data ?? []).map((a: any) => ({
+  })) as AscListDocument<AppAttributes>;
+  return (data.data ?? []).map((a) => ({
     id: a.id,
     name: a.attributes?.name,
     bundleId: a.attributes?.bundleId,
@@ -21,20 +29,20 @@ export async function listApps() {
 }
 
 export async function getApp(appId: string) {
-  const data = await apiGet(`/apps/${encodePathSegment(appId)}`, {
+  const data = (await apiGet(`/apps/${encodePathSegment(appId)}`, {
     'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
     'include': 'appStoreVersions',
-  });
+  })) as AscSingleDocument<AppAttributes>;
   return data.data;
 }
 
 // ─── TestFlight 베타 그룹 ───
 
 export async function listBetaGroups(appId: string) {
-  const data = await apiGet(`/apps/${encodePathSegment(appId)}/betaGroups`, {
+  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/betaGroups`, {
     'fields[betaGroups]': 'name,isInternalGroup,publicLink,publicLinkEnabled',
-  });
-  return (data.data ?? []).map((g: any) => ({
+  })) as AscListDocument<{ name?: string; isInternalGroup?: boolean; publicLink?: string; publicLinkEnabled?: boolean }>;
+  return (data.data ?? []).map((g) => ({
     id: g.id,
     name: g.attributes?.name,
     isInternal: g.attributes?.isInternalGroup,
@@ -50,10 +58,10 @@ export async function listBetaGroups(appId: string) {
 const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
 
 export async function getAppInfo(appId: string) {
-  const data = await apiGet(`/apps/${encodePathSegment(appId)}/appInfos`, {
+  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/appInfos`, {
     'fields[appInfos]': 'state,appStoreAgeRating,brazilAgeRating',
-  });
-  return (data.data ?? []).map((i: any) => ({
+  })) as AscListDocument<{ state?: string; appStoreState?: string; appStoreAgeRating?: string }>;
+  return (data.data ?? []).map((i) => ({
     id: i.id,
     // 새 필드명 state, 옛 필드명 appStoreState 모두 케어
     state: i.attributes?.state ?? i.attributes?.appStoreState,
@@ -73,6 +81,10 @@ export interface AppInfoLocalizationFields {
   subtitle?: string;
   privacyPolicyUrl?: string;
   privacyPolicyText?: string;
+}
+
+interface AppInfoLocalizationAttributes extends AppInfoLocalizationFields {
+  locale?: string;
 }
 
 async function findEditableAppInfoId(appId: string): Promise<{ appInfoId: string; state: string }> {
@@ -96,7 +108,7 @@ export async function listAppInfoLocalizations(appId: string, locale?: string) {
     'fields[appInfoLocalizations]': 'locale,name,subtitle,privacyPolicyUrl,privacyPolicyText',
     'limit': '200',
   });
-  const all = ((data?.data ?? []) as any[]).map((l) => ({
+  const all = ((data?.data ?? []) as AscResource<AppInfoLocalizationAttributes>[]).map((l) => ({
     id: l.id,
     locale: l.attributes?.locale,
     name: l.attributes?.name,
@@ -159,6 +171,21 @@ export async function createAppInfoLocalization(
 
 // ─── 고객 리뷰 (App Store 받은 리뷰 + 개발자 답변) ───
 
+interface CustomerReviewAttributes {
+  rating?: number;
+  title?: string;
+  body?: string;
+  reviewerNickname?: string;
+  createdDate?: string;
+  territory?: string;
+}
+
+interface CustomerReviewResponseAttributes {
+  responseBody?: string;
+  lastModifiedDate?: string;
+  state?: string;
+}
+
 export interface ListCustomerReviewsOptions {
   limit?: number;
   territory?: string;       // 예: "KR", "US" — ISO 3166-1 alpha-3 일부 ISO-3166 alpha-2 혼합. App Store API는 "USA", "KOR" 등 alpha-3 사용
@@ -180,17 +207,21 @@ export async function listCustomerReviews(
   if (opts.territory) params['filter[territory]'] = opts.territory;
   if (opts.rating != null) params['filter[rating]'] = String(opts.rating);
 
-  const data = await apiGet(`/apps/${encodePathSegment(appId)}/customerReviews`, params);
+  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/customerReviews`, params)) as AscListDocument<
+    CustomerReviewAttributes,
+    { response?: AscToOne },
+    AscResource<CustomerReviewResponseAttributes>
+  >;
 
   // include로 가져온 답변 매핑
-  const responses = new Map<string, any>();
+  const responses = new Map<string, CustomerReviewResponseAttributes | undefined>();
   for (const inc of data.included ?? []) {
     if (inc.type === 'customerReviewResponses') {
       responses.set(inc.id, inc.attributes);
     }
   }
 
-  return (data.data ?? []).map((r: any) => {
+  return (data.data ?? []).map((r) => {
     const respId = r.relationships?.response?.data?.id;
     const resp = respId ? responses.get(respId) : null;
     return {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { JsonApiRequestBody } from './helpers.js';
 
 // 심사 제출 전 선언 — 네트워크 없이 요청 모양만 고정한다.
 //
@@ -14,7 +15,8 @@ vi.mock('../appstore/auth.js', () => ({
 
 const decl = await import('../appstore/declarations.js');
 
-type Call = { url: string; method: string; body?: any };
+// body 는 요청에 본문이 있을 때만 채워진다 — 테스트는 본문이 있는 호출만 되읽는다.
+type Call = { url: string; method: string; body: JsonApiRequestBody };
 let calls: Call[] = [];
 
 function stubFetch(routes: Array<{ match: RegExp; method?: string; status?: number; json?: unknown }>) {

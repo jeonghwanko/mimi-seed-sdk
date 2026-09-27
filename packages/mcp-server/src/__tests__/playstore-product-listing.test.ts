@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OAuth2Client } from 'google-auth-library';
 
 const api = vi.hoisted(() => ({
   onetimeGet: vi.fn(),
@@ -30,7 +31,7 @@ import {
   updatePurchaseOptionState,
 } from '../playstore/tools.js';
 
-const auth = {} as any;
+const auth = {} as unknown as OAuth2Client;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,8 +55,8 @@ describe('updateOneTimeProductListings', () => {
     ]);
 
     const sent = api.onetimePatch.mock.calls[0][0].requestBody.listings;
-    expect(sent.map((l: any) => l.languageCode).sort()).toEqual(['en-US', 'ja-JP', 'ko-KR']);
-    expect(sent.find((l: any) => l.languageCode === 'ko-KR')).toEqual({
+    expect(sent.map((l: { languageCode: string }) => l.languageCode).sort()).toEqual(['en-US', 'ja-JP', 'ko-KR']);
+    expect(sent.find((l: { languageCode: string }) => l.languageCode === 'ko-KR')).toEqual({
       languageCode: 'ko-KR', title: '두루마리 10개', description: '쪽지 10번',
     });
     expect(result.created).toEqual(['ja-JP']);

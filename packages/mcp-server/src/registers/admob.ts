@@ -100,8 +100,8 @@ export function registerAdmobTools(server: ToolRegistrar) {
       try {
         const result = await admob.createApp(auth, accountId, platform, displayName, appStoreId);
         return jsonResult(result);
-      } catch (err: any) {
-        if (err.code === 403) {
+      } catch (err) {
+        if ((err as { code?: unknown }).code === 403) {
           return textResult([
             '❌ AdMob 앱 생성 API 접근 불가 (403).',
             '',
@@ -131,8 +131,8 @@ export function registerAdmobTools(server: ToolRegistrar) {
       try {
         const result = await admob.createAdUnit(auth, accountId, appId, displayName, adFormat);
         return jsonResult(result);
-      } catch (err: any) {
-        if (err.code === 403) {
+      } catch (err) {
+        if ((err as { code?: unknown }).code === 403) {
           return textResult([
             '❌ 광고 단위 생성 API 접근 불가 (403).',
             '',

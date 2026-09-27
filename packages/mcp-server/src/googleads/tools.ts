@@ -12,7 +12,7 @@ const BASE = `https://googleads.googleapis.com/${API_VERSION}`;
 
 export const REPORT_METRIC_NOTE = 'cost is in account currency, not micros. conversions are Google Ads conversions, not necessarily installs. Legacy installs/cpi aliases do not establish install CPI or cohort D7 ROAS.';
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -42,6 +42,35 @@ function validateDateRange(range: DateRange): void {
 
 // ─── 내부 헬퍼 ───────────────────────────────────────────────
 
+/**
+ * search 응답 한 행 — GAQL SELECT 에 넣은 필드만 온다. protobuf JSON 이라 0 값 스칼라는 생략될 수
+ * 있고 int64 는 문자열로 온다. 지표는 metricNumber / microsToCurrency 가 검증하므로 unknown 으로 둔다.
+ */
+interface GoogleAdsRow {
+  customer?: { currencyCode?: string; timeZone?: string };
+  campaign?: {
+    id?: string;
+    name?: string;
+    status?: string;
+    advertisingChannelType?: string;
+    advertisingChannelSubType?: string;
+    startDateTime?: string;
+    endDateTime?: string;
+  };
+  campaignBudget?: { amountMicros?: string | number };
+  metrics?: {
+    clicks?: unknown;
+    impressions?: unknown;
+    costMicros?: string | number;
+    conversions?: unknown;
+    conversionsValue?: unknown;
+    costPerConversion?: unknown;
+    ctr?: unknown;
+    averageCpc?: unknown;
+  };
+  segments?: { date?: string };
+}
+
 async function getAccessToken(auth: OAuth2Client): Promise<string> {
   const token = await auth.getAccessToken();
   if (!token.token) throw new Error('OAuth 토큰을 가져올 수 없음. 재인증 필요.');
@@ -65,11 +94,11 @@ async function search(
   auth: OAuth2Client,
   cfg: GoogleAdsConfig,
   query: string,
-): Promise<any[]> {
+): Promise<GoogleAdsRow[]> {
   const accessToken = await getAccessToken(auth);
   const url = `${BASE}/customers/${encodePathSegment(cfg.customerId)}/googleAds:search`;
 
-  const all: any[] = [];
+  const all: GoogleAdsRow[] = [];
   let pageToken: string | undefined;
   const seenTokens = new Set<string>();
 
@@ -89,15 +118,15 @@ async function search(
       throw googleAdsError(res.status, text, [accessToken, cfg.developerToken]);
     }
 
-    let json: any;
+    let json: unknown;
     try { json = JSON.parse(text); } catch { throw new Error('Google Ads returned invalid JSON.'); }
     if (!isRecord(json) || 'error' in json ||
       (json.results !== undefined && !Array.isArray(json.results)) ||
       (json.nextPageToken !== undefined && typeof json.nextPageToken !== 'string') ||
-      (json.results ?? []).some((row: unknown) => !isRecord(row) || !isRecord(row.campaign))) {
+      ((json.results ?? []) as unknown[]).some((row) => !isRecord(row) || !isRecord(row.campaign))) {
       throw new Error('Google Ads returned an invalid search response.');
     }
-    all.push(...(json.results ?? []));
+    all.push(...((json.results ?? []) as GoogleAdsRow[]));
     pageToken = json.nextPageToken ?? undefined;
     if (pageToken) {
       if (seenTokens.has(pageToken)) throw new Error('Google Ads repeated a page token; refusing partial totals.');
@@ -150,7 +179,7 @@ export async function listCampaigns(auth: OAuth2Client, cfg: GoogleAdsConfig) {
   `;
 
   const rows = await search(auth, cfg, query);
-  return rows.map((r: any) => ({
+  return rows.map((r) => ({
     id: r.campaign?.id,
     name: r.campaign?.name,
     status: r.campaign?.status,
@@ -197,7 +226,7 @@ export async function getCampaignReport(
   for (const row of rows) {
     if (!isRecord(row.metrics)) throw new Error('Google Ads report row is missing metrics.');
   }
-  return rows.map((r: any) => ({
+  return rows.map((r) => ({
     currencyCode: r.customer?.currencyCode,
     timeZone: r.customer?.timeZone,
     id: r.campaign?.id,

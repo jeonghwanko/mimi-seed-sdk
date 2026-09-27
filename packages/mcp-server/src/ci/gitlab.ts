@@ -35,20 +35,44 @@ export interface GitLabWorkflowInfo {
   note: string;
 }
 
+/** GitLab REST 응답 중 이 모듈이 읽는 필드. */
+interface GlPipelineSchedule {
+  id: number;
+  description: string;
+  ref: string;
+  cron: string;
+  active: boolean;
+}
+
+interface GlTrigger {
+  id: number;
+  description?: string | null;
+}
+
+interface GlPipeline {
+  id: number;
+  status: string;
+  ref: string;
+  sha?: string;
+  web_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function listWorkflows(cfg: CiConfig): Promise<GitLabWorkflowInfo> {
   const [schedules, triggers] = await Promise.all([
     glFetch(cfg, `/projects/${projectId(cfg)}/pipeline_schedules`),
     glFetch(cfg, `/projects/${projectId(cfg)}/triggers`),
   ]);
   return {
-    schedules: (schedules as any[]).map((s: any) => ({
+    schedules: (schedules as GlPipelineSchedule[]).map((s) => ({
       id: s.id,
       description: s.description,
       ref: s.ref,
       cron: s.cron,
       active: s.active,
     })),
-    triggers: (triggers as any[]).map((t: any) => ({
+    triggers: (triggers as GlTrigger[]).map((t) => ({
       id: t.id,
       description: t.description ?? '',
     })),
@@ -85,7 +109,7 @@ export async function listRecentBuilds(
   let endpoint = `/projects/${projectId(cfg)}/pipelines?per_page=${limit}&order_by=id&sort=desc`;
   if (ref) endpoint += `&ref=${encodeURIComponent(ref)}`;
   const data = await glFetch(cfg, endpoint);
-  return (data as any[]).map(normalize);
+  return (data as GlPipeline[]).map(normalize);
 }
 
 export async function cancelBuild(cfg: CiConfig, pipelineId: string | number): Promise<void> {
@@ -94,12 +118,12 @@ export async function cancelBuild(cfg: CiConfig, pipelineId: string | number): P
   });
 }
 
-function normalize(p: any): NormalizedBuild {
+function normalize(p: GlPipeline): NormalizedBuild {
   return {
     id: p.id,
     status: normalizeStatus(p.status),
     branch: p.ref,
-    commit: (p.sha as string | undefined)?.slice(0, 7),
+    commit: p.sha?.slice(0, 7),
     url: p.web_url,
     createdAt: p.created_at,
     updatedAt: p.updated_at,

@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { getAuthHeaders } from './auth.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import type { AscListDocument, AscResource, AscSingleDocument, AscToMany } from './types.js';
 
 const BASE = 'https://api.appstoreconnect.apple.com/v1';
 
@@ -26,7 +27,7 @@ interface UploadOperation {
   requestHeaders: Array<{ name: string; value: string }>;
 }
 
-async function req<T = any>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
+async function req<T = unknown>(pathOrUrl: string, init: RequestInit = {}): Promise<T> {
   const headers = await getAuthHeaders();
   if (!headers) {
     throw new Error(
@@ -57,6 +58,14 @@ export interface PreviewRow {
   videoUrl?: string;
 }
 
+interface PreviewAttributes {
+  fileName?: string;
+  fileSize?: number;
+  assetDeliveryState?: { state?: string };
+  previewFrameTimeCode?: string;
+  videoUrl?: string;
+}
+
 export interface PreviewSetRow {
   id: string;
   previewType?: string;
@@ -65,15 +74,19 @@ export interface PreviewSetRow {
 
 /** 로케일의 미리보기 세트 + 각 동영상 상태. 업로드 후 인코딩 확인도 여기서 한다. */
 export async function listPreviewSets(localizationId: string): Promise<PreviewSetRow[]> {
-  const data = await req(
+  const data = await req<AscListDocument<
+    { previewType?: string },
+    { appPreviews?: AscToMany },
+    AscResource<PreviewAttributes>
+  > | null>(
     `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/appPreviewSets` +
       `?include=appPreviews` +
       `&fields[appPreviewSets]=previewType,appPreviews` +
       `&fields[appPreviews]=fileName,fileSize,assetDeliveryState,previewFrameTimeCode,videoUrl`,
   );
-  const included: any[] = data?.included ?? [];
-  return (data?.data ?? []).map((s: any) => {
-    const ids: string[] = (s.relationships?.appPreviews?.data ?? []).map((p: any) => p.id);
+  const included = data?.included ?? [];
+  return (data?.data ?? []).map((s) => {
+    const ids: string[] = (s.relationships?.appPreviews?.data ?? []).map((p) => p.id);
     return {
       id: s.id,
       previewType: s.attributes?.previewType,
@@ -96,7 +109,7 @@ async function ensurePreviewSet(localizationId: string, previewType: string): Pr
   const hit = sets.find((s) => s.previewType === previewType);
   if (hit) return hit.id;
 
-  const created = await req('/appPreviewSets', {
+  const created = await req<{ data: { id: string } }>('/appPreviewSets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -111,7 +124,7 @@ async function ensurePreviewSet(localizationId: string, previewType: string): Pr
       },
     }),
   });
-  return created.data.id as string;
+  return created.data.id;
 }
 
 async function uploadChunks(absPath: string, ops: UploadOperation[]): Promise<void> {
@@ -179,7 +192,7 @@ export async function uploadPreview(args: {
   const setId = await ensurePreviewSet(localizationId, previewType);
   const mimeType = guessMimeType(fileName);
 
-  const reserved: any = await req('/appPreviews', {
+  const reserved = await req<{ data: { id: string; attributes?: { uploadOperations?: UploadOperation[] } } }>('/appPreviews', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -196,7 +209,7 @@ export async function uploadPreview(args: {
     }),
   });
 
-  const previewId = reserved.data.id as string;
+  const previewId = reserved.data.id;
   const ops: UploadOperation[] = reserved.data.attributes?.uploadOperations ?? [];
   if (ops.length === 0) throw new Error('uploadOperations 가 비어 있다 — Apple 응답 형식 확인 필요.');
 
@@ -211,7 +224,7 @@ export async function uploadPreview(args: {
       .on('error', reject);
   });
 
-  const committed: any = await req(`/appPreviews/${encodePathSegment(previewId)}`, {
+  const committed = await req<AscSingleDocument<{ assetDeliveryState?: { state?: string } }> | null>(`/appPreviews/${encodePathSegment(previewId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -81,6 +81,9 @@ repo the comments carry the "why" and the incident dates, so blame is a real ass
 (`no-floating-promises`, `await-thenable`, `no-misused-promises`) are the point — this codebase is almost all
 async, and a missing `await` looks like success. They lint through `tsconfig.lint.json`, not the build config:
 the latter excludes `src/__tests__`, which had left the test files with **no type checking at all**.
+In `packages/mcp-server` a hand-written `any` is also an error (`no-explicit-any`): declare the fields you read
+(e.g. `appstore/types.ts` for ASC JSON:API shapes) or take `unknown` and narrow. The implicit `any` that
+`res.json()` returns is still allowed — the `no-unsafe-*` rules stay off.
 
 ### Where each guard actually runs in CI
 

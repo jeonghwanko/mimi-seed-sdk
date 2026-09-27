@@ -2,16 +2,17 @@
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import { apiGet, apiPatch, apiPost } from './client.js';
+import type { AscListDocument, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 // ─── 버전 ───
 
 export async function listVersions(appId: string) {
-  const data = await apiGet(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
+  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
     'fields[appStoreVersions]': 'versionString,appStoreState,releaseType,createdDate',
     'limit': '10',
-  });
-  return (data.data ?? []).map((v: any) => ({
+  })) as AscListDocument<{ versionString?: string; appStoreState?: string; releaseType?: string; createdDate?: string }>;
+  return (data.data ?? []).map((v) => ({
     id: v.id,
     version: v.attributes?.versionString,
     state: v.attributes?.appStoreState,
@@ -163,10 +164,16 @@ export async function attachLatestValidBuild(
 // ─── 로컬라이제이션 (메타데이터) ───
 
 export async function getVersionLocalizations(versionId: string) {
-  const data = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionLocalizations`, {
+  const data = (await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionLocalizations`, {
     'fields[appStoreVersionLocalizations]': 'locale,description,keywords,promotionalText,whatsNew',
-  });
-  return (data.data ?? []).map((l: any) => ({
+  })) as AscListDocument<{
+    locale?: string;
+    description?: string;
+    keywords?: string;
+    promotionalText?: string;
+    whatsNew?: string;
+  }>;
+  return (data.data ?? []).map((l) => ({
     id: l.id,
     locale: l.attributes?.locale,
     description: l.attributes?.description,
@@ -212,9 +219,9 @@ export async function updateVersionWhatsNew(
   fields: LocalizationUpdateFields,
 ) {
   const localizations = await getVersionLocalizations(versionId);
-  const target = localizations.find((l: any) => l.locale === locale);
+  const target = localizations.find((l) => l.locale === locale);
   if (!target) {
-    const available = localizations.map((l: any) => l.locale).join(', ') || '(없음)';
+    const available = localizations.map((l) => l.locale).join(', ') || '(없음)';
     throw new Error(
       `로캘 "${locale}"을 버전 ${versionId}에서 찾을 수 없어. 가능한 로캘: ${available}`,
     );
@@ -300,13 +307,13 @@ export async function getReviewNotes(
 // ─── 빌드 ───
 
 export async function listBuilds(appId: string) {
-  const data = await apiGet(`/builds`, {
+  const data = (await apiGet(`/builds`, {
     'filter[app]': appId,
     'fields[builds]': 'version,uploadedDate,processingState,buildAudienceType',
     'sort': '-uploadedDate',
     'limit': '10',
-  });
-  return (data.data ?? []).map((b: any) => ({
+  })) as AscListDocument<{ version?: string; uploadedDate?: string; processingState?: string }>;
+  return (data.data ?? []).map((b) => ({
     id: b.id,
     version: b.attributes?.version,
     uploadedDate: b.attributes?.uploadedDate,
@@ -314,14 +321,13 @@ export async function listBuilds(appId: string) {
   }));
 }
 
-
 // ─── 버전 → 앱/플랫폼 역조회 (빌드 연결·심사 제출이 공유) ───
 
 export async function getVersionAppAndPlatform(versionId: string): Promise<{ appId: string; platform: string }> {
-  const data = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}`, {
+  const data = (await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}`, {
     'fields[appStoreVersions]': 'platform,app',
     'include': 'app',
-  });
+  })) as AscSingleDocument<{ platform?: string }, { app?: AscToOne }> | undefined;
   const platform = data?.data?.attributes?.platform;
   const appId = data?.data?.relationships?.app?.data?.id;
   if (!platform || !appId) {

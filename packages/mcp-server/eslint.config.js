@@ -46,10 +46,16 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
       ],
 
+      // 손으로 쓰는 `any` 는 금지한다. 외부 API 응답은 "이 코드가 읽는 필드"만 선언한
+      // 인터페이스(appstore/types.ts 의 JSON:API 모양, googleads 의 GoogleAdsRow 등)로
+      // 캐스팅하거나, unknown 으로 받아 좁힌다. 정말 필요한 곳은 사유를 단 줄 단위 disable.
+      '@typescript-eslint/no-explicit-any': 'error',
+
       // ── 이 코드베이스에서 의도적으로 쓰는 것 ───────────────────────────
-      // 외부 API 응답은 스키마가 없다. any 를 막으면 googleapis/ASC 응답을 다루는
-      // 모든 곳에 가짜 타입을 지어내게 되고, 그 타입이 곧 거짓말이 된다.
-      '@typescript-eslint/no-explicit-any': 'off',
+      // res.json() / JSON.parse 가 돌려주는 암묵적 any 까지 막으면 수백 곳(2026-09 기준
+      // no-unsafe-* 합계 약 450, 대부분 ASC apiGet 응답 접근)에 가짜 타입을 지어내게 되고,
+      // 그 타입이 곧 거짓말이 된다.
+      // 명시적 any 만 막고 암묵적 any 의 전파는 아직 허용한다.
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
