@@ -25,6 +25,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   only reports and exits 0.
 - CI runs both packages' test suites on Windows (Node 22) in addition to Linux (Node 20 and 22).
 - `CHANGELOG.md` (this file), with a `Tool changes` convention for MCP tool additions, renames, and removals.
+- Every MCP tool now carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+  `openWorldHint`) and a readable `title`, derived from the read / write / destructive classification in
+  `tool-manifest.json` (mirrored by the **W** / **D** markers in `docs/domain/tool-catalog.md`). Clients that honor
+  annotations can now auto-approve reads and warn before destructive calls.
+- Destructive tools are confirm-gated by the server: called without `confirm: true` they return a dry-run
+  preview and change nothing; the call with `confirm: true` runs it. Tools that already had their own flag
+  (`confirmPublish`, `confirmVisible`, `confirm` on submit/release/recovery tools) keep it.
+- `MIMI_SEED_TOOLSETS` / `MIMI_SEED_TOOLSETS_EXCLUDE` limit which tool domains the local MCP server exposes
+  (domain keys such as `playstore`, or the groups `store`, `google`, `social`, `media`, `build`, `all`). Unset
+  means every domain, as before; `auth` and `checks` are always on; unknown keys are ignored with a warning.
+  `mimi_seed_status` shows the active toolsets.
 
 ### Changed
 
@@ -42,6 +53,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `playstore_reply_review`, `sync_apps`) up to 5 minutes, so a slow write is not cut off with an unknown outcome.
 - The CLI's command help moved to `packages/cli/src/help.ts` and `mimi-seed init` to `packages/cli/src/init.ts`
   (internal refactor; no behavior change).
+- MCP tools are registered through `McpServer.registerTool` instead of the deprecated `server.tool` API
+  (internal; the tool list, names, and schemas are otherwise unchanged).
+- **Agents must now preview then confirm** destructive calls (see `Tool changes` for the list). Skills, the
+  agent guide, and the `review-inbox` prompt describe the new call order.
+
+### Deprecated
+
+- `playstore_update_latest_release_notes` — use `playstore_update_release_notes` without `versionCode`.
+- `appstore_attach_latest_build` — use `appstore_attach_build` without `buildId`.
+
+Both still work (same schema and behavior as their replacement, description prefixed `[DEPRECATED …]`) and will
+be removed in the next minor release.
 
 ### Fixed
 
@@ -65,6 +88,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - On Windows, credential writes retry briefly (up to 1 s) when antivirus, the search indexer, OneDrive, or another
   mimi-seed process holds the file open, instead of failing with `EPERM`.
 - `CALLBACK_PORT_IN_USE` names the loopback address that is taken and how to find the process holding it.
+- `bigquery_run_query` also rejects non-`SELECT` SQL lexically before any API call, and that check ends `--` / `#`
+  comments at `\r` as BigQuery does — `SELECT 1 -- x\r; DROP TABLE t` no longer hides its second statement.
+  Pipe-syntax queries (`FROM t |> …`) are accepted; `CREATE TEMP FUNCTION …; SELECT …` scripts are rejected with
+  an explanation.
 
 ### Security
 
@@ -93,7 +120,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Tool changes
 
-- No tools were added, renamed, or removed. Parameter and output changes:
+- No tools were added or removed. Two tools become deprecated aliases (see `Deprecated`):
+  `playstore_update_latest_release_notes` → `playstore_update_release_notes`,
+  `appstore_attach_latest_build` → `appstore_attach_build`.
+- Merged-tool parameters: `playstore_update_release_notes` — `versionCode` is optional (omitted = latest release
+  on the track) and gains `syncTracks` (only without `versionCode`; the output with `versionCode` is unchanged).
+  `appstore_attach_build` — `buildId` is optional (omitted = latest `VALID` build) and gains `minBuildNumber`
+  (only without `buildId`).
+- **Now require `confirm: true`** (without it they return a dry-run preview): `playstore_submit_release` and
+  `playstore_promote_release` (every status, including `draft`), `playstore_delete_product`,
+  `playstore_delete_all_images`, `playstore_replace_images`, `playstore_delete_service_account`,
+  `playstore_reply_review`, `setup_playstore_connection`, `appstore_delete_screenshot`,
+  `appstore_delete_screenshot_set`, `appstore_delete_product`, `appstore_cancel_review`,
+  `appstore_remove_review_submission_item`, `appstore_reply_review`, `appstore_add_product_to_review`,
+  `firebase_delete_android_app`, `firebase_delete_ios_app`, `firebase_delete_web_app`,
+  `jenkins_delete_credential`, `jenkins_create_job`, `jenkins_update_job`, `iam_add_iam_policy_binding`,
+  `iam_create_key`, `ci_cancel_build`, `facebook_post_photo`, `facebook_post_multi_photo`, `instagram_post_image`,
+  `instagram_post_carousel`, `threads_post`, `threads_post_video`, `threads_post_carousel`.
+- `jenkins_create_credential` / `jenkins_upload_keystore` still create a **new** id directly, but replacing an
+  **existing** id now needs `confirm: true` (with either the value or the file input style).
+- `youtube_upload_video` / `youtube_update_video_privacy` are classified as writes, not destructive (private is
+  reversible); public / unlisted still require `confirmVisible: true`.
+- Other parameter and output changes:
   - `iam_create_key` returns the key **file path**, keyId and client email — no longer the private key JSON.
   - `android_generate_keystore` returns the **paths** of `upload.jks` and `signing.json` — no longer the passwords
     or the keystore base64.
