@@ -19,7 +19,7 @@ import {
   type AuthDomainId,
 } from './scopes.js';
 import { openPrivateBrowser } from './browser.js';
-import { resolveLang } from '../lib/lang.js';
+import { resolveLang } from '#core/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
 // 여기 있는 건 전부 **터미널에 찍히는 사람용 문자열**이다. errors.ts 가 만드는

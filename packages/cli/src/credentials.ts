@@ -10,8 +10,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { McpBin } from "./mcp-bin.js";
-import type { Lang } from "./settings.js";
-import { resolveLang } from "./settings.js";
+import type { Lang } from "#core/lang.js";
+import { resolveLang } from "#core/lang.js";
 import {
   findProjectManifest,
   manifestSocialProfile,

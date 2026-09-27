@@ -1,0 +1,9 @@
+{
+  "//": "packages/core(공유 소스)를 이 패키지의 dist/core 로 컴파일한다 — `npm run build` 의 첫 단계. 런타임은 package.json \"imports\" 의 `#core/*` → `./dist/core/*` 로 찾아가므로, 배포본은 미배포 패키지에 의존하지 않는다. 본 빌드(tsconfig.json)는 여기서 나온 .d.ts 로 타입을 본다. @types/node 는 이 패키지 설치본(typeRoots 기본값)을 쓴다 — core 는 node: 빌트인만 import 한다.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../core/src",
+    "outDir": "dist/core"
+  },
+  "include": ["../core/src/**/*"]
+}

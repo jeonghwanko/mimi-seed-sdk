@@ -8,7 +8,7 @@ import readline from 'node:readline';
 import { loadConfig, saveConfig, normalizeCustomerId, type GoogleAdsConfig } from './config.js';
 import { listAccessibleCustomers } from './tools.js';
 import { getAuthenticatedClient } from '../auth/google-auth.js';
-import { resolveLang } from '../lib/lang.js';
+import { resolveLang } from '#core/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
 const ko = {

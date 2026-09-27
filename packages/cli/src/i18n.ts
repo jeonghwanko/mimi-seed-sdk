@@ -8,7 +8,7 @@
 // MCP 도구의 description 은 여기서 다루지 않는다. 그건 사람이 아니라 LLM 이 읽는 인터페이스라,
 // 번역하면 도구 선택 품질이 흔들린다.
 
-import { resolveLang, type Lang } from "./settings.js";
+import { resolveLang, type Lang } from "#core/lang.js";
 
 /**
  * 파일별 로컬 카탈로그를 만든다.

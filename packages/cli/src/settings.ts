@@ -2,21 +2,17 @@
 //
 // 자격증명이 아니라 **취향**을 담는다 (지금은 언어 하나). 자격증명 파일들과 분리해 둔 이유:
 // logout/재인증으로 토큰을 지워도 언어 설정은 남아야 하고, 이 파일은 비밀이 아니다.
+//
+// 이 파일의 **쓰기**는 CLI 만 한다. 언어를 고르는 규칙(resolveLang)은 mcp-server 의 setup bin 과
+// 같아야 하므로 packages/core 의 `#core/lang.js` 한 곳에 있다.
 
 import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
+import { settingsPath, type Lang } from "#core/lang.js";
 import { writeJsonAtomic } from "./lib/atomic-write.js";
-
-export type Lang = "ko" | "en";
-export const DEFAULT_LANG: Lang = "ko";
 
 export interface Settings {
   lang?: Lang;
-}
-
-function settingsPath(home: string): string {
-  return path.join(home, ".mimi-seed", "settings.json");
 }
 
 export function readSettings(home: string = os.homedir()): Settings {
@@ -36,22 +32,4 @@ export function writeSettings(next: Settings, home: string = os.homedir()): void
 /** 언어가 아직 한 번도 선택되지 않았는가 (= setup 이 물어봐야 하는가). */
 export function isLangUnset(home: string = os.homedir()): boolean {
   return !process.env.MIMI_SEED_LANG && !readSettings(home).lang;
-}
-
-export function isLang(v: unknown): v is Lang {
-  return v === "ko" || v === "en";
-}
-
-/**
- * 우선순위: 환경변수 > settings.json > 기본값(ko).
- *
- * 환경변수를 1순위로 두는 이유: CLI 가 mcp-server 의 setup bin 을 spawn 할 때 이 값을 물려줘서,
- * 마법사와 그 자식 프로세스의 언어가 어긋나지 않게 한다 (mcp-bin.ts).
- */
-export function resolveLang(home: string = os.homedir()): Lang {
-  const env = process.env.MIMI_SEED_LANG?.toLowerCase();
-  if (isLang(env)) return env;
-  const saved = readSettings(home).lang;
-  if (isLang(saved)) return saved;
-  return DEFAULT_LANG;
 }

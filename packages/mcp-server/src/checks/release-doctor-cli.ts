@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolveLang } from '../lib/lang.js';
+import { resolveLang } from '#core/lang.js';
 import { scanReleaseDoctor } from './release-doctor.js';
 import { parseReleaseDoctorArgs, RELEASE_DOCTOR_USAGE } from './release-doctor-cli-args.js';
 import { renderReleaseDoctor } from './release-doctor-render.js';
