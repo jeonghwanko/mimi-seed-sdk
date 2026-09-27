@@ -21,24 +21,64 @@ function credentialBase(url: string, id: string): string {
   return `${storeBase(url)}/credential/${encodeURIComponent(id)}`;
 }
 
+/** 이미 있는 credential 의 메타데이터 — 교체 dry-run 이 "무엇을 덮어쓰게 되는지" 보여줄 때 쓴다. 비밀값은 없다. */
+export interface ExistingCredential {
+  id: string;
+  /** Jenkins 가 준 `_class`. */
+  className: string;
+  /** 표시용 종류 이름 (예: "Secret file"). 로케일에 따라 번역될 수 있다. */
+  typeName: string;
+  displayName: string;
+  description: string;
+}
+
 /**
- * 기존 credential 의 Java class. 없으면 null, 있는데 메타데이터를 못 읽으면 빈 문자열.
- *
- * boolean(존재 여부)만으로는 부족하다 — id 가 같고 **종류가 다른** credential 을
- * upsert 하면 기존 값이 통째로 사라진다. 예: Secret text 로 앱 키를 넣어둔 id 에
- * Play SA 파일을 올리면 앱 키가 소멸한다. `_class` 는 Jenkins 가 주는 Java 클래스명이라
- * 표시 이름(typeName)과 달리 로케일에 흔들리지 않는다.
+ * 기존 credential 의 메타데이터. 없으면 null. 본문을 못 읽으면 빈 필드로 채운다 (존재 자체는 확정).
+ * 존재 확인과 교체 dry-run 표시가 같은 엔드포인트(`/credential/<id>/api/json`)를 쓴다.
  */
-async function credentialClass(cfg: JenkinsConfig, id: string): Promise<string | null> {
+export async function describeCredential(cfg: JenkinsConfig, id: string): Promise<ExistingCredential | null> {
   const res = await fetchWithTimeout(`${credentialBase(cfg.url, id)}/api/json`, {
     headers: authHeaders(cfg),
   });
   if (!res.ok) return null;
+  let body: Record<string, unknown> = {};
   try {
-    return ((await res.json()) as { _class?: string })._class ?? '';
+    body = ((await res.json()) as Record<string, unknown> | null) ?? {};
   } catch {
-    return '';
+    // 메타데이터가 깨져도 "있다" 는 사실은 유지한다.
   }
+  const str = (value: unknown) => (typeof value === 'string' ? value : '');
+  return {
+    id: str(body.id) || id,
+    className: str(body._class),
+    typeName: str(body.typeName),
+    displayName: str(body.displayName),
+    description: str(body.description),
+  };
+}
+
+/**
+ * 기존 credential 의 **종류**(Java class). 없으면 null, 판단 못 하면 빈 문자열.
+ *
+ * boolean(존재 여부)만으로는 부족하다 — id 가 같고 **종류가 다른** credential 을
+ * upsert 하면 기존 값이 통째로 사라진다. 예: Secret text 로 앱 키를 넣어둔 id 에
+ * Play SA 파일을 올리면 앱 키가 소멸한다.
+ *
+ * `/credential/<id>/api/json` 의 `_class` 는 credential 구현 클래스일 수도, 그것을 감싼
+ * `CredentialsStoreAction$CredentialsWrapper` 일 수도 있다. 래퍼면 `_class` 로는 종류를 알 수 없어
+ * 영어 typeName("Secret file" / "Secret text")으로만 판정하고, 그것도 아니면(번역된 이름 등) 모른다고 본다
+ * — 메타데이터 부재로 정상 교체를 막지 않는다.
+ */
+function credentialKind(info: ExistingCredential): string {
+  if (info.className && !info.className.includes('CredentialsWrapper')) return info.className;
+  if (/^secret file$/i.test(info.typeName.trim())) return FILE_CLASS;
+  if (/^secret text$/i.test(info.typeName.trim())) return TEXT_CLASS;
+  return '';
+}
+
+async function credentialClass(cfg: JenkinsConfig, id: string): Promise<string | null> {
+  const info = await describeCredential(cfg, id);
+  return info === null ? null : credentialKind(info);
 }
 
 /** id 가 이미 **다른 종류**로 쓰이고 있으면 덮어쓰지 않고 멈춘다. */
