@@ -10,7 +10,9 @@ import {
   tryCredById,
   detectAll,
   isSatisfied,
+  type Platform,
 } from "./credentials.js";
+import type { AppHint } from "./detect.js";
 import { migrateLegacyJenkins } from "./jenkins-config.js";
 import { findProjectLink } from "./project-link.js";
 import { t } from "./i18n.js";
@@ -107,6 +109,14 @@ export function manifestCredentialMismatch(
   return null;
 }
 
+/** 감지된 앱에서 이 프로젝트의 플랫폼을 뽑는다 (setup 과 같은 규칙: packageName=android, bundleId=ios). */
+export function platformsFromHints(hints: AppHint[]): Platform[] {
+  const platforms: Platform[] = [];
+  if (hints.some((h) => h.packageName)) platforms.push("android");
+  if (hints.some((h) => h.bundleId)) platforms.push("ios");
+  return platforms;
+}
+
 /**
  * 원격(웹 콘솔 / 원격 MCP) 기능을 쓰도록 설정된 환경인가.
  *
@@ -163,7 +173,11 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
   // Jenkins/CI/Ads/Facebook/Instagram 은 doctor 에 아예 보이지 않았다.
   migrateLegacyJenkins(); // 레거시 config.json.jenkins → jenkins.json (1회성)
   const detected = detectAll(undefined, cwd);
+  const hints = await detectHints(cwd);
+  const platforms = platformsFromHints(hints);
   for (const spec of CREDENTIALS) {
+    // 클라우드 계정(config.json / MIMI_SEED_TOKEN)은 위 "계정" 섹션이 이미 판정했다 — 두 번 찍지 않는다.
+    if (spec.id === "mimiseed") continue;
     const d = detected.get(spec.id)!;
     const base = credLabel(spec);
     const note = credNote(spec);
@@ -171,8 +185,11 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
     if (d.present) r.ok(base, d.detail);
     else if (isSatisfied(spec, detected)) r.warn(label, t().setup.fallbackWorking);
     else if (spec.requirement === "optional") r.warn(`${label}`, `→ ${spec.fix}`);
-    // 클라우드 계정은 원격을 쓸 때만 필수다 (위 remoteConfigured 참고).
-    else if (spec.id === "mimiseed" && !remote) r.warn(label, m.noTokenLocalDetail);
+    // 플랫폼 자격증명(App Store 등)은 이 프로젝트가 그 플랫폼일 때만 필수다 — missingRequired() 와 같은
+    // 규칙. 안 그러면 Android 전용 사용자가 App Store 키 때문에 영원히 exit 1 을 받는다.
+    else if (spec.requirement === "platform" && !platforms.includes(spec.platform!)) {
+      r.warn(label, `${t().setup.neededFor(spec.platform!)}  → ${spec.fix}`);
+    }
     else r.fail(base, `→ ${spec.fix}`);
   }
   r.text(kleur.dim(m.credsHint));
@@ -227,7 +244,6 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
   // ANTHROPIC_API_KEY 는 위 자격증명 섹션(레지스트리)에서 이미 보고했다 — 여기서 또 찍지 않는다.
 
   r.section("apps", m.secApps);
-  const hints = await detectHints(cwd);
   if (hints.length === 0) {
     r.warn(m.noApp, m.noAppDetail);
   } else {

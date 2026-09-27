@@ -7,7 +7,9 @@ const mocks = vi.hoisted(() => ({
   config: vi.fn(),
   mcpCall: vi.fn(),
   detectAll: vi.fn(),
+  detectHints: vi.fn(),
 }));
+vi.mock("../detect.js", () => ({ detectHints: mocks.detectHints }));
 vi.mock("../config.js", () => ({ getEffectiveConfig: mocks.config }));
 vi.mock("../mcp-client.js", () => ({ mcpCall: mocks.mcpCall }));
 vi.mock("../jenkins-config.js", () => ({ migrateLegacyJenkins: () => false }));
@@ -17,7 +19,7 @@ vi.mock("../credentials.js", async (importOriginal) => ({
 }));
 
 import { CREDENTIALS } from "../credentials.js";
-import { cmdDoctor, manifestCredentialMismatch, remoteConfigured, runDoctor } from "../doctor.js";
+import { cmdDoctor, manifestCredentialMismatch, platformsFromHints, remoteConfigured, runDoctor } from "../doctor.js";
 
 describe("doctor manifest credential identity", () => {
   it("매니페스트가 요구한 App Store keyId와 현재 연결을 비교한다", () => {
@@ -64,6 +66,7 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
     vi.stubEnv("MIMI_SEED_WEB_BASE", "");
     mocks.config.mockResolvedValue(null);
     mocks.detectAll.mockReturnValue(everythingButCloud());
+    mocks.detectHints.mockResolvedValue([]);
     process.exitCode = undefined;
   });
 
@@ -97,7 +100,15 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
     expect(process.exitCode).toBe(1);
     const report = await runDoctor({ cwd, print: false });
     expect(report.ok).toBe(false);
-    expect(report.checks.filter((c) => c.status === "fail").map((c) => c.section)).toEqual(["account", "credentials"]);
+    // 클라우드 계정은 "계정" 섹션에서 한 번만 판정한다 (자격증명 섹션에 같은 줄을 또 찍지 않는다).
+    expect(report.checks.filter((c) => c.status === "fail").map((c) => c.section)).toEqual(["account"]);
+  });
+
+  it("클라우드 토큰 경고는 한 번만 나온다", async () => {
+    const report = await runDoctor({ cwd, print: false });
+    const cloudRows = report.checks.filter((c) => c.status !== "ok" && /Mimi Seed/.test(c.label));
+    expect(cloudRows).toHaveLength(1);
+    expect(cloudRows[0].section).toBe("account");
   });
 
   it("MIMI_SEED_WEB_BASE 가 설정돼 있어도 원격을 쓰는 것으로 본다", async () => {
@@ -150,5 +161,55 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.checks.length).toBeGreaterThan(CREDENTIALS.length);
     expect(new Set(parsed.checks.map((c) => c.status))).not.toContain("fail");
+  });
+});
+
+// App Store Connect 는 requirement "platform"(ios) 이다. 예전 doctor 는 플랫폼을 보지 않고 실패시켜서
+// Android 전용 사용자는 영원히 exit 1 이었다. 규칙은 missingRequired()/setup 과 같다:
+// 이 프로젝트에서 그 플랫폼이 감지될 때만 ✗, 아니면 ⚠.
+describe("doctor 플랫폼 자격증명", () => {
+  let cwd: string;
+  /** Google OAuth 만 연결된 로컬 전용 사용자 — App Store 키 없음. */
+  const oauthOnly = () => new Map(CREDENTIALS.map((spec) => [spec.id, { present: spec.id === "oauth" }]));
+  const android = { packageName: "com.example.app", source: ["android/app/build.gradle"] };
+  const ios = { bundleId: "com.example.app", source: ["ios/App/Info.plist"] };
+
+  beforeEach(() => {
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "mimi-doctor-platform-"));
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.stubEnv("MIMI_SEED_LANG", "en");
+    vi.stubEnv("MIMI_SEED_TOKEN", "");
+    vi.stubEnv("MIMI_SEED_WEB_BASE", "");
+    mocks.config.mockResolvedValue(null);
+    mocks.detectAll.mockReturnValue(oauthOnly());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  const appStoreStatus = async () => {
+    const report = await runDoctor({ cwd, print: false });
+    const row = report.checks.find((c) => c.section === "credentials" && /App Store/.test(c.label));
+    return { ok: report.ok, status: row?.status };
+  };
+
+  it.each([
+    ["Android 전용", [android], "warn", true],
+    ["iOS 전용", [ios], "fail", false],
+    ["둘 다", [android, ios], "fail", false],
+    ["앱 감지 없음", [], "warn", true],
+  ] as const)("%s → App Store Connect %s", async (_name, hints, status, ok) => {
+    mocks.detectHints.mockResolvedValue([...hints]);
+    await expect(appStoreStatus()).resolves.toEqual({ status, ok });
+  });
+
+  it("platformsFromHints 는 packageName=android, bundleId=ios", () => {
+    expect(platformsFromHints([android])).toEqual(["android"]);
+    expect(platformsFromHints([ios])).toEqual(["ios"]);
+    expect(platformsFromHints([{ ...android, ...ios }])).toEqual(["android", "ios"]);
+    expect(platformsFromHints([])).toEqual([]);
   });
 });
