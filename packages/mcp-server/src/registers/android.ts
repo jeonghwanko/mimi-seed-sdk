@@ -8,7 +8,7 @@ import { getAppDetails } from '../playstore/tools.js';
 import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
 import { keystoresDir, persistGeneratedKeystore } from '../android/keystore-store.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
-import { describeCredential, upsertSecretFile } from '../jenkins/credentials.js';
+import { inspectCredential, KIND_FILE, upsertSecretFile } from '../jenkins/credentials.js';
 import { ambiguousDefaultIdNote, existingCredentialPreview } from '../jenkins/messages.js';
 import { loadPlayServiceAccountForUpload } from '../android/playstore-sa.js';
 import {
@@ -168,7 +168,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
               `ℹ️ "${credential_id}" 는 credential_id 를 생략해 ${package_name} 의 마지막 세그먼트로 만든 기본 id 다 — 같은 마지막 세그먼트를 가진 다른 앱도 이 id 를 쓴다.`,
           );
         }
-        return textResult(existingCredentialPreview(credential_id, await describeCredential(cfg, credential_id), notes));
+        return textResult(existingCredentialPreview(credential_id, await inspectCredential(cfg, credential_id), KIND_FILE, notes));
       }
 
       return textResult(playServiceAccountUploadedLines({

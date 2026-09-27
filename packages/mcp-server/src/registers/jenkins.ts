@@ -12,9 +12,9 @@ import {
 } from '../jenkins/messages.js';
 
 /** 기존 id 교체 dry-run — 무엇을 덮어쓰게 되는지(id·종류·설명)와 모호한 기본 id 경고를 싣는다. */
-async function existingPreview(cfg: JenkinsConfig, id: string) {
+async function existingPreview(cfg: JenkinsConfig, id: string, requested: creds.CredentialKind) {
   const note = ambiguousDefaultIdNote(id);
-  return textResult(existingCredentialPreview(id, await creds.describeCredential(cfg, id), note ? [note] : []));
+  return textResult(existingCredentialPreview(id, await creds.inspectCredential(cfg, id), requested, note ? [note] : []));
 }
 
 export function registerJenkinsTools(server: ToolRegistrar) {
@@ -115,7 +115,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const value = resolveSecretInput({ secret, secretFile: secret_file, secretField: secret_field });
       const cfg = requireJenkinsConfig();
       const result = await creds.upsertSecretText(cfg, id, value, description ?? '', { allowReplace: confirm === true });
-      if (result === 'exists') return existingPreview(cfg, id);
+      if (result === 'exists') return existingPreview(cfg, id, creds.KIND_STRING);
       return textResult(`✅ Jenkins credential ${result}: \`${id}\``);
     },
   );
@@ -147,7 +147,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const result = await creds.upsertSecretFile(cfg, id, keystore, file_name, description ?? '', {
         allowReplace: confirm === true,
       });
-      if (result === 'exists') return existingPreview(cfg, id);
+      if (result === 'exists') return existingPreview(cfg, id, creds.KIND_FILE);
       return textResult(`✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`);
     },
   );

@@ -1,7 +1,7 @@
 // Jenkins 도구의 사람용 응답 문구. jenkins register 와 android register(jenkins_upload_playstore_sa)가
 // 같은 credential 교체 dry-run 문구를 쓴다 — 도구마다 다르게 적히면 에이전트가 다르게 해석한다.
 
-import type { ExistingCredential } from './credentials.js';
+import { kindLabel, type CredentialKind, type ExistingCredential } from './credentials.js';
 
 /**
  * 같은 id 가 이미 있어 쓰지 않았을 때의 dry-run 응답 (confirm 없이 기존 credential 을 덮어쓰지 않는다).
@@ -9,13 +9,20 @@ import type { ExistingCredential } from './credentials.js';
  * 기존 credential 의 id · 종류 · 설명을 함께 보여준다 — 기본 id 가 패키지 마지막 세그먼트로만 만들어져
  * (`com.foo.app` 과 `com.bar.app` 이 둘 다 `app-…`) 남의 앱 credential 과 부딪혀도 사용자가 알아볼 수 있게.
  * `notes` 는 도구가 덧붙이는 경고 줄 (예: 모호한 기본 id).
+ *
+ * 기존 종류를 확인하지 못했으면(kind null — 번역된·빈 typeName 등) 교체가 막히지 않으므로, 그 사실을 명시한다.
+ * 종류가 확인됐고 다르면 upsert 가 이미 멈췄으므로 여기까지 오지 않는다.
  */
 export function existingCredentialPreview(
   id: string,
-  existing: ExistingCredential | null,
+  inspected: { info: ExistingCredential; kind: CredentialKind | null } | null,
+  requested: CredentialKind,
   notes: string[] = [],
 ): string {
+  const existing = inspected?.info ?? null;
   const replaced = existing?.description || existing?.displayName || id;
+  const unverified = inspected !== null && inspected.kind === null;
+  const shownKind = existing?.typeName || 'unknown';
   return [
     `🛑 dry-run — Jenkins credential \`${id}\` 가 이미 존재해 아직 바꾸지 않았다.`,
     '',
@@ -30,6 +37,14 @@ export function existingCredentialPreview(
       : ['   (메타데이터를 읽지 못했다 — jenkins_list_credentials 로 확인)']),
     '',
     `confirm: true will REPLACE this existing credential: ${replaced}`,
+    ...(unverified
+      ? [
+          '',
+          `⚠ 기존 크리덴셜 종류를 확인할 수 없음 — 기존: ${shownKind}, 요청: ${kindLabel(requested)}. confirm 하면 이 종류로 교체됩니다.`,
+          `⚠ Existing credential kind could not be verified — existing: ${shownKind}, requested: ${kindLabel(requested)}. ` +
+            'confirm: true replaces it with the requested kind; check jenkins_list_credentials or the Jenkins UI first.',
+        ]
+      : []),
     ...(notes.length ? ['', ...notes] : []),
     '',
     '같은 종류의 기존 값(비밀값·keystore)은 교체되면 되돌릴 수 없다.',

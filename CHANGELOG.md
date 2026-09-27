@@ -149,8 +149,13 @@ be removed in 0.21.0.
 - Jenkins queue and build-status lookups failed for a controller URL saved with a trailing slash; all Jenkins
   calls now normalize the URL the same way.
 - The Jenkins credential kind check no longer mistakes the credentials store's wrapper class (which the per-id
-  API can report as `_class`) for a different kind, which blocked replacing any existing credential; it then
-  falls back to the credential's type name (`Secret file` / `Secret text`) and never blocks on an unknown one.
+  API reports as `_class`) for a different kind, which blocked replacing any existing credential. When `_class` is
+  the wrapper, the kind comes from the English type name (requested with `Accept-Language: en`: `Secret text`,
+  `Secret file`, `Username with password`, `SSH Username with private key`, `Certificate`, …) or, failing that,
+  from the root element of the credential's `config.xml`. A known kind that differs from the requested one is
+  refused even with `confirm: true`. If the kind still cannot be determined (a localized or empty type name and no
+  readable `config.xml`), the replace is not blocked, but the dry-run says that the existing kind could not be
+  verified and names the kind it would be replaced with.
 - The CLI's credential files (`ci.json`, `config.json`, `telemetry.json`, and the legacy Jenkins migration) are
   written atomically with `0600` permissions; an interrupted write can no longer leave a truncated file or a
   briefly world-readable token.
