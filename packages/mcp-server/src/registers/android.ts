@@ -1,16 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { androidPackageName } from '../lib/package-name.js';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { requirePlayStoreAuth } from '../helpers.js';
-import { getServiceAccountJson } from '../auth/playstore-auth.js';
+import { getServiceAccountJson, serviceAccountPathForPackage } from '../auth/playstore-auth.js';
 import { getAppDetails } from '../playstore/tools.js';
 import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
 import { upsertSecretFile } from '../jenkins/credentials.js';
-
-const SA_DIR = join(homedir(), '.mimi-seed', 'play-service-accounts');
 
 /**
  * Jenkins credential id 접두사를 패키지명/앱 이름에서 만든다.
@@ -37,7 +34,7 @@ export function registerAndroidTools(server: McpServer) {
       '"Jenkins에 keystore 등록해줘", "Android 빌드 설정 해줘", "서명 키 설정" 요청 시 이 도구를 먼저 호출하세요.',
     ].join(' '),
     {
-      package_name: z.string().describe('Android 패키지명 (예: com.example.app)'),
+      package_name: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
       project_id: z.string().optional().describe('GCP 프로젝트 ID (SA 생성 시 필요, 선택)'),
     },
     async ({ package_name, project_id }) => {
@@ -223,14 +220,14 @@ export function registerAndroidTools(server: McpServer) {
       'setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요.',
     ].join(' '),
     {
-      package_name: z.string().describe('Android 패키지명 (예: com.example.app)'),
+      package_name: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
       // 기본값을 하드코딩 문자열에서 패키지명 파생으로 바꿨다 — 예전 기본값은 한 사설 앱
       // 이름이었고, 여러 앱을 쓰는 사용자는 모든 SA 가 그 이름 하나로 덮였다.
       credential_id: z.string().optional().describe('Jenkins Credential ID (생략 시 "<앱>-playstore-sa")'),
     },
     async ({ package_name, credential_id: credentialIdInput }) => {
       const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-playstore-sa`;
-      const saPath = join(SA_DIR, `${package_name}.json`);
+      const saPath = serviceAccountPathForPackage(package_name);
       if (!existsSync(saPath)) {
         return {
           content: [{

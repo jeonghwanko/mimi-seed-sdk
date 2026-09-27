@@ -7,6 +7,7 @@ import {
   getServiceAccountJson,
   listRegisteredServiceAccounts,
 } from './auth/playstore-auth.js';
+import { isValidAndroidPackageName } from './lib/package-name.js';
 
 interface RemoteConfig {
   token: string;
@@ -106,6 +107,32 @@ async function callRemote(
   }
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * 비밀값(ASC .p8, SA 개인키)을 보낼 원격 엔드포인트 검사. `~/.mimi-seed/config.json` 이나
+ * `MIMI_SEED_WEB_BASE` 가 조작되면 평문 http 나 임의 호스트로 키가 나간다 — https 만 허용하고,
+ * 로컬 개발 서버(루프백)만 http 를 봐준다.
+ */
+export function checkRemoteEndpoint(
+  endpoint: string,
+): { ok: true; host: string } | { ok: false; reason: string } {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return { ok: false, reason: 'URL 형식이 아닙니다' };
+  }
+  if (url.username || url.password) {
+    return { ok: false, reason: 'URL 에 사용자 정보가 들어 있습니다' };
+  }
+  if (url.protocol === 'https:') return { ok: true, host: url.host };
+  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
+    return { ok: true, host: `${url.host} (로컬 http)` };
+  }
+  return { ok: false, reason: `https 가 아닙니다 (${url.protocol}//${url.host})` };
+}
+
 const defaultDependencies: RemoteSyncDependencies = {
   getConfig: getRemoteConfig,
   getAppStoreCredentials,
@@ -122,21 +149,38 @@ export async function syncRemoteCredentials(
   const includeAppStore = options.includeAppStore !== false;
   const includePlayStore = options.includePlayStore !== false;
   const appStore = includeAppStore ? dependencies.getAppStoreCredentials() : null;
+  // 허용 목록 = 실제로 등록된 패키지별 SA. 요청 이름을 그대로 파일 경로로 쓰면
+  // `../tokens` 가 ~/.mimi-seed/tokens.json(OAuth 리프레시 토큰)을 원격으로 보낸다.
+  const registered = new Set(dependencies.listPackageNames().filter(isValidAndroidPackageName));
   const requestedPackages = options.packageNames?.map((name) => name.trim()).filter(Boolean);
-  const packageNames = includePlayStore
-    ? [...new Set(requestedPackages?.length ? requestedPackages : dependencies.listPackageNames())]
+  const candidates = includePlayStore
+    ? [...new Set(requestedPackages?.length ? requestedPackages : [...registered])]
     : [];
+  const rejected = candidates.filter((name) => !registered.has(name));
+  const packageNames = candidates.filter((name) => registered.has(name));
   const playCredentials = packageNames
     .map((packageName) => ({ packageName, json: dependencies.getServiceAccountJson(packageName) }))
     .filter((entry): entry is { packageName: string; json: string } => Boolean(entry.json));
 
+  const config = dependencies.getConfig();
+  const endpoint = config ? checkRemoteEndpoint(config.endpoint) : null;
+
   const lines = [
     'Mimi Seed 로컬 → 원격 자격증명 동기화',
+    `- 전송 대상: ${
+      !config ? '원격 연결 정보 없음' : endpoint?.ok ? endpoint.host : `거부됨 — ${endpoint?.reason}`
+    }`,
     `- App Store Connect: ${appStore ? '대상 1개' : includeAppStore ? '로컬 키 없음' : '제외'}`,
     `- Google Play: ${playCredentials.length}개 패키지${
       packageNames.length > playCredentials.length ? ` (자격증명 없는 대상 ${packageNames.length - playCredentials.length}개)` : ''
     }`,
     ...playCredentials.map((entry) => `  - ${entry.packageName}`),
+    ...(rejected.length
+      ? [
+          `- 등록되지 않은 패키지 ${rejected.length}개 — 거부 (playstore_list_service_accounts 로 등록 목록 확인):`,
+          ...rejected.map((name) => `  - ${JSON.stringify(name.slice(0, 80))}`),
+        ]
+      : []),
     '- Google OAuth: 복사하지 않음 (원격 웹에서 별도 동의 필요)',
   ];
 
@@ -144,9 +188,15 @@ export async function syncRemoteCredentials(
     return [...lines, '', '미리보기만 수행했습니다. 원격 저장은 confirm=true일 때만 실행됩니다.'].join('\n');
   }
 
-  const config = dependencies.getConfig();
   if (!config) {
     return [...lines, '', '원격 연결 정보가 없습니다. 먼저 `mimi-seed init`을 실행하세요.'].join('\n');
+  }
+  if (!endpoint?.ok) {
+    return [...lines, '', `원격 엔드포인트를 신뢰할 수 없어 전송하지 않았습니다: ${endpoint?.reason}`].join('\n');
+  }
+  if (rejected.length) {
+    // 일부만 보내고 넘어가면 사용자는 오타를 모른 채 "동기화됨"으로 믿는다 — 통째로 멈춘다.
+    return [...lines, '', '등록되지 않은 패키지명이 있어 아무것도 전송하지 않았습니다.'].join('\n');
   }
 
   const results: string[] = [];

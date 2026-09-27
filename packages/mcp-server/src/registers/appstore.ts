@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { iosBundleId } from '../lib/package-name.js';
 import * as appstore from '../appstore/tools.js';
 import * as appstoreScreenshots from '../appstore/screenshots.js';
 import * as appstoreProductReview from '../appstore/product-review.js';
@@ -528,7 +529,7 @@ export function registerAppstoreTools(server: McpServer) {
         )
         .optional()
         .describe('추가 지역별 명시 가격'),
-      bundleId: z.string().optional().describe('번들 ID (appId 대신 사용 가능)'),
+      bundleId: iosBundleId.optional().describe('번들 ID (appId 대신 사용 가능)'),
     },
     async (args) => {
       const creds = requireAppStoreCreds();
@@ -573,7 +574,7 @@ export function registerAppstoreTools(server: McpServer) {
         )
         .optional()
         .describe('추가 지역별 명시 가격'),
-      bundleId: z.string().optional().describe('번들 ID (appId 대신 사용 가능)'),
+      bundleId: iosBundleId.optional().describe('번들 ID (appId 대신 사용 가능)'),
     },
     async (args) => {
       const creds = requireAppStoreCreds();
@@ -959,7 +960,7 @@ export function registerAppstoreTools(server: McpServer) {
     '스토어에 보이는 표시 이름·설명은 appstore_update_product_localization 을 쓴다.',
     {
       appId: z.string().optional().describe('App Store 앱 ID'),
-      bundleId: z.string().optional().describe('번들 ID (appId 대신 사용 가능)'),
+      bundleId: iosBundleId.optional().describe('번들 ID (appId 대신 사용 가능)'),
       productId: z.string().describe('상품 ID'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
       name: z.string().describe('새 reference name'),
@@ -985,7 +986,7 @@ export function registerAppstoreTools(server: McpServer) {
     '⚠️ 비가역. App Store IAP 상품 삭제. MISSING_METADATA / WAITING_FOR_REVIEW 상태만 가능 — 이미 승인(READY_FOR_SALE)된 상품은 Console에서 "Remove from sale" 해야 함.',
     {
       appId: z.string().optional().describe('App Store 앱 ID'),
-      bundleId: z.string().optional().describe('번들 ID (appId 대신 사용 가능)'),
+      bundleId: iosBundleId.optional().describe('번들 ID (appId 대신 사용 가능)'),
       productId: z.string().describe('상품 ID'),
       productType: z.enum(['subscription', 'consumable', 'non_consumable']).describe('상품 유형'),
     },

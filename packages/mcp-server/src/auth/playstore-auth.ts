@@ -5,10 +5,26 @@ import path from 'node:path';
 import os from 'node:os';
 import { PLAY_DEVELOPER_REPORTING_SCOPE } from './scopes.js';
 import { writeCredentialFile } from '../lib/atomic-write.js';
+import { assertAndroidPackageName, isValidAndroidPackageName } from '../lib/package-name.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const SA_DIR = path.join(CONFIG_DIR, 'play-service-accounts');
 const LEGACY_SA_PATH = path.join(CONFIG_DIR, 'play-service-account.json');
+
+/**
+ * 패키지별 SA 파일 경로. 패키지명을 검증하고, 해석된 경로가 SA_DIR 바로 아래인지 한 번 더
+ * 확인한다 — `../tokens` 같은 값이 `~/.mimi-seed/tokens.json` 을 가리키는 것을 막는 방어선이다.
+ * 스키마 검증(register)은 1차 방어일 뿐, 이 모듈을 부르는 모든 경로가 거기를 지나지는 않는다.
+ */
+export function serviceAccountPathForPackage(packageName: string): string {
+  assertAndroidPackageName(packageName);
+  const dir = path.resolve(SA_DIR);
+  const resolved = path.resolve(dir, `${packageName}.json`);
+  if (path.dirname(resolved) !== dir) {
+    throw new Error(`서비스 계정 경로가 ${dir} 밖을 가리킵니다.`);
+  }
+  return resolved;
+}
 
 function safeReadFile(p: string): string | null {
   try {
@@ -24,7 +40,7 @@ function safeReadFile(p: string): string | null {
  */
 export function getServiceAccountJson(packageName?: string): string | null {
   if (packageName) {
-    const perPkg = path.join(SA_DIR, `${packageName}.json`);
+    const perPkg = serviceAccountPathForPackage(packageName);
     if (fs.existsSync(perPkg)) {
       const json = safeReadFile(perPkg);
       if (json) return json;
@@ -49,7 +65,7 @@ export function saveServiceAccountJson(json: string): void {
  * ~/.mimi-seed/play-service-accounts/{packageName}.json
  */
 export function saveServiceAccountJsonForPackage(packageName: string, json: string): void {
-  writeCredentialFile(path.join(SA_DIR, `${packageName}.json`), json);
+  writeCredentialFile(serviceAccountPathForPackage(packageName), json);
 }
 
 /**
@@ -64,6 +80,9 @@ export function listRegisteredServiceAccounts(): {
     for (const f of fs.readdirSync(SA_DIR)) {
       if (!f.endsWith('.json')) continue;
       const packageName = f.replace(/\.json$/, '');
+      // 손으로 넣은 이상한 파일명은 패키지로 취급하지 않는다 — 이 목록은 원격 동기화의
+      // 허용 목록으로도 쓰이므로, 여기서 새면 검증을 우회하는 이름이 생긴다.
+      if (!isValidAndroidPackageName(packageName)) continue;
       const json = safeReadFile(path.join(SA_DIR, f));
       let clientEmail: string | null = null;
       let projectId: string | null = null;
@@ -96,7 +115,7 @@ export function listRegisteredServiceAccounts(): {
  * 패키지별 SA 삭제. 없으면 false.
  */
 export function deleteServiceAccountJsonForPackage(packageName: string): boolean {
-  const filePath = path.join(SA_DIR, `${packageName}.json`);
+  const filePath = serviceAccountPathForPackage(packageName);
   if (!fs.existsSync(filePath)) return false;
   fs.unlinkSync(filePath);
   return true;
