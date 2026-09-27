@@ -163,7 +163,7 @@ async function main(): Promise<void> {
         await cmdStatus();
         break;
       case "doctor":
-        await cmdDoctor();
+        await cmdDoctor(restArgs);
         break;
       case "check":
         await cmdCheck(restArgs);

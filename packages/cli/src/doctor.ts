@@ -12,6 +12,7 @@ import {
   isSatisfied,
 } from "./credentials.js";
 import { migrateLegacyJenkins } from "./jenkins-config.js";
+import { findProjectLink } from "./project-link.js";
 import { t } from "./i18n.js";
 import {
   findProjectManifest,
@@ -20,17 +21,52 @@ import {
   type ManifestService,
 } from "./project-manifest.js";
 
-function ok(label: string, detail = "") {
-  process.stdout.write(`  ${kleur.green("✓")} ${label}${detail ? kleur.dim("  " + detail) : ""}\n`);
+// ── 결과 모델 ──
+//
+// 모든 체크는 한 곳(Reporter)을 지난다: 사람용 출력은 즉시 찍고, --json 이면 모아 두었다가
+// 마지막에 한 번 찍는다. 종료 코드는 여기서 파생된다 — ✗ 가 하나라도 있으면 exit 1.
+// 예전엔 ✗ 를 찍고도 exit 0 이라 `mimi-seed doctor` 를 CI 게이트로 쓸 수 없었다.
+
+export type CheckStatus = "ok" | "warn" | "fail";
+/** 섹션 id 는 언어와 무관하게 고정 — JSON 소비자가 번역된 제목에 의존하지 않게. */
+export type DoctorSection = "account" | "credentials" | "project" | "environment" | "apps";
+
+export interface DoctorCheck {
+  section: DoctorSection;
+  status: CheckStatus;
+  label: string;
+  detail?: string;
 }
-function warn(label: string, detail = "") {
-  process.stdout.write(`  ${kleur.yellow("⚠")} ${label}${detail ? kleur.dim("  " + detail) : ""}\n`);
+
+export interface DoctorReport {
+  /** ✗(fail) 가 하나도 없으면 true. 경고(⚠)는 실패가 아니다. */
+  ok: boolean;
+  checks: DoctorCheck[];
 }
-function fail(label: string, detail = "") {
-  process.stdout.write(`  ${kleur.red("✗")} ${label}${detail ? kleur.dim("  " + detail) : ""}\n`);
-}
-function section(title: string) {
-  process.stdout.write("\n" + kleur.dim(`── ${title} ──\n`));
+
+const ICON: Record<CheckStatus, string> = { ok: kleur.green("✓"), warn: kleur.yellow("⚠"), fail: kleur.red("✗") };
+
+class Reporter {
+  readonly checks: DoctorCheck[] = [];
+  private current: DoctorSection = "account";
+  constructor(private readonly print: boolean) {}
+
+  section(id: DoctorSection, title: string): void {
+    this.current = id;
+    if (this.print) process.stdout.write("\n" + kleur.dim(`── ${title} ──\n`));
+  }
+  text(s: string): void {
+    if (this.print) process.stdout.write(s);
+  }
+  private add(status: CheckStatus, label: string, detail = ""): void {
+    this.checks.push({ section: this.current, status, label, ...(detail ? { detail } : {}) });
+    if (this.print) {
+      process.stdout.write(`  ${ICON[status]} ${label}${detail ? kleur.dim("  " + detail) : ""}\n`);
+    }
+  }
+  ok(label: string, detail = ""): void { this.add("ok", label, detail); }
+  warn(label: string, detail = ""): void { this.add("warn", label, detail); }
+  fail(label: string, detail = ""): void { this.add("fail", label, detail); }
 }
 
 /** 매니페스트 서비스별 식별자 한 줄 (예: "my-app-analytics / analytics_123456789"). */
@@ -71,31 +107,58 @@ export function manifestCredentialMismatch(
   return null;
 }
 
-export async function cmdDoctor(): Promise<void> {
-  const cwd = process.cwd();
-  const m = t().doctor;
-  process.stdout.write(kleur.bold(m.title + "\n\n"));
+/**
+ * 원격(웹 콘솔 / 원격 MCP) 기능을 쓰도록 설정된 환경인가.
+ *
+ * Mimi Seed 토큰(config.json)은 `init`·`status`·`deploy` 같은 **원격** 경로에만 필요하다. 로컬
+ * stdio MCP 만 쓰는 사용자는 이 토큰이 영원히 없는데, 예전 doctor 는 그들에게 항상 ✗ 를 줬다.
+ * 그래서 "원격을 쓰려는 흔적"이 있을 때만 토큰 부재를 실패로 본다: 토큰/웹 주소 환경변수, 또는
+ * 이 프로젝트의 `.mimi-seed-link.json`(웹 앱과 연결된 프로젝트). 연결 파일이 깨져 있어도 원격을
+ * 쓰려던 것이므로 true.
+ */
+export async function remoteConfigured(cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  if (env.MIMI_SEED_TOKEN || env.MIMI_SEED_WEB_BASE) return true;
+  try {
+    return (await findProjectLink(cwd)) !== null;
+  } catch {
+    return true;
+  }
+}
 
-  section(m.secAuth);
+/** 전체 진단. `print` 가 참이면 진행하면서 사람용 출력을 찍는다. 네트워크 호출은 원격 확인 한 번뿐. */
+export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<DoctorReport> {
+  const { cwd } = opts;
+  const m = t().doctor;
+  const r = new Reporter(opts.print);
+  r.text(kleur.bold(m.title + "\n\n"));
+
+  r.section("account", m.secAuth);
   const cfg = await getEffectiveConfig();
+  const remote = cfg !== null || (await remoteConfigured(cwd));
   if (!cfg) {
-    fail(m.noToken, m.noTokenFix);
+    if (remote) r.fail(m.noToken, m.noTokenFix);
+    else r.warn(m.noTokenLocal, m.noTokenLocalDetail);
   } else {
-    ok(m.tokenSaved, `${cfg.prefix}…  (${cfg.createdAt.slice(0, 10)})`);
-    ok(m.endpoint, cfg.endpoint);
+    r.ok(m.tokenSaved, `${cfg.prefix}…  (${cfg.createdAt.slice(0, 10)})`);
+    r.ok(m.endpoint, cfg.endpoint);
     if (process.env.MIMI_SEED_TOKEN) {
-      ok(m.ciMode, m.ciModeDetail);
+      r.ok(m.ciMode, m.ciModeDetail);
     }
-    const r = await mcpCall(cfg.endpoint, cfg.token, "list_apps", {});
-    if (r.isError) {
-      fail(m.tokenInvalid, r.text.slice(0, 80));
-    } else {
-      const lines = r.text.split("\n").filter(Boolean);
-      ok(m.serverOk, m.appCount(lines.length));
+    try {
+      const res = await mcpCall(cfg.endpoint, cfg.token, "list_apps", {});
+      if (res.isError) {
+        r.fail(m.tokenInvalid, res.text.slice(0, 80));
+      } else {
+        const lines = res.text.split("\n").filter(Boolean);
+        r.ok(m.serverOk, m.appCount(lines.length));
+      }
+    } catch (e) {
+      // 네트워크 오류·타임아웃으로 doctor 전체가 죽으면 나머지 진단을 못 본다 — 한 줄 실패로 남긴다.
+      r.fail(m.serverUnreachable, (e instanceof Error ? e.message : String(e)).slice(0, 120));
     }
   }
 
-  section(m.secCreds);
+  r.section("credentials", m.secCreds);
   // 목록은 credentials.ts 레지스트리가 SSOT — 예전엔 여기 4줄만 손으로 들고 있어서
   // Jenkins/CI/Ads/Facebook/Instagram 은 doctor 에 아예 보이지 않았다.
   migrateLegacyJenkins(); // 레거시 config.json.jenkins → jenkins.json (1회성)
@@ -105,12 +168,14 @@ export async function cmdDoctor(): Promise<void> {
     const base = credLabel(spec);
     const note = credNote(spec);
     const label = note ? `${base} (${note})` : base;
-    if (d.present) ok(base, d.detail);
-    else if (isSatisfied(spec, detected)) warn(label, t().setup.fallbackWorking);
-    else if (spec.requirement === "optional") warn(`${label}`, `→ ${spec.fix}`);
-    else fail(base, `→ ${spec.fix}`);
+    if (d.present) r.ok(base, d.detail);
+    else if (isSatisfied(spec, detected)) r.warn(label, t().setup.fallbackWorking);
+    else if (spec.requirement === "optional") r.warn(`${label}`, `→ ${spec.fix}`);
+    // 클라우드 계정은 원격을 쓸 때만 필수다 (위 remoteConfigured 참고).
+    else if (spec.id === "mimiseed" && !remote) r.warn(label, m.noTokenLocalDetail);
+    else r.fail(base, `→ ${spec.fix}`);
   }
-  process.stdout.write(kleur.dim(m.credsHint));
+  r.text(kleur.dim(m.credsHint));
 
   // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ──
   // 저장소가 필요로 하는 서비스를 선언해두면, 로컬 자격증명 보유 여부와 대조해
@@ -118,7 +183,7 @@ export async function cmdDoctor(): Promise<void> {
   const loaded = findProjectManifest(cwd);
   if (loaded) {
     const projName = loaded.manifest.displayName ?? loaded.manifest.project ?? m.thisProject;
-    section(m.requirements(projName));
+    r.section("project", m.requirements(projName));
     // 연결 판정·복구 명령 모두 레지스트리에서 파생한다 (fallback 규칙 포함 — 예: Play SA 없어도 OAuth 면 OK).
     // 매니페스트의 서비스 id 는 CredId 의 부분집합이다.
     for (const [id, svc] of manifestServiceEntries(loaded.manifest)) {
@@ -128,51 +193,63 @@ export async function cmdDoctor(): Promise<void> {
       // 그것 때문에 doctor 전체가 죽으면 안 된다 — 모르는 항목은 경고만 하고 넘어간다.
       const spec = tryCredById(id);
       if (!spec) {
-        warn(m.unknownService(id), svc.note ?? detail);
+        r.warn(m.unknownService(id), svc.note ?? detail);
         continue;
       }
       const connected = isSatisfied(spec, detected);
       const mismatch = manifestCredentialMismatch(id, svc, detected.get(spec.id)?.identity);
       if (connected && mismatch) {
-        fail(id, `${m.credentialMismatch(mismatch.field, mismatch.expected, mismatch.actual)}  → ${spec.fix}`);
-      } else if (connected) ok(id, detail);
-      else if (!required) warn(`${id} (${t().common.optional})`, svc.note ?? detail);
-      else fail(id, `→ ${spec.fix}${detail ? "  " + detail : ""}`);
+        r.fail(id, `${m.credentialMismatch(mismatch.field, mismatch.expected, mismatch.actual)}  → ${spec.fix}`);
+      } else if (connected) r.ok(id, detail);
+      else if (!required) r.warn(`${id} (${t().common.optional})`, svc.note ?? detail);
+      else r.fail(id, `→ ${spec.fix}${detail ? "  " + detail : ""}`);
     }
   }
 
-  section(m.secEnv);
+  r.section("environment", m.secEnv);
   const nodeVer = process.version;
   const [, major] = nodeVer.match(/v(\d+)/) ?? [];
   // Node 하한은 20 — CLI 와 MCP 서버가 같다 (.nvmrc 가 SSOT).
   if (Number(major) >= 20) {
-    ok("Node.js", nodeVer);
+    r.ok("Node.js", nodeVer);
   } else {
-    fail("Node.js", m.nodeTooOld(nodeVer));
+    r.fail("Node.js", m.nodeTooOld(nodeVer));
   }
 
   if (isGitRepo(cwd)) {
     const latestTag = getLatestTag(cwd);
     const commits = getGitLog(cwd, { limit: 5 });
-    ok(m.gitRepo, latestTag ? m.gitTag(latestTag) : m.gitCommits(commits.length));
+    r.ok(m.gitRepo, latestTag ? m.gitTag(latestTag) : m.gitCommits(commits.length));
   } else {
-    warn(m.noGit, m.noGitDetail);
+    r.warn(m.noGit, m.noGitDetail);
   }
 
   // ANTHROPIC_API_KEY 는 위 자격증명 섹션(레지스트리)에서 이미 보고했다 — 여기서 또 찍지 않는다.
 
-  section(m.secApps);
+  r.section("apps", m.secApps);
   const hints = await detectHints(cwd);
   if (hints.length === 0) {
-    warn(m.noApp, m.noAppDetail);
+    r.warn(m.noApp, m.noAppDetail);
   } else {
     for (const h of hints) {
       const ids = [h.packageName && `android:${h.packageName}`, h.bundleId && `ios:${h.bundleId}`]
         .filter(Boolean)
         .join("  ");
-      ok(h.name ?? m.unnamed, ids);
+      r.ok(h.name ?? m.unnamed, ids);
     }
   }
 
-  process.stdout.write("\n");
+  r.text("\n");
+  return { ok: !r.checks.some((c) => c.status === "fail"), checks: r.checks };
+}
+
+/**
+ * `mimi-seed doctor [--json]`. ✗ 가 하나라도 있으면 exit code 1 (⚠ 는 0).
+ * `--json` 은 사람용 출력 대신 `DoctorReport` 를 stdout 에 JSON 으로 찍는다.
+ */
+export async function cmdDoctor(args: string[] = []): Promise<void> {
+  const json = args.includes("--json");
+  const report = await runDoctor({ cwd: process.cwd(), print: !json });
+  if (json) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  if (!report.ok) process.exitCode = 1;
 }
