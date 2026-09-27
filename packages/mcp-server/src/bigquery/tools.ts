@@ -12,9 +12,16 @@ const bq = () => google.bigquery('v2');
 // bigquery_run_query 는 "SELECT 실행" 도구로 노출되고 readOnlyHint 를 단다. 그런데 BigQuery
 // jobs.query 에는 읽기 전용 모드가 없어서, 막지 않으면 DELETE / DROP TABLE / MERGE / 스크립트가
 // 그대로 실행된다. BigQuery 의 DML·DDL·스크립트 문장은 전부 자기 키워드로 시작하므로
-// "주석·리터럴을 걷어낸 단일 문장이 SELECT 또는 WITH 로 시작" 이면 데이터를 바꿀 수 없다.
+// "주석·리터럴을 걷어낸 단일 문장이 SELECT / WITH / FROM(파이프 문법) 으로 시작" 이면 데이터를 바꿀 수 없다.
+//
+// 이 함수는 순수(pure)·자기완결이다 — 서버 측 dryRun(statementType) 검사와 함께 쓰일 때 먼저 도는
+// 저비용 사전 검사라서, 네트워크나 다른 모듈에 의존하지 않게 둔다.
 
-/** 주석(--, #, /* *\/)과 문자열·식별자 리터럴을 공백으로 치환한다 (키워드 검사가 속지 않게). */
+/**
+ * 주석(--, #, /* *\/)과 문자열·식별자 리터럴을 공백으로 치환한다 (키워드 검사가 속지 않게).
+ * 한 줄 주석은 ZetaSQL 처럼 `\n` **또는** `\r` 에서 끝난다 — `\n` 만 보면 `SELECT 1 -- x\r; DROP TABLE t`의
+ * 두 번째 문장이 주석 속에 숨어 검사를 통과한다.
+ */
 function stripSqlNoise(sql: string): string {
   let out = '';
   let i = 0;
@@ -22,7 +29,7 @@ function stripSqlNoise(sql: string): string {
     const c = sql[i];
     const next = sql[i + 1];
     if ((c === '-' && next === '-') || c === '#') {
-      while (i < sql.length && sql[i] !== '\n') i++;
+      while (i < sql.length && sql[i] !== '\n' && sql[i] !== '\r') i++;
       out += ' ';
     } else if (c === '/' && next === '*') {
       const end = sql.indexOf('*/', i + 2);
@@ -43,16 +50,20 @@ function stripSqlNoise(sql: string): string {
   return out;
 }
 
-/** SELECT/WITH 단일 문장이 아니면 throw — API 를 부르기 전에 막는다. */
+/** SELECT / WITH / FROM(파이프 문법) 단일 문장이 아니면 throw — API 를 부르기 전에 막는다. */
 export function assertSelectOnlyQuery(query: string): void {
   const body = stripSqlNoise(query).trim().replace(/;\s*$/, '').trim();
   if (body.includes(';')) {
-    throw new Error('bigquery_run_query 는 단일 SELECT 문만 실행한다 — 여러 문장(스크립트)은 허용하지 않음.');
+    throw new Error(
+      'bigquery_run_query 는 단일 SELECT 문만 실행한다 — 여러 문장(스크립트)은 허용하지 않음. ' +
+        'CREATE TEMP FUNCTION …; SELECT … 처럼 임시 함수를 앞에 두는 스크립트도 거부된다 — 식을 쿼리 안에 인라인하거나 BigQuery 콘솔에서 실행할 것.',
+    );
   }
   const first = /^[(\s]*([a-z_]+)/i.exec(body)?.[1]?.toUpperCase();
-  if (first !== 'SELECT' && first !== 'WITH') {
+  // FROM 은 파이프 문법(FROM t |> WHERE … |> SELECT …) 의 시작이다 — 파이프 연산자는 전부 조회용이다.
+  if (first !== 'SELECT' && first !== 'WITH' && first !== 'FROM') {
     throw new Error(
-      `bigquery_run_query 는 읽기 전용이다 — SELECT / WITH 로 시작하는 쿼리만 허용 (받은 문장: ${first ?? '(비어 있음)'}). ` +
+      `bigquery_run_query 는 읽기 전용이다 — SELECT / WITH / FROM(파이프 문법) 으로 시작하는 쿼리만 허용 (받은 문장: ${first ?? '(비어 있음)'}). ` +
         'DML/DDL 은 BigQuery 콘솔이나 bq CLI 에서 직접 실행할 것.',
     );
   }
