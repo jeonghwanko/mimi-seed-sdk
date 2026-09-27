@@ -33,7 +33,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.52.0",
+    "@anthropic-ai/sdk": "^0.128.0",
     "kleur": "^4.1.5",
     "open": "^10.1.0"
   },
