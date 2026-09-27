@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { JenkinsConfig } from "./jenkins-config.js";
-import type { ProjectManifest } from "./project-manifest.js";
-import { MANIFEST_FILENAME } from "./project-manifest.js";
+import type { ProjectManifest } from "#core/project-manifest.js";
+import { MANIFEST_FILENAME } from "#core/project-manifest.js";
 import { catalog } from "./i18n.js";
 
 const M = catalog({

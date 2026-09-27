@@ -5,7 +5,7 @@ import { connectThreads, refreshThreadsToken } from '../threads/setup.js';
 import * as api from '../threads/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
-import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
+import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
 
 export function registerThreadsTools(server: ToolRegistrar) {

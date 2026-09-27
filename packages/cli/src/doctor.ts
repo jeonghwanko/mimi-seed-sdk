@@ -21,7 +21,7 @@ import {
   manifestServiceEntries,
   type ManifestServiceId,
   type ManifestService,
-} from "./project-manifest.js";
+} from "#core/project-manifest.js";
 
 // ── 결과 모델 ──
 //

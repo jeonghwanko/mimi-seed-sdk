@@ -33,7 +33,7 @@ import {
   manifestServiceEntries,
   type ManifestServiceId,
   type ManifestService,
-} from '../lib/project-manifest.js';
+} from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
 import { describeToolsets } from '../lib/toolsets.js';
 

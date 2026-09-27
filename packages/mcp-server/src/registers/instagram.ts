@@ -4,7 +4,7 @@ import { requireInstagramConfig } from '../instagram/config.js';
 import { connectInstagram } from '../instagram/setup.js';
 import * as api from '../instagram/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
-import { SOCIAL_PROFILE_ID_PATTERN } from '../lib/project-manifest.js';
+import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
 
 export function registerInstagramTools(server: ToolRegistrar) {

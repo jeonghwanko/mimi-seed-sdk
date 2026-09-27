@@ -6,7 +6,7 @@ import {
   isValidSocialProfileId,
   manifestSocialProfile,
   type SocialPlatform,
-} from '../lib/project-manifest.js';
+} from '#core/project-manifest.js';
 import { writeCredentialJson } from '../lib/atomic-write.js';
 
 export interface SocialConfigOptions {

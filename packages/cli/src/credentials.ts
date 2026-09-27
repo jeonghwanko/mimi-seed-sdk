@@ -14,9 +14,17 @@ import type { Lang } from "#core/lang.js";
 import { resolveLang } from "#core/lang.js";
 import {
   findProjectManifest,
+  MANIFEST_FILENAME,
   manifestSocialProfile,
   type SocialPlatform,
-} from "./project-manifest.js";
+  type SocialProfileMessages,
+} from "#core/project-manifest.js";
+
+// .mimi-seed.json socialProfiles 검증 문구 — 규칙은 core 한 곳, 문구는 CLI 가 예전부터 쓰던 영어 그대로.
+const SOCIAL_PROFILE_MESSAGES: SocialProfileMessages = {
+  notAnObject: `${MANIFEST_FILENAME} socialProfiles must be an object`,
+  invalidId: (platform) => `${MANIFEST_FILENAME} socialProfiles.${platform} must be a safe 1-64 character profile id`,
+};
 
 /** 사람이 읽는 텍스트는 언어별로 들고 있는다 — 렌더 시점에 resolveLang() 으로 고른다. */
 export type LocalizedText = Record<Lang, string>;
@@ -181,7 +189,7 @@ function detectProjectSocialToken(
 
   let profile: string | null;
   try {
-    profile = manifestSocialProfile(loaded.manifest, platform);
+    profile = manifestSocialProfile(loaded.manifest, platform, SOCIAL_PROFILE_MESSAGES);
   } catch (error) {
     return { present: false, detail: error instanceof Error ? error.message : String(error) };
   }
