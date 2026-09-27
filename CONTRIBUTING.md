@@ -71,14 +71,22 @@ npm run build && npm test
 
 ## Releasing (maintainers)
 
-Releases are automated. **The root `package.json` version is the SDK's single version** — both
-packages and both plugin manifests follow it. Never edit those four files by hand:
+Releases are cut by pushing a **`v*` tag**; merging to `main` only runs the tests. `main` is protected —
+changes land through a PR with green CI. **The root `package.json` version is the SDK's single version** —
+both packages and both plugin manifests follow it. Never edit those four files by hand:
 
 ```bash
+git switch -c release/0.9.0
 npm run version:set 0.9.0     # or: patch | minor | major
 npm run version:check         # fails if anything drifted (also enforced by a test)
-git commit -am "feat(cli): ..." && git push origin main
+git commit -am "chore(release): 0.9.0"   # + the CHANGELOG rename below
+# open a PR, wait for green CI, merge it, then tag the merged commit on main:
+git switch main && git pull
+git tag v0.9.0 && git push origin v0.9.0
 ```
+
+The `publish` job refuses to run unless the tag equals `v<root package.json version>` and points at a commit
+that is already on `main`.
 
 In the same release commit, rename the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) to the new
 version and date and open a fresh empty `[Unreleased]` above it. Between releases, every PR with a user-visible
@@ -92,14 +100,14 @@ to say which CLI matched which server; `version-sync.test.ts` now fails if they 
 One consequence of a single version: bumping it republishes **both** packages, even the one you didn't
 touch. That's the trade for never having to reason about cross-package compatibility.
 
-CI then, once every test leg (Linux node 20/22, Windows node 22) and the repo guards are green, runs a single
+On the tag push CI, once every test leg (Linux node 20/22, Windows node 22) and the repo guards are green, runs a single
 `publish` job that handles **mcp-server first, then cli** — if the mcp-server publish fails, cli is not
 published. For each package whose `package.json` version is not yet on npm it:
 - publishes to npm with **provenance** (signed via GitHub OIDC), and
 - creates a **GitHub Release** with auto-generated notes (`<package>-v<version>` tag).
 
-If the version already exists it's skipped (idempotent), so version-less pushes (docs, CI)
-are safe. Publishing uses npm trusted publishing (OIDC), without an `NPM_TOKEN` secret.
+If the version already exists it's skipped (idempotent), so re-pushing a tag after a partial failure
+only publishes what is missing. Publishing uses npm trusted publishing (OIDC), without an `NPM_TOKEN` secret.
 Both npm packages must trust GitHub repository `jeonghwanko/mimi-seed-sdk`, workflow `ci.yml`.
 CI keeps Node 20/22 for tests and switches to Node 24 (npm 11) for publishing.
 See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).

@@ -26,6 +26,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Releases publish only on a `v*` tag push (the tag must equal the root version and point at a commit on `main`);
+  pushing to `main` runs tests only. Both packages publish from one job, mcp-server first, so a failed
+  mcp-server publish no longer leaves a lone cli release.
 - `mimi-seed doctor` exits with code 1 when any ✗ check fails, so it can gate CI. The Mimi Seed cloud token is
   only treated as required when remote use is configured (`MIMI_SEED_TOKEN`, `MIMI_SEED_WEB_BASE`, or a
   `.mimi-seed-link.json` in the project); local-stdio-only setups now get a warning instead of a failure.

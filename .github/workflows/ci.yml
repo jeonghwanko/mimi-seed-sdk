@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
+    # 릴리스는 `v*` 태그 푸시로만 한다 (main 푸시·PR 은 테스트만). 아래 publish 잡 참고.
+    tags: ['v*']
   pull_request:
 
 # 같은 ref 의 run 을 직렬화 — 연속 푸시 2건이 같은 패키지를 동시에 publish 하다
@@ -89,13 +91,14 @@ jobs:
   # 짝이 되는 mcp-server 가 없으면 그 cli 는 설치 직후부터 깨진다. 같은 잡의 연속 step 이라
   # mcp-server step 이 실패하면 cli step 은 실행되지 않는다.
   #
-  # 트리거: 지금은 "main 푸시 + package.json 버전이 npm 에 없음"이다. 태그 기반으로 바꿀 때는
-  # 위 `on:` 에 `tags` 를 추가하고 아래 `if:` 한 줄만 고치면 된다 — publish 로직은
-  # .github/scripts/publish-if-new.sh 에 있고 트리거를 모른다.
+  # 트리거: `v*` 태그 푸시만. main 푸시는 테스트만 하고 배포하지 않는다 — 예전(main 푸시 =
+  # 즉시 latest)엔 하루 12번 릴리스·회귀 수정 연쇄가 그대로 사용자에게 나갔다. 태그는 루트
+  # package.json 버전과 같아야 하고 main 에 이미 병합된 커밋을 가리켜야 한다 (아래 첫 step).
+  # 프리릴리스(`-beta.N`/`-next.N`)는 scripts/release-channel.mjs 가 해당 dist-tag 로 보낸다.
   publish:
     name: publish (mcp-server → cli)
     needs: [repo-guards, build-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write   # GitHub Release + 태그 생성
@@ -105,6 +108,24 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # 태그 커밋이 origin/main 조상인지 확인하려면 전체 이력이 필요
+
+      # 태그 ↔ 버전 ↔ main 정합성. 하나라도 어긋나면 아무것도 publish 하지 않는다.
+      - name: Verify release tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::tag $TAG does not match root package.json version v$VERSION"
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $TAG points at $GITHUB_SHA, which is not on main — merge the release PR first"
+            exit 1
+          fi
+          node scripts/version.mjs --check
 
       # 빌드는 테스트한 상용 버전(22)에서 — 산출물이 테스트된 것과 같은 런타임으로 만들어진다.
       - uses: actions/setup-node@v5
