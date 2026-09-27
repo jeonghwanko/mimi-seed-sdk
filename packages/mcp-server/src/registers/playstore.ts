@@ -52,7 +52,7 @@ export function registerPlaystoreTools(server: McpServer) {
   server.tool(
     'playstore_get_app',
     'Google Play 앱 세부정보 조회 — 개발자 연락처(이메일·전화·웹사이트)·기본 언어 등 (edits.details). 수정은 playstore_update_details.',
-    { packageName: androidPackageName.describe('패키지명 (예: com.findthem.app)') },
+    { packageName: androidPackageName.describe('패키지명 (예: com.example.app)') },
     async ({ packageName }) => {
       const auth = requirePlayStoreAuth(packageName);
       const details = await playstore.getAppDetails(auth, packageName);
@@ -488,7 +488,7 @@ export function registerPlaystoreTools(server: McpServer) {
         .optional()
         .describe('서비스 계정 JSON 전체 내용 (문자열). serviceAccountJsonPath 와 둘 중 하나. 문자열로 넘기면 개인키가 대화 기록에 남는다'),
       packageName: androidPackageName
-        .describe('검증할 Android 앱의 패키지명 (예: com.findthem.app)'),
+        .describe('검증할 Android 앱의 패키지명 (예: com.example.app)'),
     },
     async ({ serviceAccountJson, serviceAccountJsonPath, packageName }) => {
       const json = resolveServiceAccountJsonInput({ json: serviceAccountJson, jsonPath: serviceAccountJsonPath });

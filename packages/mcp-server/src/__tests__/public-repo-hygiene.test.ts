@@ -43,7 +43,8 @@ const BANNED: Banned[] = [
   {
     label: '사설 프로젝트·잡·앱 이름',
     // 과거에 실제로 새어나간 이름들. 되돌아오면 즉시 잡는다.
-    pattern: /\b(penguinrun|vir-?game|ads-coffee|speakmoney|supervlabs)\b/i,
+    // find-?them: 2026-09 점검에서 playstore describe 예시(com.<앱>.app)로 발견.
+    pattern: /\b(penguinrun|vir-?game|ads-coffee|speakmoney|supervlabs|find-?them)\b/i,
     hint: `플레이스홀더를 쓰세요: ${ALLOWED_PLACEHOLDER_HINTS.join(', ')}`,
   },
   {
@@ -89,6 +90,23 @@ const FILES = SCAN_ROOTS.flatMap((rel) => scanFiles(path.join(repoRoot, rel))).f
 describe('공개 저장소 — 사설 식별자 금지', () => {
   it('스캔 대상 파일을 실제로 찾았다 (경로 오타 방지)', () => {
     expect(FILES.length).toBeGreaterThan(100);
+  });
+
+  // 이 파일은 스캔에서 빠지므로, 패턴이 실제 누출 모양을 잡는지는 여기서 직접 확인한다.
+  it.each([
+    ["{ packageName: z.string().describe('패키지명 (예: com." + 'findthem' + ".app)') }", '사설 프로젝트·잡·앱 이름'],
+    ['jenkins job find-' + 'them-android', '사설 프로젝트·잡·앱 이름'],
+  ])('과거 누출 사례 %j 를 잡는다', (line, label) => {
+    const rule = BANNED.find((b) => b.label === label)!;
+    expect(rule.pattern.test(line) && !rule.allow?.test(line)).toBe(true);
+  });
+
+  it('플레이스홀더는 걸리지 않는다', () => {
+    for (const placeholder of ALLOWED_PLACEHOLDER_HINTS) {
+      for (const rule of BANNED) {
+        expect(rule.pattern.test(placeholder) && !rule.allow?.test(placeholder), `${rule.label}: ${placeholder}`).toBe(false);
+      }
+    }
   });
 
   it.each(BANNED)('$label 이 소스·문서·스킬 어디에도 없다', ({ pattern, allow, hint }) => {
