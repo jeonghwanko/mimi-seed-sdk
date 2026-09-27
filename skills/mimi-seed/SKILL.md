@@ -51,9 +51,9 @@ ToolSearch(query="select:<tool>[,<tool>...]")
 `mimi_seed_remote_sync_credentials`를 `confirm=false`로 호출해 대상을 확인한다. 사용자에게
 Apple P8 키와 Play 서비스 계정 JSON이 원격 워크스페이스에 암호화 저장된다는 점을 알리고,
 명시 동의를 받은 뒤에만 `confirm=true`로 다시 호출한다. 특정 앱만 필요하면
-`package_names`를 지정한다 — `playstore_list_service_accounts`에 **등록된** 패키지명만 허용되며, 하나라도
-미등록이면 아무것도 보내지 않는다. 미리보기에 표시되는 **전송 대상 호스트**를 사용자에게 함께 보여준다
-(https만 허용, http는 localhost 개발 서버만).
+`package_names`를 지정한다 — `playstore_list_service_accounts`에 **등록된** 패키지명(레거시 단일 SA 가 있으면
+형식이 맞는 패키지명)만 보내고, 나머지는 **건너뛴 목록**으로 보여준다. 미리보기에 표시되는 **전송 대상 호스트**와
+건너뛸 이름을 사용자에게 함께 보여준다 (https만 허용, http는 localhost 개발 서버만).
 
 - 동기화 대상: `appstore.json`, `play-service-accounts/<packageName>.json`
 - 동기화 제외: `tokens.json`. 로컬 Google OAuth refresh token은 로컬 OAuth client에 묶여 있으므로

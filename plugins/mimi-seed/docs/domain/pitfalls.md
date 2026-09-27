@@ -246,7 +246,16 @@ review found three places where a plain `z.string()` flowed into something dange
   after URL normalization. Use `encodePathSegment()` (`lib/url-path.ts`) — plain `encodeURIComponent` still lets
   an id of exactly `..` climb one level. `path-encoding.test.ts` rejects an unencoded `/${…}` segment in the
   provider directories.
-- **Executables.** `ffmpegPath` was executed as given. It must now be named `ffmpeg`/`ffmpeg.exe`.
+- **Google resource names.** googleapis puts `name`/`parent`/`resource`/`projectId`/`datasetId`… into the URL
+  with *reserved* expansion (`{+name}`), which does **not** encode `/`: `firebase_delete_android_app` with
+  `appId: "../../B/androidApps/Z"` removed an app in **another project**. Encoding is no fix (Google does not
+  decode `%2F` there), so these ids are *validated* as a single segment with `resourceSegment()` /
+  `resourceName()` (`lib/resource-id.ts`). The same `path-encoding.test.ts` scans the Google domain folders, and
+  `google-resource-id.test.ts` drives the real googleapis client to prove the request never leaves.
+- **Executables.** `ffmpegPath` was executed as given; a basename check still let `\\host\share\ffmpeg.exe`
+  (UNC/WebDAV — remote binary plus an NTLM hash leak) through. The MCP tools no longer accept it at all (FFmpeg is
+  configured by env var / `PATH`); the internal parameter requires a local absolute path, rejects UNC/device
+  prefixes before touching the filesystem, then checks realpath + regular file + `ffmpeg` name.
 
 Tools that accept a *file path* to a secret (`serviceAccountJsonPath`, `keystore_path`, `secret_file`) restrict it
 to the directory the SDK itself wrote (`lib/path-containment.ts`, realpath-based so a symlink cannot escape) —
@@ -280,3 +289,11 @@ checks the real request options.
 projects/services, Play products/subscriptions) silently dropped the rest; `lib/paginate.ts` follows
 `nextPageToken` and **fails** rather than truncating at its page cap. A query that outlives its wait window
 returns `jobComplete=false` with a note — an empty row set must never look like an empty result.
+
+## 24. Windows refuses to rename over a file someone is reading
+
+`writeFileAtomic` replaces `tokens.json` and friends with `rename(2)`. On Windows that fails with
+`EPERM`/`EBUSY`/`EACCES` while another process holds a read handle — antivirus, the search indexer, OneDrive, or
+another mimi-seed process reading the token — and the refresh looked like a random auth failure. The rename now
+retries only those codes on `RENAME_RETRY_DELAYS_MS` (10/20/40/80/160/320 ms, ~1 s total) and still deletes the
+temp file if it gives up. The CLI has its own copy of the atomic writer; **keep both schedules identical**.

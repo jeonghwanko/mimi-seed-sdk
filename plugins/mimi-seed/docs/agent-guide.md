@@ -301,11 +301,15 @@ General rules:
   `android_generate_keystore`) write them to `~/.mimi-seed/` and return paths; hand those paths to the
   consuming tool's `*_path` / `secret_file` parameter instead of reading the file.
 - `bigquery_run_query` is **read-only**: it dry-runs the SQL first and refuses anything that is not a
-  single `SELECT` (DML, DDL, scripts). If it returns `jobComplete=false` with a `jobId`, the rows are
-  empty because the job did not finish — not because the result is empty.
+  single `SELECT` (DML, DDL, scripts). "Read-only" means no data change, not no side effects: a `SELECT`
+  still bills scanned bytes, and one that calls remote functions, `ML.GENERATE_TEXT`-style model calls, or
+  `EXTERNAL_QUERY` still makes those external calls and costs. If it returns `jobComplete=false` with a
+  `jobId`, the rows are empty because the job did not finish — not because the result is empty.
 - `mimi_seed_remote_sync_credentials` only sends Play service accounts that are **registered**
-  (`playstore_list_service_accounts`); an unknown package name stops the whole sync. The preview shows the
-  destination host, and the endpoint must be https (http only for localhost).
+  (`playstore_list_service_accounts`), or — when the legacy single `play-service-account.json` exists — any
+  well-formed package name (it falls back to that SA). Other names are **skipped and listed**; App Store and the
+  allowed packages still sync. The preview shows the destination host, and the endpoint must be https (http only
+  for localhost).
 
 ---
 
@@ -332,7 +336,10 @@ General rules:
 - **Identifiers are validated at the schema.** `packageName` / `package_name(s)` must look like an
   Android application id (`com.example.app`) and `bundleId` like an iOS bundle id; anything else
   (`../x`, slashes, empty segments) is rejected with `Input validation error` before the tool runs.
-  `ffmpegPath` must point at a file named `ffmpeg` / `ffmpeg.exe`.
+  Google resource ids (project, app, service-account email, dataset/table, AdMob/GA4/billing account) must be a
+  single segment (`A-Z a-z 0-9 - _ . : @`) — `../` is refused before any request.
+- **FFmpeg location is configuration, not a tool argument.** The video/TikTok tools no longer take
+  `ffmpegPath`; set `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` or put FFmpeg on `PATH`.
 - **Reward/cash-out apps** are a sensitive Play category — flag policy implications to
   the user, but it does not block test-track distribution.
 
