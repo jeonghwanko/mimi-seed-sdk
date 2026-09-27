@@ -29,6 +29,45 @@ export interface AtomicWriteOptions {
   dirMode?: number;
 }
 
+/**
+ * Windows 에서 rename 이 일시적으로 실패할 때의 대기 간격(ms). 합계 630ms ≈ 1초 이내.
+ *
+ * 왜: Windows 는 다른 프로세스가 대상 파일을 열고 있으면(백신·검색 인덱서·OneDrive, 또는
+ * tokens.json 을 읽는 중인 다른 mimi-seed 프로세스) rename 을 EPERM/EBUSY/EACCES 로 거절한다.
+ * 그 핸들은 보통 수십~수백 ms 안에 닫히므로, 짧게 물러났다 다시 시도하면 대부분 통과한다.
+ *
+ * ⚠️ CLI 쪽 원자적 쓰기 사본(packages/cli)도 **같은 일정**을 쓴다. 한쪽을 바꾸면 다른 쪽도 맞출 것 —
+ * 두 패키지는 서로 import 하지 않으므로 이 숫자가 유일한 동기화 지점이다.
+ */
+export const RENAME_RETRY_DELAYS_MS = [10, 20, 40, 80, 160, 320] as const;
+const RETRYABLE_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+function sleepSync(ms: number): void {
+  // 동기 API(writeFileAtomic)를 유지하려고 이벤트 루프를 막는 대기를 쓴다 — 최악 630ms.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export interface RenameRetryDeps {
+  rename?: (from: string, to: string) => void;
+  sleep?: (ms: number) => void;
+}
+
+/** 일시적 잠금 오류(EPERM/EBUSY/EACCES)에만 정해진 간격으로 재시도하고, 그 외 오류는 즉시 던진다. */
+export function renameWithRetry(from: string, to: string, deps: RenameRetryDeps = {}): void {
+  const rename = deps.rename ?? renameSync;
+  const sleep = deps.sleep ?? sleepSync;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? '';
+      if (!RETRYABLE_RENAME_CODES.has(code) || attempt >= RENAME_RETRY_DELAYS_MS.length) throw error;
+      sleep(RENAME_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+}
+
 export function writeFileAtomic(
   filePath: string,
   contents: string | Uint8Array,
@@ -46,8 +85,9 @@ export function writeFileAtomic(
     });
     // writeFileSync 의 mode 는 umask 로 깎이고 파일이 이미 있으면 무시된다 — 명시적으로 못 박는다.
     if (options.mode !== undefined && process.platform !== 'win32') chmodSync(tempPath, options.mode);
-    renameSync(tempPath, filePath);
+    renameWithRetry(tempPath, filePath);
   } catch (error) {
+    // 재시도까지 다 실패해도 temp 는 지운다 — 대상 파일은 옛 내용 그대로 남는다.
     try {
       unlinkSync(tempPath);
     } catch {
