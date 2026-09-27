@@ -44,13 +44,53 @@ Committing *any* Play Developer API edit (image, listing, release) discards list
 saved-but-didn't-publish in the Play Console UI. Google warns against editing the same app with both tools at
 once. Do all listing writes via the API, **or** finish & publish Console edits first — never interleave.
 
-## 5. CI ≠ Jenkins; there is no `jenkins_trigger_build`
+## 5. CI ≠ Jenkins; a Jenkins trigger is at-most-once per `request_id`, locally
 
 `ci_*` triggers **GitHub Actions / GitLab only**. The `jenkins_*` tools manage **credentials** (keystore,
 service account, secrets) and **job definitions** (`jenkins_list_jobs` / `jenkins_get_job_config` /
-`jenkins_create_job` / `jenkins_update_job`) — they do **not** start builds. To run a Jenkins job, hit its
-REST API. And remember: **Mimi Seed never compiles binaries** — `.aab`/`.ipa` come from EAS/Xcode/Gradle/CI,
-not from this SDK.
+`jenkins_create_job` / `jenkins_update_job`), and run builds through `jenkins_trigger_build` →
+`jenkins_get_queue_item` → `jenkins_get_build_status`.
+
+A Jenkins `POST …/build` has no idempotency key, and a timeout or 5xx does not say whether the job was queued —
+blindly retrying a deploy job runs it twice. So `jenkins_trigger_build` (`jenkins/builds.ts`) takes a caller-chosen
+`request_id` and reserves it with an atomic `mkdir` under `~/.mimi-seed/jenkins-build-requests/<sha256(url, user,
+request_id)>/` **before** the POST, writes a `pending` receipt, then records the outcome in `receipt.json` (0600, via
+`#core/atomic-write.js`). Any later call with the same `request_id` returns that record (`replayed: true`) and never
+POSTs; the same key with a different job or parameters is refused.
+
+- **Before the POST** (pending receipt write, CSRF crumb fetch) a failure releases the reservation and throws —
+  nothing was sent, so the same `request_id` may be retried. The crumb is fetched with `redirect: 'manual'`
+  (credentials never follow a redirect); a 404 means the crumb issuer is off and the POST goes without one; any
+  other crumb failure stops before the POST.
+- **After the POST may have been sent** the function never throws. Outcomes it cannot classify — network error,
+  5xx, 429, a redirect, a 201 without a usable queue `Location` — are `unknown`. If the final receipt write fails,
+  the in-memory result is returned with `persisted: false` (a `queued` build keeps its `queue_id` and a "do not
+  retrigger" note); throwing there once lost the queue id and invited a retry with a new `request_id` — a second
+  deploy.
+- **Replays without a final record** are `pending` while the reservation is younger than `PENDING_WINDOW_MS`
+  (another call is in flight) and `unknown` after that (it died mid-flight). Fail closed: check Jenkins, don't
+  delete the reservation to retry.
+- **Reverse proxies** may rewrite the host and context path of the `Location` header. Only the trailing
+  `/queue/item/<id>/` is read; every follow-up request goes to the configured base, never to the `Location` host.
+- The receipt holds only an HMAC-SHA256 fingerprint of the job + parameters (keyed by a random per-install
+  `jenkins-build-requests/.key`, 0600, published once with `link(2)` so concurrent first uses agree on one key) and
+  bounded response metadata (state, reservation time, queue id, HTTP status) — never parameters or the API token.
+  The reservation directory name does **not** use that key, so losing `.key` never re-opens a used `request_id`
+  (its replays are refused as a different payload instead). The POST uses API-token auth, no redirects, and a single
+  attempt.
+
+It is **not** Jenkins-side exactly-once: another machine, another Jenkins user, or a deleted
+`jenkins-build-requests/` directory can dispatch the same logical request again.
+
+- **The confirm gate composes with it.** The tool is **D**; the registrar's injected gate returns the dry-run
+  before the handler runs, so a preview never reserves the `request_id` or writes a receipt (or the `.key`).
+  Preview and confirm with the same `request_id`. The preview redacts secret-looking keys inside `parameters` too
+  (the registrar's preview redaction is recursive).
+- **Follow the queue item, not `lastBuild`.** The queue id from the trigger leads to the exact build number
+  (`jenkins_get_queue_item`); `lastBuild` may belong to someone else's run.
+
+And remember: **Mimi Seed never compiles binaries** — `.aab`/`.ipa` come from EAS/Xcode/Gradle/CI, not from this
+SDK; the trigger tools only start a job that already exists.
 
 ## 6. Per-package Play SA needs Android Publisher API enabled
 

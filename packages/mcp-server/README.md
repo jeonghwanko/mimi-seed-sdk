@@ -139,7 +139,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Firebase | 21 | `firebase_create_project` / `firebase_get_remote_config_overview` / `firebase_get_android_config` / `firebase_create_ios_app` |
 | AdMob | 7 | `admob_list_apps` / `admob_create_ad_unit` / `admob_get_today_earnings` / `admob_get_report` |
 | CI (GitHub Actions / GitLab) | 6 | `ci_trigger_build` / `ci_get_build_status` / `ci_list_workflows` / `ci_cancel_build` |
-| Jenkins (크리덴셜 + 잡) | 10 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` |
+| Jenkins (크리덴셜 + 잡 + 빌드) | 13 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` / `jenkins_trigger_build` |
 | GA4 (Google Analytics 4) | 8 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_plan_bigquery_link` / `ga4_create_bigquery_link` / `ga4_run_report` |
 | Search Console | 6 | `gsc_inspect_url` / `gsc_search_analytics` / `gsc_submit_sitemap` |
 | Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |

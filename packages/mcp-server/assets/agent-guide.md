@@ -82,6 +82,7 @@ row for the job; batching two rows in one `select:` call is fine.
 | Social posting (Facebook / Instagram / Threads) | `select:facebook_current_config,facebook_save_config,facebook_list_pages,facebook_get_page,facebook_post_photo,facebook_post_multi_photo,instagram_save_config,instagram_get_account,instagram_post_image,instagram_post_carousel,threads_current_config,threads_save_config,threads_refresh_token,threads_get_account,threads_post,threads_post_video,threads_post_carousel` |
 | TikTok Business video publish | `select:tiktok_business_auth_status,tiktok_business_get_account,tiktok_business_get_video_settings,tiktok_business_plan_video_post,tiktok_business_publish_video,tiktok_business_get_publish_status,tiktok_business_list_publish_audits` |
 | Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_delete_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
+| Jenkins build run + track | `select:jenkins_status,jenkins_trigger_build,jenkins_get_queue_item,jenkins_get_build_status` |
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds,ci_cancel_build` |
 | Android signing / keystore | `select:android_signing_setup,android_generate_keystore,jenkins_upload_keystore,jenkins_create_credential,jenkins_upload_playstore_sa` |
 | Service account end-to-end | `select:iam_list_service_accounts,iam_create_service_account,iam_list_keys,iam_create_key,iam_add_iam_policy_binding,setup_playstore_connection,playstore_register_service_account,playstore_verify_service_account,playstore_list_service_accounts,playstore_delete_service_account` |
@@ -159,6 +160,7 @@ Credentials live under `~/.mimi-seed/` (legacy `~/.preseed/` is still read):
 | `play-service-account.json` | default/legacy Play SA (fallback when no per-package match) |
 | `bigquery-service-account.json` | BigQuery SA (exempt from Workspace reauth; OAuth is the fallback) |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection |
+| `jenkins-build-requests/` | `jenkins_trigger_build` dispatch records per `request_id` (hashes + queue id only; do not delete to retry) |
 | `google-ads.json` | Google Ads developer token + customer id |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page / account tokens for social post tools |
 | `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads tokens selected by the current project's `.mimi-seed.json` |
@@ -219,7 +221,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Firebase** | `firebase_create_project` · `firebase_create_android_app` · `firebase_create_ios_app` · `firebase_get_android_config` · `firebase_enable_service` · `firebase_enable_common_services` · `firebase_get_remote_config_overview` · `firebase_list_*_apps` |
 | **AdMob** | `admob_create_app` · `admob_create_ad_unit` · `admob_list_ad_units` · `admob_get_today_earnings` · `admob_get_report` |
 | **CI/CD** | `ci_trigger_build` · `ci_get_build_status` · `ci_list_workflows` (**GitHub Actions / GitLab only**) |
-| **Jenkins** (credentials + jobs) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` · `jenkins_create_job` · `jenkins_update_job` |
+| **Jenkins** (credentials + jobs + builds) | `jenkins_status` · `jenkins_save_config` · `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_upload_playstore_sa` · `jenkins_create_job` · `jenkins_update_job` · `jenkins_trigger_build` · `jenkins_get_queue_item` · `jenkins_get_build_status` |
 | **Google Cloud IAM** | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |
 | **BigQuery** | `bigquery_run_query` · `bigquery_list_datasets` · `bigquery_get_table_schema` |
 | **GA4** | `ga4_list_properties` · `ga4_create_property` · `ga4_create_data_stream` · `ga4_run_report` · `ga4_plan_bigquery_link` · `ga4_create_bigquery_link` |
@@ -305,17 +307,17 @@ contact sheet; codec validation alone is not a quality pass.
 7. Preview then confirm `video_render`; poll `video_job_status`, then run `video_validate` on the completed MP4.
 
 > **Mimi Seed does not compile app binaries.** It manages metadata, store releases, and
-> CI/Jenkins *credentials and job definitions* — not Xcode/Gradle builds. To produce an
-> `.ipa`/`.aab`, use EAS, Xcode, or a CI/Jenkins job. There is **no `jenkins_trigger_build`
-> tool**; trigger a Jenkins job via its REST API and use the `jenkins_*` tools for
-> credentials and job configs.
+> CI/Jenkins credentials and job definitions, and it can *start* an existing CI or Jenkins job —
+> the job does the Xcode/Gradle build. To produce an `.ipa`/`.aab`, use EAS, Xcode, or a CI/Jenkins job.
+> For Jenkins: `jenkins_trigger_build` (preview, then `confirm: true`) → `jenkins_get_queue_item` for the exact
+> build number → `jenkins_get_build_status`. Never infer the build from `lastBuild` — it may belong to another request.
 
 ---
 
 ## 5. Safety — irreversible actions need explicit confirmation
 
 Every tool marked **D** in the [tool catalog](domain/tool-catalog.md) — submit/promote/release, deletes,
-public posts and review replies, IAM keys and bindings, Jenkins job/credential overwrites, Play service-account
+public posts and review replies, IAM keys and bindings, Jenkins build triggers and job/credential overwrites, Play service-account
 setup, beta invites — is
 **confirm-gated by the server**, and its MCP annotations say `destructiveHint: true`. Call order:
 
@@ -335,12 +337,22 @@ not **D** (private is reversible), but public/unlisted still needs `confirmVisib
 
 Never pass `confirm: true` on the first call, and never retry an uncertain public write automatically.
 
+`jenkins_trigger_build` also takes a caller-chosen `request_id` (one per logical build request). The dry-run does
+**not** reserve it, so preview and confirm with the same `request_id`. Once a confirmed call has used it, every
+later call with that `request_id` returns the recorded result (`replayed: true`) instead of POSTing again — the
+record lives under `~/.mimi-seed/jenkins-build-requests/`, per Jenkins URL and user, on this machine only.
+`state: "pending"` means another call with that `request_id` is still in flight — call again with the same
+`request_id` shortly. `state: "unknown"` means the outcome could not be confirmed — check Jenkins before doing
+anything; do not retry with a new `request_id`. `persisted: false` means only the local record failed: a `queued`
+build is already in the queue, so track its `queue_id` and do not retrigger.
+
 | Action | Why |
 |--------|-----|
 | `playstore_submit_release` / `playstore_promote_release` with `status=completed` | Starts Google review / full rollout. Near-irreversible. |
 | `appstore_submit_for_review`, `appstore_release_version` | Submits to Apple review / publishes immediately. |
 | `appstore_delete_screenshot_set`, `playstore_delete_all_images`, `playstore_replace_images` | Deletes assets. |
 | `playstore_delete_product`, `jenkins_delete_credential`, `firebase_delete_*_app` | Destructive. |
+| `jenkins_trigger_build` | Runs a Jenkins job, which may deploy or publish. |
 | `facebook_post_*`, `instagram_post_*`, `threads_post*`, `*_reply_review`, `youtube_reply_comment` | Public, outward-facing. |
 | `iam_create_key`, `iam_add_iam_policy_binding` | Issues a permanent credential / changes project IAM. |
 
@@ -384,13 +396,16 @@ General rules:
   changes you saved-but-didn't-publish in the Play Console UI. Google's own docs warn
   against editing the same app with both tools at once. Do all listing writes via the
   API, or finish & publish your Console edits first — never interleave them.
-- **`ci_*` is GitHub/GitLab only.** It does not trigger Jenkins builds.
+- **`ci_*` is GitHub/GitLab only.** Jenkins builds use the separate `jenkins_trigger_build` →
+  `jenkins_get_queue_item` → `jenkins_get_build_status` flow.
 - **Identifiers are validated at the schema.** `packageName` / `package_name(s)` must look like an
   Android application id (`com.example.app`) and `bundleId` like an iOS bundle id; anything else
   (`../x`, slashes, empty segments) is rejected with `Input validation error` before the tool runs.
   Google resource ids (project, app, service-account email, AdMob/GA4/billing account) must be a single segment
   (`A-Z a-z 0-9 - _ . : @`) — `../` is refused before any request. BigQuery ids follow BigQuery's own naming
   rules (table names may contain Unicode and spaces), and Play ids may not be exactly `.` or `..`.
+  Jenkins job paths (`folder/job`) are encoded per segment; `.`/`..` segments are refused, and the build tools
+  also refuse empty segments, backslashes, and control characters.
 - **FFmpeg location is configuration, not a tool argument.** The video/TikTok tools no longer take
   `ffmpegPath`; set `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` or put FFmpeg on `PATH`.
 - **Reward/cash-out apps** are a sensitive Play category — flag policy implications to

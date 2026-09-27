@@ -18,6 +18,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- MCP tools can now run and follow a Jenkins build: `jenkins_trigger_build` starts a job (`/build`, or
+  `/buildWithParameters` when `parameters` is given), `jenkins_get_queue_item` turns the returned queue id into
+  the exact build number, and `jenkins_get_build_status` reports `building` / `result` for that build. Before, an
+  agent had to call Jenkins' REST API itself, and the docs said there was no trigger tool.
+- `jenkins_trigger_build` is confirm-gated like other destructive tools (a job may deploy or publish): without
+  `confirm: true` it only returns the `🛑 DRY-RUN` preview. It also takes a `request_id` you choose per logical
+  build request and sends at most one POST per `request_id` on this machine. The first confirmed call reserves
+  the id under `~/.mimi-seed/jenkins-build-requests/` (per Jenkins URL and user) and records the outcome there;
+  any later call with the same `request_id` returns that record (`replayed: true`) instead of starting the job
+  again, and reusing it with a different job or parameters is refused. The preview does not reserve the id, so
+  preview and confirm with the same `request_id`. A replay while the first call is still in flight reports
+  `state: "pending"`. An outcome that cannot be confirmed (timeout, network error, 5xx, 429, redirect, or a `201`
+  without a queue location) is reported as `state: "unknown"` and is never retried automatically — check Jenkins
+  before doing anything. Once the request may have reached Jenkins the tool always returns a result: if only the
+  local record fails to save it answers `persisted: false`, and a queued build keeps its `queue_id` with a "do not
+  retrigger" note. It sends the CSRF crumb when the server issues one (without following redirects) and stops
+  before the POST if the crumb cannot be fetched. It reads the queue id from `Location` even when a reverse proxy
+  rewrites the context path, but always polls the configured URL. The record holds only an HMAC fingerprint
+  (keyed by a random per-install `.key`), the state, the queue id, and the HTTP status, never parameters or the
+  API token. This is local deduplication, not a Jenkins guarantee: another machine or a deleted record can run the
+  same request again.
+
+### Security
+
+- Jenkins job paths passed to any `jenkins_*` tool (`jenkins_get_job_config`, `jenkins_create_job`,
+  `jenkins_update_job`, `jenkins_list_jobs` `folder`, and the new build tools) are now encoded with the shared
+  path-segment encoder, which refuses `.` and `..` segments. Before, `team-folder/..` was sent unchanged and URL
+  normalization could point the request at another job or folder. The new build tools also refuse empty segments,
+  backslashes, and control characters, and take `queue_id` / `build_number` only as positive integers.
+- Dry-run previews of confirm-gated tools now also redact secret-looking keys nested inside object or array
+  arguments (for example `parameters: { DEPLOY_TOKEN: … }`), not only top-level ones. Previews without such keys
+  are unchanged.
+
 ### Fixed
 
 - `playstore_list_reviews` now returns the developer's published reply. Each review gains a top-level
@@ -35,7 +70,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Tool changes
 
-- None added, renamed or removed. `playstore_list_reviews` output gains `developerComment`.
+- Added: `jenkins_trigger_build` (destructive, confirm-gated), `jenkins_get_queue_item`, `jenkins_get_build_status`.
+- None renamed or removed. `playstore_list_reviews` output gains `developerComment`.
 
 ## [0.21.0] - 2026-09-28
 

@@ -91,8 +91,16 @@ Inspect the configured CI and recent builds. Do not write anything; give me the 
 Trigger GitHub Actions deploy.yml on main and monitor it. Do not release to a store.
 ```
 
-The MCP surface exposes `ci_*` tools for GitHub/GitLab builds. Jenkins MCP tools manage credentials and job
-configuration; the CLI `deploy` flow triggers and monitors Jenkins builds.
+The MCP surface exposes `ci_*` tools for GitHub/GitLab builds. For Jenkins, ask your agent to run the job:
+it calls `jenkins_trigger_build` (a preview first; it runs only after you approve), then
+`jenkins_get_queue_item` for the exact build number, then `jenkins_get_build_status`. The CLI `deploy` flow
+also triggers and monitors Jenkins builds.
+
+Each MCP trigger carries a `request_id`. Retrying with the same `request_id` returns the recorded result instead
+of starting the job again. `pending` means that request is still being sent — ask again with the same ID shortly.
+If the result is `unknown`, check Jenkins — never retrigger with a new ID. The record
+lives in `~/.mimi-seed/jenkins-build-requests/` for the same Jenkins URL and user on this machine; it is not a
+guarantee across machines. Do not delete these records to retry.
 
 ## Failure recovery
 

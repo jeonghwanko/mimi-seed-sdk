@@ -135,9 +135,23 @@ export function annotationsFor(meta: ToolMeta): ToolAnnotations & { title: strin
 
 const SECRET_KEY = /secret|token|password|passphrase|private|base64|credential_json|serviceAccountJson/i;
 
-function previewValue(key: string, value: unknown): string {
+/**
+ * 중첩된 객체·배열 안의 비밀처럼 보이는 키도 가린다 — 예: jenkins_trigger_build 의
+ * `parameters: { DEPLOY_TOKEN: … }`. 최상위 키만 보던 시절엔 값이 preview 에 그대로 찍혔다.
+ */
+function redactNested(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactNested);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, SECRET_KEY.test(k) ? '(redacted)' : redactNested(v)]),
+    );
+  }
+  return value;
+}
+
+export function previewValue(key: string, value: unknown): string {
   if (SECRET_KEY.test(key)) return '(redacted)';
-  const raw = typeof value === 'string' ? value : JSON.stringify(value);
+  const raw = typeof value === 'string' ? value : JSON.stringify(redactNested(value));
   if (raw === undefined) return 'undefined';
   return raw.length > 200 ? `${raw.slice(0, 200)}… (${raw.length}자)` : raw;
 }

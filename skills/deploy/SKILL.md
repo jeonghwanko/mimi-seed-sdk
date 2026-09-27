@@ -11,7 +11,7 @@ mimi-seed로 출시를 한 흐름으로 운전한다: CI 빌드 → 블로커 �
 
 1. MCP에 `mimi-seed` 등록 + 대상 스토어 인증 완료 (`mimi_seed_status`로 확인).
 2. AI 릴리스 노트를 쓰려면 `ANTHROPIC_API_KEY` 환경변수.
-3. CI 연결: GitHub Actions / GitLab은 `ci_save_config`(`ToolSearch(query="select:ci_save_config")`). **Jenkins는 빌드 트리거 도구가 없으므로** 잡 실행은 REST API로 직접 트리거한다. mimi-seed의 `jenkins_*`는 credential 등록과 잡 정의 관리(`jenkins_list_jobs`/`jenkins_get_job_config`/`jenkins_create_job`/`jenkins_update_job`)까지 담당한다.
+3. CI 연결: GitHub Actions / GitLab은 `ci_save_config`(`ToolSearch(query="select:ci_save_config")`). Jenkins는 `jenkins_status`로 연결을 확인한다(`jenkins_*`는 credential·잡 정의 관리와 빌드 실행·추적까지 담당).
 
 ## 경로 A — CLI (가장 간단)
 
@@ -33,7 +33,13 @@ CI 실행 번호는 스토어 빌드 번호가 아니다. 실제 산출물 버�
    ```
    ToolSearch(query="select:mimi_seed_status,ci_list_workflows,ci_trigger_build,ci_get_build_status,generate_release_notes_from_commits,playstore_check_submission_risks,playstore_update_release_notes,playstore_promote_release,playstore_submit_release,appstore_check_submission_risks,appstore_list_builds,appstore_attach_build,appstore_update_whats_new,appstore_submit_for_review")
    ```
-2. **빌드**: `ci_trigger_build`(GitHub/GitLab) → `ci_get_build_status`로 완료 대기. (Jenkins면 REST 트리거 후 빌드 로그 폴링.)
+2. **빌드**: `ci_trigger_build`(GitHub/GitLab) → `ci_get_build_status`로 완료 대기.
+   Jenkins면 `ToolSearch(query="select:jenkins_status,jenkins_trigger_build,jenkins_get_queue_item,jenkins_get_build_status")` 로드 후:
+   - 논리적 빌드 요청마다 새 `request_id`를 하나 정한다 (예: `release_<버전>_android`).
+   - `jenkins_trigger_build`를 **confirm 없이** 호출 → 🛑 DRY-RUN 미리보기(잡·파라미터·request_id)를 사용자에게 보여주고 승인받는다. 미리보기는 request_id를 예약하지 않는다.
+   - 승인 후 **같은 인자 + 같은 `request_id`** 에 `confirm: true`를 붙여 재호출 → `queue_id`.
+   - `jenkins_get_queue_item`으로 `state=started`와 정확한 `build_number`를 받고 `jenkins_get_build_status`로 완료 대기. `lastBuild`로 번호를 추정하지 않는다.
+   - `state=unknown`(접수 불명)이면 Jenkins에서 확인한다. 새 `request_id`로 재전송하지 않는다. 같은 `request_id` 재호출은 기록된 결과만 돌려준다.
 3. **노트**: git 커밋 배열을 `generate_release_notes_from_commits`(3톤 × 다국어)로 생성 → 사용자 리뷰 → 적용.
 4. **점검**: `playstore_check_submission_risks` / `appstore_check_submission_risks` 블로커 보고.
 5. **적용**:
@@ -52,4 +58,4 @@ CI 실행 번호는 스토어 빌드 번호가 아니다. 실제 산출물 버�
 ## 참고 (온톨로지)
 
 - 파이프라인·CLI 토폴로지 상세: [`docs/domain/cli-deploy.md`](../../docs/domain/cli-deploy.md)
-- 함정(CI≠Jenkins, `jenkins_trigger_build` 없음 등): [`docs/domain/pitfalls.md`](../../docs/domain/pitfalls.md)
+- 함정(CI≠Jenkins, Jenkins 트리거 중복 방지 등): [`docs/domain/pitfalls.md`](../../docs/domain/pitfalls.md)

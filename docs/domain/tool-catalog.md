@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**242 tools across 22 domains** — per-domain counts below.
+**245 tools across 22 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -32,7 +32,7 @@
 | Firebase | `registers/firebase.ts` | 21 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub Actions / GitLab) | `registers/ci.ts` | 6 |
-| Jenkins (credentials + jobs) | `registers/jenkins.ts` | 10 |
+| Jenkins (credentials + jobs + builds) | `registers/jenkins.ts` | 13 |
 | GA4 | `registers/ga4.ts` | 8 |
 | Search Console | `registers/gsc.ts` | 6 |
 | Google Ads | `registers/googleads.ts` | 6 |
@@ -49,7 +49,7 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **22 modules** | **242** |
+| **Total** | **22 modules** | **245** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -151,7 +151,7 @@
 | Domain (file) | Tools |
 |---|---|
 | CI (GitHub Actions / GitLab) (`ci.ts`) — **not** Jenkins builds | `ci_list_workflows` · `ci_get_build_status` · `ci_list_recent_builds` · **W** `ci_save_config` · **W** `ci_trigger_build` · **D** `ci_cancel_build` |
-| Jenkins (credentials + jobs) (`jenkins.ts`) — **no build trigger** | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · **W** `jenkins_save_config` · **D** `jenkins_create_credential` · **D** `jenkins_upload_keystore` (새 id 는 바로 생성, 기존 id 교체만 confirm) · **D** `jenkins_delete_credential` · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) |
+| Jenkins (credentials + jobs + builds) (`jenkins.ts`) — builds: `jenkins_trigger_build` → `jenkins_get_queue_item` → `jenkins_get_build_status` | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · `jenkins_get_queue_item` · `jenkins_get_build_status` · **W** `jenkins_save_config` · **D** `jenkins_create_credential` · **D** `jenkins_upload_keystore` (새 id 는 바로 생성, 기존 id 교체만 confirm) · **D** `jenkins_delete_credential` · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) · **D** `jenkins_trigger_build` (confirm 필요; 같은 `request_id` 는 로컬 기록으로 한 번만 발송) |
 | Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **D** `jenkins_upload_playstore_sa` (새 id 는 바로 생성, 기존 id 교체만 confirm) |
 <!-- generated:catalog-table:build:end -->
 
