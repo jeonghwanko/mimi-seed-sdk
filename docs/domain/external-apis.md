@@ -18,6 +18,7 @@
 | BigQuery | BigQuery API | `googleapis` |
 | GA4 | GA4 Admin v1beta (속성/스트림), Admin v1alpha (BigQueryLink) + Data v1beta APIs | `googleapis` |
 | Search Console | Search Console API | `googleapis` |
+| Naver Search Advisor | **No public Search Advisor API** — only the IndexNow endpoint (`searchadvisor.naver.com/indexnow`, key-file auth) plus plain GETs of the target site (page, `robots.txt`) as the Yeti crawler. Sitemap/RSS submission and reports stay console-only | `fetchWithTimeout`; no `~/.mimi-seed/` credential |
 | Google Ads | Google Ads reporting | `googleapis` / REST per `googleads_save_config` |
 | YouTube | YouTube Data API v3 (channel/video reads, upload, metadata, thumbnails, scheduling, privacy, comments/replies) + YouTube Analytics API v2 (reports) | `googleapis` + local file streams |
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |

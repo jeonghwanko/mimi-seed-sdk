@@ -94,6 +94,7 @@ const BRAND_PREFIXES: Array<[string, string]> = [
   ['bigquery_', 'BigQuery'],
   ['ga4_', 'GA4'],
   ['gsc_', 'Search Console'],
+  ['naver_', 'Naver'],
   ['googleads_', 'Google Ads'],
   ['facebook_', 'Facebook'],
   ['instagram_', 'Instagram'],
@@ -106,7 +107,7 @@ const BRAND_PREFIXES: Array<[string, string]> = [
 ];
 
 const WORD_CASE: Record<string, string> = {
-  iap: 'IAP', ios: 'iOS', sa: 'SA', url: 'URL', uac: 'UAC', ai: 'AI', iam: 'IAM', ga4: 'GA4',
+  iap: 'IAP', ios: 'iOS', sa: 'SA', url: 'URL', uac: 'UAC', ai: 'AI', iam: 'IAM', ga4: 'GA4', indexnow: 'IndexNow',
   playstore: 'Play Store', appstore: 'App Store', bigquery: 'BigQuery', youtube: 'YouTube',
 };
 

@@ -128,7 +128,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## 제공 도구 (150+ 개 · 22개 영역)
+## 제공 도구 (150+ 개 · 23개 영역)
 <!-- generated:readme-tools-heading:end -->
 
 <!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -142,6 +142,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Jenkins (크리덴셜 + 잡 + 빌드) | 13 | `jenkins_create_credential` / `jenkins_upload_keystore` / `jenkins_create_job` / `jenkins_update_job` / `jenkins_trigger_build` |
 | GA4 (Google Analytics 4) | 8 | `ga4_create_property` / `ga4_create_data_stream` / `ga4_plan_bigquery_link` / `ga4_create_bigquery_link` / `ga4_run_report` |
 | Search Console | 6 | `gsc_inspect_url` / `gsc_search_analytics` / `gsc_submit_sitemap` |
+| 네이버 서치어드바이저 | 2 | `naver_check_page` / `naver_indexnow_submit` |
 | Google Ads | 6 | `googleads_list_campaigns` / `googleads_get_uac_report` / `googleads_get_campaign_report` |
 | Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
 | Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |

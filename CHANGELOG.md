@@ -18,6 +18,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Naver Search Advisor tools. Naver publishes no webmaster API, so these cover the two parts that can be automated:
+  `naver_check_page` reports what Naver's crawler (Yeti) sees for one URL — the redirect chain (302 vs 301),
+  whether `robots.txt` lets Yeti in (a `User-agent: Yeti` group overrides `*`), noindex from meta or
+  `X-Robots-Tag`, canonical, title / description / Open Graph, and pages whose raw HTML has almost no text
+  because JavaScript draws them. `naver_indexnow_submit` sends new, changed, or deleted URLs to Naver's IndexNow
+  endpoint. It first fetches your `<key>.txt` key file and sends nothing if the file is missing or doesn't match.
+  Sitemap and RSS submission remain in the Search Advisor console.
+
+### Tool changes
+
+- Added: `naver_check_page`, `naver_indexnow_submit`.
+
 ## [0.21.1] - 2026-09-28
 
 ### Added

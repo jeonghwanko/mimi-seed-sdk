@@ -442,7 +442,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## Local MCP Tool List (150+ tools · 22 domains)
+## Local MCP Tool List (150+ tools · 23 domains)
 <!-- generated:readme-tools-heading:end -->
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md). Every tool carries MCP annotations (read-only / destructive / open-world), and destructive tools (submit, delete, public posts, …) return a dry-run preview unless called with `confirm: true`.
@@ -458,6 +458,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **Jenkins (credentials + jobs + builds)** | 13 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` · `jenkins_update_job` · `jenkins_trigger_build` |
 | **GA4** | 8 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_plan_bigquery_link` · `ga4_create_bigquery_link` · `ga4_run_report` |
 | **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
+| **Naver Search Advisor** | 2 | `naver_check_page` · `naver_indexnow_submit` |
 | **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |

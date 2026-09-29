@@ -27,6 +27,7 @@ const PROVIDER_DIRS = [
   'googleads',
   'instagram',
   'jenkins',
+  'naver',
   'social',
   'threads',
   'tiktok-business',

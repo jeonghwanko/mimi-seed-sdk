@@ -439,7 +439,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## 도구 목록 (Local MCP · 150+ 개 · 22개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 23개 영역)
 <!-- generated:readme-tools-heading:end -->
 
 > 아래 도구는 **Local MCP** — 로컬 Google OAuth — 로 동작합니다. Remote MCP는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
@@ -455,6 +455,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **Jenkins (크리덴셜 + 잡 + 빌드)** | 13 | `jenkins_create_credential` · `jenkins_upload_keystore` · `jenkins_create_job` · `jenkins_update_job` · `jenkins_trigger_build` |
 | **GA4 (Google Analytics 4)** | 8 | `ga4_create_property` · `ga4_create_data_stream` · `ga4_plan_bigquery_link` · `ga4_create_bigquery_link` · `ga4_run_report` |
 | **Search Console** | 6 | `gsc_inspect_url` · `gsc_search_analytics` · `gsc_submit_sitemap` |
+| **네이버 서치어드바이저** | 2 | `naver_check_page` · `naver_indexnow_submit` |
 | **Google Ads** | 6 | `googleads_list_campaigns` · `googleads_get_uac_report` · `googleads_get_campaign_report` |
 | **Facebook** | 6 | `facebook_post_photo` · `facebook_post_multi_photo` · `facebook_list_pages` |
 | **Google Cloud IAM** | 5 | `iam_create_service_account` · `iam_create_key` · `iam_add_iam_policy_binding` |

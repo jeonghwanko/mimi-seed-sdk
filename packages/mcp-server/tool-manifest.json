@@ -1,6 +1,6 @@
 {
   "$comment": "등록된 MCP 도구 + 도메인 메타데이터(label·credential·summary) + 도구 분류(write·destructive·local·idempotent → MCP annotations·confirm 가드) + toolset 그룹·폐기 별칭의 SSOT (src/lib/tool-registrar.ts 가 읽는다). src/__tests__/tool-manifest.test.ts 가 실제 서버 등록 목록과 diff 하고 메타데이터 정합성을 검사한다. 도구 추가/삭제/개명 시 이 파일을 함께 갱신할 것 — 산문 문서에는 정확한 개수를 쓰지 말고 이 파일을 가리킬 것. mimi-seed://tools/catalog 리소스가 이 파일을 그대로 서빙한다.",
-  "total": 245,
+  "total": 247,
   "alwaysOn": [
     "auth",
     "checks"
@@ -505,6 +505,24 @@
       "local": [],
       "idempotent": [
         "gsc_submit_sitemap"
+      ]
+    },
+    "naver": {
+      "label": "Naver Search Advisor",
+      "credential": "없음 (IndexNow 키 파일)",
+      "summary": "Yeti 크롤러 관점 색인 점검·IndexNow URL 제출",
+      "tools": [
+        "naver_check_page",
+        "naver_indexnow_submit"
+      ],
+      "write": [
+        "naver_indexnow_submit"
+      ],
+      "destructive": [],
+      "ownGate": [],
+      "local": [],
+      "idempotent": [
+        "naver_indexnow_submit"
       ]
     },
     "iam": {
