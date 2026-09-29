@@ -53,6 +53,11 @@ export const domains = {
     en: 'Search Console',
     highlights: ['gsc_inspect_url', 'gsc_search_analytics', 'gsc_submit_sitemap'],
   },
+  naver: {
+    en: 'Naver Search Advisor',
+    ko: '네이버 서치어드바이저',
+    highlights: ['naver_check_page', 'naver_indexnow_submit'],
+  },
   googleads: {
     en: 'Google Ads',
     highlights: ['googleads_list_campaigns', 'googleads_get_uac_report', 'googleads_get_campaign_report'],
@@ -165,7 +170,7 @@ export const catalog = {
     cloud: {
       header: 'Tools (W = write, D = destructive)',
       rows: [
-        ['admob'], ['iam'], ['billing'], ['bigquery'], ['ga4'], ['gsc'], ['googleads'], ['facebook'], ['instagram'],
+        ['admob'], ['iam'], ['billing'], ['bigquery'], ['ga4'], ['gsc'], ['naver', '— no public Search Advisor API: crawler-view check + IndexNow'], ['googleads'], ['facebook'], ['instagram'],
         ['threads', '— Meta Threads Graph API, **text-first** (IG 와 별개 계정·토큰)'],
       ],
     },
@@ -499,8 +504,8 @@ export const batches = [
     fallbackFor: ['googleads'],
   },
   {
-    goal: 'Search Console',
-    domains: ['gsc'],
+    goal: 'Search indexing (Search Console / Naver)',
+    domains: ['gsc', 'naver'],
   },
   {
     goal: 'Social posting (Facebook / Instagram / Threads)',

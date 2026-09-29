@@ -15,6 +15,7 @@ import { registerThreadsTools } from './registers/threads.js';
 import { registerFacebookTools } from './registers/facebook.js';
 import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerGscTools } from './registers/gsc.js';
+import { registerNaverTools } from './registers/naver.js';
 import { registerGa4Tools } from './registers/ga4.js';
 import { registerJenkinsTools } from './registers/jenkins.js';
 import { registerAndroidTools } from './registers/android.js';
@@ -65,6 +66,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   registerFacebookTools(registrar);
   registerGoogleAdsTools(registrar);
   registerGscTools(registrar);
+  registerNaverTools(registrar);
   registerGa4Tools(registrar);
   registerJenkinsTools(registrar);
   registerAndroidTools(registrar);

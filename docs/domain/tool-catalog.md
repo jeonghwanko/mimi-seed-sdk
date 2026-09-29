@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**245 tools across 22 domains** — per-domain counts below.
+**247 tools across 23 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -35,6 +35,7 @@
 | Jenkins (credentials + jobs + builds) | `registers/jenkins.ts` | 13 |
 | GA4 | `registers/ga4.ts` | 8 |
 | Search Console | `registers/gsc.ts` | 6 |
+| Naver Search Advisor | `registers/naver.ts` | 2 |
 | Google Ads | `registers/googleads.ts` | 6 |
 | Facebook | `registers/facebook.ts` | 6 |
 | Google Cloud IAM | `registers/iam.ts` | 5 |
@@ -49,7 +50,7 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **22 modules** | **245** |
+| **Total** | **23 modules** | **247** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -139,6 +140,7 @@
 | BigQuery (`bigquery.ts`) | `bigquery_run_query` (read-only — a single `SELECT` enforced by a dry run; can incur cost) · `bigquery_list_datasets` · `bigquery_list_tables` · `bigquery_get_table_schema` · `bigquery_auth_status` |
 | GA4 (`ga4.ts`) | `ga4_list_account_summaries` · `ga4_list_properties` · `ga4_list_data_streams` · `ga4_plan_bigquery_link` · `ga4_run_report` · **W** `ga4_create_property` · **W** `ga4_create_data_stream` · **W** `ga4_create_bigquery_link` (confirm 필요, 기존 링크는 no-op) |
 | Search Console (`gsc.ts`) | `gsc_list_sites` · `gsc_list_sitemaps` · `gsc_get_sitemap` · `gsc_inspect_url` · `gsc_search_analytics` · **W** `gsc_submit_sitemap` |
+| Naver Search Advisor (`naver.ts`) — no public Search Advisor API: crawler-view check + IndexNow | `naver_check_page` · **W** `naver_indexnow_submit` |
 | Google Ads (`googleads.ts`) | `googleads_list_campaigns` · `googleads_get_campaign_report` · `googleads_get_uac_report` · `googleads_list_accessible_customers` · `googleads_config_status` · **W** `googleads_save_config` (local config) |
 | Facebook (`facebook.ts`) | `facebook_list_pages` · `facebook_get_page` · `facebook_current_config` · **W** `facebook_save_config` · **D** `facebook_post_photo` (public) · **D** `facebook_post_multi_photo` (public) |
 | Instagram (`instagram.ts`) | `instagram_get_account` · **W** `instagram_save_config` · **D** `instagram_post_image` (public) · **D** `instagram_post_carousel` (public) |

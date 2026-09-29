@@ -15,7 +15,7 @@
   never-published source that both compile in (the code they share; [[architecture]]).
 - The MCP server registers **150+ tools** across the domain modules under `src/registers/` (exact inventory:
   `packages/mcp-server/tool-manifest.json`, test-enforced) — Play Store, App Store Connect, Firebase,
-  AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Google Ads, CI (GitHub/GitLab), Jenkins (credentials,
+  AdMob, Google Cloud IAM, BigQuery, GA4, Search Console, Naver Search Advisor, Google Ads, CI (GitHub/GitLab), Jenkins (credentials,
   jobs, and build triggers),
   Facebook, Instagram, Threads, Android signing, video production (incl. YouTube publishing), AI, Auth, and
   Checks. (Prose docs use the "150+" floor; only the manifest and the blocks generated from it — [[tool-catalog]]
