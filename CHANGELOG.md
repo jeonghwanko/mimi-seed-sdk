@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-09-29
+
 ### Added
 
 - Naver Search Advisor tools. Naver publishes no webmaster API, so these cover the two parts that can be automated:
