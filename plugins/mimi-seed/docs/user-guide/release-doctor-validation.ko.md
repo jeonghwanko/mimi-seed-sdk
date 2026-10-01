@@ -17,3 +17,23 @@ MCP 패키지 설치를 실행하지 않는다.
 
 이 기준선은 플랫폼 분류와 정적 정책 근거만 확인한다. 비공개 소스, 스토어 자격증명, 업로드 빌드,
 등록정보 또는 심사 제출 동작은 시험하지 않는다.
+
+## 파일럿 전 리허설
+
+두 번째 사전 점검으로 배포된 CLI를 공개 오픈소스 앱 12개(네이티브 Android, 네이티브 iOS, bare React Native,
+Expo, Flutter, Kotlin Multiplatform이며 일부는 `--path`로 검사한 모노레포)에 실행했다. 위 기준선과 마찬가지로
+독립 파일럿 프로젝트 5개에는 포함하지 않는다.
+
+| | 첫 실행 | 수정 후 |
+|---|---|---|
+| 플랫폼 감지 | 12/12 | 12/12 |
+| 오탐인 경고 | 17개 중 12개 | 4개 중 0개 |
+| 블로커 | 1개는 맞지만 example 앱 파일을 인용, Billing 블로커 1개 누락 | 2개 모두 맞고 앱 자신의 파일을 인용 |
+| 앱 식별자 정확도 (Android / iOS) | 9/10 · 6/9 | 10/10 · 9/9 |
+
+오탐 원인은 Wear OS 모듈이 휴대전화 앱의 Target API 검사를 꺼 버린 것, example 앱과 extension을 별도 앱으로
+센 것, 정적 검사로 해석할 수 있는데도 해석하지 않은 식별자와 targetSdk 값(`$(VAR)` bundle ID, version catalog,
+`gradle.properties`, `apply from:` 스크립트, Expo build properties)이었다. 누락된 블로커는 포함된 Billing
+Library의 마감일이 지난 `react-native-iap` 릴리스였다. 남은 경고는 실제 상황이다: 여러 앱을 담은 저장소 두 개와
+저장소의 정적 파일 밖에 있는 targetSdk 값 두 개. 한 저장소는 `devEngines` 선언 때문에 CLI가 실행되기 전에
+`npx`가 멈췄다. 우회 방법은 [파일럿 안내](release-doctor-pilot.ko.md)에 있다.

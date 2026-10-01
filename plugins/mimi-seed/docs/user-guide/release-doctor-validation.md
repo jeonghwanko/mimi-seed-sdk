@@ -17,3 +17,24 @@ The bundled CLI path no longer launches a second MCP-package installation.
 
 This baseline checks platform classification and static policy evidence only. It does not test private source,
 store credentials, uploaded builds, metadata, or review submission behavior.
+
+## Pre-pilot rehearsal
+
+A second preflight ran the published CLI against 12 public open-source apps (native Android, native iOS, bare
+React Native, Expo, Flutter, and Kotlin Multiplatform, several of them monorepos scanned with `--path`). Like the
+baseline above, it does not count toward the five independent pilot projects.
+
+| | First run | After the fixes |
+|---|---|---|
+| Platform detection | 12/12 | 12/12 |
+| Warnings that were false positives | 12 of 17 | 0 of 4 |
+| Blockers | 1 correct but citing an example app's file, 1 Billing blocker missed | 2 correct, citing the app's own file |
+| App identifiers correct (Android / iOS) | 9/10 · 6/9 | 10/10 · 9/9 |
+
+The false positives came from Wear OS modules switching off the phone app's Target API check, example apps and
+extensions counted as extra apps, and identifiers or targetSdk values that a static scan can resolve but did not
+(`$(VAR)` bundle IDs, version catalogs, `gradle.properties`, `apply from:` scripts, Expo build properties). The
+missed blocker was a `react-native-iap` release whose bundled Billing Library had passed its deadline. The
+remaining warnings are real: two multi-app repositories and two targetSdk values that live outside the repository's
+static files. One repository's `devEngines` declaration stopped `npx` before the CLI ran; the
+[pilot guide](release-doctor-pilot.md) describes the workaround.

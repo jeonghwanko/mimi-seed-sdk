@@ -18,6 +18,53 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+Release Doctor fixes from a pre-pilot rehearsal on 12 open-source apps (most warnings were false positives and one
+real Billing blocker was missed).
+
+### Changed
+
+- CLI and setup-bin output now follow the system locale when neither `MIMI_SEED_LANG` nor a saved `mimi-seed lang`
+  choice exists: a Korean locale (`LC_ALL` / `LC_MESSAGES` / `LANG`, or the OS locale on Windows) gets Korean,
+  anything else English. It used to be Korean for everyone. The first-run `setup` prompt's Enter default follows
+  the same rule.
+- Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
+  unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the
+  check is incomplete and names those items. They are also listed in the JSON report as `coverage.unresolved`.
+- Release Doctor labels undecided info items `NEEDS CHECK` (Korean `확인 필요`, where `확인` read as "confirmed");
+  other info items are `INFO` (`정보`).
+- Release Doctor Billing findings show their evidence (file and resolved expression, including why a version is
+  unresolved), a passing Billing check no longer suggests an upgrade, and the Korean action matches the English one.
+
+### Fixed
+
+- Release Doctor missed a Play Billing blocker for React Native apps using `react-native-iap` when the package was
+  not installed (a fresh clone or CI): the version pinned in `yarn.lock` / `package-lock.json` / `pnpm-lock.yaml`
+  (also at the repository root when `--path` points into a workspace) is now mapped to the Billing version that
+  release bundles, verified against every stable `react-native-iap` release through 16.7.2 — e.g. 12.15–13.x →
+  Billing 7, a blocker since 2026-08-31. An installed 12.5–13.x and an app's `ext.playBillingSdkVersion` override are
+  read too; newer or unknown releases stay unresolved.
+- A Wear OS, TV, Automotive, or XR module no longer switches off the Target API check for the whole repository; the
+  phone app is still checked, and the specialized module is reported for a category-specific check.
+- Android application IDs: strings, templates, and variables that mention `applicationId` are no longer reported
+  as IDs (or as extra app modules); `applicationId` read from the version catalog or `gradle.properties`, and the
+  `namespace` fallback, are resolved.
+- targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`) or in Expo's
+  `expo-build-properties` plugin is now read instead of reported as unresolved.
+- Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
+  targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes
+  `MULTIPLE_*` warnings or a blocker that cites the wrong file.
+- iOS bundle IDs written as `$(VAR)` / `${VAR}` are resolved from `.xcconfig` files and XcodeGen `project.yml`
+  settings; when they cannot be resolved, Release Doctor reports them as unresolved instead of borrowing a nested
+  sample project's ID. Framework, test-bundle, and Debug/Profile-only IDs are left out.
+- `MULTIPLE_IOS_BUNDLE_IDS` no longer fires for one app plus its extensions, widgets, and watch app, and
+  `…UITests` IDs are filtered.
+- With `--path` inside a repository, Xcode pins in the repository root's CI files and the root Gradle version
+  catalog are read (a pin outside the path alone never makes a blocker). Composite actions
+  (`.github/actions/**/action.yml`) count as Xcode pin sources, and Xcode Cloud `ci_scripts/` are reported as such.
+- The reusable Release Doctor workflow, and the CI command `check --local` suggests for projects that declare
+  `devEngines`, run `npx` with a throwaway prefix; inside such a project npm stopped `npx` with `EBADDEVENGINES`
+  before Release Doctor started. The pilot guide and troubleshooting document the workaround.
+
 ## [0.21.3] - 2026-10-01
 
 ### Fixed
