@@ -836,6 +836,344 @@ describe('Release Doctor local scan', () => {
     });
   });
 
+  // Pre-pilot rehearsal on 12 open-source apps: each fixture is the minimal synthetic shape of a real repository
+  // that produced a false positive, a wrong identifier or citation, or hid a blocker.
+  describe('리허설 회귀 — 실제 저장소 모양', () => {
+    const at = new Date('2026-10-01T00:00:00Z');
+    const git = { '.git/HEAD': 'ref: refs/heads/main\n' };
+    const codes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.map((row) => row.code);
+
+    /** A minimal project.pbxproj with real target → configuration-list → build-configuration wiring. */
+    function pbxProject(targets: Array<{ name: string; productType: string; configs: Record<string, string> }>): string {
+      let next = 0;
+      const id = () => (++next).toString(16).toUpperCase().padStart(24, '0');
+      const lines = ['// !$*UTF8*$!', '{', '\tobjects = {'];
+      for (const target of targets) {
+        const list = id();
+        const configs = Object.entries(target.configs).map(([name, bundleId]) => ({ id: id(), name, bundleId }));
+        lines.push(
+          `\t\t${id()} /* ${target.name} */ = {`, '\t\t\tisa = PBXNativeTarget;',
+          `\t\t\tbuildConfigurationList = ${list} /* Build configuration list for PBXNativeTarget "${target.name}" */;`,
+          `\t\t\tname = ${target.name};`, `\t\t\tproductType = "${target.productType}";`, '\t\t};',
+          `\t\t${list} /* Build configuration list for PBXNativeTarget "${target.name}" */ = {`,
+          '\t\t\tisa = XCConfigurationList;', '\t\t\tbuildConfigurations = (',
+          ...configs.map((config) => `\t\t\t\t${config.id} /* ${config.name} */,`), '\t\t\t);', '\t\t};',
+        );
+        for (const config of configs) {
+          lines.push(
+            `\t\t${config.id} /* ${config.name} */ = {`, '\t\t\tisa = XCBuildConfiguration;', '\t\t\tbuildSettings = {',
+            '\t\t\t\tSDKROOT = iphoneos;', `\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = "${config.bundleId}";`, '\t\t\t};',
+            `\t\t\tname = ${config.name};`, '\t\t};',
+          );
+        }
+      }
+      lines.push('\t};', '}');
+      return lines.join('\n');
+    }
+    const app = 'com.apple.product-type.application';
+    const extension = 'com.apple.product-type.app-extension';
+
+    it('Gradle 문자열·템플릿 속 applicationId를 ID로 읽지 않고 catalog 값을 해석한다 (Tasks)', async () => {
+      const root = await fixture({
+        'gradle/libs.versions.toml': '[versions]\napplicationId = "com.example.tasks"\nandroid-targetSdk = "36"\n',
+        'app/build.gradle.kts': [
+          'plugins { alias(libs.plugins.android.application) }',
+          'android {',
+          '  defaultConfig {',
+          '    applicationId = libs.versions.applicationId.get()',
+          '    targetSdk = libs.versions.android.targetSdk.get().toInt()',
+          '  }',
+          '}',
+        ].join('\n'),
+        'kmp/build.gradle.kts': [
+          'plugins { alias(libs.plugins.kotlin.multiplatform) }',
+          'val applicationId = libs.versions.applicationId.get()',
+          'val generate by tasks.registering {',
+          '  inputs.property("applicationId", applicationId)',
+          '  doLast { file.writeText("""',
+          '    |    const val APPLICATION_ID = "$applicationId"',
+          '    |    const val DEV_URL = "https://example.com"',
+          '  """) }',
+          '}',
+        ].join('\n'),
+      });
+
+      const report = await scanReleaseDoctor(root, at);
+
+      expect(report.identifiers.androidPackageNames).toEqual(['com.example.tasks']);
+      expect(codes(report)).not.toContain('MULTIPLE_ANDROID_APPLICATION_IDS');
+      expect(codes(report)).toContain('TARGET_SDK_OK');
+    });
+
+    it('applicationId가 gradle.properties 키를 가리키면 그 값을 쓴다 (Rocket.Chat)', async () => {
+      const root = await fixture({
+        'android/app/build.gradle': 'apply plugin: "com.android.application"\nandroid { defaultConfig {\n  applicationId APPLICATION_ID\n  targetSdkVersion 36\n} }',
+        'android/gradle.properties': '# app identity\nAPPLICATION_ID=com.example.chat\n',
+      });
+
+      const report = await scanReleaseDoctor(root, at);
+
+      expect(report.identifiers.androidPackageNames).toEqual(['com.example.chat']);
+      expect(codes(report)).not.toContain('ANDROID_PACKAGE_UNRESOLVED');
+    });
+
+    describe('Wear OS 모듈이 휴대전화 앱의 Target API 검사를 끄지 않는다 (AntennaPod, Tasks)', () => {
+      const wearRepo = (phoneTargetSdk: number) => ({
+        'build.gradle': 'plugins {\n  alias(libs.plugins.android.application) apply false\n}',
+        'common.gradle': `android {\n  compileSdk 36\n  defaultConfig {\n    minSdk 23\n    targetSdk ${phoneTargetSdk}\n  }\n}`,
+        'app/build.gradle': 'plugins {\n  alias(libs.plugins.android.application)\n}\napply from: "../common.gradle"\nandroid {\n  namespace "com.example.podcast"\n}',
+        'app/src/main/AndroidManifest.xml': '<manifest />',
+        'app-wearos/build.gradle': 'plugins {\n  alias(libs.plugins.android.application)\n}\napply from: "../common.gradle"\nandroid {\n  namespace "com.example.podcast.wearos"\n  defaultConfig {\n    applicationId "com.example.podcast"\n    targetSdk 36\n  }\n}',
+        'app-wearos/src/main/AndroidManifest.xml': '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n  <uses-feature android:name="android.hardware.type.watch" android:required="true" />\n</manifest>',
+      });
+
+      it('통과하는 휴대전화 앱은 공통 스크립트의 근거로 판정하고, Wear 모듈은 info로 남긴다', async () => {
+        const report = await scanReleaseDoctor(await fixture(wearRepo(36)), at);
+        const specialized = report.findings.find((row) => row.code === 'TARGET_SDK_SPECIALIZED_APP_REVIEW');
+
+        expect(report.identifiers.androidPackageNames).toEqual(['com.example.podcast']);
+        expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_OK', file: 'common.gradle' }));
+        expect(specialized).toMatchObject({ severity: 'info' });
+        expect(specialized?.detail).toContain('app-wearos');
+        expect(specialized?.detail).toContain('(app)');
+        expect(report.counts.warning).toBe(0);
+      });
+
+      it('기준 미달인 휴대전화 앱은 Wear 모듈이 있어도 블로커다', async () => {
+        const report = await scanReleaseDoctor(await fixture(wearRepo(35)), at);
+
+        expect(report.findings).toContainEqual(expect.objectContaining({
+          code: 'TARGET_SDK_BELOW_MINIMUM',
+          severity: 'blocker',
+          file: 'common.gradle',
+        }));
+      });
+    });
+
+    it('example 앱의 Gradle·Xcode 근거는 실제 앱이 있으면 판정과 인용에 쓰지 않는다 (AppFlowy)', async () => {
+      const root = await fixture({
+        'android/app/build.gradle': 'apply plugin: "com.android.application"\nandroid { defaultConfig { applicationId "com.example.notes"; targetSdkVersion 35 } }',
+        'ios/Runner.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.notes.ios;\n',
+        'packages/backend/example/android/app/build.gradle': 'apply plugin: "com.android.application"\nandroid { defaultConfig { applicationId "com.example.example"; targetSdkVersion 33 } }',
+        'packages/backend/example/ios/Runner.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.backendExample;\n',
+        'packages/widgets/demo/android/app/build.gradle': 'apply plugin: "com.android.application"\nandroid { defaultConfig { applicationId "com.example.demo"; targetSdkVersion 30 } }',
+      });
+
+      const report = await scanReleaseDoctor(root, at);
+
+      expect(report.identifiers).toEqual({ androidPackageNames: ['com.example.notes'], iosBundleIds: ['com.example.notes.ios'] });
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'TARGET_SDK_BELOW_MINIMUM',
+        title: expect.stringContaining('35'),
+        file: 'android/app/build.gradle',
+      }));
+      expect(codes(report)).not.toContain('MULTIPLE_ANDROID_APPLICATION_IDS');
+      expect(codes(report)).not.toContain('MULTIPLE_IOS_BUNDLE_IDS');
+    });
+
+    describe('$(VAR) bundle identifier (Element X, Tasks, Immich)', () => {
+      const elementShape = (withSettings: boolean) => ({
+        'project.yml': ['name: ElementX', 'settings:', '  APP_NAME: ElementX', 'include:', '- path: app.yml', '- path: NSE/target.yml', ''].join('\n'),
+        ...(withSettings ? { 'app.yml': 'settings:\n  APP_DISPLAY_NAME: Example\n  BASE_BUNDLE_IDENTIFIER: com.example.chat # the store ID\n' } : {}),
+        'ElementX.xcodeproj/project.pbxproj': pbxProject([
+          { name: 'ElementX', productType: app, configs: { Debug: '$(BASE_BUNDLE_IDENTIFIER)', Release: '$(BASE_BUNDLE_IDENTIFIER)' } },
+          { name: 'NSE', productType: extension, configs: { Release: '${BASE_BUNDLE_IDENTIFIER}.nse' } },
+          { name: 'UnitTests', productType: 'com.apple.product-type.bundle.unit-test', configs: { Release: '${BASE_BUNDLE_IDENTIFIER}.unit.tests' } },
+          { name: 'MapShim', productType: 'com.apple.product-type.framework', configs: { Release: '$(BASE_BUNDLE_IDENTIFIER).map-shim' } },
+        ]),
+        // A component Swift package with its own sample app, vendored in the same repository.
+        'components-ios/Package.swift': '// swift-tools-version:5.9\n',
+        'components-ios/Inspector/Inspector.xcodeproj/project.pbxproj': pbxProject([
+          { name: 'Inspector', productType: app, configs: { Release: 'com.example.components.inspector' } },
+        ]),
+      });
+
+      it('XcodeGen settings로 변수를 해석하고, 컴포넌트 sample 앱·framework·test ID는 제외한다', async () => {
+        const report = await scanReleaseDoctor(await fixture(elementShape(true)), at);
+
+        expect(report.identifiers.iosBundleIds).toEqual(['com.example.chat', 'com.example.chat.nse']);
+        expect(codes(report)).not.toContain('MULTIPLE_IOS_BUNDLE_IDS');
+      });
+
+      it('해석할 수 없으면 다른 프로젝트의 ID를 빌려오지 않고 unresolved로 보고한다', async () => {
+        const report = await scanReleaseDoctor(await fixture(elementShape(false)), at);
+        const finding = report.findings.find((row) => row.code === 'IOS_BUNDLE_ID_UNRESOLVED');
+
+        expect(report.identifiers.iosBundleIds).toEqual([]);
+        expect(finding).toMatchObject({ severity: 'warning', file: 'ElementX.xcodeproj/project.pbxproj' });
+        expect(finding?.detail).toContain('$(BASE_BUNDLE_IDENTIFIER)');
+        expect(finding?.detail).not.toContain('inspector');
+      });
+
+      it('.xcconfig 값으로 해석하고 Debug/Profile 전용 ID는 출시 ID에서 뺀다', async () => {
+        const root = await fixture({
+          'ios/Signing.xcconfig': '// Override these for a fork:\n//     APP_BUNDLE_ID_PROD = com.customuniqueid.app\nAPP_BUNDLE_ID_PROD = com.example.photos\nAPP_BUNDLE_ID_DEV = com.example.photosdev\n',
+          'ios/Config.xcconfig': 'TEAM_ID=\nBUNDLE_ID_SUFFIX=\n#include? "Local.xcconfig"\n',
+          'ios/Runner.xcodeproj/project.pbxproj': pbxProject([
+            { name: 'Runner', productType: app, configs: { Debug: '$(APP_BUNDLE_ID_DEV).debug', Profile: '$(APP_BUNDLE_ID_DEV).profile', Release: '$(APP_BUNDLE_ID_PROD)$(BUNDLE_ID_SUFFIX)' } },
+            { name: 'ShareExtension', productType: extension, configs: { Debug: '$(APP_BUNDLE_ID_DEV).debug.ShareExtension', Release: '$(APP_BUNDLE_ID_PROD).ShareExtension' } },
+          ]),
+        });
+
+        const report = await scanReleaseDoctor(root, at);
+
+        expect(report.identifiers.iosBundleIds).toEqual(['com.example.photos', 'com.example.photos.ShareExtension']);
+        expect(codes(report)).not.toContain('IOS_BUNDLE_ID_UNRESOLVED');
+        expect(codes(report)).not.toContain('MULTIPLE_IOS_BUNDLE_IDS');
+      });
+    });
+
+    describe('MULTIPLE_IOS_BUNDLE_IDS', () => {
+      const scan = async (ids: string[]) => scanReleaseDoctor(await fixture({
+        'ios/App.xcodeproj/project.pbxproj': ['SDKROOT = iphoneos;', ...ids.map((id) => `PRODUCT_BUNDLE_IDENTIFIER = ${id};`)].join('\n'),
+      }), at);
+
+      it('앱 하나와 그 extension·위젯·watch 앱, …UITests ID는 경고하지 않는다 (Mattermost, Rocket.Chat)', async () => {
+        const report = await scan([
+          'com.example.chat', 'com.example.chat.ShareExtension', 'com.example.chat.NotificationService',
+          'com.example.chat.watchkitapp', 'com.example.chat.watchkitapp.watchkitextension', 'com.example.ChatUITests',
+        ]);
+
+        expect(report.identifiers.iosBundleIds).not.toContain('com.example.ChatUITests');
+        expect(codes(report)).not.toContain('MULTIPLE_IOS_BUNDLE_IDS');
+      });
+
+      it('자체 extension을 가진 별도 채널 앱이나 다른 앱 ID는 계속 경고한다 (Wikipedia)', async () => {
+        const nested = await scan(['org.example.wiki', 'org.example.wiki.Widgets', 'org.example.wiki.beta', 'org.example.wiki.beta.Widgets']);
+        const unrelated = await scan(['com.example.one', 'com.example.two']);
+
+        expect(codes(nested)).toContain('MULTIPLE_IOS_BUNDLE_IDS');
+        expect(codes(unrelated)).toContain('MULTIPLE_IOS_BUNDLE_IDS');
+      });
+    });
+
+    it('Expo expo-build-properties의 targetSdkVersion을 근거로 쓴다 (Bluesky)', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+        'app.config.js': [
+          'const IS_DEV = process.env.EXPO_PUBLIC_ENV === "development";',
+          'module.exports = () => ({',
+          '  expo: {',
+          '    ios: { bundleIdentifier: "com.example.social" },',
+          '    android: { package: "com.example.social" },',
+          '    plugins: [',
+          '      ["expo-build-properties", {',
+          '        ios: { deploymentTarget: "16.4", extraPods: [{ name: "Picker", branch: "main" }] },',
+          '        android: { compileSdkVersion: 36, targetSdkVersion: 36, buildToolsVersion: "36.0.0" },',
+          '      }],',
+          '    ],',
+          '  },',
+          '});',
+        ].join('\n'),
+      });
+
+      const report = await scanReleaseDoctor(root, at);
+
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_OK', file: 'app.config.js' }));
+      expect(codes(report)).not.toContain('TARGET_SDK_UNRESOLVED');
+    });
+
+    describe('--path가 저장소 안을 가리킬 때 루트 CI를 읽는다 (Immich)', () => {
+      const mobile = {
+        'mobile/ios/Runner.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.photos;\n',
+      };
+
+      it('루트 워크플로의 Xcode 핀을 근거로 쓴다', async () => {
+        const root = await fixture({
+          ...git,
+          ...mobile,
+          '.github/workflows/build-mobile.yml': 'jobs:\n  ios:\n    runs-on: macos-26\n    steps:\n      - run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer\n',
+        });
+
+        const report = await scanReleaseDoctor(path.join(root, 'mobile'), at);
+
+        expect(report.findings).toContainEqual(expect.objectContaining({
+          code: 'IOS_XCODE_OK',
+          file: '../.github/workflows/build-mobile.yml',
+        }));
+      });
+
+      it('경로 밖 핀만 기준 미달이면 다른 앱의 job일 수 있으므로 블로커가 아닌 경고다', async () => {
+        const root = await fixture({
+          ...git,
+          ...mobile,
+          '.github/workflows/desktop.yml': 'jobs:\n  mac:\n    steps:\n      - uses: maxim-lobanov/setup-xcode@v1\n        with:\n          xcode-version: 16.4\n',
+        });
+
+        const report = await scanReleaseDoctor(path.join(root, 'mobile'), at);
+
+        expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_MIXED_PINS', severity: 'warning' }));
+        expect(report.counts.blocker).toBe(0);
+      });
+    });
+
+    it('composite action의 핀과 Xcode Cloud ci_scripts를 Xcode 근거로 읽는다 (Mattermost, Element X)', async () => {
+      const ios = { 'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;\n' };
+      const action = await scanReleaseDoctor(await fixture({
+        ...ios,
+        '.github/actions/prepare-ios/action.yaml': 'runs:\n  using: composite\n  steps:\n    - uses: maxim-lobanov/setup-xcode@v1\n      with:\n        xcode-version: "26.1"\n',
+      }), at);
+      const cloud = await scanReleaseDoctor(await fixture({ ...ios, 'ci_scripts/ci_post_clone.sh': '#!/bin/sh\nbrew install xcodegen\n' }), at);
+      const cloudFinding = cloud.findings.find((row) => row.code === 'IOS_XCODE_UNRESOLVED');
+
+      expect(action.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_OK', file: '.github/actions/prepare-ios/action.yaml' }));
+      expect(cloudFinding?.detail).toContain('Xcode Cloud');
+    });
+
+    describe('첫 실행 출력', () => {
+      it('확정하지 못한 검사가 있으면 성공 문구 대신 미완료를 알리고, info 라벨을 [확인 필요]로 바꾼다', async () => {
+        const root = await fixture({
+          'android/app/build.gradle': 'apply plugin: "com.android.application"\nandroid { defaultConfig { applicationId "com.example.app"; targetSdkVersion rootProject.ext.targetSdkVersion } }',
+          'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;\n',
+        });
+        const report = await scanReleaseDoctor(root, at);
+
+        expect(report.coverage.unresolved).toEqual(['IOS_XCODE_UNRESOLVED', 'TARGET_SDK_UNRESOLVED']);
+        const en = renderReleaseDoctor(report, 'en');
+        const ko = renderReleaseDoctor(report, 'ko');
+        expect(en).not.toContain('No submission blocker was found');
+        expect(en).toContain('the local check is incomplete: 2 item(s) could not be resolved (IOS_XCODE_UNRESOLVED, TARGET_SDK_UNRESOLVED)');
+        expect(en).toContain('[NEEDS CHECK] The Xcode version used for iOS release builds could not be resolved locally');
+        expect(en).toContain('[INFO] Android application ID detected');
+        expect(ko).toContain('로컬 검사가 끝나지 않았습니다');
+        expect(ko).toContain('[확인 필요] iOS 릴리스 빌드의 Xcode 버전을 로컬에서 확정하지 못함');
+        expect(ko).toContain('[정보] Android application ID 감지 완료');
+        expect(ko).not.toMatch(/\[확인\]/);
+      });
+
+      it('모든 검사가 판정되면 성공 문구를 그대로 보여준다', async () => {
+        const root = await fixture({
+          'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 36 } }',
+        });
+        const report = await scanReleaseDoctor(root, at);
+
+        expect(report.coverage.unresolved).toEqual([]);
+        expect(renderReleaseDoctor(report, 'en')).toContain('✓ No submission blocker was found by the local checks.');
+      });
+
+      it('Billing 결과는 근거를 보여주고, 통과에는 업그레이드 조치를 붙이지 않으며 한·영 조치가 같은 내용이다', async () => {
+        const pass = await scanReleaseDoctor(await fixture({
+          'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 36 } }\ndependencies { implementation("com.android.billingclient:billing:9.1.0") }',
+        }), at);
+        const unresolved = await scanReleaseDoctor(await fixture({
+          'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 36 } }',
+          'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^12.16.2' } }),
+        }), at);
+        const passFinding = pass.findings.find((row) => row.code === 'BILLING_PASS');
+        const unresolvedFinding = unresolved.findings.find((row) => row.code === 'BILLING_UNRESOLVED');
+
+        expect(passFinding?.action).toBeUndefined();
+        expect(passFinding?.ko?.action).toBeUndefined();
+        expect(passFinding?.detail).toContain('Evidence: app/build.gradle.kts (com.android.billingclient:billing:9.1.0)');
+        expect(unresolvedFinding?.detail).toContain('react-native-iap ^12.16.2 is declared but neither installed nor pinned in a lockfile');
+        expect(unresolvedFinding?.ko?.detail).toContain('react-native-iap ^12.16.2');
+        expect(unresolvedFinding?.action).toContain('install the declared IAP package');
+        expect(unresolvedFinding?.ko?.action).toContain('IAP 패키지를 설치');
+        expect(renderReleaseDoctor(unresolved, 'en')).toContain('BILLING_UNRESOLVED');
+      });
+    });
+  });
+
   it('새 iOS·FCM 결과를 한국어와 영어로 렌더링한다', async () => {
     const root = await fixture({
       'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;',

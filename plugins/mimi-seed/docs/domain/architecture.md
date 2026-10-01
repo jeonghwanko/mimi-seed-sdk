@@ -183,7 +183,7 @@ never `npm install`ed, and has no build of its own.
 
 | `#core/…` module | What both packages share |
 |---|---|
-| `checks/{billing,release-doctor,release-doctor-render}.ts` | Release Doctor — the MCP bin/tools and `mimi-seed check --local` run the same scanner in-process |
+| `checks/{billing,release-doctor,release-doctor-render,lockfile}.ts` | Release Doctor — the MCP bin/tools and `mimi-seed check --local` run the same scanner in-process (`lockfile.ts`: npm/pnpm/Yarn lockfile and repository-root lookups) |
 | `project-manifest.ts` | the `.mimi-seed.json` schema + reader (wording of validation errors is passed in by the caller) |
 | `lang.ts` | the `MIMI_SEED_LANG` > `settings.json` > `ko` rule, so the wizard and the setup bins it spawns agree |
 | `atomic-write.ts` | temp + rename credential writes, incl. the Windows rename-retry schedule |

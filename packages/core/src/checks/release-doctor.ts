@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { checkBillingCompliance } from './billing.js';
+import { checkBillingCompliance, reactNativeIapUpgradeTarget, type BillingComplianceResult } from './billing.js';
+import { lockedPackageVersion, lockfileDirectories, readText, repositoryRoot } from './lockfile.js';
 
 const SKIP_DIRS = new Set([
   '.git',
@@ -91,10 +92,14 @@ const EXCLUDED_EVIDENCE_DIRS = new Set([
   'e2e', 'fixtures', 'Library', 'mocks', 'obj', 'out', 'spec', 'Temp', 'target', 'test', 'tests', 'vendor', 'venv',
   // Documentation and sample projects show pins and endpoints without building or running them. (An example app's
   // manifests are still read, so a library repo's xample/ app is detected as before.)
-  'doc', 'docs', 'example', 'examples', 'sample', 'samples',
+  'doc', 'docs', 'example', 'examples', 'sample', 'samples', 'demo', 'demos',
   // Third-party checkouts that carry their own CI and Xcode pins.
   'Carthage', '.build', '.symlinks', '.dart_tool', '.swiftpm',
+  // Android instrumentation-test and test-fixture source sets.
+  'androidTest', 'testFixtures',
 ]);
+// Xcode test-target folders (UnitTests, UITests, WikipediaUITests, ...). Case-sensitive, so `contests` is not one.
+const TEST_TARGET_DIR = /Tests$/;
 const TEST_SOURCE_FILE = /(?:\.(?:spec|test)\.[^.]+$|_test\.(?:go|py|dart)$|^test_[^/]+\.py$)/;
 
 export type ReleaseDoctorSeverity = 'blocker' | 'warning' | 'info';
@@ -126,6 +131,11 @@ export interface ReleaseDoctorReport {
   findings: ReleaseDoctorFinding[];
   coverage: {
     checked: string[];
+    /**
+     * Codes of findings for checks that ran but could not reach a verdict (a blocker could hide behind them). The
+     * report is not an all-clear while this is non-empty.
+     */
+    unresolved: string[];
     requiresStoreConnection: string[];
   };
 }
@@ -134,7 +144,26 @@ interface ProjectFile {
   absolute: string;
   relative: string;
   text: string;
+  /**
+   * Inside an example, sample, demo, test, vendored, or nested-repository tree, or an app project inside a nested
+   * Swift package. Such files still detect the platform, but their app identifiers and targetSdk are used only
+   * when the scan finds no app outside those trees (a library repository whose only app is its example).
+   */
+  sample?: boolean;
+  /** Read from the enclosing repository root, outside the scanned `--path` (CI files, the root version catalog). */
+  outside?: boolean;
 }
+
+/** Codes whose check could not decide; see `coverage.unresolved`. */
+const UNRESOLVED_CODES = new Set([
+  'TARGET_SDK_UNRESOLVED',
+  'TARGET_SDK_POLICY_REFRESH_REQUIRED',
+  'TARGET_SDK_SPECIALIZED_APP_REVIEW',
+  'BILLING_UNRESOLVED',
+  'IOS_XCODE_UNRESOLVED',
+  'IOS_XCODE_MIXED_PINS',
+  'IOS_SDK_POLICY_REFRESH_REQUIRED',
+]);
 
 async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 7): Promise<{
   files: ProjectFile[];
@@ -145,7 +174,8 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
   const sourceCandidates: Array<{ absolute: string; relative: string; depth: number }> = [];
   // `excluded`: inside a test/fixture/vendored tree or a nested repository (a directory with its own `.git`).
   // Manifest files there are still read exactly as before; Xcode pins and FCM source evidence are not.
-  async function visit(dir: string, depth: number, excluded: boolean): Promise<void> {
+  // `sample` additionally covers app projects inside a nested Swift package (a component library's demo app).
+  async function visit(dir: string, depth: number, excluded: boolean, sample: boolean): Promise<void> {
     if (depth > maxDepth) return;
     let entries;
     try {
@@ -155,11 +185,16 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
     }
     const nestedRepository = depth > 0 && entries.some((entry) => entry.name === '.git');
     const excludedHere = excluded || nestedRepository;
+    const sampleHere = sample || excludedHere || (depth > 0 && entries.some((entry) => entry.name === 'Package.swift'));
     for (const entry of entries) {
       const absolute = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRS.has(entry.name)) {
-          await visit(absolute, depth + 1, excludedHere || EXCLUDED_EVIDENCE_DIRS.has(entry.name) || entry.name.startsWith('.next'));
+          const excludedChild = excludedHere
+            || EXCLUDED_EVIDENCE_DIRS.has(entry.name)
+            || TEST_TARGET_DIR.test(entry.name)
+            || entry.name.startsWith('.next');
+          await visit(absolute, depth + 1, excludedChild, sampleHere || excludedChild);
         }
         continue;
       }
@@ -168,7 +203,7 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
       if (isRelevantFile(entry.name, relative)) {
         if (excludedHere && isXcodePinFile(entry.name, relative)) continue;
         try {
-          files.push({ absolute, relative, text: await fs.readFile(absolute, 'utf8') });
+          files.push({ absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: sampleHere });
         } catch {
           // Unreadable files are ignored; other evidence can still produce a useful partial report.
         }
@@ -178,7 +213,7 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
       sourceCandidates.push({ absolute, relative, depth });
     }
   }
-  await visit(root, 0, false);
+  await visit(root, 0, false, false);
   // Shallow files first, so a deep generated tree cannot crowd the project's own sources out of the cap.
   const prioritized = sourceCandidates
     .map((candidate, order) => ({ ...candidate, order }))
@@ -236,11 +271,21 @@ function isXcodePinFile(name: string, relative: string): boolean {
     || name === 'codemagic.yml'
     || name === 'Jenkinsfile'
     || name === '.gitlab-ci.yml'
-    || /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/.test(relative);
+    || /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/.test(relative)
+    // Composite actions that workflows call (`uses: ./.github/actions/<name>`).
+    || /(?:^|\/)\.github\/actions\/(?:[^/]+\/)+action\.ya?ml$/.test(relative)
+    || isXcodeCloudScript(relative);
+}
+
+/** Xcode Cloud custom build scripts; their presence means the workflow (and Xcode) is set in App Store Connect. */
+function isXcodeCloudScript(relative: string): boolean {
+  return /(?:^|\/)ci_scripts\/ci_(?:post_clone|pre_xcodebuild|post_xcodebuild)\.sh$/.test(relative);
 }
 
 function isRelevantFile(name: string, relative: string): boolean {
   return isXcodePinFile(name, relative)
+    || name.endsWith('.xcconfig')
+    || name === 'project.yml'
     || name === 'app.json'
     || name === 'app.config.json'
     || /^app\.config\.(?:js|cjs|mjs|ts)$/.test(name)
@@ -312,10 +357,22 @@ function resolveJsonMember(
   return typeof value === 'string' ? value : undefined;
 }
 
+/** `["expo-build-properties", { android: { targetSdkVersion: N } }]` in a parsed Expo config. */
+function expoBuildPropertiesTargetSdk(plugins: unknown): number | undefined {
+  if (!Array.isArray(plugins)) return undefined;
+  for (const plugin of plugins) {
+    if (!Array.isArray(plugin) || plugin[0] !== 'expo-build-properties') continue;
+    const value = (plugin[1] as { android?: { targetSdkVersion?: unknown } } | undefined)?.android?.targetSdkVersion;
+    if (typeof value === 'number' && Number.isInteger(value)) return value;
+  }
+  return undefined;
+}
+
 async function parseExpo(files: ProjectFile[], root: string) {
   const androidPackageNames: string[] = [];
   const iosBundleIds: string[] = [];
   const platforms = new Set<string>();
+  const targetSdkEvidence: Array<{ file: string; value: number }> = [];
   let detected = false;
   for (const file of files.filter((candidate) => /(?:^|\/)app(?:\.config)?\.(?:json|js|cjs|mjs|ts)$/.test(candidate.relative))) {
     try {
@@ -325,6 +382,7 @@ async function parseExpo(files: ProjectFile[], root: string) {
         android?: { package?: unknown };
         ios?: { bundleIdentifier?: unknown };
         platforms?: unknown;
+        plugins?: unknown;
       };
       if (hasExpoRoot
         || typeof expo.android?.package === 'string'
@@ -335,6 +393,8 @@ async function parseExpo(files: ProjectFile[], root: string) {
       if (Array.isArray(expo.platforms)) {
         for (const platform of expo.platforms) if (typeof platform === 'string') platforms.add(platform);
       }
+      const targetSdk = expoBuildPropertiesTargetSdk(expo.plugins);
+      if (targetSdk !== undefined) targetSdkEvidence.push({ file: file.relative, value: targetSdk });
     } catch {
       // Dynamic Expo configs are common. Resolve only obvious literal identifiers and keep the rest as warnings.
       const android = file.text.match(/\bandroid\s*:\s*\{[\s\S]{0,3000}?\bpackage\s*:\s*['"]([^'"]+)['"]/);
@@ -345,6 +405,11 @@ async function parseExpo(files: ProjectFile[], root: string) {
       if (android?.[1] || ios?.[1] || importedAndroid || importedIos || /\bexpo\s*:/.test(file.text)) detected = true;
       if (android?.[1] || importedAndroid) androidPackageNames.push(android?.[1] ?? importedAndroid!);
       if (ios?.[1] || importedIos) iosBundleIds.push(ios?.[1] ?? importedIos!);
+      // A literal `targetSdkVersion: N` inside the expo-build-properties plugin's android block.
+      const buildProperties = file.text.match(
+        /['"]expo-build-properties['"]\s*,\s*\{[\s\S]{0,4000}?\bandroid\s*:\s*\{[^}]*?\btargetSdkVersion\s*:\s*(\d+)\b/,
+      );
+      if (buildProperties) targetSdkEvidence.push({ file: file.relative, value: Number.parseInt(buildProperties[1], 10) });
     }
   }
   for (const file of files.filter((candidate) => candidate.relative.endsWith('package.json'))) {
@@ -356,7 +421,268 @@ async function parseExpo(files: ProjectFile[], root: string) {
       // A malformed package manifest cannot add Expo evidence.
     }
   }
-  return { androidPackageNames, iosBundleIds, platforms, detected };
+  return { androidPackageNames, iosBundleIds, platforms, detected, targetSdkEvidence };
+}
+
+const REACT_NATIVE_CATALOG = 'node_modules/react-native/gradle/libs.versions.toml';
+
+// --- Android application ID -------------------------------------------------------------------------------------
+
+/** Shape of an Android package name / applicationId (two or more Java-identifier segments). */
+const ANDROID_APPLICATION_ID = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
+// `applicationId` as a DSL assignment, not inside a string ("$applicationId", "applicationId", ...) or a template.
+const APPLICATION_ID_ASSIGNMENT = String.raw`(?<![\w$"'{])applicationId(?:\s*=\s*|[ \t]+)`;
+const APPLICATION_ID_LITERAL = new RegExp(`${APPLICATION_ID_ASSIGNMENT}["']([^"'\\n]+)["']`, 'g');
+const APPLICATION_ID_CATALOG = new RegExp(`${APPLICATION_ID_ASSIGNMENT}libs\\.versions\\.([A-Za-z0-9_.-]+?)\\.get\\(\\)`, 'g');
+// `applicationId APPLICATION_ID` / `applicationId = project.APPLICATION_ID`: a gradle.properties key.
+const APPLICATION_ID_PROPERTY = new RegExp(`${APPLICATION_ID_ASSIGNMENT}(?:project\\.)?([A-Za-z_]\\w*)[ \\t]*(?=$|[;)}])`, 'gm');
+const APPLICATION_ID_ANY = new RegExp(`${APPLICATION_ID_ASSIGNMENT}\\S`);
+const NAMESPACE_LITERAL = /(?<![\w$"'{.])namespace(?:\s*=\s*|[ \t]+)["']([^"'\n]+)["']/;
+const ANDROID_APP_PLUGIN_ID = /\bcom\.android\.application\b|\blibs\.plugins\.android\.application\b/;
+/** Applies the Android application plugin — a root `plugins { … apply false }` declaration only makes it available. */
+function appliesAndroidAppPlugin(text: string): boolean {
+  return text.split(/\r?\n/).some((line) => ANDROID_APP_PLUGIN_ID.test(line) && !/\bapply\s*\(?\s*false\b/.test(line));
+}
+
+/** `[versions]` entries of the scanned Gradle version catalogs (React Native's bundled catalog excluded). */
+function catalogVersions(files: ProjectFile[]): Map<string, { value: string; file: string }> {
+  const result = new Map<string, { value: string; file: string }>();
+  for (const file of files.filter((candidate) => candidate.relative.endsWith('libs.versions.toml'))) {
+    if (file.relative === REACT_NATIVE_CATALOG) continue;
+    let section = '';
+    for (const rawLine of file.text.split(/\r?\n/)) {
+      const line = rawLine.replace(/\s+#.*$/, '').trim();
+      const sectionMatch = line.match(/^\[([^\]]+)]$/);
+      if (sectionMatch) {
+        section = sectionMatch[1];
+        continue;
+      }
+      if (section !== 'versions') continue;
+      const version = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*["']([^"']+)["']/);
+      // The first catalog wins, so a nested build's catalog cannot overwrite the root one.
+      if (version && !result.has(version[1])) result.set(version[1], { value: version[2], file: file.relative });
+    }
+  }
+  return result;
+}
+
+/** `libs.versions.a.b` may be declared as `a-b`, `a_b`, or `a.b` in the catalog. */
+function catalogLookup<T>(catalog: Map<string, T>, alias: string): T | undefined {
+  return catalog.get(alias) ?? catalog.get(alias.replace(/\./g, '-')) ?? catalog.get(alias.replace(/\./g, '_'));
+}
+
+/** gradle.properties keys whose value is the same everywhere they are set. */
+function gradleProperties(files: ProjectFile[]): Map<string, string> {
+  const values = new Map<string, Set<string>>();
+  for (const file of files.filter((candidate) => candidate.relative.endsWith('gradle.properties'))) {
+    for (const line of file.text.split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Za-z_][\w.]*)\s*[=:]\s*(.*?)\s*$/);
+      if (!match) continue;
+      values.set(match[1], (values.get(match[1]) ?? new Set()).add(match[2]));
+    }
+  }
+  return new Map([...values].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]]));
+}
+
+function androidApplicationIds(
+  file: ProjectFile,
+  catalog: Map<string, { value: string; file: string }>,
+  properties: Map<string, string>,
+): string[] {
+  const ids: string[] = [];
+  for (const match of file.text.matchAll(APPLICATION_ID_LITERAL)) ids.push(match[1]);
+  for (const match of file.text.matchAll(APPLICATION_ID_CATALOG)) {
+    const value = catalogLookup(catalog, match[1])?.value;
+    if (value) ids.push(value);
+  }
+  for (const match of file.text.matchAll(APPLICATION_ID_PROPERTY)) {
+    const value = properties.get(match[1]);
+    if (value) ids.push(value);
+  }
+  // AGP uses `namespace` as the applicationId when an app module sets none.
+  if (ids.length === 0 && !APPLICATION_ID_ANY.test(file.text) && appliesAndroidAppPlugin(file.text)) {
+    const namespace = file.text.match(NAMESPACE_LITERAL)?.[1];
+    if (namespace) ids.push(namespace);
+  }
+  return ids.filter((id) => ANDROID_APPLICATION_ID.test(id));
+}
+
+/** The Gradle module directory a file belongs to (`app-wearos/src/main/AndroidManifest.xml` -> `app-wearos`). */
+function moduleDir(relative: string): string {
+  if (relative.startsWith('src/')) return '.';
+  const source = relative.lastIndexOf('/src/');
+  return source >= 0 ? relative.slice(0, source) : path.posix.dirname(relative);
+}
+
+const SPECIALIZED_MANIFEST = /android\.hardware\.type\.(?:watch|automotive)|android\.(?:software|hardware)\.xr|LEANBACK_LAUNCHER/i;
+const LEANBACK_REQUIRED = /android\.software\.leanback[^>]*android:required\s*=\s*["']true["']/i;
+
+/** Module directories whose manifest declares Wear OS, TV, Automotive OS, or XR. */
+function specializedAndroidModules(manifests: ProjectFile[]): Set<string> {
+  const result = new Set<string>();
+  for (const file of manifests) {
+    const manifest = file.text.replace(/<!--[\s\S]*?-->/g, '');
+    if (SPECIALIZED_MANIFEST.test(manifest) || LEANBACK_REQUIRED.test(manifest)) result.add(moduleDir(file.relative));
+  }
+  return result;
+}
+
+/** Keeps only the files outside example/sample/test trees, unless every candidate is inside one. */
+function preferShipped<T extends ProjectFile>(candidates: T[]): T[] {
+  const shipped = candidates.filter((file) => !file.sample);
+  return shipped.length > 0 ? shipped : candidates;
+}
+
+// --- iOS bundle identifier -----------------------------------------------------------------------------------------
+
+const IOS_TEST_BUNDLE_ID = /(?:^|\.)(?:Tests?|UITests?|RunnerTests)$/i;
+const IOS_TEST_BUNDLE_SUFFIX = /Tests?$/; // `...WikipediaUITests`; case-sensitive so `...contests` is kept
+const IOS_BUNDLE_ID = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+const RELEASE_CONFIGURATION = /release|app\s*store|prod/i;
+// Build configurations that are never archived for the App Store (Debug, Flutter's Profile, test configurations).
+const DEVELOPMENT_CONFIGURATION = /debug|profile|test/i;
+// Xcode product types that ship under their own bundle ID in an App Store record: apps, App Clips, watch apps, and
+// app/ExtensionKit/watch extensions.
+const APP_PRODUCT_TYPE = /\.(?:application|app-extension|watchkit2-extension|extensionkit-extension|tv-app-extension)(?:\.[\w-]+)*$/;
+
+interface BuildSettingValue {
+  value: string;
+  file: string;
+}
+
+/**
+ * Build-setting variables from `.xcconfig` files and XcodeGen specs (`project.yml` and the files it `include:`s), so
+ * `PRODUCT_BUNDLE_IDENTIFIER = $(BASE_BUNDLE_IDENTIFIER)` can be resolved. Conditional assignments
+ * (`KEY[config=Debug]`) are ignored except for Release.
+ */
+async function buildSettingVariables(files: ProjectFile[]): Promise<Map<string, BuildSettingValue[]>> {
+  const result = new Map<string, BuildSettingValue[]>();
+  const add = (key: string, value: string, file: string) => {
+    const rows = result.get(key) ?? [];
+    if (!rows.some((row) => row.value === value)) rows.push({ value, file });
+    result.set(key, rows);
+  };
+  for (const file of files.filter((candidate) => candidate.relative.endsWith('.xcconfig'))) {
+    for (const rawLine of file.text.split(/\r?\n/)) {
+      const line = rawLine.replace(/\s*\/\/.*$/, '');
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)((?:\[[^\]]*\])*)\s*=\s*(.*?)\s*;?\s*$/);
+      if (!match || (match[2] && !/config=Release/i.test(match[2]))) continue;
+      add(match[1], match[3].replace(/^"(.*)"$/, '$1'), file.relative);
+    }
+  }
+  const specs: ProjectFile[] = [];
+  for (const spec of files.filter((candidate) => /(?:^|\/)project\.yml$/.test(candidate.relative))) {
+    specs.push(spec);
+    for (const include of spec.text.matchAll(/^\s*-\s*(?:path:\s*)?["']?([^"'\s#]+\.ya?ml)["']?\s*$/gm)) {
+      const absolute = path.resolve(path.dirname(spec.absolute), include[1]);
+      const text = await readText(absolute);
+      if (text !== undefined) {
+        specs.push({ absolute, relative: path.posix.join(path.posix.dirname(spec.relative), include[1]), text });
+      }
+    }
+  }
+  for (const spec of specs) {
+    for (const match of spec.text.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*:\s*(.+?)\s*$/gm)) {
+      const value = match[2].replace(/\s+#.*$/, '').replace(/^(["'])(.*)\1$/, '$2');
+      if (value && !/^[[{|>&*]/.test(value)) add(match[1], value, spec.relative);
+    }
+  }
+  return result;
+}
+
+/** Substitutes `$(VAR)` / `${VAR}`; undefined when any variable is unknown, ambiguous, or uses a modifier. */
+function resolveBuildSetting(
+  expression: string,
+  local: Map<string, string>,
+  variables: Map<string, BuildSettingValue[]>,
+  depth = 0,
+): string | undefined {
+  if (depth > 8) return undefined;
+  let failed = false;
+  const resolved = expression.replace(/\$(?:\(([^)]+)\)|\{([^}]+)\})/g, (_whole, paren?: string, brace?: string) => {
+    const name = (paren ?? brace)!;
+    if (name === 'inherited') return '';
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      failed = true; // `$(PRODUCT_NAME:rfc1034identifier)` and friends
+      return '';
+    }
+    const own = local.get(name);
+    let candidates = own !== undefined ? [own] : (variables.get(name) ?? []).map((row) => row.value);
+    if (candidates.length > 1) {
+      const release = (variables.get(name) ?? []).filter((row) => RELEASE_CONFIGURATION.test(path.posix.basename(row.file)));
+      candidates = release.length === 1 ? [release[0].value] : candidates;
+    }
+    if (candidates.length !== 1) {
+      failed = true;
+      return '';
+    }
+    const value = candidates[0].includes('$') ? resolveBuildSetting(candidates[0], local, variables, depth + 1) : candidates[0];
+    if (value === undefined) failed = true;
+    return value ?? '';
+  });
+  return failed ? undefined : resolved;
+}
+
+interface PbxBundleIds {
+  ids: string[];
+  /** PRODUCT_BUNDLE_IDENTIFIER expressions that could not be resolved. */
+  unresolved: string[];
+}
+
+/**
+ * Bundle IDs a project ships: identifiers set only in Debug / Profile / Test configurations (`.debug`, a dev bundle
+ * ID) and those of framework, library, and test-bundle targets are left out.
+ */
+function pbxBundleIds(file: ProjectFile, variables: Map<string, BuildSettingValue[]>): PbxBundleIds {
+  // Configurations of targets that are not shipped as their own bundle ID (frameworks, libraries, test bundles,
+  // resource bundles) say nothing about the App Store record.
+  const nonAppConfigurations = new Set<string>();
+  for (const target of file.text.matchAll(/\bisa = PBXNativeTarget;([\s\S]*?)\n\s*\};/g)) {
+    const productType = target[1].match(/\bproductType = "?([^";]+)"?;/)?.[1];
+    const list = target[1].match(/\bbuildConfigurationList = ([0-9A-Za-z]+)/)?.[1];
+    if (!productType || !list || APP_PRODUCT_TYPE.test(productType)) continue;
+    const configurations = new RegExp(`\\b${list}\\b[^=\\n]*=\\s*\\{\\s*isa = XCConfigurationList;\\s*buildConfigurations = \\(([^)]*)\\)`)
+      .exec(file.text)?.[1] ?? '';
+    for (const id of configurations.matchAll(/\b([0-9A-Za-z]{16,})\b/g)) nonAppConfigurations.add(id[1]);
+  }
+  const blocks = [...file.text.matchAll(
+    /\b([0-9A-Za-z]{16,})\b[^=\n]*=\s*\{\s*isa = XCBuildConfiguration;[\s\S]*?buildSettings = \{([\s\S]*?)\n\s*\};\s*name = "?([^";]+)"?;/g,
+  )].map((match) => ({ id: match[1], settings: match[2], name: match[3] }));
+  const withId = blocks.filter((block) => /\bPRODUCT_BUNDLE_IDENTIFIER\s*=/.test(block.settings)
+    && !nonAppConfigurations.has(block.id));
+  const shipping = withId.filter((block) => !DEVELOPMENT_CONFIGURATION.test(block.name));
+  const scopes = withId.length === 0 ? [file.text] : (shipping.length > 0 ? shipping : withId).map((block) => block.settings);
+  const result: PbxBundleIds = { ids: [], unresolved: [] };
+  for (const settings of scopes) {
+    const local = new Map([...settings.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*"?([^";\n]*)"?;/gm)]
+      .filter((match) => match[1] !== 'PRODUCT_BUNDLE_IDENTIFIER')
+      .map((match) => [match[1], match[2]] as [string, string]));
+    for (const match of settings.matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g)) {
+      const raw = match[1].trim().replace(/^["']|["']$/g, '');
+      if (!raw) continue;
+      const value = raw.includes('$') ? resolveBuildSetting(raw, local, variables) : raw;
+      if (value === undefined) {
+        // Test targets are not release identifiers even when they are unresolved.
+        if (!IOS_TEST_BUNDLE_ID.test(raw) && !IOS_TEST_BUNDLE_SUFFIX.test(raw)) result.unresolved.push(raw);
+        continue;
+      }
+      if (IOS_BUNDLE_ID.test(value) && !IOS_TEST_BUNDLE_ID.test(value) && !IOS_TEST_BUNDLE_SUFFIX.test(value)) {
+        result.ids.push(value);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * True when every ID is the main app's or `<main>.<suffix>` (its extensions, widgets, and watch app). A nested ID
+ * that has extensions of its own (`<main>.beta` next to `<main>.beta.Widgets`) is a separate app record, unless it is
+ * a watch app (`<main>.watchkitapp.watchkitextension`).
+ */
+function isOneAppWithExtensions(ids: string[]): boolean {
+  return ids.some((main) => ids.every((id) => id === main || id.startsWith(`${main}.`))
+    && !ids.some((parent) => parent !== main && !/watch/i.test(parent.slice(parent.lastIndexOf('.') + 1))
+      && ids.some((child) => child.startsWith(`${parent}.`))));
 }
 
 async function detectProject(files: ProjectFile[], root: string) {
@@ -364,11 +690,16 @@ async function detectProject(files: ProjectFile[], root: string) {
   const gradleFiles = files.filter((file) => /build\.gradle(?:\.kts)?$/.test(file.relative));
   const pbxFiles = files.filter((file) => file.relative.endsWith('project.pbxproj'));
   const plistFiles = files.filter((file) => file.relative.endsWith('Info.plist'));
-  const androidAppGradleFiles = gradleFiles.filter((file) =>
-    /\bcom\.android\.application\b|\blibs\.plugins\.android\.application\b|\bapplicationId\b/.test(file.text));
+  const allCatalogs = files.filter((file) => file.relative.endsWith('libs.versions.toml'));
+  const shippedCatalogs = preferShipped(allCatalogs);
+  const catalog = catalogVersions(shippedCatalogs);
+  const properties = gradleProperties(files);
+  // An app module applies the Android application plugin or sets a literal, well-formed applicationId. The bare
+  // word `applicationId` (a string, a template, a variable) is not enough.
+  const androidAppGradleFiles = gradleFiles.filter((file) => appliesAndroidAppPlugin(file.text)
+    || [...file.text.matchAll(APPLICATION_ID_LITERAL)].some((match) => ANDROID_APPLICATION_ID.test(match[1])));
   const androidAppManifestFiles = files.filter((file) =>
     /(?:^|\/)android\/app\/src\/main\/AndroidManifest\.xml$/.test(file.relative));
-  const versionCatalogFiles = files.filter((file) => file.relative.endsWith('libs.versions.toml'));
   const iosPbxFiles = pbxFiles.filter((file) =>
     /(?:^|\/)ios\//.test(file.relative)
     || /\b(?:SDKROOT\s*=\s*iphoneos|IPHONEOS_DEPLOYMENT_TARGET|TARGETED_DEVICE_FAMILY)\b/.test(file.text));
@@ -390,25 +721,32 @@ async function detectProject(files: ProjectFile[], root: string) {
     }
   }
 
+  // Identifiers and targetSdk come from shipped app modules; an example/sample/test app counts only when it is the
+  // only app in scope (a library repository).
+  const shippedAppGradleFiles = preferShipped(androidAppGradleFiles);
   const androidPackageNames = [...expo.androidPackageNames, ...unityAndroidPackageNames];
-  for (const file of androidAppGradleFiles) {
-    for (const match of file.text.matchAll(/\bapplicationId\s*(?:=\s*)?["']([^"']+)["']/g)) {
-      androidPackageNames.push(match[1]);
-    }
-  }
+  for (const file of shippedAppGradleFiles) androidPackageNames.push(...androidApplicationIds(file, catalog, properties));
 
   const iosBundleIds = [...expo.iosBundleIds, ...unityIosBundleIds];
-  for (const file of iosPbxFiles) {
-    for (const match of file.text.matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g)) {
-      const value = match[1].trim().replace(/^["']|["']$/g, '');
-      if (value && !value.includes('$') && !/(?:^|\.)(?:Tests?|UITests?|RunnerTests)$/i.test(value)) {
-        iosBundleIds.push(value);
-      }
-    }
+  const iosBundleIdExpressions: Array<{ file: string; expression: string }> = [];
+  const variables = await buildSettingVariables(files);
+  const shippedPbx = preferShipped(iosPbxFiles)
+    .map((file) => ({ file, depth: file.relative.split('/').length, ...pbxBundleIds(file, variables) }))
+    .filter((project) => project.ids.length > 0 || project.unresolved.length > 0);
+  // When the outermost Xcode project only has unresolvable identifiers, a deeper project's literal ID (a component
+  // package's sample app) is not the app's ID: report the unresolved expression instead of borrowing it.
+  const primaryDepth = Math.min(...shippedPbx.map((project) => project.depth));
+  const primary = shippedPbx.filter((project) => project.depth === primaryDepth);
+  const primaryUnresolved = primary.length > 0 && primary.every((project) => project.ids.length === 0);
+  for (const project of primaryUnresolved ? primary : shippedPbx) {
+    iosBundleIds.push(...project.ids);
+    for (const expression of project.unresolved) iosBundleIdExpressions.push({ file: project.file.relative, expression });
   }
-  for (const file of iosPlistFiles) {
-    const match = file.text.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
-    if (match?.[1] && !match[1].includes('$')) iosBundleIds.push(match[1]);
+  if (!primaryUnresolved) {
+    for (const file of preferShipped(iosPlistFiles)) {
+      const match = file.text.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
+      if (match?.[1] && !match[1].includes('$')) iosBundleIds.push(match[1]);
+    }
   }
 
   const expoTargetsAndroid = expo.detected && (expo.platforms.size === 0 || expo.platforms.has('android'));
@@ -424,16 +762,24 @@ async function detectProject(files: ProjectFile[], root: string) {
     || expo.iosBundleIds.length > 0
     || expoTargetsIos
     || unityIosBundleIds.length > 0;
+  const shippedOnly = shippedAppGradleFiles.some((file) => !file.sample);
+  // App modules, everything under android/ (React Native, Flutter), and the root build script, which often holds
+  // the shared `ext { targetSdkVersion = … }`.
   const androidGradleFiles = gradleFiles.filter((file) =>
-    androidAppGradleFiles.includes(file) || /(?:^|\/)android\//.test(file.relative));
+    (androidAppGradleFiles.includes(file) || /(?:^|\/)android\//.test(file.relative) || /^build\.gradle(?:\.kts)?$/.test(file.relative))
+    && (!shippedOnly || !file.sample));
+  const manifests = files.filter((file) => file.relative.endsWith('AndroidManifest.xml') && (!shippedOnly || !file.sample));
 
   return {
     android,
     ios,
     androidPackageNames: unique(androidPackageNames),
     iosBundleIds: unique(iosBundleIds),
-    gradleFiles: [...androidGradleFiles, ...versionCatalogFiles],
-    targetSdkEvidence: unityTargetSdkEvidence,
+    iosBundleIdExpressions,
+    androidAppModules: unique(shippedAppGradleFiles.map((file) => moduleDir(file.relative))),
+    manifests,
+    gradleFiles: [...androidGradleFiles, ...(shippedOnly ? allCatalogs.filter((file) => !file.sample) : allCatalogs)],
+    targetSdkEvidence: [...unityTargetSdkEvidence, ...expo.targetSdkEvidence],
   };
 }
 
@@ -470,7 +816,7 @@ function targetSdkFindings(
       const version = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*["'](\d+)["']/);
       if (version) {
         const parsed = { value: Number.parseInt(version[2], 10), file: file.relative };
-        if (file.relative === 'node_modules/react-native/gradle/libs.versions.toml' && version[1] === 'targetSdk') {
+        if (file.relative === REACT_NATIVE_CATALOG && version[1] === 'targetSdk') {
           reactNativeTargetSdk = parsed;
         } else {
           catalogs.set(version[1], parsed);
@@ -478,7 +824,8 @@ function targetSdkFindings(
       }
     }
   }
-  for (const file of gradleFiles.filter((candidate) => /build\.gradle(?:\.kts)?$/.test(candidate.relative))) {
+  // build.gradle(.kts) plus the scripts they `apply from:` (common.gradle and the like).
+  for (const file of gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative))) {
     let resolvedIndirectly = false;
     for (const match of file.text.matchAll(/\btargetSdk(?:Version)?\s*(?:=\s*)?(\d+)/g)) {
       evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
@@ -581,6 +928,8 @@ interface XcodeEvidence {
   /** Xcode major version, when the evidence names one. */
   major?: number;
   beta: boolean;
+  /** From the repository root, outside the scanned --path: it may build a different app, so never a blocker alone. */
+  outside?: boolean;
 }
 
 function xcodeEvidence(file: string, raw: string, version: string): XcodeEvidence {
@@ -696,10 +1045,21 @@ function ciXcodeEvidence(file: ProjectFile): XcodeEvidence[] {
 
 function collectXcodeEvidence(files: ProjectFile[]): XcodeEvidence[] {
   const evidence: XcodeEvidence[] = [];
+  const xcodeCloudDirs = new Set<string>();
   for (const file of files) {
     const name = path.posix.basename(file.relative);
     if (!isXcodePinFile(name, file.relative)) continue;
-    evidence.push(...(name === 'eas.json' ? easXcodeEvidence(file) : ciXcodeEvidence(file)));
+    if (isXcodeCloudScript(file.relative)) {
+      // One row per ci_scripts/ folder: Xcode Cloud picks Xcode in the App Store Connect workflow, not in the repo.
+      const dir = path.posix.dirname(file.relative);
+      if (!xcodeCloudDirs.has(dir)) {
+        xcodeCloudDirs.add(dir);
+        evidence.push({ file: file.relative, raw: 'Xcode Cloud custom build script; the Xcode version is set in the App Store Connect workflow', beta: false, outside: file.outside });
+      }
+      continue;
+    }
+    const rows = name === 'eas.json' ? easXcodeEvidence(file) : ciXcodeEvidence(file);
+    evidence.push(...rows.map((row) => ({ ...row, outside: file.outside })));
   }
   return evidence;
 }
@@ -771,7 +1131,7 @@ function iosXcodeFindings(files: ProjectFile[], now: Date): ReleaseDoctorFinding
   // A definite blocker needs every piece of Xcode evidence to be a resolved pin below the minimum. A newer pin, or an
   // unpinned/auto-selected build (EAS without ios.image, an unpinned macOS runner), may be the one that uploads;
   // mixed evidence usually means a compatibility job, an unused variable, or a secondary lane.
-  if (below.length > 0 && meeting.length === 0 && unresolved.length === 0) {
+  if (below.length > 0 && meeting.length === 0 && unresolved.length === 0 && below.some((row) => !row.outside)) {
     return [{
       code: 'IOS_XCODE_BELOW_MINIMUM',
       severity: 'blocker',
@@ -897,82 +1257,6 @@ function rangeStaysBelow(range: string, target: readonly number[]): boolean | un
   return true;
 }
 
-function ancestorsWithin(start: string, root: string): string[] {
-  const result: string[] = [];
-  let current = start;
-  for (;;) {
-    result.push(current);
-    const relative = path.relative(root, current);
-    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) break;
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return result;
-}
-
-async function readText(file: string): Promise<string | undefined> {
-  try {
-    return await fs.readFile(file, 'utf8');
-  } catch {
-    return undefined;
-  }
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** The firebase-admin version a lockfile resolved for the package in `packageDir`. */
-async function lockedFirebaseAdmin(packageDir: string, lockDir: string, declared: string): Promise<string | undefined> {
-  const fromLock = path.relative(lockDir, packageDir).replace(/\\/g, '/');
-  const npmLock = await readText(path.join(lockDir, 'package-lock.json'));
-  if (npmLock) {
-    try {
-      const lock = JSON.parse(npmLock) as {
-        packages?: Record<string, { version?: unknown }>;
-        dependencies?: Record<string, { version?: unknown }>;
-      };
-      const keys = [`${fromLock ? `${fromLock}/` : ''}node_modules/firebase-admin`, 'node_modules/firebase-admin'];
-      for (const key of keys) {
-        const version = lock.packages?.[key]?.version;
-        if (typeof version === 'string') return version;
-      }
-      const legacy = lock.dependencies?.['firebase-admin']?.version;
-      if (typeof legacy === 'string') return legacy;
-    } catch {
-      // Malformed lockfile: fall through to the next source.
-    }
-  }
-  const pnpmLock = await readText(path.join(lockDir, 'pnpm-lock.yaml'));
-  if (pnpmLock) {
-    const lines = pnpmLock.split(/\r?\n/);
-    const importers = lines.findIndex((line) => /^importers:\s*$/.test(line));
-    const importer = importers >= 0
-      ? lines.findIndex((line, index) => index > importers && line === `  ${fromLock || '.'}:`)
-      : -1;
-    for (let index = importer + 1; importer >= 0 && index < lines.length && /^(?:\s{3,}|\s*$)/.test(lines[index]); index++) {
-      if (!/^\s+['"]?firebase-admin['"]?:\s*$/.test(lines[index])) continue;
-      for (const next of lines.slice(index + 1, index + 4)) {
-        const version = next.match(/^\s+version:\s*['"]?(\d+\.\d+\.\d+)/)?.[1];
-        if (version) return version;
-      }
-    }
-  }
-  const yarnLock = await readText(path.join(lockDir, 'yarn.lock'));
-  if (yarnLock) {
-    const header = new RegExp(`(?:^|[\\s",])firebase-admin@(?:npm:)?${escapeRegExp(declared)}(?=["',:]|$)`);
-    const blocks = yarnLock.split(/\r?\n(?=\S)/);
-    for (const block of blocks) {
-      const [first] = block.split(/\r?\n/, 1);
-      if (!header.test(first)) continue;
-      const version = block.match(/^\s+version:?\s+"?(\d+\.\d+\.\d+)/m)?.[1];
-      if (version) return version;
-    }
-  }
-  return undefined;
-}
-
 interface FirebaseAdminEvidence {
   file: string;
   version: string;
@@ -996,7 +1280,8 @@ async function firebaseAdminEvidence(files: ProjectFile[], root: string): Promis
       .find((value): value is string => typeof value === 'string');
     if (!declared) continue;
     const packageDir = path.dirname(file.absolute);
-    const directories = ancestorsWithin(packageDir, root);
+    // Ancestors up to the scan root, then on to the repository root (a --path into a workspace monorepo).
+    const directories = await lockfileDirectories(packageDir, root);
 
     // 1. The installed copy (hoisted installs put it in an ancestor's node_modules).
     let resolved: FirebaseAdminEvidence | undefined;
@@ -1016,7 +1301,7 @@ async function firebaseAdminEvidence(files: ProjectFile[], root: string): Promis
     // 2. The nearest lockfile's resolution.
     if (!resolved) {
       for (const directory of directories) {
-        const version = await lockedFirebaseAdmin(packageDir, directory, declared);
+        const version = (await lockedPackageVersion('firebase-admin', packageDir, directory, declared))?.version;
         if (version && parseExactVersion(version)) {
           resolved = { file: file.relative, version, source: 'lockfile' };
           break;
@@ -1160,14 +1445,177 @@ async function fcmFindings(
   return findings;
 }
 
-function hasSpecializedAndroidProfile(files: ProjectFile[]): boolean {
-  return files
-    .filter((file) => file.relative.endsWith('AndroidManifest.xml'))
-    .some((file) => {
-      const manifest = file.text.replace(/<!--[\s\S]*?-->/g, '');
-      return /android\.hardware\.type\.(?:watch|automotive)|android\.(?:software|hardware)\.xr|LEANBACK_LAUNCHER/i.test(manifest)
-        || /android\.software\.leanback[^>]*android:required\s*=\s*["']true["']/i.test(manifest);
-    });
+function isWithin(scope: string, target: string): boolean {
+  const relative = path.relative(scope, target);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+/**
+ * Scripts the given Gradle files pull in with `apply from: "…"` (one level), so values set in a shared
+ * `common.gradle` count for every module that applies it. Paths may use `$rootDir` / `$rootProject.projectDir`.
+ */
+async function appliedGradleScripts(
+  gradleFiles: ProjectFile[],
+  root: string,
+  limit: string,
+  known: ProjectFile[],
+): Promise<ProjectFile[]> {
+  const result: ProjectFile[] = [];
+  const seen = new Set([...known, ...gradleFiles].map((file) => file.absolute));
+  for (const file of gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative))) {
+    const text = stripComments(file.text, { slash: true, hash: false });
+    for (const match of text.matchAll(/\bapply\s*\(?\s*from\s*[:=]\s*["']([^"']+\.gradle(?:\.kts)?)["']/g)) {
+      const reference = match[1];
+      if (/^[a-z]+:\/\//i.test(reference)) continue;
+      const rooted = reference.match(/^\$\{?(?:rootDir|rootProject\.projectDir)\}?\/(.+)$/);
+      if (!rooted && reference.includes('$')) continue;
+      const candidates = rooted
+        ? ancestorsUpTo(path.dirname(file.absolute), limit).map((directory) => path.join(directory, rooted[1]))
+        : [path.resolve(path.dirname(file.absolute), reference)];
+      for (const absolute of candidates) {
+        if (!isWithin(limit, absolute)) continue;
+        const existing = known.find((candidate) => candidate.absolute === absolute);
+        if (existing) {
+          if (!result.includes(existing) && !gradleFiles.includes(existing)) result.push(existing);
+          break;
+        }
+        if (seen.has(absolute)) break;
+        const applied = await readText(absolute);
+        if (applied === undefined) continue;
+        seen.add(absolute);
+        result.push({ absolute, relative: path.relative(root, absolute).replace(/\\/g, '/'), text: applied, outside: !isWithin(root, absolute) });
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+/** `start` and its ancestors up to `limit`, nearest first. */
+function ancestorsUpTo(start: string, limit: string): string[] {
+  const result: string[] = [];
+  let current = start;
+  for (;;) {
+    result.push(current);
+    if (current === limit || !isWithin(limit, current)) break;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return result;
+}
+
+/**
+ * When `--path` points inside a repository, CI and the root Gradle version catalog usually live at the repository
+ * root. Read those few files from there (marked `outside`) so a narrowed scan keeps its Xcode pins and catalog values.
+ */
+async function repositoryRootFiles(root: string, repo: string): Promise<ProjectFile[]> {
+  const result: ProjectFile[] = [];
+  const add = async (absolute: string) => {
+    const text = await readText(absolute);
+    if (text !== undefined) {
+      result.push({ absolute, relative: path.relative(root, absolute).replace(/\\/g, '/'), text, outside: true });
+    }
+  };
+  for (const name of ['.xcode-version', '.gitlab-ci.yml', 'codemagic.yaml', 'codemagic.yml', 'Jenkinsfile', 'gradle/libs.versions.toml']) {
+    await add(path.join(repo, name));
+  }
+  const workflows = path.join(repo, '.github', 'workflows');
+  for (const entry of await fs.readdir(workflows).catch(() => [] as string[])) {
+    if (/\.ya?ml$/.test(entry)) await add(path.join(workflows, entry));
+  }
+  const actions = path.join(repo, '.github', 'actions');
+  for (const entry of await fs.readdir(actions, { recursive: true }).catch(() => [] as string[])) {
+    if (/(?:^|[\\/])action\.ya?ml$/.test(String(entry))) await add(path.join(actions, String(entry)));
+  }
+  return result;
+}
+
+function billingEvidenceText(billing: BillingComplianceResult): string {
+  const rows = billing.evidence.map((row) => {
+    const what = row.expression
+      ? `${row.expression}${row.version && !row.expression.includes(row.version) ? ` = ${row.version}` : ''}`
+      : `${row.module}:${row.version ?? '?'}`;
+    return `${row.file} (${what})`;
+  });
+  return rows.length > 3 ? `${rows.slice(0, 3).join('; ')}; +${rows.length - 3}` : rows.join('; ');
+}
+
+/** The Release Doctor finding for a Billing result, with the evidence in both languages and a status-specific action. */
+function billingFinding(billing: BillingComplianceResult): ReleaseDoctorFinding {
+  const versions = billing.detectedVersions.join(', ');
+  const evidence = billingEvidenceText(billing);
+  const minimum = billing.policy.minimumSupportedMajor;
+  const schedule = (major: number | null) => billing.policy.knownSchedule.find((row) => row.major === major);
+  const status = billing.status as Exclude<BillingComplianceResult['status'], 'not_used'>;
+  const iapTarget = minimum === null ? undefined : reactNativeIapUpgradeTarget(minimum);
+  const iapBelow = minimum !== null && billing.evidence.some((row) => row.wrapper?.name === 'react-native-iap'
+    && row.version !== undefined && Number.parseInt(row.version, 10) < minimum);
+  const belowMajors = minimum === null ? [] : [...new Set(billing.detectedVersions
+    .map((version) => Number.parseInt(version, 10))
+    .filter((major) => Number.isFinite(major) && major < minimum))].sort((left, right) => left - right);
+
+  const copy = {
+    pass: {
+      title: 'Google Play Billing version is supported',
+      koTitle: 'Google Play Billing 버전 기준 충족',
+      koDetail: `감지된 Billing Library ${versions}은 현재 제출 기준을 충족합니다.`,
+      action: undefined,
+      koAction: undefined,
+    },
+    warning: {
+      title: 'Google Play Billing Library is supported, but its major is next to be deprecated',
+      koTitle: 'Google Play Billing Library는 지원되지만 다음 지원 종료 대상',
+      koDetail: `감지된 Billing Library ${versions}은 현재 지원되지만 다음 지원 종료 대상입니다.`,
+      action: billing.actions.join(' ') || undefined,
+      koAction: schedule(minimum) ? `${schedule(minimum)!.submissionDeadline} 전에 업그레이드를 계획하세요.` : undefined,
+    },
+    blocker: {
+      title: 'Google Play Billing Library is below the submission minimum',
+      koTitle: 'Google Play Billing Library가 제출 최소 버전 미달',
+      koDetail: `감지된 Billing Library ${versions}은 현재 제출 최소 major ${minimum}보다 낮습니다.`,
+      action: billing.actions.join(' '),
+      koAction: [
+        '새 앱이나 업데이트를 제출하기 전에 지원되는 Billing Library로 업그레이드하세요.',
+        iapBelow && iapTarget
+          ? `react-native-iap가 Billing을 간접적으로 포함합니다: ${iapTarget.version} 이상(Billing ${iapTarget.billing})으로 올리세요. major 업그레이드이므로 마이그레이션 가이드를 따르세요.`
+          : '',
+        ...belowMajors.map((major) => schedule(major)
+          ? `Billing Library ${major}: 기본 마감일 ${schedule(major)!.submissionDeadline}, 연장 마감일 ${schedule(major)!.extensionDeadline}(Play Console에서 연장을 받은 경우에만).`
+          : `Billing Library ${major}: 마감일이 내장된 공식 표보다 이르므로 유효한 연장이 있다고 가정하지 마세요.`),
+      ].filter(Boolean).join(' '),
+    },
+    unresolved: billing.policy.scheduleCurrent
+      ? {
+        title: 'Google Play Billing version could not be resolved locally',
+        koTitle: 'Google Play Billing 버전을 로컬에서 확정하지 못함',
+        koDetail: 'Billing 의존성은 찾았지만 버전을 정적으로 확정하지 못했습니다.',
+        action: billing.actions.join(' '),
+        koAction: '보고된 Gradle/version catalog 표현식을 확인하거나 선언된 IAP 패키지를 설치한 뒤 다시 검사하세요.',
+      }
+      : {
+        title: 'Google Play Billing policy table needs a refresh',
+        koTitle: 'Google Play Billing 정책표 갱신 필요',
+        koDetail: `내장된 공식 일정은 Billing Library ${billing.policy.latestKnownMajor}에서 끝나므로 현재 정책을 출처에서 다시 확인해야 합니다.`,
+        action: billing.actions.join(' '),
+        koAction: '공식 Billing 지원 중단 표를 확인하고, 이 결과를 믿기 전에 Mimi Seed를 업데이트하세요.',
+      },
+  }[status];
+
+  return {
+    code: `BILLING_${status.toUpperCase()}`,
+    severity: status === 'blocker' ? 'blocker' : status === 'pass' ? 'info' : 'warning',
+    title: copy.title,
+    detail: `${billing.summary} Evidence: ${evidence}.`,
+    action: copy.action,
+    file: billing.evidence[0]?.file,
+    sourceUrl: billing.policy.sourceUrl,
+    ko: {
+      title: copy.koTitle,
+      detail: `${copy.koDetail} 근거: ${evidence}.`,
+      action: copy.koAction,
+    },
+  };
 }
 
 export interface ReleaseDoctorScanOptions {
@@ -1195,12 +1643,14 @@ export async function scanReleaseDoctor(
   try {
     files.push({
       absolute: reactNativeCatalog,
-      relative: 'node_modules/react-native/gradle/libs.versions.toml',
+      relative: REACT_NATIVE_CATALOG,
       text: await fs.readFile(reactNativeCatalog, 'utf8'),
     });
   } catch {
     // The package may not be installed; the report will keep the indirect expression unresolved.
   }
+  const repo = await repositoryRoot(root);
+  if (repo && repo !== root && isWithin(repo, root)) files.push(...await repositoryRootFiles(root, repo));
   const detected = await detectProject(files, root);
   const platforms: Array<'android' | 'ios'> = [];
   if (detected.android) platforms.push('android');
@@ -1262,63 +1712,70 @@ export async function scanReleaseDoctor(
         });
       }
     }
-    if (hasSpecializedAndroidProfile(files)) {
+    // Wear OS / TV / Automotive / XR minimums differ from phones, so those modules are left out of the generic rule
+    // — per module: a phone app next to its Wear OS module is still checked.
+    const specialized = specializedAndroidModules(detected.manifests);
+    const generalModules = detected.androidAppModules.filter((module) => !specialized.has(module));
+    const specializedList = [...specialized].map((module) => (module === '.' ? '(root)' : module)).sort().join(', ');
+    if (specialized.size > 0 && generalModules.length === 0) {
       findings.push({
         code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
         severity: 'warning',
         title: 'Specialized Android app type needs a category-specific Target API check',
-        detail: 'Wear OS, Android TV, Android Automotive OS, or Android XR evidence was found. Their submission minimums differ from general mobile apps, so Release Doctor did not apply the generic API 36 rule.',
+        detail: `Wear OS, Android TV, Android Automotive OS, or Android XR evidence was found (${specializedList}). Their submission minimums differ from general mobile apps, so Release Doctor did not apply the generic API ${targetPolicy(now).minimum ?? ''} rule.`,
         action: 'Confirm the app category and its current Target API requirement in the official table.',
         sourceUrl: TARGET_SDK_SOURCE,
         ko: {
           title: '특수 Android 앱 유형은 카테고리별 Target API 확인 필요',
-          detail: 'Wear OS, Android TV, Android Automotive OS 또는 Android XR 근거를 찾았습니다. 일반 모바일 앱과 제출 최소값이 달라 API 36 기준을 일괄 적용하지 않았습니다.',
+          detail: `Wear OS, Android TV, Android Automotive OS 또는 Android XR 근거를 찾았습니다(${specializedList}). 일반 모바일 앱과 제출 최소값이 달라 API ${targetPolicy(now).minimum ?? ''} 기준을 적용하지 않았습니다.`,
           action: '앱 카테고리와 해당 Target API 요구사항을 공식 표에서 확인하세요.',
         },
       });
     } else {
-      findings.push(...targetSdkFindings(detected.gradleFiles, now, detected.targetSdkEvidence));
+      const scoped = detected.gradleFiles.filter((file) =>
+        file.relative.endsWith('libs.versions.toml') || !specialized.has(moduleDir(file.relative)));
+      const limit = repo && isWithin(repo, root) ? repo : root;
+      const applied = await appliedGradleScripts(scoped, root, limit, files);
+      findings.push(...targetSdkFindings([...scoped, ...applied], now, detected.targetSdkEvidence));
+      if (specialized.size > 0) {
+        findings.push({
+          code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
+          severity: 'info',
+          title: 'A Wear OS, TV, Automotive, or XR module needs its own Target API check',
+          detail: `${specializedList} declares a specialized form factor whose submission minimum differs from phones, so it was left out of the check above; the other app modules (${generalModules.join(', ')}) were checked against the general rule.`,
+          action: 'Confirm that module\'s Target API requirement in the official table.',
+          sourceUrl: TARGET_SDK_SOURCE,
+          ko: {
+            title: 'Wear OS·TV·Automotive·XR 모듈은 별도 Target API 확인 필요',
+            detail: `${specializedList} 모듈은 휴대전화와 제출 최소값이 다른 특수 기기용이라 위 검사에서 제외했습니다. 나머지 앱 모듈(${generalModules.join(', ')})은 일반 기준으로 검사했습니다.`,
+            action: '해당 모듈의 Target API 요구사항을 공식 표에서 확인하세요.',
+          },
+        });
+      }
     }
 
     const billing = await checkBillingCompliance(root, now);
-    if (billing.status !== 'not_used') {
-      const billingKoDetail = billing.status === 'pass'
-        ? `감지된 Billing Library ${billing.detectedVersions.join(', ')}은 현재 제출 기준을 충족합니다.`
-        : billing.status === 'blocker'
-          ? `감지된 Billing Library ${billing.detectedVersions.join(', ')}은 현재 제출 최소 버전보다 낮습니다.`
-          : billing.status === 'warning'
-            ? `감지된 Billing Library ${billing.detectedVersions.join(', ')}은 현재 지원되지만 다음 지원 종료 대상입니다.`
-            : 'Billing 의존성은 찾았지만 버전을 정적으로 확정하지 못했습니다.';
-      findings.push({
-        code: `BILLING_${billing.status.toUpperCase()}`,
-        severity: billing.status === 'blocker' ? 'blocker' : billing.status === 'pass' ? 'info' : 'warning',
-        title: billing.status === 'pass' ? 'Google Play Billing version is supported' : 'Google Play Billing needs attention',
-        detail: billing.summary,
-        action: billing.actions[0] ?? billing.upgrade.prompt,
-        file: billing.evidence[0]?.file,
-        sourceUrl: billing.policy.sourceUrl,
-        ko: {
-          title: billing.status === 'pass' ? 'Google Play Billing 버전 기준 충족' : 'Google Play Billing 확인 필요',
-          detail: billingKoDetail,
-          action: billing.actions[0]
-            ? '공식 마감일과 보고된 Gradle 근거를 확인한 뒤 지원 버전으로 업그레이드하세요.'
-            : 'Google Play Billing 업그레이드 Skill을 사용해 변경사항을 검토하세요.',
-        },
-      });
-    }
+    if (billing.status !== 'not_used') findings.push(billingFinding(billing));
   }
 
   if (detected.ios) {
     if (detected.iosBundleIds.length === 0) {
+      const expressions = unique(detected.iosBundleIdExpressions.map((row) => `${row.expression} (${row.file})`));
+      const listed = expressions.length > 3 ? `${expressions.slice(0, 3).join(', ')}, +${expressions.length - 3}` : expressions.join(', ');
       findings.push({
         code: 'IOS_BUNDLE_ID_UNRESOLVED',
         severity: 'warning',
         title: 'iOS bundle identifier could not be resolved',
-        detail: 'The iOS project was detected, but no literal bundle identifier was found in Expo config, Info.plist, or project.pbxproj.',
+        detail: listed
+          ? `PRODUCT_BUNDLE_IDENTIFIER is set through build-setting variables that no .xcconfig or XcodeGen file in scope resolves: ${listed}.`
+          : 'The iOS project was detected, but no literal bundle identifier was found in Expo config, Info.plist, or project.pbxproj.',
         action: 'Confirm PRODUCT_BUNDLE_IDENTIFIER for the release configuration before connecting App Store Connect.',
+        file: detected.iosBundleIdExpressions[0]?.file,
         ko: {
           title: 'iOS bundle identifier를 확정하지 못함',
-          detail: 'iOS 프로젝트는 감지했지만 Expo 설정, Info.plist, project.pbxproj에서 문자열 bundle identifier를 찾지 못했습니다.',
+          detail: listed
+            ? `PRODUCT_BUNDLE_IDENTIFIER가 검사 범위의 .xcconfig나 XcodeGen 파일로 해석되지 않는 빌드 설정 변수로 지정되어 있습니다: ${listed}.`
+            : 'iOS 프로젝트는 감지했지만 Expo 설정, Info.plist, project.pbxproj에서 문자열 bundle identifier를 찾지 못했습니다.',
           action: 'App Store Connect 연결 전에 릴리스 구성의 PRODUCT_BUNDLE_IDENTIFIER를 확인하세요.',
         },
       });
@@ -1333,7 +1790,8 @@ export async function scanReleaseDoctor(
           detail: detected.iosBundleIds.join(', '),
         },
       });
-      if (detected.iosBundleIds.length > 1) {
+      // One app plus its `<app>.<suffix>` extensions, widgets, and watch app is a single release, not several.
+      if (detected.iosBundleIds.length > 1 && !isOneAppWithExtensions(detected.iosBundleIds)) {
         findings.push({
           code: 'MULTIPLE_IOS_BUNDLE_IDS',
           severity: 'warning',
@@ -1377,6 +1835,7 @@ export async function scanReleaseDoctor(
           ? `Firebase Cloud Messaging legacy API usage (first ${maxSourceFiles} source files)`
           : 'Firebase Cloud Messaging legacy API usage',
       ],
+      unresolved: unique(findings.filter((finding) => UNRESOLVED_CODES.has(finding.code)).map((finding) => finding.code)),
       requiresStoreConnection: [
         'store listing metadata and screenshots',
         'uploaded build availability and processing state',

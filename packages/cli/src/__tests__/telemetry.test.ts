@@ -27,7 +27,7 @@ describe('optional usage privacy', () => {
     await usageRun('check', path.join(home, 'private-project'))('completed', {
       projectPath: '/private/source', checkedAt: '', platforms: ['android'],
       identifiers: { androidPackageNames: ['com.example.secret'], iosBundleIds: [] },
-      counts: { blocker: 1, warning: 0, info: 0 }, coverage: { checked: [], requiresStoreConnection: [] },
+      counts: { blocker: 1, warning: 0, info: 0 }, coverage: { checked: [], unresolved: [], requiresStoreConnection: [] },
       findings: [{ code: 'target_sdk_outdated', severity: 'blocker', title: 'private title', detail: 'private secret', file: '/private/file' }],
     });
     const calls = vi.mocked(fetch).mock.calls;
