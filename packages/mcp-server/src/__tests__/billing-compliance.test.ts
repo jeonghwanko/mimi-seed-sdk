@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { billingVersionFromPom, checkBillingCompliance } from '#core/checks/billing.js';
+import { billingVersionFromPom, checkBillingCompliance, reactNativeIapBundledBilling } from '#core/checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
 const dirs: string[] = [];
@@ -218,6 +218,121 @@ describe('Google Play Billing compliance', () => {
       expect.stringContaining('Billing Library 6: standard deadline 2025-08-31; extension deadline 2025-11-01'),
       expect.stringContaining('Billing Library 7: standard deadline 2026-08-31; extension deadline 2026-11-01'),
     ]));
+  });
+
+  // Pre-pilot rehearsal: a Yarn-workspace React Native app (react-native-iap 12.16.2 locked, not installed, scanned
+  // with --path) was reported as BILLING_UNRESOLVED although react-native-iap 12.15+ bundles Billing 7 by default.
+  describe('react-native-iap → Play Billing (리허설 회귀)', () => {
+    it.each([
+      ['4.5.9', '2.0.3'], ['4.6.0', '3.0.0'], ['6.0.4', '3.0.3'], ['8.6.7', '4.0.0'], ['12.5.0', '5.0.0'],
+      ['12.5.1', '5.1.0'], ['12.10.6', '5.2.1'], ['12.13.0', '6.0.1'], ['12.14.1', '6.1.0'], ['12.15.0', '7.0.0'],
+      ['12.16.2', '7.0.0'], ['13.0.4', '7.0.0'], ['14.0.0', '8.0.0'], ['14.5.0', '8.0.0'], ['14.6.0', '8.1.0'],
+      ['14.6.3', '8.2.1'], ['15.3.6', '8.3.0'], ['15.4.0', '9.1.0'], ['16.7.2', '9.1.0'],
+    ])('검증된 표: react-native-iap %s → Billing %s', (version, billing) => {
+      expect(reactNativeIapBundledBilling(version)?.version).toBe(billing);
+    });
+
+    it.each(['16.7.3', '17.0.0', '14.0.0-rc.1', '^12.16.2', '3.9.0'])('표 밖의 버전 %s는 추측하지 않는다', (version) => {
+      expect(reactNativeIapBundledBilling(version)).toBeNull();
+    });
+
+    it('--path 앱의 상위 저장소 yarn.lock이 고정한 12.16.2를 Billing 7 블로커로 판정한다', async () => {
+      const root = await fixture({
+        '.git/HEAD': 'ref: refs/heads/main\n',
+        'package.json': JSON.stringify({ private: true, workspaces: ['packages/*'] }),
+        'yarn.lock': [
+          '__metadata:', '  version: 8', '',
+          '"react-native-iap@npm:^12.16.2":', '  version: 12.16.2', '  resolution: "react-native-iap@npm:12.16.2"', '',
+        ].join('\n'),
+        'packages/mobile/package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^12.16.2' } }),
+        'packages/mobile/android/app/build.gradle': 'apply plugin: "com.android.application"',
+      });
+
+      const result = await checkBillingCompliance(path.join(root, 'packages/mobile'), new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('blocker');
+      expect(result.detectedVersions).toEqual(['7.0.0']);
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        file: 'package.json',
+        source: 'transitive',
+        wrapper: { name: 'react-native-iap', version: '12.16.2' },
+        expression: expect.stringContaining('react-native-iap 12.16.2 from ../../yarn.lock'),
+      }));
+      expect(result.actions.join(' ')).toContain('upgrade it to 14.0.0 or later (Billing 8.0.0)');
+    });
+
+    it.each([
+      ['package-lock.json', {
+        'package-lock.json': JSON.stringify({
+          lockfileVersion: 3,
+          packages: { '': {}, 'node_modules/react-native-iap': { version: '15.4.1' } },
+        }),
+      }, 'pass', '9.1.0'],
+      ['pnpm-lock.yaml', {
+        'pnpm-lock.yaml': [
+          "lockfileVersion: '9.0'", 'importers:', '  .:', '    dependencies:', '      react-native-iap:',
+          '        specifier: ^12.4.0', '        version: 12.4.14(react-native@0.76.0)', '',
+        ].join('\n'),
+      }, 'blocker', '5.0.0'],
+    ])('%s가 고정한 버전도 같은 표로 판정한다', async (_name, lock, status, version) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^12.4.0' } }),
+        ...lock,
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe(status);
+      expect(result.detectedVersions).toEqual([version]);
+    });
+
+    it('표에 없는 새 버전은 unresolved로 남기되 무엇이 해석되지 않았는지 보여준다', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^17.0.0' } }),
+        'yarn.lock': '"react-native-iap@^17.0.0":\n  version "17.0.0"\n',
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('unresolved');
+      expect(result.summary).toContain('react-native-iap 17.0.0 from yarn.lock is not in the embedded');
+    });
+
+    it('앱의 ext.playBillingSdkVersion은 12.x 기본값을 대체한다', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '12.16.2' } }),
+        'android/build.gradle': 'buildscript { ext { playBillingSdkVersion = "8.0.0" } }',
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('warning');
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        file: 'android/build.gradle',
+        version: '8.0.0',
+        source: 'variable',
+      }));
+    });
+
+    it('설치된 12.x는 패키지의 gradle.properties 기본값을 읽는다 (이전에는 unresolved)', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^12.16.2' } }),
+        'node_modules/react-native-iap/package.json': JSON.stringify({ version: '12.16.2' }),
+        'node_modules/react-native-iap/android/build.gradle':
+          'def playBillingSdkVersion = getExtOrDefault("playBillingSdkVersion")\n'
+          + 'dependencies { implementation "com.android.billingclient:billing-ktx:$playBillingSdkVersion" }',
+        'node_modules/react-native-iap/android/gradle.properties': 'RNIap_playBillingSdkVersion=7.0.0\n',
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('blocker');
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        module: 'com.android.billingclient:billing-ktx',
+        version: '7.0.0',
+        expression: 'react-native-iap 12.16.2 default RNIap_playBillingSdkVersion',
+      }));
+    });
   });
 
   it('존재하지 않는 경로를 Billing 미사용으로 위장하지 않는다', async () => {
