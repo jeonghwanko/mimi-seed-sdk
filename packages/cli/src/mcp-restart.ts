@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -216,25 +216,37 @@ function findPids(markers: string[]): number[] {
   return pids;
 }
 
+/**
+ * Windows: CommandLine 에 marker 가 든 프로세스를 찾는 PowerShell 호출.
+ *
+ * marker 는 MCP 설정의 args 에서 온다 — 레포가 커밋한 `.mcp.json` 일 수도 있다. 그래서 스크립트
+ * 텍스트에는 절대 넣지 않고 환경변수로 넘긴다. 따옴표 이스케이프로는 못 막는다: PowerShell 은
+ * 유니코드 둥근 따옴표도 문자열 구분자로 받는다. 비교는 -like 처럼 대소문자 무시, 와일드카드 없음.
+ */
+function windowsPidQuery(marker: string): { args: string[]; env: NodeJS.ProcessEnv } {
+  const script =
+    'Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -and ' +
+    '$_.CommandLine.IndexOf($env:MIMI_SEED_MARKER, [StringComparison]::OrdinalIgnoreCase) -ge 0 } | ' +
+    'Select-Object -ExpandProperty ProcessId';
+  return { args: ['-NoProfile', '-Command', script], env: { ...process.env, MIMI_SEED_MARKER: marker } };
+}
+
 function killByMarkers(markers: string[]): { killed: number } {
   const isWin = os.platform() === 'win32';
   if (isWin) {
-    // PowerShell로 CommandLine에 marker를 포함한 모든 PID 조회
-    const escaped = markers[0].replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const { args, env } = windowsPidQuery(markers[0]);
+    const skip = new Set([String(process.pid), String(process.ppid)]);
     let pids: string[];
     try {
-      const out = execSync(
-        `powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*${escaped}*' } | Select-Object -ExpandProperty ProcessId"`,
-        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
-      ).trim();
-      pids = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      const out = execFileSync('powershell', args, { encoding: 'utf8', env, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      pids = out.split(/\r?\n/).map((s) => s.trim()).filter((s) => /^\d+$/.test(s) && !skip.has(s));
     } catch {
       return { killed: 0 };
     }
     let killed = 0;
     for (const pid of pids) {
       try {
-        execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+        execFileSync('taskkill', ['/F', '/PID', pid], { stdio: 'pipe' });
         log(kleur.dim(M().killedPid(pid)));
         killed++;
       } catch { /* ignore: process may have already exited */ }
@@ -302,4 +314,4 @@ export async function cmdRestart(args: string[]): Promise<void> {
   log(kleur.cyan(recovery.verify));
 }
 
-export const __testing = { detectMcpClient, recoveryMessages, resolveServerConfig };
+export const __testing = { detectMcpClient, recoveryMessages, resolveServerConfig, windowsPidQuery };

@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 export interface GitCommit {
   hash: string;
@@ -9,7 +9,7 @@ export interface GitCommit {
 
 export function isGitRepo(cwd: string): boolean {
   try {
-    execSync("git rev-parse --git-dir", { cwd, stdio: "pipe" });
+    execFileSync("git", ["rev-parse", "--git-dir"], { cwd, stdio: "pipe" });
     return true;
   } catch {
     return false;
@@ -18,7 +18,7 @@ export function isGitRepo(cwd: string): boolean {
 
 export function getLatestTag(cwd: string): string | null {
   try {
-    return execSync("git describe --tags --abbrev=0", { cwd, stdio: "pipe" })
+    return execFileSync("git", ["describe", "--tags", "--abbrev=0"], { cwd, stdio: "pipe" })
       .toString()
       .trim();
   } catch {
@@ -31,13 +31,16 @@ export function getGitLog(
   opts: { from?: string; to?: string; limit?: number } = {},
 ): GitCommit[] {
   const { from, to = "HEAD", limit = 30 } = opts;
+  // ref 는 --from/--to 인자나 레포의 태그 이름에서 온다. 태그 이름엔 `$(…)`·`;`·`|` 가 허용되므로
+  // 셸을 거치지 않는다. `-` 로 시작하면 git 이 옵션(`--output=…`)으로 읽으니 여기서 거부한다 —
+  // `--end-of-options` 는 git 2.24+ 라 그 전 버전에선 조용히 커밋 0개가 된다. 끝의 `--` 는 경로와 구분.
+  if (from?.startsWith("-") || to.startsWith("-")) return [];
   const range = from ? `${from}..${to}` : to;
   const format = "%H\x1f%s\x1f%ci\x1f%an";
-  const limitFlag = `--max-count=${limit}`;
 
   let out: string;
   try {
-    out = execSync(`git log ${limitFlag} --format="${format}" ${range}`, {
+    out = execFileSync("git", ["log", `--max-count=${limit}`, `--format=${format}`, range, "--"], {
       cwd,
       stdio: "pipe",
     }).toString();
