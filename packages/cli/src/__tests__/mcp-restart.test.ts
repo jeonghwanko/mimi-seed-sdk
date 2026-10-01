@@ -196,6 +196,11 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.candidateMarkers({ command: 'ssh', args: ['deploy@1-build', 'mcp-server'] })).not.toContain('deploy');
     expect(__testing.candidateMarkers({ command: 'npx', args: ['--registry', 'https://admin@r.example.com', '-y', 'some-srv'] })).toEqual(['some-srv']);
     expect(__testing.candidateMarkers({ command: 'uvx', args: ['some_srv', 'log-level=debug'] })).toEqual(['some_srv']);
+    // Python 버전 고정(`pkg==1.0`)이 대입으로 빠져도 실행기 단어(pipx · tool)가 식별자가 되면 안 된다.
+    expect(__testing.candidateMarkers({ command: 'pipx', args: ['run', 'mcp-server-fetch==1.0'] })).not.toContain('pipx');
+    expect(__testing.candidateMarkers({ command: 'uv', args: ['tool', 'run', 'mcp-server-fetch==1.0'] })).not.toContain('tool');
+    // 경로의 폴더 이름에 든 `=` 는 대입이 아니다.
+    expect(__testing.candidateMarkers({ command: 'node', args: ['/home/x=y/node_modules/.bin/mimi-seed-mcp'] })).toContain('mimi-seed-mcp');
     expect(__testing.candidateMarkers({ command: 'npx', args: ['-y', 'some-server@sha256:abc'] })).not.toContain('some-server');
   });
 

@@ -166,7 +166,7 @@ function collectServers(): { servers: ServerMap; sources: string[] } {
  */
 const GENERIC_MARKERS = new Set([
   'node', 'nodejs', 'npx', 'npm', 'pnpm', 'pnpx', 'yarn', 'bun', 'bunx', 'deno', 'tsx', 'ts-node',
-  'python', 'python3', 'uv', 'uvx', 'pip', 'cmd', 'sh', 'bash', 'zsh', 'powershell', 'pwsh',
+  'python', 'python3', 'uv', 'uvx', 'pip', 'pipx', 'tool', 'cmd', 'sh', 'bash', 'zsh', 'powershell', 'pwsh',
   'node_modules', '.bin', '.npm', '_npx', 'stdio', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
   'index.js', 'index.ts', 'index.mjs', 'index.cjs', 'main.js', 'main.ts', 'server.js', 'server.ts', 'cli.js',
 ]);
@@ -295,7 +295,7 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
   // 2순위: npm 패키지명 (@ 또는 -가 포함된 식별자)
   // `KEY=value`(대입) · URL(`--registry` 값)은 식별자가 아니다. 대입의 `=` 는 `@` 앞에 오고,
   // 버전 범위(`@>=0.21`)의 `=` 는 `@` 뒤에 온다.
-  const notValue = (a: string) => !/^[^@]*=/.test(a) && !a.includes('://');
+  const notValue = (a: string) => !/^[^@/\\]*=/.test(a) && !a.includes('://'); // 경로 속 `=`(`/home/x=y/…`)는 대입이 아니다
   const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && notValue(a) && isSpecificMarker(a));
   if (pkgArg) return pkgArg;
   // 3순위: 마지막 의미 있는 arg
