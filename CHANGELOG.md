@@ -50,11 +50,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   line containing that text (`node`, a single letter, a bare `index.js`, or a program name such as `explorer`).
   It now stops only your own (on Linux and macOS) Node / Bun / Deno / Python processes whose **script** — the
   file or `-m` module the runtime is running — is the configured server: a script path must match (a relative
-  path is resolved against that process's working folder), and a package must be the script's bin name or the
-  `node_modules/` folder it runs from. Shells and `npm exec` / `npx` / `cmd /c` wrappers are left alone; they exit
-  when the server does. With the default server name it also refuses a marker that does not look like the
-  `mimi-seed-mcp` server (or a `packages/mcp-server/` checkout), so a repository's `.mcp.json` cannot redirect it
-  at other processes, and it kills nothing — reporting the count — when more than 10 server processes match.
+  path is resolved against that process's working folder), and a package must be the script's bin name or that
+  bin's entry file inside the package's `node_modules/` folder — so the package's other commands, such as a setup
+  wizard running at the same time, are not stopped. Shells and `npm exec` / `npx` / `cmd /c` wrappers are left alone; they exit
+  when the server does. With the default server name every marker must be the `@yoonion/mimi-seed-mcp` package or
+  bin, or a script whose nearest `package.json` is that package, so a repository's `.mcp.json` cannot redirect it
+  at other processes; and it kills nothing — reporting the count — when more than 10 server processes match.
   Not restarted (it reports that no process was found): Docker and native-binary servers; on Windows, a server
   started from a relative script path, because Windows does not expose another process's working folder; and on
   Linux and macOS, an `npx` server whose npm cache path contains a space.

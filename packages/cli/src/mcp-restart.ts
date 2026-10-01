@@ -186,10 +186,19 @@ const RUNTIME_RE = /^(?:node(?:js)?\d*|bun|deno|python(?:\d+(?:\.\d+)?t?)?|pytho
 const FLAGS_WITH_VALUE = new Set([
   '-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions', '--env-file',
   '--title', '--inspect-port', '--debug-port', '--disable-warning', '--watch-path', '--input-type',
+  '--unhandled-rejections', '--redirect-warnings', '--report-dir', '--report-directory', '--report-filename',
+  '--report-signal', '--diagnostic-dir', '--heapsnapshot-signal', '--icu-data-dir', '--openssl-config',
+  '--tls-cipher-list', '--secure-heap', '--secure-heap-min', '--experimental-policy', '--policy-integrity',
   '--config', '--import-map', '-W', '-X',
 ]);
-/** 같은 프로세스 안에서 다음 인자를 스크립트로 실행하는 로더 — 스크립트 자리는 그 다음 인자다. */
-const IN_PROCESS_LOADERS = new Set(['ts-node', 'ts-node-esm', 'ts-node-script', 'ts-node-transpile-only']);
+/**
+ * 같은 프로세스 안에서 다음 인자를 스크립트로 실행하는 로더(ts-node). 파일 이름이 아니라 설치 위치로 안다 —
+ * 사용자 스크립트 이름이 우연히 `ts-node.js` 여도 로더로 보지 않는다. Windows 셈은 `ts-node/dist/bin.js` 로 띄운다.
+ */
+const IN_PROCESS_LOADER_RE =
+  /\/(?:node_modules\/\.bin|bin)\/ts-node(?:-esm|-script|-transpile-only|-cwd)?$|\/node_modules\/ts-node\/dist\/bin(?:-[\w-]+)?\.js$/;
+/** ts-node 자신의 값 받는 플래그 — 로더 뒤에서만 쓴다 (python `-P` 처럼 다른 런타임에선 뜻이 다르다). */
+const LOADER_FLAGS_WITH_VALUE = new Set(['-P', '--project', '-O', '--compiler-options', '-C', '--compiler', '-I', '--ignore', '--scope-dir', '--cwd']);
 
 /** `/` 와 `\` 를 모두 구분자로 본 마지막 경로 조각 — Windows 명령줄도 같은 규칙으로 비교한다. */
 function baseName(value: string): string {
@@ -254,7 +263,7 @@ function candidateMarkers(cfg: Record<string, unknown>, cwd: string = process.cw
  * 런타임이 실행 중인 스크립트(또는 `python -m` 모듈). 플래그와 그 값을 건너뛴 첫 인자다 — `node [플래그] <스크립트>`,
  * `bun run <스크립트>`, `deno run [플래그] <스크립트>`. 인라인 코드(`node -e`, `python -c`)는 스크립트가 없다.
  */
-function scriptOf(argv: string[]): string | null {
+function scriptOf(argv: string[], loaderFlags: ReadonlySet<string> = new Set()): string | null {
   const program = programName(argv[0] ?? '');
   const isPython = program.startsWith('py');
   const hasRunVerb = program === 'bun' || program === 'deno';
@@ -262,19 +271,46 @@ function scriptOf(argv: string[]): string | null {
     const a = argv[i];
     if (isPython && a === '-m') return argv[i + 1] ?? null;
     if ((isPython && a === '-c') || (!isPython && ['-e', '--eval', '-p', '--print'].includes(a))) return null;
-    if (FLAGS_WITH_VALUE.has(a) || (program === 'deno' && a === '-c')) { i++; continue; }
+    if (FLAGS_WITH_VALUE.has(a) || loaderFlags.has(a) || (program === 'deno' && a === '-c')) { i++; continue; }
     if (a.startsWith('-')) continue;
     if (hasRunVerb && a === 'run') continue; // `bun --smol run x`, `deno run --allow-net x`
     // `node …/.bin/ts-node src/index.ts` — ts-node 는 같은 프로세스에서 다음 인자를 실행한다.
-    if (IN_PROCESS_LOADERS.has(baseName(a).toLowerCase().replace(/\.[cm]?js$/, ''))) {
-      return scriptOf([argv[0] ?? '', ...argv.slice(i + 1)]);
+    if (!isPython && IN_PROCESS_LOADER_RE.test(`/${normalizePath(a)}`)) {
+      return scriptOf([argv[0] ?? '', ...argv.slice(i + 1)], LOADER_FLAGS_WITH_VALUE);
     }
     return a;
   }
   return null;
 }
 
-type MatchContext = { processCwd?: () => string | null };
+type PackageJson = { name?: unknown; bin?: unknown; main?: unknown };
+type MatchContext = { processCwd?: () => string | null; readPackageJson?: (dir: string) => PackageJson | null };
+
+function readPackageJsonFile(dir: string): PackageJson | null {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `…/node_modules/<패키지>/…` 아래 스크립트가 그 패키지의 **해당 bin 진입점**인가. 같은 패키지의 다른 bin
+ * (`mimi-seed-auth` 의 `dist/auth/cli.js` 같은 설정 마법사)까지 죽이지 않으려는 것. package.json 을 못 읽으면
+ * 관례적인 `dist/index.js` 만 인정한다.
+ */
+function isPackageEntry(original: string, packageDir: string, binName: string, read: (dir: string) => PackageJson | null): boolean {
+  const pkg = read(packageDir);
+  const rest = original.slice(packageDir.length + 1).toLowerCase();
+  if (!pkg) return rest === 'dist/index.js';
+  const bin = pkg.bin;
+  const target = typeof bin === 'string' ? bin
+    : bin && typeof bin === 'object' && typeof (bin as Record<string, unknown>)[binName] === 'string'
+      ? (bin as Record<string, string>)[binName]
+      : typeof pkg.main === 'string' ? pkg.main : null;
+  return target !== null && normalizePath(target) === rest;
+}
 
 /**
  * 런타임 프로세스의 스크립트가 식별자와 맞는가. 명령줄 부분일치는 쓰지 않는다. 맞는 경우는:
@@ -297,21 +333,34 @@ function matchesMarkers(argv: string[], markers: string[], ctx: MatchContext = {
     }
     return resolved;
   };
+  const read = ctx.readPackageJson ?? readPackageJsonFile;
   return markers.some((marker) => {
     if (SCRIPT_RE.test(marker)) {
       const wanted = normalizePath(marker);
       // 파일 이름이 같을 때만 작업 폴더를 묻는다 — macOS 는 프로세스마다 lsof 를 띄운다.
       if (baseName(s) === baseName(wanted) && absoluteScript() === wanted) return true;
       if (!wanted.includes(' ') || !isAbsoluteScript(script)) return false;
-      const joined = normalizePath(argv.slice(argv.indexOf(script, 1)).join(' '));
-      return joined === wanted || joined.startsWith(`${wanted} `);
+      // 공백 든 경로: 스크립트 자리부터 토큰을 하나씩 늘려 붙인 경로가 정확히 같아야 한다. 여기서는 `..` 를
+      // 접지 않는다 — 접으면 뒤 인자(`/../x`)가 앞 경로를 지워 다른 경로처럼 보이게 만든다.
+      const start = argv.indexOf(script, 1);
+      for (let end = start + 2; end <= argv.length; end++) {
+        if (argv.slice(start, end).join(' ').replace(/\\/g, '/').toLowerCase() === wanted) return true;
+      }
+      return false;
     }
     const name = normalizePath(marker.replace(VERSION_RE, '').replace(WIN_EXE_RE, ''));
-    if (s === name || baseName(s).replace(/\.(?:[cm]?js|ts|exe|cmd)$/, '').replace(VERSION_RE, '') === name) return true;
-    const padded = `/${s}/`;
-    return name.includes('/')
-      ? padded.includes(`/node_modules/${name}/`)
-      : new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}/`).test(padded);
+    const binName = baseName(name);
+    // 링크된 bin (`…/.bin/mimi-seed-mcp`, `/usr/local/bin/mimi-seed-mcp`) — 파일 이름이 곧 bin 이름이다.
+    if (s === name || baseName(s).replace(/\.(?:[cm]?js|ts|exe|cmd)$/, '').replace(VERSION_RE, '') === binName) return true;
+    // 패키지 폴더에서 직접 (`…/node_modules/@scope/pkg/dist/index.js`) — 그 bin 의 진입점일 때만.
+    const original = path.posix.normalize(script.replace(/\\/g, '/'));
+    const pattern = name.includes('/')
+      ? new RegExp(`/node_modules/${escapeRegExp(name)}(?=/)`)
+      : new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}(?=/)`);
+    const m = pattern.exec(`/${original.toLowerCase()}`);
+    if (!m) return false;
+    const packageDir = original.slice(0, m.index + m[0].length - 1);
+    return isPackageEntry(original, packageDir, binName, read);
   });
 }
 
@@ -428,13 +477,32 @@ function listWindowsProcesses(): ProcessEntry[] {
   }
 }
 
+const MIMI_SEED_PACKAGE = '@yoonion/mimi-seed-mcp';
+
+/**
+ * mimi-seed MCP 서버 식별자인가 (기본 이름 `mimi-seed` 보호용). 패키지 식별자는 이 패키지 · bin 이름 그대로여야
+ * 하고 — `evil-mimi-seed-mcp/vitest` 처럼 글자만 섞인 것은 아니다 — 스크립트는 경로를 풀어 가장 가까운
+ * package.json 이 이 패키지여야 한다 (`packages/mcp-server` 는 흔한 폴더 이름이고, `…/../` 로 위장할 수 있다).
+ */
+function looksLikeMimiSeed(marker: string, read: (dir: string) => PackageJson | null = readPackageJsonFile): boolean {
+  if (SCRIPT_RE.test(marker)) {
+    let dir = path.dirname(path.resolve(marker));
+    for (let depth = 0; depth < 6; depth++) {
+      const pkg = read(dir);
+      if (pkg) return pkg.name === MIMI_SEED_PACKAGE;
+      const up = path.dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+    return false;
+  }
+  return /^(?:@yoonion\/)?mimi-seed-mcp(?:@[\w.+-]+)?$/i.test(marker);
+}
+
 /**
  * 상대경로 스크립트를 풀 때 쓰는 그 프로세스의 작업 폴더. Linux 는 /proc, macOS 는 lsof(절대경로).
  * Windows 는 Win32_Process 에 작업 폴더가 없어 알 수 없다 — 그때 상대경로 프로세스는 고르지 않는다.
  */
-/** mimi-seed MCP 서버 식별자인가 — CLI(`mimi-seed`) 자체는 아니다. 소스 체크아웃은 packages/mcp-server 경로로 안다. */
-const looksLikeMimiSeed = (marker: string) => /mimi-seed-mcp/i.test(marker) || /[\\/]packages[\\/]mcp-server[\\/]/i.test(marker);
-
 function processCwd(pid: number): string | null {
   try {
     if (process.platform === 'linux') return fs.readlinkSync(`/proc/${pid}/cwd`);
@@ -453,13 +521,17 @@ function processCwd(pid: number): string | null {
 function planKill(
   processes: ProcessEntry[],
   markers: string[],
-  { uid = process.getuid?.(), cwdOf = processCwd }: { uid?: number; cwdOf?: (pid: number) => string | null } = {},
+  {
+    uid = process.getuid?.(),
+    cwdOf = processCwd,
+    readPackageJson = readPackageJsonFile,
+  }: { uid?: number; cwdOf?: (pid: number) => string | null; readPackageJson?: (dir: string) => PackageJson | null } = {},
 ): { pids: number[]; refused: number } {
   if (markers.length === 0) return { pids: [], refused: 0 };
   const skip = new Set<number>([process.pid, process.ppid]);
   const pids = processes
     .filter((p) => !skip.has(p.pid) && (uid === undefined || p.uid === undefined || p.uid === uid))
-    .filter((p) => matchesMarkers(p.argv, markers, { processCwd: () => cwdOf(p.pid) }))
+    .filter((p) => matchesMarkers(p.argv, markers, { processCwd: () => cwdOf(p.pid), readPackageJson }))
     .map((p) => p.pid);
   return pids.length > MAX_SERVERS ? { pids: [], refused: pids.length } : { pids, refused: 0 };
 }
@@ -513,7 +585,7 @@ export async function cmdRestart(args: string[]): Promise<void> {
     process.exit(1);
   }
   // 기본 이름은 레포의 `.mcp.json` 이 가로챌 수 있다 — mimi-seed 서버로 보이지 않는 식별자로는 아무것도 죽이지 않는다.
-  if (serverName === 'mimi-seed' && !markers.some(looksLikeMimiSeed)) {
+  if (serverName === 'mimi-seed' && !markers.every((m) => looksLikeMimiSeed(m))) {
     log(kleur.red(M().notMimiSeed(marker)));
     log(kleur.dim(M().configLine(JSON.stringify(cfg))));
     process.exit(1);

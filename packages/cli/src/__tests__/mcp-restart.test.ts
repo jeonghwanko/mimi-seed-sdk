@@ -72,11 +72,21 @@ describe('restart 식별자 — 흔한 값은 쓰지 않는다', () => {
     expect(__testing.candidateMarkers({ command: 'github-mcp-server', args: ['stdio'] })).toEqual(['github-mcp-server']);
   });
 
-  it('기본 이름(mimi-seed)은 mimi-seed 서버로 보이는 식별자만 받는다', () => {
-    expect(__testing.looksLikeMimiSeed('@yoonion/mimi-seed-mcp@latest')).toBe(true);
-    expect(__testing.looksLikeMimiSeed('/home/dev/sdk/packages/mcp-server/dist/index.js')).toBe(true);
-    expect(__testing.looksLikeMimiSeed('@anthropic-ai/claude-code')).toBe(false);
-    expect(__testing.looksLikeMimiSeed('mimi-seed')).toBe(false); // CLI 자체 — 진행 중인 deploy 를 죽이면 안 된다
+  it('기본 이름(mimi-seed)은 mimi-seed 서버 식별자만 받는다 — 글자 섞기 · `..` 위장은 거부', () => {
+    const sdk = path.resolve('/home/dev/sdk/packages/mcp-server');
+    const other = path.resolve('/home/dev/other/packages/mcp-server');
+    const pkgs: Record<string, { name: string }> = { [sdk]: { name: '@yoonion/mimi-seed-mcp' }, [other]: { name: 'other-mcp' } };
+    const read = (dir: string) => pkgs[dir] ?? null;
+    const ok = (m: string) => __testing.looksLikeMimiSeed(m, read);
+    expect(['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp'].every(ok)).toBe(true);
+    expect(ok(path.join(sdk, 'dist', 'index.js'))).toBe(true);
+    expect(ok(path.join(sdk, 'src', 'index.ts'))).toBe(true);
+    expect(ok(path.join(other, 'dist', 'index.js'))).toBe(false); // 흔한 폴더 이름만으로는 아니다
+    expect(ok('/mimi-seed-mcp/../home/dev/other/packages/mcp-server/dist/index.js')).toBe(false);
+    expect(ok('mimi-seed')).toBe(false); // CLI 자체 — 진행 중인 deploy 를 죽이면 안 된다
+    expect(ok('@anthropic-ai/claude-code')).toBe(false);
+    const evil = __testing.candidateMarkers({ command: 'npx', args: ['-y', 'evil-mimi-seed-mcp/vitest'] });
+    expect(evil.every(ok)).toBe(false);
   });
 });
 
@@ -99,6 +109,9 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.scriptOf(['node', '--title', 'srv', '--inspect-port', '9230', '/x/a.js'])).toBe('/x/a.js');
     expect(__testing.scriptOf(['bun', '--smol', 'run', 'src/index.ts'])).toBe('src/index.ts');
     expect(__testing.scriptOf(['node', '/p/node_modules/.bin/ts-node', '--transpile-only', 'src/index.ts'])).toBe('src/index.ts');
+    expect(__testing.scriptOf(['node', 'C:\\p\\node_modules\\ts-node\\dist\\bin.js', '-P', 'tsconfig.json', 'src\\index.ts'])).toBe('src\\index.ts');
+    expect(__testing.scriptOf(['node', '/home/dev/tools/ts-node.js', 'src/index.ts'])).toBe('/home/dev/tools/ts-node.js'); // 이름만 같은 스크립트
+    expect(__testing.scriptOf(['python3', '-P', 'server.py'])).toBe('server.py'); // python -P 는 값을 받지 않는다
   });
 
   it('기본 npx 설정의 서버(node)만 고르고 래퍼는 두고 본다 (POSIX)', () => {
@@ -120,6 +133,18 @@ describe('restart 프로세스 판정', () => {
       // npm cmd-shim 이 실제로 만드는 형태: %dp0% 가 이미 \ 로 끝나 `.bin\\..\` 이 된다.
       { pid: 25, argv: win('"C:\\Program Files\\nodejs\\node.exe"  "C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\.bin\\\\..\\@yoonion\\mimi-seed-mcp\\dist\\index.js"') },
     ], ['mimi-seed-mcp'])).toEqual([23, 24, 25]);
+  });
+
+  it('패키지 폴더에서 띄운 경우 그 bin 진입점만 — 같은 패키지의 설정 마법사(하위 CLI)는 두고 본다', () => {
+    const read = (dir: string) => (/mimi-seed-mcp$/i.test(dir.replace(/[\\/]+$/, ''))
+      ? { name: '@yoonion/mimi-seed-mcp', bin: { 'mimi-seed-mcp': 'dist/index.js', 'mimi-seed-auth': 'dist/auth/cli.js' } }
+      : null);
+    const base = 'C:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist';
+    expect(__testing.planKill([
+      { pid: 71, argv: win(`node ${base}\\index.js`) },
+      { pid: 72, argv: win(`node ${base}\\auth\\cli.js`) },
+      { pid: 73, argv: ['node', '/usr/lib/node_modules/@yoonion/mimi-seed-mcp/dist/firebase/cli.js'] },
+    ], pkg, { uid: 1000, readPackageJson: read }).pids).toEqual([71]);
   });
 
   it('pnpm 셈의 `.bin/../` 경로도 정리해서 비교한다', () => {
@@ -174,6 +199,10 @@ describe('restart 프로세스 판정', () => {
     expect(plan([{ pid: 63, argv: line.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([63]);
     const other = 'node /home/dev/My /home/dev/My Projects/mimi/dist/index.js';
     expect(plan([{ pid: 64, argv: other.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([]);
+    const trailing = 'node /home/dev/My Projects/x.js /../mimi/dist/index.js';
+    expect(plan([{ pid: 65, argv: trailing.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([]);
+    const withArgs = 'node /home/dev/My Projects/mimi/dist/index.js ../../cfg';
+    expect(plan([{ pid: 66, argv: withArgs.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([66]);
   });
 
   it('다른 사용자의 프로세스와 자기 자신은 빼고, 너무 많이 맞으면 하나도 죽이지 않는다', () => {
