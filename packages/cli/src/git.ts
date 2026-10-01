@@ -31,14 +31,16 @@ export function getGitLog(
   opts: { from?: string; to?: string; limit?: number } = {},
 ): GitCommit[] {
   const { from, to = "HEAD", limit = 30 } = opts;
+  // ref 는 --from/--to 인자나 레포의 태그 이름에서 온다. 태그 이름엔 `$(…)`·`;`·`|` 가 허용되므로
+  // 셸을 거치지 않는다. `-` 로 시작하면 git 이 옵션(`--output=…`)으로 읽으니 여기서 거부한다 —
+  // `--end-of-options` 는 git 2.24+ 라 그 전 버전에선 조용히 커밋 0개가 된다. 끝의 `--` 는 경로와 구분.
+  if (from?.startsWith("-") || to.startsWith("-")) return [];
   const range = from ? `${from}..${to}` : to;
   const format = "%H\x1f%s\x1f%ci\x1f%an";
 
-  // ref 는 --from/--to 인자나 레포의 태그 이름에서 온다. 태그 이름엔 `$(…)`·`;`·`|` 가 허용되므로
-  // 셸을 거치지 않고, `--end-of-options` 로 `-` 로 시작하는 ref 가 옵션으로 읽히는 것도 막는다.
   let out: string;
   try {
-    out = execFileSync("git", ["log", `--max-count=${limit}`, `--format=${format}`, "--end-of-options", range], {
+    out = execFileSync("git", ["log", `--max-count=${limit}`, `--format=${format}`, range, "--"], {
       cwd,
       stdio: "pipe",
     }).toString();

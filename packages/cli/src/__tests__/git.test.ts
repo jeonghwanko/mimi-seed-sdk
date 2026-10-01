@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getGitLog, getLatestTag, isGitRepo } from '../git.js';
 
 let repo: string;
-const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+// 개발자 전역 설정(commit.gpgsign, core.hooksPath …)이 픽스처 커밋을 깨지 않게 격리한다.
+const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe', env });
 const commit = (message: string) => git('-c', 'user.name=Example', '-c', 'user.email=dev@example.com', 'commit', '--allow-empty', '-q', '-m', message);
 
 beforeEach(() => {
@@ -37,6 +39,7 @@ describe('git helpers', () => {
 
   it('does not let a ref starting with "-" act as a git option', () => {
     expect(getGitLog(repo, { from: '--output=leak' })).toEqual([]);
+    expect(getGitLog(repo, { to: '--output=leak' })).toEqual([]);
     expect(fs.readdirSync(repo).filter((f) => f.startsWith('leak'))).toEqual([]);
   });
 });
