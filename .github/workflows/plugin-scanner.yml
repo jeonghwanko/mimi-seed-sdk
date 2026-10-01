@@ -20,12 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Scan (latest scanner)
-        uses: hashgraph-online/ai-plugin-scanner-action@c57f042a11fe3b7f5849ed95757888561ae95368 # v1.2.738 (plugin-scanner 3.15.5)
+        uses: hashgraph-online/ai-plugin-scanner-action@2d86c226ed36a19a78668ef6c14a01b1c7751ae2 # v1.2.738 (plugin-scanner 3.15.5)
         with:
           plugin_dir: "."
           min_score: 80
@@ -35,7 +35,7 @@ jobs:
       # awesome-ai-plugins' central scan pins an older action (see its CONTRIBUTING.md); older scanners flag
       # shapes the newer one exempts (e.g. a quoted placeholder assigned to a token key), so gate on both.
       - name: Scan (version used by the awesome-ai-plugins central scan)
-        uses: hashgraph-online/ai-plugin-scanner-action@caba2e96aa8ad2feb6cf6fca52442b52e22e779f # v1.2.635 (plugin-scanner 3.0.123)
+        uses: hashgraph-online/ai-plugin-scanner-action@2d86c226ed36a19a78668ef6c14a01b1c7751ae2 # v1.2.635 (plugin-scanner 3.0.123)
         with:
           plugin_dir: "."
           min_score: 80
