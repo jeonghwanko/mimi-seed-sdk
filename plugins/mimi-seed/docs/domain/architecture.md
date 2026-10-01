@@ -80,7 +80,12 @@ classified — nobody has to remember to hand-write a preview branch.
   their engine into cohesive modules (`appstore/{client,apps,versions,review-submission,products}.ts`,
   `playstore/{edits,statistics,listing,releases,images,reviews,products,recovery,data-safety,service-account}.ts`)
   and keep `tools.ts` as a re-export barrel, because registers, `checks/*`, and tests import and `vi.mock` that
-  path. File IO (reading a CSV or a key
+  path. The App Store **register** layer is split the same way: `registers/appstore.ts` stays the one entry
+  `server.ts` calls, and only sequences the `registers/appstore/<part>.ts` modules (`apps`, `versions`,
+  `metadata`, `media`, `testflight`, `customer-reviews`, `products`, `review-submission`, `declarations`,
+  `reports`). Call order there is the `tools/list` order, so a module that owns non-adjacent tools exports more
+  than one register function rather than reordering them. A new App Store tool goes into its part's function,
+  not the entry file. File IO (reading a CSV or a key
   file the caller named) belongs to the domain module too — e.g. `playstore/data-safety.ts`,
   `android/playstore-sa.ts`.
 - Responses go through `lib/mcp-response.ts`: `jsonResult(value)` for structured output, `textResult(str | lines)`
