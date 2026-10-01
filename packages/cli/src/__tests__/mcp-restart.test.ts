@@ -168,6 +168,9 @@ describe('restart 프로세스 판정', () => {
       ['bun', ['x', '@yoonion/mimi-seed-mcp@beta']],
       ['pnpm', ['dlx', '@yoonion/mimi-seed-mcp@~0.21.0']],
       ['C:\\Program Files\\nodejs\\NPX.CMD', ['-y', 'mimi-seed-mcp@next']],
+      ['pwsh', ['-NoProfile', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['NODE_OPTIONS=--max-old-space-size=4096', 'npx', '-y', '@yoonion/mimi-seed-mcp@beta']],
+      ['npx', ['--registry', 'https://registry.example.com', '-y', '@yoonion/mimi-seed-mcp@1.0.0-beta.1+build']],
     ] as const) {
       const markers = __testing.candidateMarkers({ command, args: [...args] });
       expect(markers.every((m) => __testing.looksLikeMimiSeed(m))).toBe(true);
@@ -180,6 +183,9 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@10.0.0.5', 'mcp-server'] })).not.toContain('dev');
     // 인자 어딘가의 npx 는 실행기가 아니다 — 실행기는 command 자리(또는 cmd /c 바로 뒤)에 있어야 한다.
     expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@build-host', 'npx', '-y', 'srv'] })).not.toContain('dev');
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['admin@10-0-0-5.nip.io', 'mcp-server'] })).not.toContain('admin');
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['deploy@1-build', 'mcp-server'] })).not.toContain('deploy');
+    expect(__testing.candidateMarkers({ command: 'npx', args: ['--registry', 'https://admin@r.example.com', '-y', 'some-srv'] })).toEqual(['some-srv']);
     expect(__testing.candidateMarkers({ command: 'npx', args: ['-y', 'some-server@sha256:abc'] })).not.toContain('some-server');
   });
 

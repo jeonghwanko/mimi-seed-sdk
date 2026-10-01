@@ -172,8 +172,11 @@ const GENERIC_MARKERS = new Set([
 ]);
 const SCRIPT_RE = /\.(?:[cm]?[jt]s|py)$/i;
 const WIN_EXE_RE = /\.(?:exe|cmd|bat)$/i;
-/** 좁은 버전 접미사: `@latest` · `@next` · semver (`@1`, `@0.21.2`, `@1.0.0-beta.1`). `@10.0.0.5` 같은 IP 는 아니다. */
-const VERSION_RE = /@(?:latest|next|\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?)$/;
+/**
+ * 좁은 버전 접미사: `@latest` · `@next` · semver (`@1`, `@0.21`, `@0.21.2`, `@1.0.0-beta.1+build`). 프리릴리스 ·
+ * 빌드 표기는 x.y.z 뒤에서만 받는다 — `@10.0.0.5`(IP) · `@1-build`(호스트명)는 버전이 아니다.
+ */
+const VERSION_RE = /@(?:latest|next|\d+(?:\.\d+){0,2}|\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)$/;
 /**
  * 패키지 식별자의 버전 · 태그 · 범위 (`@latest`, `@beta`, `@^0.21`). 패키지 실행기(npx 등)로 등록했을 때만 뗀다 —
  * 그 밖의 `user@host` 같은 인자에서 떼면 `user` 처럼 너무 넓은 식별자가 생긴다. `:` 가 든 값(digest, `npm:` 별칭)은 버전이 아니다.
@@ -182,6 +185,12 @@ const PACKAGE_VERSION_RE = /@[^@/\\\s:]+$/;
 /** 패키지 실행기 — 바로 실행(npx 등) 또는 하위 명령이 붙는 것(`npm exec`, `bun x`, `pnpm dlx` …). */
 const DIRECT_RUNNERS = new Set(['npx', 'bunx', 'pnpx', 'uvx']);
 const RUNNER_SUBCOMMANDS: Record<string, string[]> = { npm: ['exec', 'x'], bun: ['x'], pnpm: ['dlx'], yarn: ['dlx'], pipx: ['run'] };
+/** 실행기 앞에 올 수 있는 셸 래퍼, 그리고 실행기 뒤에서 값을 받는 플래그 (`--package` 의 값은 패키지라 건너뛰지 않는다). */
+const SHELL_WRAPPERS = new Set(['cmd', 'sh', 'bash', 'zsh', 'dash', 'powershell', 'pwsh']);
+const RUNNER_FLAGS_WITH_VALUE = new Set([
+  '--registry', '--cache', '--userconfig', '--globalconfig', '--prefix', '-w', '--workspace', '-c', '--call',
+  '--node-options', '--shell', '--script-shell', '--python', '--index-url', '--from',
+]);
 
 /**
  * 패키지 실행기가 실행하는 패키지 인자의 위치. 실행기는 `command` 자리(또는 `cmd /c` · `sh -c` 바로 뒤)에 있어야
@@ -192,8 +201,13 @@ function runnerPackageIndex(cfg: Record<string, unknown>): number | null {
   const word = (v: unknown) => (typeof v === 'string' ? baseName(v).toLowerCase().replace(WIN_EXE_RE, '') : '');
   let program = word(cfg.command);
   let i = 0;
-  if (['cmd', 'sh', 'bash', 'zsh', 'dash'].includes(program)) {
-    while (i < args.length && /^(?:\/[a-z]|-[a-z]+)$/i.test(args[i])) i++; // /c /d /s -c -l
+  if (SHELL_WRAPPERS.has(program)) {
+    while (i < args.length && /^(?:\/[a-z]|-[a-z]+)$/i.test(args[i])) i++; // /c /d /s -c -l -NoProfile -Command
+    program = word(args[i]);
+    i++;
+  }
+  if (program === 'env') {
+    while (i < args.length && (args[i].startsWith('-') || args[i].includes('='))) i++; // env -i FOO=1 npx …
     program = word(args[i]);
     i++;
   }
@@ -204,8 +218,11 @@ function runnerPackageIndex(cfg: Record<string, unknown>): number | null {
   } else if (!DIRECT_RUNNERS.has(program)) {
     return null;
   }
-  while (i < args.length && args[i].startsWith('-')) i++; // -y, --yes, --quiet …
-  return i < args.length ? i : null;
+  while (i < args.length && args[i].startsWith('-')) {
+    if (RUNNER_FLAGS_WITH_VALUE.has(args[i].toLowerCase())) i++; // --registry <url> 의 값은 패키지가 아니다
+    i++; // -y, --yes, --quiet …
+  }
+  return i < args.length && !args[i].includes('://') ? i : null;
 }
 
 /**
@@ -266,10 +283,12 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
   const fileArg = args.find((a) => SCRIPT_RE.test(a) && isSpecificMarker(a));
   if (fileArg) return fileArg;
   // 2순위: npm 패키지명 (@ 또는 -가 포함된 식별자)
-  const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && isSpecificMarker(a));
+  // `KEY=value`(env 대입) · URL(`--registry` 값)은 식별자가 아니다.
+  const notValue = (a: string) => !a.includes('=') && !a.includes('://');
+  const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && notValue(a) && isSpecificMarker(a));
   if (pkgArg) return pkgArg;
   // 3순위: 마지막 의미 있는 arg
-  const meaningful = args.filter((a) => !a.startsWith('-') && a.toLowerCase() !== '/c' && isSpecificMarker(a));
+  const meaningful = args.filter((a) => !a.startsWith('-') && notValue(a) && a.toLowerCase() !== '/c' && isSpecificMarker(a));
   if (meaningful.length) return meaningful.at(-1) ?? null;
   // 4순위: 링크된 bin 을 command 로 직접 등록한 경우 (`command: "mimi-seed-mcp"`, args 없음)
   const command = typeof cfg.command === 'string' ? baseName(cfg.command).replace(WIN_EXE_RE, '') : '';
