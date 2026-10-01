@@ -75,13 +75,21 @@ describe('restart 식별자 — 흔한 값은 쓰지 않는다', () => {
   it('기본 이름(mimi-seed)은 mimi-seed 서버 식별자만 받는다 — 글자 섞기 · `..` 위장은 거부', () => {
     const sdk = path.resolve('/home/dev/sdk/packages/mcp-server');
     const other = path.resolve('/home/dev/other/packages/mcp-server');
-    const pkgs: Record<string, { name: string }> = { [sdk]: { name: '@yoonion/mimi-seed-mcp' }, [other]: { name: 'other-mcp' } };
+    const pkgs: Record<string, { name: string; bin?: Record<string, string> }> = {
+      [sdk]: { name: '@yoonion/mimi-seed-mcp', bin: { 'mimi-seed-mcp': 'dist/index.js', 'mimi-seed-auth': 'dist/auth/cli.js' } },
+      [other]: { name: 'other-mcp' },
+    };
     const read = (dir: string) => pkgs[dir] ?? null;
     const ok = (m: string) => __testing.looksLikeMimiSeed(m, read);
     expect(['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp'].every(ok)).toBe(true);
     expect(ok(path.join(sdk, 'dist', 'index.js'))).toBe(true);
     expect(ok(path.join(sdk, 'src', 'index.ts'))).toBe(true);
     expect(ok(path.join(other, 'dist', 'index.js'))).toBe(false); // 흔한 폴더 이름만으로는 아니다
+    expect(ok(path.join(sdk, 'dist', 'auth', 'cli.js'))).toBe(false); // 같은 패키지의 설정 마법사는 아니다
+    expect(ok('@yoonion/mimi-seed-mcp@^0.21')).toBe(true);
+    expect(ok('/usr/local/bin/mimi-seed-mcp')).toBe(true);
+    expect(ok('C:\\npm\\mimi-seed-mcp.cmd')).toBe(true);
+    expect(ok('@yoonion/mimi-seed-mcp@x/../../vitest')).toBe(false);
     expect(ok('/mimi-seed-mcp/../home/dev/other/packages/mcp-server/dist/index.js')).toBe(false);
     expect(ok('mimi-seed')).toBe(false); // CLI 자체 — 진행 중인 deploy 를 죽이면 안 된다
     expect(ok('@anthropic-ai/claude-code')).toBe(false);
@@ -112,6 +120,7 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.scriptOf(['node', 'C:\\p\\node_modules\\ts-node\\dist\\bin.js', '-P', 'tsconfig.json', 'src\\index.ts'])).toBe('src\\index.ts');
     expect(__testing.scriptOf(['node', '/home/dev/tools/ts-node.js', 'src/index.ts'])).toBe('/home/dev/tools/ts-node.js'); // 이름만 같은 스크립트
     expect(__testing.scriptOf(['python3', '-P', 'server.py'])).toBe('server.py'); // python -P 는 값을 받지 않는다
+    expect(__testing.scriptOf(['node', '/p/node_modules/.bin/ts-node', '-D', '2307', '--transpiler', 'sucrase', 'src/index.ts'])).toBe('src/index.ts');
   });
 
   it('기본 npx 설정의 서버(node)만 고르고 래퍼는 두고 본다 (POSIX)', () => {
@@ -144,7 +153,9 @@ describe('restart 프로세스 판정', () => {
       { pid: 71, argv: win(`node ${base}\\index.js`) },
       { pid: 72, argv: win(`node ${base}\\auth\\cli.js`) },
       { pid: 73, argv: ['node', '/usr/lib/node_modules/@yoonion/mimi-seed-mcp/dist/firebase/cli.js'] },
-    ], pkg, { uid: 1000, readPackageJson: read }).pids).toEqual([71]);
+      // 소문자로 바꾸면 길이가 늘어나는 글자(İ)가 경로에 있어도 패키지 폴더를 제대로 자른다.
+      { pid: 74, argv: win('node C:\\Users\\İsmail\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js') },
+    ], pkg, { uid: 1000, readPackageJson: read }).pids).toEqual([71, 74]);
   });
 
   it('pnpm 셈의 `.bin/../` 경로도 정리해서 비교한다', () => {

@@ -198,7 +198,10 @@ const FLAGS_WITH_VALUE = new Set([
 const IN_PROCESS_LOADER_RE =
   /\/(?:node_modules\/\.bin|bin)\/ts-node(?:-esm|-script|-transpile-only|-cwd)?$|\/node_modules\/ts-node\/dist\/bin(?:-[\w-]+)?\.js$/;
 /** ts-node 자신의 값 받는 플래그 — 로더 뒤에서만 쓴다 (python `-P` 처럼 다른 런타임에선 뜻이 다르다). */
-const LOADER_FLAGS_WITH_VALUE = new Set(['-P', '--project', '-O', '--compiler-options', '-C', '--compiler', '-I', '--ignore', '--scope-dir', '--cwd']);
+const LOADER_FLAGS_WITH_VALUE = new Set([
+  '-P', '--project', '-O', '--compiler-options', '-C', '--compiler', '-I', '--ignore', '-D', '--ignore-diagnostics',
+  '--transpiler', '--dir', '--scope-dir', '--cwd',
+]);
 
 /** `/` 와 `\` 를 모두 구분자로 본 마지막 경로 조각 — Windows 명령줄도 같은 규칙으로 비교한다. */
 function baseName(value: string): string {
@@ -354,10 +357,11 @@ function matchesMarkers(argv: string[], markers: string[], ctx: MatchContext = {
     if (s === name || baseName(s).replace(/\.(?:[cm]?js|ts|exe|cmd)$/, '').replace(VERSION_RE, '') === binName) return true;
     // 패키지 폴더에서 직접 (`…/node_modules/@scope/pkg/dist/index.js`) — 그 bin 의 진입점일 때만.
     const original = path.posix.normalize(script.replace(/\\/g, '/'));
+    // 원래 경로에 대소문자 무시로 찾는다 — 소문자로 바꾼 문자열의 위치로 자르면 `İ` 처럼 길이가 바뀌는 글자에서 어긋난다.
     const pattern = name.includes('/')
-      ? new RegExp(`/node_modules/${escapeRegExp(name)}(?=/)`)
-      : new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}(?=/)`);
-    const m = pattern.exec(`/${original.toLowerCase()}`);
+      ? new RegExp(`/node_modules/${escapeRegExp(name)}(?=/)`, 'i')
+      : new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}(?=/)`, 'i');
+    const m = pattern.exec(`/${original}`);
     if (!m) return false;
     const packageDir = original.slice(0, m.index + m[0].length - 1);
     return isPackageEntry(original, packageDir, binName, read);
@@ -486,17 +490,26 @@ const MIMI_SEED_PACKAGE = '@yoonion/mimi-seed-mcp';
  */
 function looksLikeMimiSeed(marker: string, read: (dir: string) => PackageJson | null = readPackageJsonFile): boolean {
   if (SCRIPT_RE.test(marker)) {
-    let dir = path.dirname(path.resolve(marker));
+    // 스크립트는 이 패키지의 서버 진입점이어야 한다 — 같은 패키지의 설정 마법사(dist/auth/cli.js 등)는 아니다.
+    const file = path.resolve(marker);
+    let dir = path.dirname(file);
     for (let depth = 0; depth < 6; depth++) {
       const pkg = read(dir);
-      if (pkg) return pkg.name === MIMI_SEED_PACKAGE;
+      if (pkg) {
+        if (pkg.name !== MIMI_SEED_PACKAGE) return false;
+        const rest = normalizePath(path.relative(dir, file));
+        const bin = pkg.bin && typeof pkg.bin === 'object' ? (pkg.bin as Record<string, unknown>)['mimi-seed-mcp'] : null;
+        return rest === 'src/index.ts' || rest === normalizePath(typeof bin === 'string' ? bin : 'dist/index.js');
+      }
       const up = path.dirname(dir);
       if (up === dir) break;
       dir = up;
     }
     return false;
   }
-  return /^(?:@yoonion\/)?mimi-seed-mcp(?:@[\w.+-]+)?$/i.test(marker);
+  // 경로로 적은 링크된 bin (`/usr/local/bin/mimi-seed-mcp`)은 파일 이름으로 본다. 버전은 범위(`@^0.21`)도 받는다.
+  const name = /[\\/]/.test(marker) && !marker.startsWith('@') ? baseName(marker).replace(WIN_EXE_RE, '') : marker;
+  return /^(?:@yoonion\/)?mimi-seed-mcp(?:@[^/\\\s]+)?$/i.test(name);
 }
 
 /**

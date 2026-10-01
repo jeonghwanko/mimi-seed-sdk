@@ -54,8 +54,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   bin's entry file inside the package's `node_modules/` folder — so the package's other commands, such as a setup
   wizard running at the same time, are not stopped. Shells and `npm exec` / `npx` / `cmd /c` wrappers are left alone; they exit
   when the server does. With the default server name every marker must be the `@yoonion/mimi-seed-mcp` package or
-  bin, or a script whose nearest `package.json` is that package, so a repository's `.mcp.json` cannot redirect it
-  at other processes; and it kills nothing — reporting the count — when more than 10 server processes match.
+  bin, or that package's server entry script (found through its `package.json`), so a repository's `.mcp.json`
+  cannot point it at your other processes — at most at a process running that repository's own files; and it
+  kills nothing — reporting the count — when more than 10 server processes match.
   Not restarted (it reports that no process was found): Docker and native-binary servers; on Windows, a server
   started from a relative script path, because Windows does not expose another process's working folder; and on
   Linux and macOS, an `npx` server whose npm cache path contains a space.
