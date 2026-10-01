@@ -13,7 +13,7 @@ vi.mock('../config.js', () => ({ getEffectiveConfig: mocks.getEffectiveConfig })
 vi.mock('#core/checks/release-doctor.js', () => ({ scanReleaseDoctor: mocks.scanReleaseDoctor }));
 vi.mock('../mcp-client.js', () => ({ mcpCall: mocks.mcpCall }));
 
-import { cmdCheck, parseCheckArgs } from '../check.js';
+import { cmdCheck, devEnginesCheckCommand, parseCheckArgs } from '../check.js';
 
 describe('cmdCheck Release Doctor entry', () => {
   beforeEach(() => {
@@ -93,6 +93,15 @@ describe('cmdCheck Release Doctor entry', () => {
       vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('Windows에서는 bash 문법 대신 PowerShell 형식의 일회용 prefix 명령을 안내한다', () => {
+    const windows = devEnginesCheckCommand('win32');
+
+    expect(windows).not.toContain('mktemp');
+    expect(windows).toContain('New-Item -ItemType Directory');
+    expect(windows).toContain('npx -y --prefix $p.FullName mimi-seed check --local --path . --fail-on-blocker');
+    expect(devEnginesCheckCommand('linux')).toContain('--prefix "$(mktemp -d)"');
   });
 
   it('로컬 검사 오류를 성공으로 삼키지 않는다', async () => {

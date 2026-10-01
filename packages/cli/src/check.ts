@@ -20,9 +20,9 @@ const M = catalog(
     localFailed: (message: string) => `Release Doctor 실행 실패: ${message}\n`,
     title: "mimi-seed check — 출시 전 점검\n\n",
     localNext: "\n스토어 검사 연결: npx mimi-seed init\nCI에서 반복 검사: npx mimi-seed check --local --fail-on-blocker\n",
-    localNextDevEngines:
+    localNextDevEngines: (command: string) =>
       "\n스토어 검사 연결: npx mimi-seed init\n"
-      + "CI에서 반복 검사: npx -y --prefix \"$(mktemp -d)\" mimi-seed check --local --path . --fail-on-blocker\n"
+      + `CI에서 반복 검사: ${command}\n`
       + "  (이 프로젝트의 package.json에 devEngines가 있어, 프로젝트 안에서 그냥 실행한 npx는 EBADDEVENGINES로 멈출 수 있습니다)\n",
     appsFailed: (msg: string) => `앱 목록 조회 실패: ${msg}\n`,
     noApps: "등록된 앱이 없습니다. `mimi-seed init` 후 앱을 등록하세요.\n",
@@ -52,9 +52,9 @@ const M = catalog(
     localFailed: (message: string) => `Release Doctor failed: ${message}\n`,
     title: "mimi-seed check — pre-launch check\n\n",
     localNext: "\nConnect store checks: npx mimi-seed init\nRun in CI: npx mimi-seed check --local --fail-on-blocker\n",
-    localNextDevEngines:
+    localNextDevEngines: (command: string) =>
       "\nConnect store checks: npx mimi-seed init\n"
-      + "Run in CI: npx -y --prefix \"$(mktemp -d)\" mimi-seed check --local --path . --fail-on-blocker\n"
+      + `Run in CI: ${command}\n`
       + "  (this project's package.json declares devEngines, so a plain npx run inside it can stop with EBADDEVENGINES)\n",
     appsFailed: (msg: string) => `Failed to list apps: ${msg}\n`,
     noApps: "No apps registered. Run `mimi-seed init`, then register an app.\n",
@@ -88,6 +88,14 @@ function declaresDevEngines(projectPath: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The `check` command with a throwaway npm prefix, in the shell the platform uses (PowerShell on Windows). */
+export function devEnginesCheckCommand(platform: NodeJS.Platform): string {
+  return platform === "win32"
+    ? "$p = New-Item -ItemType Directory (Join-Path $env:TEMP ([guid]::NewGuid())); "
+      + "npx -y --prefix $p.FullName mimi-seed check --local --path . --fail-on-blocker"
+    : "npx -y --prefix \"$(mktemp -d)\" mimi-seed check --local --path . --fail-on-blocker";
 }
 
 export interface CheckArgs {
@@ -173,7 +181,9 @@ export async function cmdCheck(argv: string[]): Promise<void> {
         ? `${JSON.stringify(report, null, 2)}\n`
         : renderReleaseDoctor(report, resolveLang()));
       if (!args.json && !process.env.CI) {
-        process.stdout.write((declaresDevEngines(args.projectPath) ? M().localNextDevEngines : M().localNext) + telemetryNotice());
+        process.stdout.write((declaresDevEngines(args.projectPath)
+          ? M().localNextDevEngines(devEnginesCheckCommand(process.platform))
+          : M().localNext) + telemetryNotice());
       }
       if (args.failOnBlocker && report.counts.blocker > 0) process.exitCode = 1;
       await finish("completed", report);
