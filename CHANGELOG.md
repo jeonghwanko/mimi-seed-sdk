@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.4] - 2026-10-02
+
 ### Added
 
 - `SECURITY.md` — how to report a vulnerability privately, which versions get fixes, and what is in scope. It also
