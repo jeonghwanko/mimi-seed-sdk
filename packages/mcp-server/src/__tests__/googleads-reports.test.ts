@@ -175,7 +175,7 @@ describe('listAccessibleCustomers — 응답 모양', () => {
     expect((error as Error).message).toBe('Google Ads returned invalid JSON.');
   });
 
-  it.each([[[]], [{ resourceNames: 'customers/1' }], [{ resourceNames: [1] }]])('모양이 다른 성공 응답은 거절한다: %j', async (body) => {
+  it.each([[[]], [{ resourceNames: 'customers/1' }], [{ resourceNames: [1] }], [{ error: { code: 403 } }]])('모양이 다른 성공 응답은 거절한다: %j', async (body) => {
     fetchMock.mockResolvedValueOnce(ads(body));
     await expect(listAccessibleCustomers(auth, cfg)).rejects.toThrow('invalid accessible-customers response');
   });

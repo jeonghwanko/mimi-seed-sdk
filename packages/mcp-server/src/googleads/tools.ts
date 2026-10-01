@@ -164,7 +164,8 @@ export async function listAccessibleCustomers(auth: OAuth2Client, cfg: GoogleAds
   // SyntaxError 메시지는 본문 앞부분을 그대로 싣는다 — search() 와 같이 프록시 본문을 노출하지 않는다.
   let json: unknown;
   try { json = JSON.parse(text); } catch { throw new Error('Google Ads returned invalid JSON.'); }
-  const names = isRecord(json) ? json.resourceNames ?? [] : null;
+  // search() 와 같이 200 + error 본문도 거절한다 — 안 그러면 setup 이 "계정 0개" 로 저장해 버린다.
+  const names = isRecord(json) && !('error' in json) ? json.resourceNames ?? [] : null;
   if (!Array.isArray(names) || names.some((name) => typeof name !== 'string')) {
     throw new Error('Google Ads returned an invalid accessible-customers response.');
   }

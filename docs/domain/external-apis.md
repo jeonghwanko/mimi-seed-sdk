@@ -151,7 +151,9 @@ alone does not prove that an existing client is fixed; smoke-test the actual cal
 - Both MCP report responses and the script include the shared `REPORT_METRIC_NOTE`; prefer the additive
   `conversions` and `costPerConversion` fields to historical install/CPI aliases.
 - Guard: `src/__tests__/googleads.test.ts` covers request bodies, pagination, long-range totals, removed
-  campaigns, dates, supported campaign fields, partial failure, provider diagnostics and secret redaction.
+  campaigns, dates, supported campaign fields, partial failure, provider diagnostics and secret redaction;
+  `googleads-reports.test.ts` pins report parsing, micros rounding, malformed-response rejection and the
+  accessible-customers shape, and `googleads-mcp.test.ts` runs config + tools end to end against a temp home.
 
 Provider references: [pagination](https://developers.google.com/google-ads/api/docs/reporting/paging),
 [release notes](https://developers.google.com/google-ads/api/docs/release-notes).
