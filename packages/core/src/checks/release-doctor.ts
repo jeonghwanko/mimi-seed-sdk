@@ -185,7 +185,7 @@ interface ConventionRoot {
   /** Flags of the place the convention build sits in (never of folders inside it, such as `com/example/`). */
   sample: boolean;
   demo: boolean;
-  /** Known to build Gradle plugins: buildSrc/, build-logic/, or a `pluginManagement { includeBuild(…) }` root. */
+  /** Known to build Gradle plugins (buildSrc/, build-logic/, a `pluginManagement { includeBuild(…) }` root): read first. */
   plugin: boolean;
 }
 
@@ -194,9 +194,8 @@ interface ConventionRoot {
  * any depth (also nested, as in `gradle/build-logic/`) and every `includeBuild("…")` root a settings script declares
  * inside the scanned tree, read with no depth limit of the project walk. Package folders inside them (`com/example/…`,
  * `test/`) never mark a file as a sample; a root several builds include is a sample only when every including build
- * is. Kotlin / Java / Groovy sources are read only from plugin builds (buildSrc, build-logic, a
- * `pluginManagement { includeBuild }` root, or a build whose script is a plugin build), never from an included app.
- * Plugin roots are read first, each within its own budget; a root the walk could not read completely is returned in
+ * is. Kotlin / Java / Groovy sources are read from every root except inside its Android application modules (the
+ * app's own code, never a Gradle plugin). Plugin roots are read first, each within its own budget; a root the walk could not read completely is returned in
  * `truncated`, and the Target API check then cannot be OK. Included builds under node_modules/ are third-party
  * plugins, like binary plugins, and are not read.
  */
@@ -273,11 +272,16 @@ async function conventionFiles(root: string, files: ProjectFile[], found: Conven
     };
     const scriptFiles = (await Promise.all(scripts.map(read))).filter((file): file is ProjectFile => Boolean(file));
     result.push(...scriptFiles);
-    const plugin = owner.plugin || scriptFiles.some((file) => /\.gradle(?:\.kts)?$/.test(file.relative) && isGradlePluginBuild(file.text));
-    if (plugin) {
-      if (sources.length > MAX_CONVENTION_FILES) incomplete = true;
-      result.push(...(await Promise.all(sources.slice(0, MAX_CONVENTION_FILES).map(read))).filter((file): file is ProjectFile => Boolean(file)));
-    }
+    // Plugin sources are read from every included build; only an Android application module's own sources (its
+    // app code, never a Gradle plugin) are skipped.
+    // A source belongs to the nearest project folder above it, so a plugin project nested in an app's folder is read.
+    const projects = scriptFiles
+      .filter((file) => /(?:^|\/)build\.gradle(?:\.kts)?$/.test(file.relative))
+      .map((file) => ({ dir: path.dirname(file.absolute), app: appliesAndroidAppPlugin(stripGradleComments(file.text)) }))
+      .sort((left, right) => right.dir.length - left.dir.length);
+    const pluginSources = sources.filter((source) => !projects.find((project) => isWithin(project.dir, source))?.app);
+    if (pluginSources.length > MAX_CONVENTION_FILES) incomplete = true;
+    result.push(...(await Promise.all(pluginSources.slice(0, MAX_CONVENTION_FILES).map(read))).filter((file): file is ProjectFile => Boolean(file)));
     if (incomplete) truncated.push(path.relative(root, owner.dir).replace(/\\/g, '/') || '.');
   }
   return { files: result, truncated };
@@ -609,14 +613,31 @@ const ANDROID_LIBRARY_PLUGIN_ID = /(?<![\w.:-])com\.android\.(?:library|test|fus
 // `apply false` declaration. Every other line naming the id applies it — `id(…)` (also split over lines), `alias(…)`,
 // `apply plugin:`, `apply { plugin(…) }`, `pluginManager.apply(…)`, `plugins.apply(…)`. A deny-list, so a new way of
 // applying the plugin still finds the app.
-const PLUGIN_MENTION = /\b(?:hasPlugin|withId|withPlugin|findPlugin|getPlugin|findByName|getByName|listOf|setOf|arrayOf|mutableListOf|mutableSetOf|contains|containsKey|equals|startsWith|endsWith|matches|filter|any|none)\s*\(|[=!]=|->|\bin\s*[[(]|\b(?:def|val|var|const)\s+[A-Za-z_]\w*\s*(?::\s*[\w<>?.]+\s*)?=|\bclasspath\b|\bpluginId\b|\bid\s*=(?!=)|\bapply\s*\(?\s*false\b/;
+const PLUGIN_MENTION = /\b(?:hasPlugin|withId|withPlugin|findPlugin|getPlugin|findByName|getByName|listOf|setOf|arrayOf|mutableListOf|mutableSetOf|contains|containsKey|equals|startsWith|endsWith|matches|filter|any|none)\s*\(|[=!]=|->|\bin\s*[[(]|\b(?:def|val|var|const)\s+[A-Za-z_]\w*\s*(?::\s*[\w<>?.]+\s*)?=|\b(?:classpath|implementation|api|compileOnly|runtimeOnly|testImplementation|androidTestImplementation|debugImplementation|releaseImplementation|annotationProcessor|kapt|ksp|lintChecks)\b|\.toDep\(\)|\bpluginId\b|\bid\s*=(?!=)|\bapply\s*\(?\s*false\b/;
 
 function appliesAndroidPlugin(text: string, id: RegExp): boolean {
-  const lines = blankComments(text).split(/\r?\n/);
-  return lines.some((line, index) => id.test(line)
-    && !PLUGIN_MENTION.test(line)
-    // `id(\n  "com.android.application"\n) apply false`
-    && !lines.slice(index + 1, index + 3).some((next) => /^\s*\)?\s*(?:version\b[^\n]*?)?\bapply\s*\(?\s*false\b/.test(next)));
+  const code = blankComments(text);
+  const masked = maskStrings(text);
+  // Inside `dependencies { … }` an id is a dependency notation (`implementation(plugin(libs.plugins.android.application))`).
+  const dependencies = [...masked.matchAll(/\bdependencies\s*\{/g)]
+    .map((match) => [match.index, closingBrace(code, match.index + match[0].length - 1)] as const);
+  const lines = code.split('\n');
+  let lineStart = 0;
+  for (let index = 0; index < lines.length; lineStart += lines[index].length + 1, index++) {
+    // Judged per statement, so `implementation(…); apply plugin: '…'` on one line still applies the plugin.
+    let statementStart = lineStart;
+    for (const statement of lines[index].split(';')) {
+      const at = statementStart;
+      statementStart += statement.length + 1;
+      const match = id.exec(statement);
+      if (!match || PLUGIN_MENTION.test(statement)) continue;
+      if (dependencies.some(([open, close]) => at + match.index > open && (close < 0 || at + match.index < close))) continue;
+      // `id(\n  "com.android.application"\n) apply false`
+      if (lines.slice(index + 1, index + 3).some((next) => /^\s*\)?\s*(?:version\b[^\n]*?)?\bapply\s*\(?\s*false\b/.test(next))) continue;
+      return true;
+    }
+  }
+  return false;
 }
 
 /** A build script of a Gradle plugin project (convention plugins), not of an app. */
@@ -1383,10 +1404,44 @@ const GROOVY_METHOD = /^\s*(?:(?:public|private|protected|static|final|synchroni
 /** Blocks whose `targetSdk` is a different property (lint's and the test runner's), not the app's. */
 const OTHER_TARGET_SDK_BLOCKS = new Set(['lint', 'lintOptions', 'testOptions']);
 
+/**
+ * The full head of the block opened at `open`: the call or condition right before the brace, joined across lines
+ * (`if (a ||\n b) {`, `plugins.withId('…') {`, `} else {`).
+ */
+function blockHead(masked: string, code: string, open: number): string {
+  let cursor = open - 1;
+  while (cursor >= 0 && /\s/.test(masked[cursor])) cursor--;
+  if (masked[cursor] === ')') {
+    let depth = 0;
+    for (; cursor >= 0; cursor--) {
+      if (masked[cursor] === ')') depth++;
+      else if (masked[cursor] === '(' && --depth === 0) break;
+    }
+    cursor--;
+  }
+  // The receiver chain and keyword before it, on that line (`project.plugins.hasPlugin`, `if`, `else`).
+  while (cursor >= 0 && /[\w$.?\t ]/.test(masked[cursor])) cursor--;
+  return code.slice(cursor + 1, open).trim();
+}
+
+/**
+ * A block that runs only for Android library modules: a single positive `withId` / `withPlugin` / `hasPlugin` whose
+ * literal argument is a library plugin id. Anything else — `||`, `&&`, `!`, `else`, a ternary, a non-literal id, or
+ * the application id — runs for the app too.
+ */
+const LIBRARY_ONLY_HEAD = /^(?:if\s*\(\s*)?(?:[\w$]+\??\.)*(?:withId|withPlugin|hasPlugin)\s*\(\s*["']com\.android\.(?:library|test|fused-library|kotlin\.multiplatform\.library)["']\s*\)(?:\s*\))?$/;
+
 /** True when the token at `index` (with receiver `chain`) configures another project, or sits inside such a block. */
 function crossProjectToken(masked: string, index: number, chain: string, mode: 'self' | 'library'): boolean {
   const pattern = mode === 'library' ? CROSS_PROJECT_FROM_LIBRARY : CROSS_PROJECT_FROM_SELF;
-  return pattern.test(chain) || enclosingBlocks(masked, index).some((block) => pattern.test(block.head));
+  return pattern.test(chain) || pattern.test(statementPrefix(masked, index))
+    || enclosingBlocks(masked, index).some((block) => pattern.test(block.head));
+}
+
+/** The statement text before `index` (from the last line break, `;`, `{` or `}`): the full receiver of a token. */
+function statementPrefix(masked: string, index: number): string {
+  const before = masked.slice(Math.max(0, index - 300), index);
+  return before.slice(Math.max(before.lastIndexOf('\n'), before.lastIndexOf(';'), before.lastIndexOf('{'), before.lastIndexOf('}')) + 1);
 }
 
 /** End of the expression starting at `from` in masked code: a line break, `;`, or unmatched closer outside brackets. */
@@ -1780,10 +1835,13 @@ function targetSdkFindings(
   const libraryOnly = (script: ProjectFile, token: ScannedToken) => {
     const masked = maskStrings(script.text);
     const code = blankComments(script.text);
-    return enclosingBlocks(masked, token.index).some((block) => {
-      const head = code.slice(block.open - block.head.length, block.open);
-      return /\b(?:withId|withPlugin|hasPlugin)\b/.test(head) && ANDROID_LIBRARY_PLUGIN_ID.test(head);
-    });
+    const blocks = enclosingBlocks(masked, token.index);
+    const library = blocks.findIndex((block) => LIBRARY_ONLY_HEAD.test(blockHead(masked, code, block.open)));
+    if (library < 0) return false;
+    // Inside it, a setting that reaches another project (`project(':app').android…`) configures that project.
+    const reach = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b|gradle\s*\.|configure\s*\()/;
+    return !reach.test(token.chain ?? '') && !reach.test(statementPrefix(masked, token.index))
+      && !blocks.slice(library + 1).some((block) => reach.test(block.head));
   };
 
   const evaluate = (module: TargetSdkModule): TargetSdkModuleVerdict => {
@@ -2571,16 +2629,89 @@ function packageDir(file: string): string | undefined {
 async function resolvedPath(candidates: string[], context: ApplyContext, thirdParty = false): Promise<AppliedScriptResolution> {
   for (const absolute of candidates) {
     if (!isWithin(context.limit, absolute)) continue;
-    if (await exists(absolute, context.known)) return { absolute, thirdParty: thirdParty || inNodeModules(absolute) };
+    if (!await exists(absolute, context.known)) continue;
+    // A package linked into node_modules/ from a local folder (yarn / pnpm / npm workspaces, `link:`) is local code,
+    // even when the folder lies outside the scanned path.
+    const real = await fs.realpath(absolute).catch(() => absolute);
+    if (real !== absolute && !inNodeModules(real)) return { absolute: real, thirdParty: false };
+    return { absolute, thirdParty: thirdParty || inNodeModules(absolute) };
   }
   const first = candidates.find((candidate) => isWithin(context.limit, candidate)) ?? candidates[0];
   const external = thirdParty || (first !== undefined && inNodeModules(first));
   if (!external) return { thirdParty: false };
   const pkg = first === undefined ? undefined : packageDir(first);
+  // Not installed, but the package is the repository's own (a workspace package, or a `file:` / `link:` /
+  // `portal:` / `workspace:` dependency): read the file from its folder in the repository, or leave it unresolved.
+  if (first !== undefined && pkg !== undefined) {
+    const workspace = await workspacePackage(pkg.replace(/^.*[\\/]node_modules[\\/]/, '').replace(/\\/g, '/'), context);
+    if (workspace === null) return { thirdParty: false };
+    if (workspace !== undefined) {
+      const mapped = path.join(workspace, path.relative(pkg, first));
+      return isWithin(context.limit, mapped) && await exists(mapped, context.known) ? { absolute: mapped, thirdParty: false } : { thirdParty: false };
+    }
+  }
   const installed = pkg !== undefined && await readText(path.join(pkg, 'package.json')) !== undefined;
   return installed
     ? { thirdParty: true, reason: 'not in the installed package' }
     : { thirdParty: true, reason: 'its package is not installed', installHint: pkg !== undefined };
+}
+
+/**
+ * The repository folder of a JavaScript package named `name`, when the repository itself provides it: a package.json
+ * outside node_modules/ with that name (in the scan, or matched by the root's `workspaces` / pnpm-workspace.yaml
+ * globs), or a `file:` / `link:` / `portal:` dependency spec. Null when a dependency spec says the package is the
+ * repository's own (`workspace:`) but its folder cannot be found; undefined for an ordinary third-party package.
+ */
+async function workspacePackage(name: string, context: ApplyContext): Promise<string | null | undefined> {
+  const manifests: Array<{ dir: string; json: Record<string, unknown> }> = [];
+  const parse = (text: string | undefined) => {
+    try {
+      return text === undefined ? undefined : JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  };
+  for (const file of context.known) {
+    if (path.posix.basename(file.relative) !== 'package.json' || inNodeModules(file.absolute)) continue;
+    const json = parse(file.text);
+    if (json) manifests.push({ dir: path.dirname(file.absolute), json });
+  }
+  // Workspace roots above the scanned folder (a `--path` scan of one app in a monorepo).
+  for (const directory of ancestorsUpTo(context.projectDir, context.limit)) {
+    const json = parse(await readText(path.join(directory, 'package.json')));
+    const pnpm = await readText(path.join(directory, 'pnpm-workspace.yaml'));
+    if (json && !manifests.some((manifest) => manifest.dir === directory)) manifests.push({ dir: directory, json });
+    const globs = [
+      ...(Array.isArray(json?.workspaces) ? json.workspaces as unknown[] : []),
+      ...(Array.isArray((json?.workspaces as { packages?: unknown } | undefined)?.packages) ? (json!.workspaces as { packages: unknown[] }).packages : []),
+      ...[...(pnpm ?? '').matchAll(/^\s*-\s*["']?([^"'\n#]+?)["']?\s*$/gm)].map((match) => match[1]),
+    ].filter((glob): glob is string => typeof glob === 'string' && !glob.startsWith('!'));
+    for (const glob of globs) {
+      const base = glob.replace(/\/\*\*?$/, '');
+      const dirs = glob.endsWith('*')
+        ? await fs.readdir(path.join(directory, base), { withFileTypes: true })
+          .then((entries) => entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(directory, base, entry.name)))
+          .catch(() => [] as string[])
+        : [path.join(directory, base)];
+      for (const dir of dirs) {
+        if (manifests.some((manifest) => manifest.dir === dir)) continue;
+        const member = parse(await readText(path.join(dir, 'package.json')));
+        if (member) manifests.push({ dir, json: member });
+      }
+    }
+  }
+  const own = manifests.find((manifest) => manifest.json.name === name && isWithin(context.limit, manifest.dir));
+  if (own) return own.dir;
+  for (const manifest of manifests) {
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+      const spec = (manifest.json[field] as Record<string, unknown> | undefined)?.[name];
+      if (typeof spec !== 'string') continue;
+      const local = spec.match(/^(?:file|link|portal):(.+)$/)?.[1];
+      if (local) return path.resolve(manifest.dir, local);
+      if (spec.startsWith('workspace:')) return null;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -2602,6 +2733,10 @@ async function projectDirectory(name: string, context: ApplyContext): Promise<{ 
       return { dir, thirdParty: inNodeModules(dir) };
     }
   }
+  // A project the settings include by name, without a mapping, lives in its default folder (a repository module that
+  // happens to share an npm package's name).
+  const included = settingsFiles.some((settings) => new RegExp(`\\binclude\\b[^\\n]*["']:${quoted}["']`).test(stripGradleComments(settings.text)));
+  if (included) return { dir: path.join(settingsDir, ...name.split(':')), thirdParty: false };
   // React Native names an autolinked `@scope/pkg` project `:scope_pkg`.
   const packageNames = [name, ...(/^([^_]+)_(.+)$/.test(name) ? [name.replace(/^([^_]+)_(.+)$/, '@$1/$2')] : [])];
   for (const directory of ancestorsUpTo(context.projectDir, context.limit)) {

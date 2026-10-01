@@ -51,16 +51,26 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   plugins built inside the repository (buildSrc/, build-logic/, `includeBuild(…)` roots) are read.
 - **Third-party package scripts** (`apply from:` into node_modules/, React Native's `project(':pkg').projectDir…`,
   `@sentry/react-native` 8's `buildscript.sourceFile` shim, Expo's `node --print` form) are read when they can be
-  found. When they cannot, they are listed in an info item instead of being read, like binary plugins; install the
-  JavaScript dependencies and re-run to read them.
+  found. When they cannot — usually because the JavaScript dependencies are not installed — they are listed in an
+  info item instead, like binary plugins, and **such an unread script can hide a setting while the result still
+  shows OK**; install the dependencies and re-run to read them. A computed `apply from:` inside a third-party
+  script is noted the same way, not reported as unresolved. Packages the repository provides itself (yarn / pnpm /
+  npm workspace packages, `file:` / `link:` dependencies, a package linked into node_modules/) are not third-party:
+  they are read from their folder, and an unfollowable reference in them makes the result unresolved.
+- **A Gradle project named like an npm package** (`project(':pkg')`) that settings neither include by name nor map
+  to a folder is resolved the way React Native autolinking does, to that package in node_modules/, and so is
+  treated as third-party.
 - **Repository-owned `apply from:` that cannot be followed** — a URL, a computed path, an optional or git-ignored
-  local file (for example a signing script only CI has), or a path outside the repository — makes the app module
-  unresolved.
+  local file (for example a signing or secrets script that only CI or a release machine has), or a path outside the
+  repository — makes the app module unresolved, even when the script is applied only if it exists.
 - **Included builds** given by a computed `includeBuild(…)` path, or living under node_modules/, are not read. The
   project walk stops at directory depth 7 (convention builds are read at any depth, within a per-build budget; a
   build too large to read completely makes the result unresolved).
-- **Dead or conditional code counts.** A setting inside an `if`, a disabled branch, or code that never runs is
-  treated as live; the lowest value wins.
+- **Dead or conditional code counts.** A setting inside an `if` (whatever its condition), a disabled branch, or code
+  that never runs is treated as live; the lowest value wins. The one exception is a block behind a single positive
+  check for the library plugin (`plugins.withId('com.android.library') { … }`,
+  `if (plugins.hasPlugin('com.android.library'))`), which is treated as library-only; any other condition (`||`, `!`,
+  `else`, the application id) counts for the app.
 - **Cross-project configuration** is recognised in its common shapes (`subprojects`, `allprojects`, `project(':x')`,
   `afterEvaluate`, `plugins.withId`); other ways of reaching another project's `android` block are not modelled.
 - **Values computed outside the repository** stay unresolved: Flutter's `flutter.targetSdkVersion` (from the Flutter

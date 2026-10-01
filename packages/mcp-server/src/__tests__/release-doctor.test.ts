@@ -2636,6 +2636,172 @@ describe('Release Doctor local scan', () => {
     });
   });
 
+  // Round-9 shapes (L1–L6, W1–W5, T9, B1–B4; L1–L4, W1i, W5 and B4 confirmed with real AGP 9.0.0), plus the
+  // self-adversarial counter-fixtures for every exclusion added or changed in this round ("반례").
+  describe('9차 리뷰 회귀', () => {
+    const at = new Date('2026-10-01T00:00:00Z');
+    const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
+    const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
+    const notOk = (report: ReleaseDoctorReport) => expect(codes(report)).not.toContain('TARGET_SDK_OK');
+    const rnApp = "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.app'; targetSdkVersion rootProject.ext.targetSdkVersion } }";
+    const rnRoot = 'buildscript { ext { targetSdkVersion = 36 } }';
+
+    describe('N9-1: 라이브러리 전용 블록은 라이브러리 id 하나만 긍정으로 확인할 때뿐이다', () => {
+      it.each([
+        ['|| 한 줄 (L1)', "subprojects { p ->\n  afterEvaluate {\n    if (p.plugins.hasPlugin('com.android.application') || p.plugins.hasPlugin('com.android.library')) {\n      p.android { defaultConfig { targetSdkVersion 33 } }\n    }\n  }\n}"],
+        ['! 부정 (L2)', "subprojects { p ->\n  afterEvaluate {\n    if (!p.plugins.hasPlugin('com.android.library')) {\n      p.android { defaultConfig { targetSdkVersion 33 } }\n    }\n  }\n}"],
+        ['|| 여러 줄 (L6, LocalSend 모양)', "subprojects {\n  afterEvaluate { project ->\n    if (project.plugins.hasPlugin(\"com.android.application\") ||\n        project.plugins.hasPlugin(\"com.android.library\")) {\n      project.android { defaultConfig { targetSdkVersion 33 } }\n    }\n  }\n}"],
+        ['반례: 라이브러리 블록의 else', "subprojects { p ->\n  afterEvaluate {\n    if (p.plugins.hasPlugin('com.android.library')) { p.android { } } else { p.android { defaultConfig { targetSdkVersion 33 } } }\n  }\n}"],
+        ["반례: 라이브러리 블록에서 project(':app')로 닿는 설정", "subprojects {\n  plugins.withId('com.android.library') { project(':app').android.defaultConfig.targetSdkVersion 33 }\n}"],
+        ['반례: 변수로 준 id', "subprojects {\n  def lib = 'com.android.application'\n  plugins.withId(lib) { android { defaultConfig { targetSdkVersion 33 } } }\n}"],
+      ])('루트 subprojects %s → 앱의 값으로 33', async (_name, rootScript) => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app', ':lib'",
+          'build.gradle': `${rnRoot}\n${rootScript}`,
+          'app/build.gradle': rnApp,
+          'lib/build.gradle': "apply plugin: 'com.android.library'",
+        }), at);
+
+        expect(below(report)).toMatchObject({ title: expect.stringContaining('33') });
+      });
+
+      it.each([
+        ['|| (L3)', "afterEvaluate {\n  if (plugins.hasPlugin('com.android.application') || plugins.hasPlugin('com.android.library')) {\n    android { defaultConfig { targetSdkVersion 33 } }\n  }\n}"],
+        ['! (L4)', "afterEvaluate {\n  if (!plugins.hasPlugin('com.android.library')) {\n    android { defaultConfig { targetSdkVersion 33 } }\n  }\n}"],
+      ])('subprojects { apply from } 스크립트의 %s → 33', async (_name, common) => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app'",
+          'build.gradle': `${rnRoot}\nsubprojects { apply from: "$rootDir/gradle/common.gradle" }`,
+          'gradle/common.gradle': common,
+          'app/build.gradle': rnApp,
+        }), at);
+
+        expect(below(report)).toMatchObject({ file: 'gradle/common.gradle' });
+      });
+
+      it("대조: plugins.withId('com.android.library')만은 라이브러리 설정이다 (L5)", async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app'",
+          'build.gradle': `${rnRoot}\nsubprojects { apply from: "$rootDir/gradle/common.gradle" }`,
+          'gradle/common.gradle': "plugins.withId('com.android.library') {\n  android { defaultConfig { targetSdkVersion 33 } }\n}",
+          'app/build.gradle': rnApp,
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_OK');
+      });
+    });
+
+    describe('N9-2: 저장소 안의 워크스페이스 패키지는 저장소 코드로 읽는다', () => {
+      const workspace = (applyLine: string, extra: Record<string, string> = {}) => ({
+        '.git/HEAD': 'ref: refs/heads/main\n',
+        'package.json': '{"name":"mono","private":true,"workspaces":["packages/*","apps/*"]}',
+        'packages/android-config/package.json': '{"name":"@acme/android-config","version":"1.0.0"}',
+        'packages/android-config/android/config.gradle': 'android { defaultConfig { targetSdkVersion 33 } }',
+        'apps/mobile/package.json': '{"name":"mobile","dependencies":{"react-native":"0.74.0","@acme/android-config":"*"}}',
+        'apps/mobile/android/settings.gradle': "include ':app'",
+        'apps/mobile/android/build.gradle': rnRoot,
+        'apps/mobile/android/app/build.gradle': `${rnApp}\n${applyLine}`,
+        ...extra,
+      });
+      it.each([
+        ['node_modules 경로 (W1)', 'apply from: "../../node_modules/@acme/android-config/android/config.gradle"', {}],
+        ['settings가 node_modules로 매핑한 project (W2)', 'apply from: project(":acme_android-config").projectDir.getPath() + "/config.gradle"', {
+          'apps/mobile/android/settings.gradle': "include ':app'\ninclude ':acme_android-config'\nproject(':acme_android-config').projectDir = new File(rootProject.projectDir, '../node_modules/@acme/android-config/android')",
+        }],
+        ['매핑 없는 project + package.json (W3)', 'apply from: project(":acme_android-config").projectDir.getPath() + "/config.gradle"', {}],
+        ['Expo node --print (W4)', 'apply from: new File(["node", "--print", "require.resolve(\'@acme/android-config/package.json\')"].execute(null, rootDir).text.trim(), "../android/config.gradle")', {}],
+        ['반례: link: 의존성', 'apply from: "../../node_modules/@acme/cfg/android/config.gradle"', {
+          'apps/mobile/package.json': '{"name":"mobile","dependencies":{"@acme/cfg":"link:../../packages/android-config"}}',
+        }],
+      ])('설치 전 %s → 33 블로커', async (_name, line, extra) => {
+        const root = await fixture(workspace(line, extra));
+        const report = await scanReleaseDoctor(path.join(root, 'apps/mobile'), at);
+
+        expect(below(report)).toMatchObject({ title: expect.stringContaining('33') });
+      });
+
+      it('symlink로 설치된 워크스페이스 패키지 안의 계산된 apply는 unresolved (W5)', async () => {
+        const root = await fixture(workspace('apply from: "../../node_modules/@acme/android-config/android/config.gradle"', {
+          'apps/mobile/android/build.gradle': `buildscript { ext { targetSdkVersion = 36; sharedGradleDir = "$rootDir/../../../packages/android-config/android" } }`,
+          'packages/android-config/android/config.gradle': 'apply from: "${rootProject.ext.sharedGradleDir}/sdk.gradle"',
+          'packages/android-config/android/sdk.gradle': 'android { defaultConfig { targetSdkVersion 33 } }',
+        }));
+        await fs.mkdir(path.join(root, 'apps/mobile/node_modules/@acme'), { recursive: true });
+        await fs.symlink('../../../../packages/android-config', path.join(root, 'apps/mobile/node_modules/@acme/android-config'));
+        const report = await scanReleaseDoctor(path.join(root, 'apps/mobile'), at);
+
+        notOk(report);
+        expect(report.findings.find((row) => row.code === 'TARGET_SDK_UNRESOLVED')?.detail).toContain('sharedGradleDir');
+      });
+
+      it.each([
+        ['패키지가 없을 때 (T9)', {}],
+        ['같은 이름의 npm 패키지가 설치돼 있어도 (T9n)', { 'node_modules/config/package.json': '{"name":"config"}' }],
+      ])("settings가 이름으로 include한 ':config'는 기본 폴더다 %s", async (_name, extra) => {
+        const report = await scanReleaseDoctor(await fixture({
+          'package.json': '{"dependencies":{"react-native":"0.74.0","config":"3.0.0"}}',
+          'android/settings.gradle': "include ':app'\ninclude ':config'",
+          'android/build.gradle': rnRoot,
+          'android/config/targetsdk.gradle': 'android { defaultConfig { targetSdkVersion 33 } }',
+          'android/app/build.gradle': `${rnApp}\napply from: project(":config").projectDir.path + "/targetsdk.gradle"`,
+          ...extra,
+        }), at);
+
+        expect(below(report)).toMatchObject({ file: 'android/config/targetsdk.gradle' });
+      });
+    });
+
+    describe('N9-3·N9-4: included 빌드의 플러그인 소스와 의존성 표기', () => {
+      it('top-level includeBuild의 Groovy 플러그인(META-INF 등록)도 읽는다 (B4)', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "includeBuild('convention')\ninclude ':app'",
+          'convention/build.gradle.kts': 'plugins { `java-gradle-plugin`; groovy }',
+          'convention/src/main/groovy/AppConventionPlugin.groovy': 'class AppConventionPlugin implements Plugin<Project> {\n  void apply(Project target) {\n    target.android.defaultConfig.targetSdk = 33\n  }\n}',
+          'convention/src/main/resources/META-INF/gradle-plugins/example.app.properties': 'implementation-class=AppConventionPlugin\n',
+          'app/build.gradle': "plugins { id 'com.android.application' }\nandroid { defaultConfig { applicationId 'com.example.b4'; targetSdk 36 } }\napply plugin: 'example.app'",
+        }), at);
+
+        notOk(report);
+        expect(report.findings.find((row) => row.code === 'TARGET_SDK_UNRESOLVED')?.detail).toContain('AppConventionPlugin.groovy:3');
+      });
+
+      it('반례: 앱 모듈 폴더 안에 중첩된 플러그인 프로젝트의 소스도 읽는다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "includeBuild('tools')\ninclude ':app'",
+          'tools/settings.gradle': "include ':demo', ':demo:plugin'",
+          'tools/demo/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.demo'; targetSdk 36 } }",
+          'tools/demo/plugin/build.gradle': "plugins { id 'java-gradle-plugin' }",
+          'tools/demo/plugin/src/main/kotlin/AppPlugin.kt': 'class AppPlugin { fun apply(e: ApplicationExtension) { e.defaultConfig.targetSdk = 33 } }',
+          'app/build.gradle': "plugins { id 'com.android.application' }\nandroid { defaultConfig { applicationId 'com.example.app'; targetSdk 36 } }",
+        }), at);
+
+        notOk(report);
+        expect(report.findings.find((row) => row.code === 'TARGET_SDK_UNRESOLVED')?.detail).toContain('AppPlugin.kt:1');
+      });
+
+      it('kotlin-dsl 빌드의 implementation(plugin(libs.plugins.android.application))은 앱이 아니다 (B1)', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle.kts': 'pluginManagement { includeBuild("build-plugin") }\ninclude(":app")',
+          'gradle/libs.versions.toml': '[versions]\nagp = "8.7.0"\n[plugins]\nandroid-application = { id = "com.android.application", version.ref = "agp" }\n',
+          'build-plugin/build.gradle.kts': 'plugins {\n  `kotlin-dsl`\n}\n\ndependencies {\n  implementation(plugin(libs.plugins.android.application))\n}',
+          'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.b1"; targetSdk = 36 } }',
+        }), at);
+
+        expect(report.targetSdkModules?.map((module) => module.module)).toEqual(['app']);
+        expect(codes(report)).toContain('TARGET_SDK_OK');
+      });
+
+      it.each([
+        ['반례: 앱 스크립트에 같은 의존성 표기가 있어도 앱이다', "plugins { id 'com.android.application' }\ndependencies { implementation(plugin(libs.plugins.android.application)) }\nandroid { defaultConfig { applicationId 'com.example.app'; targetSdk 33 } }"],
+        ['반례: 한 줄의 의존성 뒤 apply plugin', "dependencies { implementation 'com.example:x:1' }; apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.app'; targetSdk 33 } }"],
+      ])('%s', async (_name, script) => {
+        const report = await scanReleaseDoctor(await fixture({ 'settings.gradle': "include ':app'", 'app/build.gradle': script }), at);
+
+        expect(below(report)).toMatchObject({ file: 'app/build.gradle' });
+      });
+    });
+  });
+
   // Runs after the scans above: the invariant and the net were checked on each of them.
   it('불변식과 그물이 이 파일의 모든 스캔에서 확인되었고, OK·unresolved·blocker 경로를 모두 지났다', () => {
     expect(invariant.scans).toBeGreaterThan(150);

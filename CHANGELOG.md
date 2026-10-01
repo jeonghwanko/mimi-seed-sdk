@@ -50,12 +50,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Scripts of JavaScript packages (node_modules/, React Native's `project(':pkg').projectDir…`, `@sentry/react-native`
   8's `sentry.gradle.kts` shim, Expo's `node --print` form) are read when found and otherwise listed in a new info
   item, `TARGET_SDK_THIRD_PARTY_SCRIPTS_NOT_READ`, like binary plugins, with an install hint when installing the
-  dependencies would make them readable. Convention builds are read within a per-build budget, plugin builds
-  first; one too large to read completely makes the result unresolved. Plugin sources are read only from plugin
-  builds (never from an included app build), and a plugin build that a sample build also includes is not a
-  sample. The user guide's validation page lists the check's known limits. A local variable that is reassigned anywhere in the script is unresolved,
-  and inside a Groovy method the name is read as the project property, as Gradle does. The JSON report lists each
-  setting as `targetSdkTokens`.
+  dependencies would make them readable. Packages the repository provides itself (yarn / pnpm / npm workspace
+  packages, `file:` / `link:` dependencies, a package linked into node_modules/) are the repository's own code:
+  they are read from their folder, and when they cannot be followed the module is unresolved. Convention builds are
+  read within a per-build budget, plugin builds first; one too large to read completely makes the result
+  unresolved. Plugin sources are read from every included build except an Android app module's own sources, and a
+  plugin build that a sample build also includes is not a sample. A `subprojects` block counts as library-only
+  (not the app's) only behind a single positive `withId` / `withPlugin` / `hasPlugin` of the library plugin; `||`,
+  `!`, `else`, or the application id make it count for the app. A dependency notation such as
+  `implementation(plugin(libs.plugins.android.application))` does not make a plugin build an app module. A local
+  variable that is reassigned anywhere in the script is unresolved, and inside a Groovy method the name is read as
+  the project property, as Gradle does. The user guide's validation page lists the check's known limits. The JSON
+  report lists each setting as `targetSdkTokens`.
 - Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
   unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the
   check is incomplete and names those items. They are also listed in the JSON report as `coverage.unresolved`.
@@ -133,8 +139,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   never decide the verdict or cancel one found inside the path). Composite actions
   (`.github/actions/**/action.yml`) count as Xcode pin sources, and Xcode Cloud `ci_scripts/` are reported as such.
 - The reusable Release Doctor workflow, and the CI command `check --local` suggests for projects that declare
-  `devEngines` (in PowerShell form on Windows), run `npx` with a throwaway prefix; inside such a project npm stopped `npx` with `EBADDEVENGINES`
-  before Release Doctor started. The pilot guide and troubleshooting document the workaround.
+  `devEngines` (in PowerShell form on Windows), run `npx` with a throwaway prefix; inside such a project npm stopped
+  `npx` with `EBADDEVENGINES` before Release Doctor started. The pilot guide and troubleshooting document the workaround.
 
 ### Tool changes
 
