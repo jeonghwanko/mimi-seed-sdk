@@ -44,24 +44,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (also at the repository root when `--path` points into a workspace) is now mapped to the Billing version that
   release bundles, verified against every stable `react-native-iap` release through 16.7.2 — e.g. 12.15–13.x →
   Billing 7, a blocker since 2026-08-31. An installed 12.5–13.x and an app's `ext.playBillingSdkVersion` override are
-  read too (only from the app's own root build script, comments ignored). pnpm v5/v6 single-project lockfiles are
+  read too (only from the app's own root build script, comments ignored; Groovy `ext` and Kotlin `extra[…]` /
+  `extra.set(…)` forms; an override Release Doctor cannot evaluate makes the result unresolved instead of using the
+  default). react-native-iap installed under another name (`"iap": "npm:react-native-iap@…"`) is recognised. pnpm v5/v6 single-project lockfiles are
   read; newer or unknown releases, and `npm:` aliases that install a fork under the react-native-iap name, stay
   unresolved.
 - A Wear OS, TV, Automotive, or XR module no longer switches off the Target API check for the whole repository; the
-  phone app is still checked, and the specialized module is reported for a category-specific check. A phone app that
-  also has a TV launcher (leanback not required) keeps the phone rule.
-- Android application IDs: strings, templates, and local variables that mention `applicationId` are no longer
-  reported as IDs (or as extra app modules); `applicationId` read from the version catalog or `gradle.properties`,
+  phone app is still checked, and the specialized module is reported for a category-specific check. A module that has
+  the phone launcher next to its TV launcher keeps the phone rule; a module with only the TV launcher (or with
+  leanback required) is a TV app.
+- Android application IDs: strings, templates, comments, local variables, and extra properties
+  (`ext.applicationId`, `ext { applicationId = … }`) that mention `applicationId` are no longer reported as IDs (or
+  as extra app modules); `applicationId` read from the version catalog or `gradle.properties`,
   and the `namespace` fallback, are resolved. An app module declared through a convention plugin or a buildSrc
   constant (`id(BuildPlugins.androidApplication)`, `libs.plugins.androidApplication`) or only by an
   `applicationId = <expression>` assignment is still detected and checked; an ID Release Doctor cannot evaluate is
   reported as unresolved with the expression.
-- targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`) or in Expo's
-  `expo-build-properties` plugin is now read instead of reported as unresolved.
+- targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`), in a Kotlin DSL root script
+  (`extra["targetSdkVersion"] = 36`), or in Expo's `expo-build-properties` plugin is now read instead of reported as
+  unresolved. `libs.versions.*` resolves against the module's own build's version catalog, so a nested build and the
+  repository root (or two builds sharing a key) no longer overwrite each other's values.
 - Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
   targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes
   `MULTIPLE_*` warnings or a blocker that cites the wrong file. Excluded app modules whose targetSdk is below the
-  minimum are listed in an info item, so a real app kept in a `demo/` folder is not dropped silently.
+  minimum are listed in an info item, so a real app kept in a `demo/` folder is not dropped silently; when the only
+  app lives in `demo/`, its Xcode pins and FCM sources are still checked.
+- A Billing blocker in a repository with several apps names only the versions below the minimum and cites the
+  failing app's file.
 - iOS bundle IDs written as `$(VAR)` / `${VAR}` are resolved from `.xcconfig` files and XcodeGen `project.yml`
   settings; when they cannot be resolved, Release Doctor reports them as unresolved instead of borrowing a nested
   sample project's ID. Framework, test-bundle, and Debug/Profile/Test-only IDs are left out (`TestFlight`

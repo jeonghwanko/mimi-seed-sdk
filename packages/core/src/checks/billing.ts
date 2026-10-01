@@ -245,10 +245,10 @@ export function billingVersionFromPom(pom: string): { module: string; version: s
   return null;
 }
 
-async function nearestNodePackage(packageDir: string, root: string): Promise<string | null> {
+async function nearestNodePackage(packageDir: string, root: string, dependencyName = 'react-native-iap'): Promise<string | null> {
   // Workspaces hoist node_modules toward the root — past the scan root when --path points into a monorepo.
   for (const directory of await lockfileDirectories(packageDir, root)) {
-    const candidate = path.join(directory, 'node_modules', 'react-native-iap');
+    const candidate = path.join(directory, 'node_modules', dependencyName);
     try {
       if ((await fs.stat(candidate)).isDirectory()) return candidate;
     } catch {
@@ -258,8 +258,8 @@ async function nearestNodePackage(packageDir: string, root: string): Promise<str
   return null;
 }
 
-// Gradle (Groovy/Kotlin) source without line comments and block comments.
-function stripGradleComments(text: string): string {
+// Gradle (Groovy/Kotlin) source without line comments and block comments (`://` in URLs is kept).
+export function stripGradleComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'])\/\/.*$/gm, '$1');
 }
 
@@ -267,10 +267,44 @@ function displayPath(root: string, file: string): string {
   return path.relative(root, file).replace(/\\/g, '/');
 }
 
-/** An app's root `ext.playBillingSdkVersion`, which react-native-iap 12.5.1–13.x use instead of their default. */
+/**
+ * An app's root `ext.playBillingSdkVersion`, which react-native-iap 12.5.1–13.x use instead of their default:
+ * a literal `version`, or the `expression` when it is set to something Release Doctor cannot evaluate.
+ */
 export interface ReactNativeIapBillingOverride {
   file: string;
-  version: string;
+  version?: string;
+  expression?: string;
+}
+
+const LITERAL_VERSION = /^["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']$/;
+
+/**
+ * `playBillingSdkVersion` set in a root build script, in Groovy (`ext { x = … }`, `ext.x = …`) or Kotlin DSL
+ * (`extra["x"] = …`, `extra.set("x", …)`). A same-file `def/val/var name = "x.y.z"` is followed once.
+ */
+export function playBillingSdkOverride(text: string): Omit<ReactNativeIapBillingOverride, 'file'> | undefined {
+  const code = stripGradleComments(text);
+  const forms = [
+    /\bplayBillingSdkVersion\s*=(?!=)\s*([^\n;}]+)/,
+    /\bextra\s*\[\s*["']playBillingSdkVersion["']\s*\]\s*=(?!=)\s*([^\n;}]+)/,
+    /\b(?:extra|ext)\.set\(\s*["']playBillingSdkVersion["']\s*,\s*([^\n;)]+)/,
+  ];
+  for (const form of forms) {
+    const match = form.exec(code);
+    if (!match) continue;
+    const value = match[1].trim();
+    const literal = value.match(LITERAL_VERSION)?.[1];
+    if (literal) return { version: literal };
+    const identifier = value.match(/^([A-Za-z_]\w*)$/)?.[1];
+    if (identifier) {
+      const local = new RegExp(`\\b(?:def|val|var)\\s+${identifier}\\s*(?::\\s*String\\s*)?=\\s*(["'][^"'\\n]*["'])`).exec(code)?.[1];
+      const resolved = local?.match(LITERAL_VERSION)?.[1];
+      if (resolved) return { version: resolved };
+    }
+    return { expression: `playBillingSdkVersion = ${value}` };
+  }
+  return undefined;
 }
 
 async function reactNativeIapEvidence(
@@ -289,10 +323,17 @@ async function reactNativeIapEvidence(
   const dependencyGroups = ['dependencies', 'devDependencies', 'optionalDependencies']
     .map((key) => manifest[key])
     .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object');
-  const declaredVersion = dependencyGroups
-    .map((group) => group['react-native-iap'])
-    .find((value): value is string => typeof value === 'string');
-  if (!declaredVersion) return null;
+  // `"react-native-iap": "…"`, or react-native-iap installed under another name (`"iap": "npm:react-native-iap@^12"`).
+  const entries = dependencyGroups.flatMap((group) => Object.entries(group))
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  const entry = entries.find(([name]) => name === 'react-native-iap')
+    ?? entries.find(([, spec]) => /^npm:react-native-iap@/.test(spec));
+  if (!entry) return null;
+  const [dependencyName, declaredVersion] = entry;
+  // The version range react-native-iap itself is declared with, and whether the name points at a fork.
+  const declaredRange = declaredVersion.replace(/^npm:react-native-iap@/, '');
+  const forkTarget = declaredVersion.match(/^npm:((?:@[^/@]+\/)?[^@]+)/)?.[1];
+  const declaredFork = forkTarget !== undefined && forkTarget !== 'react-native-iap';
 
   const relativeManifest = displayPath(root, manifestFile);
   // This app's own root build script (inside the package that declares react-native-iap).
@@ -311,6 +352,15 @@ async function reactNativeIapEvidence(
     const row = reactNativeIapBundledBilling(version);
     if (!row) return null;
     const wrapper = { name: 'react-native-iap', version };
+    if (row.overridable && override && !override.version) {
+      return {
+        file: override.file,
+        module: row.module,
+        expression: `react-native-iap ${version} from ${origin}, with ${override.expression} replacing its default ${row.version}; Release Doctor cannot evaluate that expression`,
+        source: 'unresolved',
+        wrapper,
+      };
+    }
     if (row.overridable && override) {
       return {
         file: override.file,
@@ -332,14 +382,14 @@ async function reactNativeIapEvidence(
   };
 
   const packageDir = path.dirname(manifestFile);
-  const installedDir = await nearestNodePackage(packageDir, root);
+  const installedDir = await nearestNodePackage(packageDir, root, dependencyName);
   if (!installedDir) {
     // Not installed (a fresh clone, or CI before `install`): the lockfile still says which release ships.
     for (const directory of await lockfileDirectories(packageDir, root)) {
-      const locked = await lockedPackageVersion('react-native-iap', packageDir, directory, declaredVersion);
+      const locked = await lockedPackageVersion(dependencyName, packageDir, directory, declaredVersion);
       if (!locked) continue;
       const origin = displayPath(root, path.join(directory, locked.lockfile));
-      if (locked.aliasOf) {
+      if (locked.aliasOf && locked.aliasOf !== 'react-native-iap') {
         // `"react-native-iap": "npm:@fork/…"`: the version is the fork's, so the upstream table does not apply.
         return unresolved(
           `react-native-iap is an alias of ${locked.aliasOf}${locked.version ? ` ${locked.version}` : ''} (${origin}); the react-native-iap -> Play Billing table does not apply to a fork, so install dependencies so its Gradle file can be read`,
@@ -351,10 +401,10 @@ async function reactNativeIapEvidence(
         locked.version,
       );
     }
-    if (declaredVersion.startsWith('npm:')) {
+    if (declaredFork) {
       return unresolved(`react-native-iap is declared as an alias (${declaredVersion}) and is neither installed nor pinned in a lockfile; transitive Billing version is unresolved`);
     }
-    return fromTable(declaredVersion, 'declared') ?? unresolved(
+    return fromTable(declaredRange, 'declared') ?? unresolved(
       `react-native-iap ${declaredVersion} is declared but neither installed nor pinned in a lockfile; transitive Billing version is unresolved`,
     );
   }
@@ -362,7 +412,7 @@ async function reactNativeIapEvidence(
   let installedVersion = declaredVersion;
   // An `npm:` alias installs a fork under this name; its Gradle files are read as usual, but the upstream
   // react-native-iap table must not be applied to the fork's version.
-  let aliased = declaredVersion.startsWith('npm:');
+  let aliased = declaredFork;
   try {
     const installedManifest = JSON.parse(await fs.readFile(path.join(installedDir, 'package.json'), 'utf8')) as {
       version?: unknown;
@@ -402,6 +452,15 @@ async function reactNativeIapEvidence(
     const variable = [...text.matchAll(VARIABLE_DEPENDENCY)][0];
     if (variable?.[1] === 'playBillingSdkVersion') {
       const module = variable[0].slice(0, variable[0].lastIndexOf(':'));
+      if (override && !override.version) {
+        return {
+          file: override.file,
+          module,
+          expression: `react-native-iap ${installedVersion} with ${override.expression}; Release Doctor cannot evaluate that expression`,
+          source: 'unresolved',
+          wrapper: installedWrapper,
+        };
+      }
       if (override) {
         return {
           file: override.file,
@@ -570,9 +629,8 @@ export async function checkBillingCompliance(
     const isRootScript = (await Promise.all(['settings.gradle', 'settings.gradle.kts']
       .map((name) => fs.stat(path.join(dir, name)).then(() => true, () => false)))).some(Boolean);
     if (!isRootScript) continue;
-    const version = stripGradleComments(text)
-      .match(/\bplayBillingSdkVersion\s*=\s*["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']/)?.[1];
-    if (version) iapOverrides.push({ file: displayPath(root, file), version });
+    const override = playBillingSdkOverride(text);
+    if (override) iapOverrides.push({ file: displayPath(root, file), ...override });
   }
 
   const evidence: BillingEvidence[] = [];
@@ -675,7 +733,9 @@ export async function checkBillingCompliance(
     actions.push('Check the official Billing deprecation table and update Mimi Seed before relying on this result.');
   } else if (majors.some((major) => major < policy.minimumSupportedMajor!)) {
     status = 'blocker';
-    summary = `Billing Library ${detectedVersions.join(', ')} is below the submission minimum major ${policy.minimumSupportedMajor}.`;
+    // Only the versions that fail: a compliant app next to a failing one must not read as failing too.
+    const failing = detectedVersions.filter((version) => (majorOf(version) ?? Infinity) < policy.minimumSupportedMajor!);
+    summary = `Billing Library ${failing.join(', ')} is below the submission minimum major ${policy.minimumSupportedMajor}.`;
     actions.push(`Upgrade to a supported Billing Library before submitting a new app or update.`);
     const minimum = policy.minimumSupportedMajor;
     const iapTarget = reactNativeIapUpgradeTarget(minimum);

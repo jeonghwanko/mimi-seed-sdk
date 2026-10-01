@@ -388,6 +388,38 @@ describe('Google Play Billing compliance', () => {
       expect(result.summary).toContain('alias of @example-fork/react-native-iap');
     });
 
+    // Round-2 review: a non-literal override fell back to the 7.0.0 default (a false blocker).
+    it.each([
+      ['Groovy 지역 변수 (rn8)', 'android/build.gradle', 'buildscript {\n  def billingVersion = "8.0.0"\n  ext {\n    playBillingSdkVersion = billingVersion\n  }\n}', 'warning'],
+      ['Kotlin DSL extra[…] (rn7)', 'android/build.gradle.kts', 'extra["targetSdkVersion"] = 36\nextra["playBillingSdkVersion"] = "8.0.0"', 'warning'],
+      ['Kotlin DSL extra.set(…)', 'android/build.gradle.kts', 'extra.set("playBillingSdkVersion", "9.0.0")', 'pass'],
+      ['계산할 수 없는 식', 'android/build.gradle', 'ext {\n  playBillingSdkVersion = rootProject.findProperty("billing")\n}', 'unresolved'],
+    ])('%s로 지정한 override는 기본값 7.0.0으로 판정하지 않는다', async (_name, file, text, status) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '12.16.2' } }),
+        'android/settings.gradle': 'include ":app"',
+        [file]: text,
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe(status);
+      expect(result.detectedVersions).not.toContain('7.0.0');
+      if (status === 'unresolved') expect(result.summary).toContain('playBillingSdkVersion = rootProject.findProperty("billing")');
+    });
+
+    it('다른 이름으로 설치한 react-native-iap(npm: alias)도 Billing 근거로 쓴다', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { iap: 'npm:react-native-iap@^12.16.0' } }),
+        'yarn.lock': '"iap@npm:react-native-iap@^12.16.0":\n  version: 12.16.2\n  resolution: "react-native-iap@npm:12.16.2"\n',
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('blocker');
+      expect(result.detectedVersions).toEqual(['7.0.0']);
+    });
+
     it('설치된 12.x는 패키지의 gradle.properties 기본값을 읽는다 (이전에는 unresolved)', async () => {
       const root = await fixture({
         'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^12.16.2' } }),
