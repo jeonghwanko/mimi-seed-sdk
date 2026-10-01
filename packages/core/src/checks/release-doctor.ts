@@ -133,6 +133,8 @@ export interface ReleaseDoctorReport {
   };
   counts: Record<ReleaseDoctorSeverity, number>;
   findings: ReleaseDoctorFinding[];
+  /** Per judged Android app module: the targetSdk values proven, or why it is unresolved. */
+  targetSdkModules?: TargetSdkModuleVerdict[];
   coverage: {
     checked: string[];
     /**
@@ -455,9 +457,15 @@ const NAMESPACE_LITERAL = /(?<![\w$"'{.])namespace(?:\s*=\s*|[ \t]+)["']([^"'\n]
 // `libs.plugins.androidApplication`), and buildSrc constants (`id(BuildPlugins.androidApplication)`,
 // `id(Plugins.ANDROID_APPLICATION)`).
 const ANDROID_APP_PLUGIN_ID = /\bcom\.android\.application\b|\blibs\.plugins\.android[.-]?application\b|\b(?:id|alias)\s*\(?\s*[\w.]*\bandroid[._]?application\b/i;
+// Forms that apply a plugin: `id(…)` / `id '…'`, `alias(…)`, `apply plugin: '…'`, `apply(plugin = "…")`,
+// `plugins.apply("…")`. A mention such as `hasPlugin("com.android.application")`, `withId(…)` or `listOf(…)` is not.
+const PLUGIN_APPLICATION = /\b(?:id|alias|plugin\s*[:=]|plugins\.apply)\s*\(?\s*(?:["']com\.android\.application["']|libs\.plugins\.android[.-]?application\b|[\w.]*\bandroid[._]?application\b)/i;
+
 /** Applies the Android application plugin — a root `plugins { … apply false }` declaration only makes it available. */
 function appliesAndroidAppPlugin(text: string): boolean {
-  return text.split(/\r?\n/).some((line) => ANDROID_APP_PLUGIN_ID.test(line) && !/\bapply\s*\(?\s*false\b/.test(line));
+  return text.split(/\r?\n/).some((line) => ANDROID_APP_PLUGIN_ID.test(line)
+    && PLUGIN_APPLICATION.test(line)
+    && !/\bapply\s*\(?\s*false\b/.test(line));
 }
 
 /** `[versions]` entries of the scanned Gradle version catalogs (React Native's bundled catalog excluded unless asked). */
@@ -576,12 +584,24 @@ async function catalogResolver(files: ProjectFile[], root: string): Promise<Cata
         }
         versions = parseCatalogFile(catalog);
       }
-      // `version("targetSdk", "33")` in the settings entry overrides the file; anything else about that key is unknown.
-      for (const override of body.matchAll(/\bversion\s*\(\s*["']([\w.-]+)["']\s*(,\s*([^)\n]*))?\)/g)) {
-        const literal = override[3]?.trim().match(/^["']([^"']*)["']$/)?.[1];
-        versions.set(override[1], { value: literal ?? '', file: settings.relative });
+      // `version("targetSdk", "33")` — also Groovy's paren-less `version 'targetSdk', '33'` and a call split over lines
+      // with a trailing comma — overrides the file. A non-literal value or a rich `version("k") { … }` leaves that key
+      // unknown; a `version` call the scanner cannot parse makes the whole catalog unknown (never the TOML value).
+      let unparsed = false;
+      for (const call of body.matchAll(/\bversion\b(?=\s*[("'])/g)) {
+        const rest = body.slice(call.index + call[0].length);
+        const key = /^\s*\(?\s*["']([\w.-]+)["']/.exec(rest);
+        if (!key) {
+          unparsed = true;
+          continue;
+        }
+        const after = rest.slice(key[0].length);
+        const literal = /^\s*,\s*(["'])([^"'\n]*)\1/.exec(after);
+        if (literal) versions.set(key[1], { value: literal[2], file: settings.relative });
+        else if (/^\s*,/.test(after) || /^\s*\)?\s*\{/.test(after)) versions.set(key[1], { value: '', file: settings.relative });
+        else unparsed = true;
       }
-      catalogs.set(name, versions);
+      catalogs.set(name, unparsed ? null : versions);
     }
     if (!catalogs.has('libs') && defaultCatalog) catalogs.set('libs', catalogVersions([defaultCatalog], true));
     builds.set(dir, catalogs);
@@ -609,8 +629,9 @@ function gradlePropertyScope(files: ProjectFile[]): PropertyScope {
     .filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative))
     .map((file) => path.dirname(file.absolute));
   const propertyFiles = files
-    .filter((file) => path.posix.basename(file.relative) === 'gradle.properties' && !file.sample)
+    .filter((file) => path.posix.basename(file.relative) === 'gradle.properties')
     .map((file) => ({
+      sample: Boolean(file.sample),
       dir: path.dirname(file.absolute),
       file: file.relative,
       rows: new Map(file.text.split(/\r?\n/)
@@ -625,6 +646,8 @@ function gradlePropertyScope(files: ProjectFile[]): PropertyScope {
     const result = new Map<string, { value: string; file: string } | null>();
     for (const properties of propertyFiles) {
       if (!isWithin(properties.dir, file.absolute) || (build !== undefined && !isWithin(build, properties.dir))) continue;
+      // Sample/demo trees' properties apply only to a module that itself lives in such a tree.
+      if (properties.sample && !file.sample) continue;
       for (const [key, value] of properties.rows) {
         const existing = result.get(key);
         result.set(key, existing === undefined ? { value, file: properties.file } : existing?.value === value ? existing : null);
@@ -1014,6 +1037,7 @@ async function detectProject(files: ProjectFile[], root: string) {
     iosBundleIds: unique(iosBundleIds),
     iosBundleIdExpressions,
     androidAppModules: unique(shippedAppGradleFiles.map((file) => moduleDir(file.relative))),
+    appGradleFiles: shippedAppGradleFiles,
     // An app project outside demo/ trees: then demo/ evidence (Xcode pins, FCM sources) describes a demo, not the app.
     // iOS-specific for the Xcode check (an Android app elsewhere says nothing about which Xcode builds the demo's
     // iOS app); any platform for FCM.
@@ -1049,36 +1073,134 @@ function targetPolicy(now: Date): { minimum: number | null; scheduleCurrent: boo
   };
 }
 
+/** An app module judged against the Target API rule: its build script plus the scripts it `apply from:`s. */
+interface TargetSdkModule {
+  file: ProjectFile;
+  scripts: ProjectFile[];
+  /**
+   * The module's build-root project script and the scripts it applies: their `subprojects { … }` /
+   * `allprojects { … }` blocks configure every module, so they count when the module sets no targetSdk itself.
+   */
+  inherited?: ProjectFile[];
+}
+
+/** How one judged module's targetSdk was resolved (also in the JSON report as `targetSdkModules`). */
+export interface TargetSdkModuleVerdict {
+  module: string;
+  /** Values the module was proven to use (several with flavors). */
+  values: Array<{ value: number; file: string }>;
+  /** False when any targetSdk assignment of the module could not be evaluated, or none was found. */
+  resolved: boolean;
+  /** Why the module is unresolved, as written in the build script. */
+  unresolved: string[];
+}
+
+type TargetSdkExpression =
+  | { kind: 'literal'; value: number }
+  | { kind: 'catalog'; accessor: string; alias: string }
+  | { kind: 'name'; name: string; hasDefault: boolean; rootExt: boolean }
+  | { kind: 'unknown' };
+
+/** Classifies the right-hand side of a targetSdk assignment; only shapes the scanner fully understands are named. */
+function classifyTargetSdk(raw: string): TargetSdkExpression {
+  let expression = raw.trim();
+  let hasDefault = false;
+  for (let previous = ''; previous !== expression;) {
+    previous = expression;
+    expression = expression
+      .replace(/\s+as\s+\w+\??\s*$/, '')
+      .replace(/\??\.(?:toInt|toInteger|toString)\(\)\s*$/, '')
+      .replace(/^\((.*)\)$/s, '$1')
+      .trim();
+    if (/\?:/.test(expression)) {
+      hasDefault = true;
+      expression = expression.replace(/\s*\?:.*$/s, '').trim();
+    }
+    if (/\.(?:getOrElse|orElse)\([^()]*\)$/.test(expression)) {
+      hasDefault = true;
+      expression = expression.replace(/\.(?:getOrElse|orElse)\([^()]*\)$/, '').trim();
+    }
+  }
+  if (/^\d+$/.test(expression)) return { kind: 'literal', value: Number.parseInt(expression, 10) };
+  const catalog = expression.match(/^([A-Za-z_]\w*)\.versions\.([A-Za-z0-9_.-]+?)\.get\(\)$/);
+  if (catalog) return { kind: 'catalog', accessor: catalog[1], alias: catalog[2] };
+  const name = expression.match(/^(?:(?:rootProject|project)\.)?(?:(?:ext|extra|properties)\.)?([A-Za-z_]\w*)$/)?.[1]
+    ?? expression.match(/^(?:(?:rootProject|project)\.)?(?:property|findProperty)\(\s*["']([\w.]+)["']\s*\)$/)?.[1]
+    ?? expression.match(/^providers\.gradleProperty\(\s*["']([\w.]+)["']\s*\)(?:\.get\(\))?$/)?.[1]
+    ?? expression.match(/^(?:(?:rootProject|project)\.)?(?:ext|extra|properties)\s*\[\s*["']([\w.]+)["']\s*\]$/)?.[1];
+  if (name && !['rootProject', 'project', 'ext', 'extra', 'properties', 'true', 'false', 'null'].includes(name)) {
+    return { kind: 'name', name, hasDefault, rootExt: /^rootProject\.ext\./.test(expression) };
+  }
+  return { kind: 'unknown' };
+}
+
+/**
+ * The targetSdk assignments in one script: `targetSdk 36`, `targetSdk = x`, `targetSdkVersion(36)`,
+ * `targetSdk { version = release(36) }`. Reads such as `compileSdk = targetSdk` or `rootProject.ext.targetSdkVersion`
+ * inside another assignment are not assignments.
+ */
+function targetSdkAssignments(text: string): Array<{ expression: string; release?: number; block: boolean; index: number }> {
+  const result: Array<{ expression: string; release?: number; block: boolean; index: number }> = [];
+  const occurrence = /(?<![\w$"'])targetSdk(?:Version)?\b/g;
+  for (let match = occurrence.exec(text); match; match = occurrence.exec(text)) {
+    const after = text.slice(match.index + match[0].length);
+    const previous = text[match.index - 1] ?? '';
+    const block = /^\s*\{/.exec(after);
+    if (block) {
+      const release = after.match(/^\s*\{\s*version\s*=\s*release\(\s*(\d+)\s*\)\s*\}/);
+      result.push({ expression: release ? release[0].trim() : `targetSdk { … }`, release: release ? Number.parseInt(release[1], 10) : undefined, block: true, index: match.index });
+      continue;
+    }
+    const assigned = /^\s*=(?!=)\s*([^\n;}]+)/.exec(after)
+      ?? /^\s*\(\s*([^()\n]+)\)/.exec(after)
+      ?? (previous === '.' ? null : /^[ \t]+([^\s=}][^\n;}]*)/.exec(after));
+    if (!assigned) continue;
+    result.push({ expression: assigned[1].trim(), block: false, index: match.index });
+    occurrence.lastIndex = match.index + match[0].length + assigned.index + assigned[0].length;
+  }
+  return result;
+}
+
+/**
+ * The Target API verdict. INVARIANT: TARGET_SDK_OK is emitted only when every judged app module's targetSdk was
+ * resolved from evidence the scanner fully understood. A module with any unresolvable assignment — an expression it
+ * cannot evaluate, a property it cannot see, a name with a conditional or competing definition, or a
+ * `findProperty("x") ?: N` whose property is not in scope (Gradle may see it from ~/.gradle, CI, or a settings
+ * plugin, so N is never evidence) — makes the verdict TARGET_SDK_UNRESOLVED. Another module's literal can never
+ * outvote it. A value below the minimum is still a blocker: blockers win.
+ */
 function targetSdkFindings(
   gradleFiles: ProjectFile[],
   now: Date,
   supplementalEvidence: Array<{ file: string; value: number }> = [],
   resolveCatalogs?: CatalogResolver,
   properties?: { scope: PropertyScope; ciOverrides: Set<string> },
-): ReleaseDoctorFinding[] {
-  const evidence: Array<{ file: string; value: number }> = [...supplementalEvidence];
-  let hasUnresolvedExpression = false;
+  modules: TargetSdkModule[] = [],
+): { findings: ReleaseDoctorFinding[]; modules: TargetSdkModuleVerdict[] } {
   const catalogFiles = gradleFiles.filter((candidate) => candidate.relative.endsWith('.versions.toml'));
   const reactNativeCatalog = catalogFiles.find((candidate) => candidate.relative === REACT_NATIVE_CATALOG);
   const reactNativeValue = reactNativeCatalog ? catalogVersions([reactNativeCatalog], true).get('targetSdk') : undefined;
   const reactNativeTargetSdk = reactNativeValue && /^\d+$/.test(reactNativeValue.value)
     ? { value: Number.parseInt(reactNativeValue.value, 10), file: reactNativeValue.file }
     : undefined;
-  const scripts = gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative));
-  // What a targetSdk expression names, resolved conservatively: a gradle.properties value in the module's scope or a
-  // literal extra property (`ext.x = 36`, `ext["x"] = 36`, `ext { x = 36 }`, `extra["x"] = 36`, `set("x", 36)`).
-  // The name is unresolved — never guessed — when CI overrides it, a script declares a local of that name, any
-  // assignment to it is not a plain number (a conditional, an expression), or two sources disagree.
-  const assignments = (name: string) => {
+  const scripts = [...new Map([...gradleFiles, ...modules.flatMap((module) => [...module.scripts, ...(module.inherited ?? [])])]
+    .filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative))
+    .map((file) => [file.absolute, file])).values()];
+
+  // Definitions of a name across the scanned scripts: extra properties (`ext.x = 36`, `ext["x"] = 36`,
+  // `ext { x = 36 }`, `extra["x"] = 36`, `set("x", 36)`) and local declarations (`def/val/var x …`).
+  const definitions = (name: string) => {
     const quoted = escapeRegExp(name);
     const rows: Array<{ value?: number; file: string }> = [];
+    const locals: Array<{ tail: string; file: string }> = [];
     const add = (raw: string, file: string) => {
       const value = raw.trim();
       rows.push({ value: /^\d+$/.test(value) ? Number.parseInt(value, 10) : undefined, file });
     };
-    let local = false;
     for (const file of scripts) {
-      if (new RegExp(`\\b(?:def|val|var)\\s+${quoted}\\b`).test(file.text)) local = true;
+      for (const local of file.text.matchAll(new RegExp(`\\b(?:def|val|var)\\s+${quoted}\\b([^\\n;]*)`, 'g'))) {
+        locals.push({ tail: local[1], file: file.relative });
+      }
       for (const pattern of [
         new RegExp(`\\b(?:ext|extra)\\.${quoted}\\s*=(?!=)\\s*([^\\n;]+)`, 'g'),
         new RegExp(`\\b(?:ext|extra)\\s*\\[\\s*["']${quoted}["']\\s*\\]\\s*=(?!=)\\s*([^\\n;]+)`, 'g'),
@@ -1093,87 +1215,128 @@ function targetSdkFindings(
         for (const match of body.matchAll(new RegExp(`(?:^|[\\s;])${quoted}\\s*=(?!=)\\s*([^\\n;}]+)`, 'g'))) add(match[1], file.relative);
       }
     }
-    return { rows, local };
+    return { rows, locals };
   };
-  const resolveName = (file: ProjectFile, name: string): { value: number; file: string } | 'unresolved' | undefined => {
-    if (properties?.ciOverrides.has(name)) return 'unresolved';
-    const { rows, local } = assignments(name);
-    if (local || rows.some((row) => row.value === undefined)) return 'unresolved';
+
+  /**
+   * A Gradle/extra property as the module sees it. Unresolved when CI overrides it, any definition is not a plain
+   * number, or sources disagree; undefined when nothing in scope defines it.
+   */
+  const resolveProperty = (module: ProjectFile, name: string, rows: Array<{ value?: number; file: string }>) => {
+    if (properties?.ciOverrides.has(name)) return 'unresolved' as const;
+    if (rows.some((row) => row.value === undefined)) return 'unresolved' as const;
     const candidates = rows.map((row) => ({ value: row.value!, file: row.file }));
-    const property = properties?.scope(file).get(name);
-    if (property === null) return 'unresolved';
+    const property = properties?.scope(module).get(name);
+    if (property === null) return 'unresolved' as const;
     if (property) {
-      if (!/^\d+$/.test(property.value)) return 'unresolved';
+      if (!/^\d+$/.test(property.value)) return 'unresolved' as const;
       candidates.push({ value: Number.parseInt(property.value, 10), file: property.file });
     }
     if (candidates.length === 0) return undefined;
-    return new Set(candidates.map((row) => row.value)).size === 1 ? candidates[0] : 'unresolved';
+    return new Set(candidates.map((row) => row.value)).size === 1 ? candidates[0] : 'unresolved' as const;
   };
-  // `project.properties.x`, `project.property("x")`, `findProperty("x")`, `rootProject.ext.x`, `extra["x"]`,
-  // `providers.gradleProperty("x")`, or a bare property name (`propTargetSdkVersion.toInteger()`).
-  const PROPERTY_TARGET_SDK = /\btargetSdk(?:Version)?\b\s*(?:=\s*)?\(?\s*(?:(?:rootProject|project)\.)?(?:(?:ext|extra|properties)\.|(?:property|findProperty|properties\.get)\(\s*["']|(?:ext|extra|properties)\[\s*["']|providers\.gradleProperty\(\s*["'])?([A-Za-z_]\w*)/g;
-  // build.gradle(.kts) plus the scripts they `apply from:` (common.gradle and the like).
-  for (const file of scripts) {
-    // `libs.versions.x` resolves against the module's own build's catalog, so two builds (or a --path build and the
-    // repository root) that share a key cannot overwrite each other.
+
+  /**
+   * A name used as targetSdk. A local declaration is followed only when it is the single declaration and a plain
+   * property alias (`val x: String by project`, `def x = project.property('x') as int`, `= findProperty('x')`,
+   * `= providers.gradleProperty('x').get()`); any other local makes the name unresolved.
+   */
+  const resolveName = (
+    module: ProjectFile,
+    name: string,
+    visible: Map<string, CatalogVersions | null>,
+    script: string,
+    depth = 0,
+  ): { value: number; file: string } | 'unresolved' | undefined => {
+    if (depth > 4) return 'unresolved';
+    const { rows, locals } = definitions(name);
+    if (locals.length > 1) return 'unresolved';
+    if (locals.length === 1) {
+      const { tail, file } = locals[0];
+      // A local is visible only in the script that declares it (where it shadows any property of that name).
+      if (file !== script) return 'unresolved';
+      if (/^\s*(?::\s*[\w?<>.]+\s*)?by\s+project\b/.test(tail)) return resolveProperty(module, name, rows);
+      const assigned = tail.match(/^\s*(?::\s*[\w?<>.]+\s*)?=\s*(.+)$/)?.[1];
+      const alias = assigned ? classifyTargetSdk(assigned) : undefined;
+      // A single local holding a plain number or a catalog version is fully understood.
+      if (alias?.kind === 'literal' && rows.length === 0) return { value: alias.value, file };
+      if (alias?.kind === 'catalog' && rows.length === 0) {
+        const row = catalogValue(visible, alias.accessor, alias.alias);
+        return row && /^\d+$/.test(row.value) ? { value: Number.parseInt(row.value, 10), file: row.file } : 'unresolved';
+      }
+      if (alias?.kind !== 'name' || alias.hasDefault || alias.name === name) {
+        return alias?.kind === 'name' && alias.name === name && !alias.hasDefault
+          ? resolveProperty(module, name, rows)
+          : 'unresolved';
+      }
+      return resolveName(module, alias.name, visible, script, depth + 1);
+    }
+    return resolveProperty(module, name, rows);
+  };
+
+  const evaluate = (module: ProjectFile, texts: ProjectFile[], inherited: ProjectFile[] = []): TargetSdkModuleVerdict => {
+    const verdict: TargetSdkModuleVerdict = { module: moduleDir(module.relative), values: [], resolved: true, unresolved: [] };
+    const fail = (reason: string) => {
+      verdict.resolved = false;
+      verdict.unresolved.push(reason);
+    };
     const visible: Map<string, CatalogVersions | null> = resolveCatalogs
-      ? resolveCatalogs(file)
+      ? resolveCatalogs(module)
       : (() => {
-        const nearest = nearestCatalog(file, catalogFiles);
+        const nearest = nearestCatalog(module, catalogFiles);
         return new Map(nearest ? [['libs', catalogVersions([nearest], true)]] : []);
       })();
-    const numeric = (accessor: string, alias: string) => {
-      const row = catalogValue(visible, accessor, alias);
-      return row && /^\d+$/.test(row.value) ? { value: Number.parseInt(row.value, 10), file: row.file } : undefined;
-    };
-    let resolvedIndirectly = false;
-    // `targetSdk 36`, `targetSdk = 36`, Kotlin DSL extras (`extra["targetSdkVersion"] = 36`), and AGP's
-    // `targetSdk { version = release(36) }`.
-    for (const match of file.text.matchAll(/\btargetSdk(?:Version)?(?:["']\s*\])?\s*(?:=\s*)?(\d+)/g)) {
-      evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
-    }
-    for (const match of file.text.matchAll(/\btargetSdk\s*\{\s*version\s*=\s*release\(\s*(\d+)\s*\)/g)) {
-      evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
-    }
-    for (const match of file.text.matchAll(PROPERTY_TARGET_SDK)) {
-      const resolved = resolveName(file, match[1]);
-      if (resolved === 'unresolved') continue;
-      if (resolved) {
-        evidence.push({ file: resolved.file, value: resolved.value });
-        resolvedIndirectly = true;
-        continue;
+    let assignments = 0;
+    // The module's own scripts first; only when they set nothing, the build root's subprojects/allprojects blocks.
+    const own = texts.map((script) => ({ script, found: targetSdkAssignments(script.text) }));
+    const sources = own.some((row) => row.found.length > 0) ? own : inherited.map((script) => {
+      const ranges = [...script.text.matchAll(/\b(?:subprojects|allprojects)\s*\{/g)]
+        .map((opener) => [opener.index, closingBrace(script.text, opener.index + opener[0].length - 1)] as const)
+        .filter(([, close]) => close >= 0);
+      return {
+        script,
+        found: targetSdkAssignments(script.text).filter((row) => ranges.some(([open, close]) => row.index > open && row.index < close)),
+      };
+    });
+    for (const { script, found } of sources) {
+      for (const assignment of found) {
+        assignments++;
+        const label = `${assignment.block ? '' : 'targetSdk = '}${assignment.expression} (${script.relative})`;
+        if (assignment.block) {
+          if (assignment.release === undefined) fail(label);
+          else verdict.values.push({ value: assignment.release, file: script.relative });
+          continue;
+        }
+        const expression = classifyTargetSdk(assignment.expression);
+        if (expression.kind === 'literal') {
+          verdict.values.push({ value: expression.value, file: script.relative });
+        } else if (expression.kind === 'catalog') {
+          const row = catalogValue(visible, expression.accessor, expression.alias);
+          if (row && /^\d+$/.test(row.value)) verdict.values.push({ value: Number.parseInt(row.value, 10), file: row.file });
+          else fail(label);
+        } else if (expression.kind === 'name') {
+          const resolved = resolveName(module, expression.name, visible, script.relative);
+          if (resolved && resolved !== 'unresolved') verdict.values.push(resolved);
+          else if (resolved === undefined && expression.rootExt && expression.name === 'targetSdkVersion' && reactNativeTargetSdk) {
+            verdict.values.push(reactNativeTargetSdk);
+          } else fail(label);
+        } else {
+          fail(label);
+        }
       }
-      // Not defined anywhere the module can see: Gradle uses the expression's own default
-      // (`findProperty("x") ?: 33`, `gradleProperty("x").getOrElse("33")`).
-      const line = file.text.slice(match.index, file.text.indexOf('\n', match.index) >>> 0);
-      const fallback = line.match(/\?:\s*(\d+)\b/)?.[1] ?? line.match(/\b(?:getOrElse|orElse)\(\s*["']?(\d+)["']?\s*\)/)?.[1];
-      if (fallback && /\b(?:findProperty|gradleProperty|properties\.get)\b/.test(line)) {
-        evidence.push({ file: file.relative, value: Number.parseInt(fallback, 10) });
-        resolvedIndirectly = true;
-      }
     }
-    const CATALOG_TARGET_SDK = /\btargetSdk(?:Version)?\s*(?:=\s*)?([A-Za-z_]\w*)\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/g;
-    for (const match of file.text.matchAll(CATALOG_TARGET_SDK)) {
-      const resolved = numeric(match[1], match[2]);
-      if (resolved) {
-        evidence.push({ file: resolved.file, value: resolved.value });
-        resolvedIndirectly = true;
-      }
-    }
-    if (/\btargetSdkVersion\s+rootProject\.ext\.targetSdkVersion\b/.test(file.text) && reactNativeTargetSdk) {
-      evidence.push({ file: reactNativeTargetSdk.file, value: reactNativeTargetSdk.value });
-      resolvedIndirectly = true;
-    }
-    if (/\btargetSdk(?:Version)?\b/.test(file.text) && !/\btargetSdk(?:Version)?\s*(?:=\s*)?\d+/.test(file.text)) {
-      const catalogExpression = new RegExp(CATALOG_TARGET_SDK.source).exec(file.text);
-      const resolved = catalogExpression ? numeric(catalogExpression[1], catalogExpression[2]) : undefined;
-      if (!resolved && !resolvedIndirectly) hasUnresolvedExpression = true;
-    }
-  }
+    if (assignments === 0) fail(`no targetSdk assignment in ${module.relative} or the scripts it applies`);
+    return verdict;
+  };
+
+  const verdicts = modules.map((module) => evaluate(module.file, module.scripts, module.inherited));
+  // Without a Gradle app module (Expo CNG, Unity), the supplemental evidence alone decides.
+  const values = [...supplementalEvidence, ...verdicts.flatMap((verdict) => verdict.values)];
+  const unresolvedModules = verdicts.filter((verdict) => !verdict.resolved);
 
   const policy = targetPolicy(now);
   if (!policy.scheduleCurrent || policy.minimum === null) {
-    return [{
+    return { modules: verdicts, findings: [{
       code: 'TARGET_SDK_POLICY_REFRESH_REQUIRED',
       severity: 'warning',
       title: 'Target API policy table needs a refresh',
@@ -1185,33 +1348,14 @@ function targetSdkFindings(
         detail: '내장된 Google Play Target API 일정만으로는 현재 제출 요건을 확정할 수 없습니다.',
         action: '제출 전에 최신 Google Play Target API 요구사항을 확인하세요.',
       },
-    }];
+    }] };
   }
 
-  if (evidence.length === 0) {
-    return [{
-      code: 'TARGET_SDK_UNRESOLVED',
-      severity: 'warning',
-      title: 'Android targetSdk could not be resolved locally',
-      detail: hasUnresolvedExpression
-        ? 'A targetSdk expression exists, but its numeric value is defined indirectly.'
-        : 'No literal targetSdk value was found in the scanned Gradle files.',
-      action: `Resolve the release variant and confirm targetSdk ${policy.minimum} or newer before submission.`,
-      sourceUrl: TARGET_SDK_SOURCE,
-      ko: {
-        title: 'Android targetSdk 값을 로컬에서 확정하지 못함',
-        detail: hasUnresolvedExpression
-          ? 'targetSdk 표현식은 있지만 숫자 값이 다른 파일이나 변수에 정의되어 있습니다.'
-          : '검사한 Gradle 파일에서 숫자로 된 targetSdk 값을 찾지 못했습니다.',
-        action: `릴리스 variant의 값을 확인해 targetSdk ${policy.minimum} 이상인지 검증하세요.`,
-      },
-    }];
-  }
-
-  const below = evidence.filter((row) => row.value < policy.minimum!);
+  // Blockers win: a value proven below the minimum is reported even when another module is unresolved.
+  const below = values.filter((row) => row.value < policy.minimum!);
   if (below.length > 0) {
-    const first = below.sort((left, right) => left.value - right.value)[0];
-    return [{
+    const first = [...below].sort((left, right) => left.value - right.value)[0];
+    return { modules: verdicts, findings: [{
       code: 'TARGET_SDK_BELOW_MINIMUM',
       severity: 'blocker',
       title: `Android targetSdk ${first.value} is below the submission minimum`,
@@ -1224,22 +1368,44 @@ function targetSdkFindings(
         detail: `${policy.effectiveDate} 이후 신규 앱과 업데이트는 targetSdk ${policy.minimum} 이상이어야 합니다.`,
         action: `targetSdk를 ${policy.minimum} 이상으로 올리고 릴리스 빌드를 테스트하세요.`,
       },
-    }];
+    }] };
   }
 
-  const lowest = evidence.sort((left, right) => left.value - right.value)[0];
-  return [{
+  if (unresolvedModules.length > 0 || values.length === 0) {
+    const reasons = unresolvedModules.flatMap((verdict) => verdict.unresolved.map((reason) => `${verdict.module}: ${reason}`));
+    const listed = reasons.length > 3 ? `${reasons.slice(0, 3).join('; ')}; +${reasons.length - 3}` : reasons.join('; ');
+    return { modules: verdicts, findings: [{
+      code: 'TARGET_SDK_UNRESOLVED',
+      severity: 'warning',
+      title: 'Android targetSdk could not be resolved locally',
+      detail: listed
+        ? `Not every app module's targetSdk could be evaluated from the repository: ${listed}.`
+        : 'No literal targetSdk value was found in the scanned Gradle files.',
+      action: `Resolve the release variant and confirm targetSdk ${policy.minimum} or newer before submission.`,
+      sourceUrl: TARGET_SDK_SOURCE,
+      ko: {
+        title: 'Android targetSdk 값을 로컬에서 확정하지 못함',
+        detail: listed
+          ? `저장소만으로 계산할 수 없는 앱 모듈의 targetSdk가 있습니다: ${listed}.`
+          : '검사한 Gradle 파일에서 숫자로 된 targetSdk 값을 찾지 못했습니다.',
+        action: `릴리스 variant의 값을 확인해 targetSdk ${policy.minimum} 이상인지 검증하세요.`,
+      },
+    }] };
+  }
+
+  const lowest = [...values].sort((left, right) => left.value - right.value)[0];
+  return { modules: verdicts, findings: [{
     code: 'TARGET_SDK_OK',
     severity: 'info',
     title: `Android targetSdk ${lowest.value} meets the current minimum`,
-    detail: `The lowest literal targetSdk found is at least ${policy.minimum}.`,
+    detail: `Every app module's targetSdk was resolved; the lowest is at least ${policy.minimum}.`,
     file: lowest.file,
     sourceUrl: TARGET_SDK_SOURCE,
     ko: {
       title: `Android targetSdk ${lowest.value}은 현재 제출 기준 충족`,
-      detail: `감지된 가장 낮은 targetSdk가 현재 최소값 ${policy.minimum} 이상입니다.`,
+      detail: `모든 앱 모듈의 targetSdk를 확인했고, 가장 낮은 값이 현재 최소값 ${policy.minimum} 이상입니다.`,
     },
-  }];
+  }] };
 }
 
 interface XcodeEvidence {
@@ -2018,6 +2184,7 @@ export async function scanReleaseDoctor(
   if (detected.ios) platforms.push('ios');
 
   const findings: ReleaseDoctorFinding[] = [];
+  let targetSdkModules: TargetSdkModuleVerdict[] | undefined;
   if (platforms.length === 0) {
     findings.push({
       code: 'NO_MOBILE_PROJECT',
@@ -2104,7 +2271,32 @@ export async function scanReleaseDoctor(
         file.relative.endsWith('libs.versions.toml') || !specialized.has(moduleDir(file.relative)));
       const limit = repo && isWithin(repo, root) ? repo : root;
       const applied = await appliedGradleScripts(scoped, root, limit, files);
-      findings.push(...targetSdkFindings([...scoped, ...applied], now, detected.targetSdkEvidence, detected.resolveCatalogs, detected.properties));
+      // Each judged app module with the scripts it applies; its targetSdk is evaluated on its own.
+      const settingsDirs = files
+        .filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative))
+        .map((file) => path.dirname(file.absolute));
+      const judged = await Promise.all(detected.appGradleFiles
+        .filter((file) => !specialized.has(moduleDir(file.relative)))
+        .map(async (file) => {
+          // The root project of the module's build (nearest settings directory) and the scripts it applies.
+          const buildRoot = settingsDirs
+            .filter((dir) => isWithin(dir, file.absolute))
+            .sort((left, right) => right.length - left.length)[0];
+          const rootScript = buildRoot === undefined ? undefined : files.find((candidate) =>
+            /(?:^|\/)build\.gradle(?:\.kts)?$/.test(candidate.relative)
+            && path.dirname(candidate.absolute) === buildRoot && candidate.absolute !== file.absolute);
+          const rootText = rootScript ? { ...rootScript, text: stripGradleComments(rootScript.text) } : undefined;
+          return {
+            file,
+            scripts: [file, ...await appliedGradleScripts([file], root, limit, files)],
+            inherited: rootText ? [rootText, ...await appliedGradleScripts([rootText], root, limit, files)] : [],
+          };
+        }));
+      const targetSdk = targetSdkFindings(
+        [...scoped, ...applied], now, detected.targetSdkEvidence, detected.resolveCatalogs, detected.properties, judged,
+      );
+      findings.push(...targetSdk.findings);
+      targetSdkModules = targetSdk.modules;
       if (specialized.size > 0) {
         findings.push({
           code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
@@ -2126,7 +2318,7 @@ export async function scanReleaseDoctor(
     // modules would fail the general rule.
     const minimum = targetPolicy(now).minimum;
     const failingSamples = detected.sampleAppGradleFiles.flatMap((file) => {
-      const verdict = targetSdkFindings([file], now, [], detected.resolveCatalogs, detected.properties)[0];
+      const verdict = targetSdkFindings([file], now, [], detected.resolveCatalogs, detected.properties, [{ file, scripts: [file] }]).findings[0];
       return verdict?.code === 'TARGET_SDK_BELOW_MINIMUM' ? [`${moduleDir(file.relative)} (${verdict.title.match(/targetSdk (\d+)/)?.[1]})`] : [];
     });
     if (failingSamples.length > 0 && minimum !== null) {
@@ -2220,6 +2412,7 @@ export async function scanReleaseDoctor(
     },
     counts,
     findings,
+    ...(targetSdkModules ? { targetSdkModules } : {}),
     coverage: {
       checked: [
         'mobile project and app identifier detection',

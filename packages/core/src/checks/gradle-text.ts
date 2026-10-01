@@ -1,14 +1,15 @@
 // Gradle build-script text helpers shared by the Release Doctor checks.
 
-/** Characters after which a Groovy `/` starts a slashy string rather than a division. */
-const SLASHY_CONTEXT = new Set(['~', '=', '(', ',']);
+/** Characters after which a Groovy `/` starts a slashy string rather than a division (`~ = ( , :` and `?:`). */
+const SLASHY_CONTEXT = new Set(['~', '=', '(', ',', ':', '?']);
 
 /**
  * Scans Gradle (Groovy or Kotlin DSL) source and reports each token span to `visit`: `code` (outside strings and
  * comments), `string` (any string literal, copied verbatim), or `comment`. String-aware: `'…'`, `"…"`, `'''…'''`,
- * `"""…"""` (escapes, `${…}` templates with nested strings), Groovy slashy `/…/` (after `~ = ( ,`) and dollar-slashy
- * `$/…/$` strings. Degrades safely: an unterminated single-line string or template ends at the line break, and a
- * `/*` with no closing `*\/` is text, not a comment that deletes the rest of the file.
+ * `"""…"""` (escapes, `${…}` templates with nested strings), Groovy slashy `/…/` (after `~ = ( , :` or `?:`, as in
+ * `exclude group: /a{/`) and dollar-slashy `$/…/$` strings. Degrades safely: an unterminated single-line string or
+ * template ends at the line break, and a `/*` with no closing `*\/` is text, not a comment that deletes the rest of
+ * the file.
  */
 function scanGradle(text: string, visit: (kind: 'code' | 'string' | 'comment', start: number, end: number) => void): void {
   const length = text.length;

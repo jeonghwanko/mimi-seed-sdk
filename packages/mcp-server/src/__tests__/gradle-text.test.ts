@@ -68,6 +68,7 @@ describe('stripGradleComments (string-aware)', () => {
     ['slashy regex with \\/*', 'exclude ~/.*\\/*.so/\ntargetSdk 33\n'],
     ['dollar-slashy with /*', 'def x = $/ a/* /$\ntargetSdk 33\napplicationId "x.y"\n'],
     ['slashy after ( with an apostrophe', 'def r = "a".replaceAll(/\'/, "")\ntargetSdk 33\n'],
+    ['slashy after a map key (exclude group: /a{/)', "exclude group: /a{/, module: 'x'\ntargetSdk 33\n"],
     ['/* with no closing */', 'def glob = 1 /* unterminated\ntargetSdk 33\n'],
     ['unterminated template "${"', 'def s = "${"\n// targetSdk 36\ntargetSdk 33\n'],
   ])('%s keeps the code after it', (_name, text) => {

@@ -29,6 +29,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   choice exists: a Korean locale (`LC_ALL` / `LC_MESSAGES` / `LANG`, or the OS locale on Windows) gets Korean,
   anything else English. It used to be Korean for everyone. The first-run `setup` prompt's Enter default follows
   the same rule.
+- Release Doctor judges targetSdk per Android app module and reports "meets the minimum" only when every app module's
+  targetSdk was resolved from evidence it fully understood; one module it cannot evaluate makes the result
+  unresolved (a value below the minimum is still a blocker). The JSON report lists each module as
+  `targetSdkModules`. A `findProperty("x") ?: N` default is no longer treated as the module's value.
 - Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
   unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the
   check is incomplete and names those items. They are also listed in the JSON report as `coverage.unresolved`.
@@ -66,15 +70,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`), in a Kotlin DSL root script
   (`extra["targetSdkVersion"] = 36`), or in Expo's `expo-build-properties` plugin is now read instead of reported as
   unresolved, as are targetSdk values named through Gradle properties or extras (`gradle.properties`,
-  `project.property("x")`, `rootProject.ext.x`, `set("x", 36)`, with `findProperty("x") ?: 33` defaults) and AGP's
-  `targetSdk { version = release(36) }`. A property counts only from the module's own build (gradle.properties on the
-  path from its settings directory, not other modules, included builds, or demo trees); a name that CI overrides
-  (`-Px=`, `ORG_GRADLE_PROJECT_x`), that a script redeclares as a local, assigns from an expression, or that two
-  sources disagree on stays unresolved rather than guessed. Version catalogs resolve the way Gradle does: from the
+  `project.property("x")`, `rootProject.ext.x`, `set("x", 36)`, `val x: String by project`, a single local such as
+  `def x = 36` or `val x = libs.versions.x.get().toInt()`) and AGP's `targetSdk { version = release(36) }`, plus
+  values a build root sets for every module in `subprojects { … }` / `allprojects { … }`. A property counts only from
+  the module's own build (gradle.properties on the path from its settings directory, not other modules, included
+  builds, or demo trees, unless the module itself lives there); a name that CI overrides (`-Px=`,
+  `ORG_GRADLE_PROJECT_x`), that has competing declarations, is assigned from an expression, or that two sources
+  disagree on stays unresolved rather than guessed. Version catalogs resolve the way Gradle does: from the
   module's own build's settings (`versionCatalogs { create(…) { from(files(…)) } }`, any accessor such as
-  `androidx.versions.*`, `$rootDir` paths, and literal `version("x", "33")` overrides) plus the default
+  `androidx.versions.*`, `$rootDir` paths, and literal `version("x", "33")` overrides in any call shape) plus the default
   `gradle/libs.versions.toml`, so a nested build and the repository root (or two builds sharing a key) no longer
-  overwrite each other's values. Comments are removed with a string-aware reader (including Groovy slashy strings),
+  overwrite each other's values; a `version` call it cannot parse leaves that catalog unresolved. A build script that
+  only mentions the application plugin (`hasPlugin("com.android.application")`) is not an app module. Comments are
+  removed with a string-aware reader (including Groovy slashy strings),
   so a glob such as `pickFirst '**/*.so'` or a URL no longer hides the code after it.
 - Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
   targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes

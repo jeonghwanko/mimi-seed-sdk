@@ -2,8 +2,31 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { scanReleaseDoctor } from '#core/checks/release-doctor.js';
+import { scanReleaseDoctor as scanRepository, type ReleaseDoctorReport } from '#core/checks/release-doctor.js';
 import { renderReleaseDoctor } from '#core/checks/release-doctor-render.js';
+
+// Target API INVARIANT, checked on every scan in this file (every fixture of the suite): TARGET_SDK_OK only when every
+// judged app module's targetSdk was resolved; any unresolved module ⇒ never TARGET_SDK_OK (a blocker may still win).
+const invariant = { scans: 0, ok: 0, unresolvedModules: 0, blockerWithUnresolved: 0 };
+function checkTargetSdkInvariant(report: ReleaseDoctorReport): void {
+  invariant.scans++;
+  const modules = report.targetSdkModules ?? [];
+  const codes = report.findings.map((row) => row.code);
+  if (modules.some((module) => !module.resolved)) {
+    invariant.unresolvedModules++;
+    expect(codes).not.toContain('TARGET_SDK_OK');
+    if (codes.includes('TARGET_SDK_BELOW_MINIMUM')) invariant.blockerWithUnresolved++;
+  }
+  if (codes.includes('TARGET_SDK_OK')) {
+    invariant.ok++;
+    expect(modules.every((module) => module.resolved)).toBe(true);
+  }
+}
+async function scanReleaseDoctor(...args: Parameters<typeof scanRepository>): Promise<ReleaseDoctorReport> {
+  const report = await scanRepository(...args);
+  checkTargetSdkInvariant(report);
+  return report;
+}
 
 const roots: string[] = [];
 
@@ -1580,8 +1603,8 @@ describe('Release Doctor local scan', () => {
           'app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId \"com.example.x\"; targetSdkVersion project.property('targetSdkVersion') } }",
         }), at);
 
-        // The root ext literal (30) is still literal evidence; the conflicting name itself is not resolved to 36.
-        expect(below(report)).toMatchObject({ file: 'build.gradle' });
+        // The name has two values (gradle.properties 36, root ext 30): the module is unresolved, never OK.
+        expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_UNRESOLVED' }));
         expect(report.findings.some((row) => row.code === 'TARGET_SDK_OK')).toBe(false);
       });
     });
@@ -1636,15 +1659,20 @@ describe('Release Doctor local scan', () => {
       'app/build.gradle.kts': `plugins { id("com.android.application") }\n${before}android { defaultConfig { applicationId = "com.example.p"; targetSdk = ${expression} } }`,
     });
 
-    describe('범위 밖 속성은 쓰지 않고 식의 기본값으로 판정한다 (p1, p6, p10)', () => {
+    // Round 5: a `findProperty("x") ?: N` default is never evidence — Gradle may see the property from places the
+    // scanner cannot (~/.gradle, CI, settings plugins), so an out-of-scope property leaves the module unresolved.
+    describe('범위 밖 속성은 쓰지 않고, 식의 기본값도 근거로 쓰지 않는다 (p1, p6, p10)', () => {
       it.each([
         ['라이브러리 모듈의 gradle.properties', { ...kts('(findProperty("sdkTarget") as String?)?.toInt() ?: 33'), 'settings.gradle.kts': 'include(":app", ":lib")', 'lib/build.gradle.kts': 'plugins { id("com.android.library") }', 'lib/gradle.properties': 'sdkTarget=36\n' }],
         ['demo/의 gradle.properties', { ...kts('(findProperty("sdkTarget") as String?)?.toInt() ?: 33'), 'demo/gradle.properties': 'sdkTarget=36\n' }],
         ['includeBuild한 다른 빌드의 gradle.properties', { ...kts('providers.gradleProperty("sdkTarget").getOrElse("33").toInt()'), 'settings.gradle.kts': 'includeBuild("tools")\ninclude(":app")', 'tools/settings.gradle.kts': 'rootProject.name = "tools"', 'tools/gradle.properties': 'sdkTarget=36\n' }],
-      ])('%s', async (_name, files) => {
+      ])('%s → unresolved (기본값 33은 판정 근거가 아님)', async (_name, files) => {
         const report = await scanReleaseDoctor(await fixture(files), at);
+        const finding = report.findings.find((row) => row.code === 'TARGET_SDK_UNRESOLVED');
 
-        expect(below(report)).toMatchObject({ file: 'app/build.gradle.kts', title: expect.stringContaining('33') });
+        expect(finding?.detail).toContain('sdkTarget');
+        expect(codes(report)).not.toContain('TARGET_SDK_OK');
+        expect(report.targetSdkModules).toEqual([expect.objectContaining({ module: 'app', resolved: false })]);
       });
 
       it('같은 빌드 루트의 gradle.properties 값은 기본값보다 우선한다', async () => {
@@ -1655,12 +1683,6 @@ describe('Release Doctor local scan', () => {
     });
 
     it.each([
-      ['같은 이름의 Groovy 지역 변수 (p12)', {
-        'settings.gradle': "include ':app'",
-        'gradle.properties': 'sdkTarget=36\n',
-        'app/build.gradle': "apply plugin: 'com.android.application'\ndef sdkTarget = 33\nandroid { defaultConfig { applicationId \"com.example.p\"; targetSdkVersion sdkTarget } }",
-      }],
-      ['같은 이름의 Kotlin val (p5)', { ...kts('sdkTarget', 'val sdkTarget = 33\n'), 'gradle.properties': 'sdkTarget=36\n' }],
       ['rootProject.ext["x"] = 33과 루트 ext.x = 36의 충돌 (p4)', {
         'settings.gradle': "include ':app'",
         'build.gradle': 'ext.sdkTarget = 36',
@@ -1690,6 +1712,30 @@ describe('Release Doctor local scan', () => {
 
       expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
       expect(codes(report)).not.toContain('TARGET_SDK_OK');
+    });
+
+    // Round 5: a local declared in the assigning script shadows the property, as in Gradle (both use 33).
+    it.each([
+      ['같은 이름의 Groovy 지역 변수 (p12)', {
+        'settings.gradle': "include ':app'",
+        'gradle.properties': 'sdkTarget=36\n',
+        'app/build.gradle': "apply plugin: 'com.android.application'\ndef sdkTarget = 33\nandroid { defaultConfig { applicationId \"com.example.p\"; targetSdkVersion sdkTarget } }",
+      }, 'app/build.gradle'],
+      ['같은 이름의 Kotlin val (p5)', { ...kts('sdkTarget', 'val sdkTarget = 33\n'), 'gradle.properties': 'sdkTarget=36\n' }, 'app/build.gradle.kts'],
+    ])('%s → 지역 변수 값 33 (OK 36이 아님)', async (_name, files, file) => {
+      const report = await scanReleaseDoctor(await fixture(files), at);
+
+      expect(below(report)).toMatchObject({ file, title: expect.stringContaining('33') });
+    });
+
+    it('다른 스크립트에 선언된 같은 이름의 지역 변수는 따라가지 않는다', async () => {
+      const report = await scanReleaseDoctor(await fixture({
+        'settings.gradle': "include ':app'",
+        'build.gradle': 'def sdkTarget = 36',
+        'app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId \"com.example.p\"; targetSdkVersion sdkTarget } }",
+      }), at);
+
+      expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
     });
 
     describe('settings의 catalog 선언을 Gradle처럼 해석한다 (c1, c2, c5, c6, c8)', () => {
@@ -1767,6 +1813,212 @@ describe('Release Doctor local scan', () => {
 
       expect(below(report)).toMatchObject({ file: 'app/build.gradle' });
     });
+  });
+
+  // Fifth adversarial review (round 5): every s*/k* fixture checked against real Gradle 8.14.3 (all use 33).
+  describe('5차 리뷰 회귀', () => {
+    const at = new Date('2026-10-01T00:00:00Z');
+    const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
+    const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
+    const groovyApp = (expression: string, before = '') =>
+      `plugins { id 'com.android.application' }\n${before}android {\n  defaultConfig { applicationId 'com.example.s'; targetSdkVersion ${expression} }\n}`;
+    const withDefault = "findProperty('appTargetSdk')?.toInteger() ?: 36";
+
+    describe('불변식: 해석 못 한 모듈이 있으면 다른 모듈의 리터럴이 OK를 만들지 않는다 (s7b)', () => {
+      it('별칭으로 해석된 33은 블로커로 이긴다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app', ':app2'",
+          'gradle.properties': 'appTargetSdk=33\n',
+          'app/build.gradle': groovyApp('appTargetSdk', "def appTargetSdk = project.property('appTargetSdk') as int\n"),
+          'app2/build.gradle': groovyApp('36'),
+        }), at);
+
+        expect(below(report)).toMatchObject({ file: 'gradle.properties', title: expect.stringContaining('33') });
+      });
+
+      it('해석할 수 없는 모듈 옆의 36은 OK가 아니라 unresolved', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app', ':app2'",
+          'app/build.gradle': groovyApp('Versions.targetSdk'),
+          'app2/build.gradle': groovyApp('36'),
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+        expect(report.targetSdkModules).toEqual(expect.arrayContaining([
+          expect.objectContaining({ module: 'app', resolved: false }),
+          expect.objectContaining({ module: 'app2', resolved: true, values: [expect.objectContaining({ value: 36 })] }),
+        ]));
+      });
+
+      it('해석할 수 없는 모듈이 있어도 다른 모듈의 기준 미달 값은 블로커다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app', ':app2'",
+          'app/build.gradle': groovyApp('Versions.targetSdk'),
+          'app2/build.gradle': groovyApp('33'),
+        }), at);
+
+        expect(below(report)).toMatchObject({ file: 'app2/build.gradle' });
+      });
+
+      it('targetSdk 할당이 없는 앱 모듈도 unresolved다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app', ':app2'",
+          'app/build.gradle': "plugins { id 'com.android.application' }\nandroid { defaultConfig { applicationId 'com.example.a' } }",
+          'app2/build.gradle': groovyApp('36'),
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+      });
+    });
+
+    describe('?: 기본값은 근거가 아니다 — 범위 밖 정의는 unresolved (s3b, s8, s9, s11)', () => {
+      it.each([
+        ['독립 settings가 있는 하위 폴더 (s8)', {
+          'settings.gradle': "include ':app'",
+          'gradle.properties': 'appTargetSdk=33\n',
+          'app/settings.gradle': '// standalone',
+          'app/build.gradle': groovyApp(withDefault),
+        }, ''],
+        ['두 단계 apply from 안의 ext (s9)', {
+          'settings.gradle': "include ':app'",
+          'gradle/config.gradle': "apply from: rootProject.file('gradle/versions.gradle')",
+          'gradle/versions.gradle': 'ext.appTargetSdk = 33',
+          'app/build.gradle': groovyApp(withDefault, "apply from: '../gradle/config.gradle'\n"),
+        }, ''],
+        ['settings의 gradle.beforeProject (s11)', {
+          'settings.gradle': "include ':app'\ngradle.beforeProject { p -> p.ext.appTargetSdk = 33 }",
+          'app/build.gradle': groovyApp(withDefault),
+        }, ''],
+        ['--path가 속성 파일 아래를 가리킴 (s3b)', {
+          'android/settings.gradle': "include ':app'",
+          'android/gradle.properties': 'appTargetSdk=33\n',
+          'android/app/build.gradle': groovyApp(withDefault),
+        }, 'android/app'],
+      ])('%s', async (_name, files, sub) => {
+        const root = await fixture(files);
+        const report = await scanReleaseDoctor(sub ? path.join(root, sub) : root, at);
+
+        expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+        expect(codes(report)).not.toContain('TARGET_SDK_OK');
+      });
+    });
+
+    it.each([
+      ['모듈의 gradle.properties + $rootDir 공통 스크립트 (s10)', {
+        'settings.gradle': "include ':apps:phone'",
+        'apps/phone/build.gradle': "plugins { id 'com.android.application' }\napply from: \"$rootDir/config/android.gradle\"\nandroid { defaultConfig { applicationId 'com.example.s10' } }",
+        'apps/phone/gradle.properties': 'appTargetSdk=33\n',
+        'config/android.gradle': `android { defaultConfig { targetSdkVersion ${withDefault} } }`,
+      }, 'apps/phone/gradle.properties'],
+      ['example/ 안의 유일한 앱과 그 속성 (s4)', {
+        'example/android/settings.gradle': "include ':app'",
+        'example/android/gradle.properties': 'appTarget=33\n',
+        'example/android/app/build.gradle': groovyApp("findProperty('appTarget')?.toInteger() ?: 36"),
+      }, 'example/android/gradle.properties'],
+      ['example/ 안의 유일한 앱, 기본값 없는 속성 (s4b)', {
+        'example/android/settings.gradle': "include ':app'",
+        'example/android/gradle.properties': 'appTarget=33\n',
+        'example/android/app/build.gradle': groovyApp('appTarget.toInteger()'),
+      }, 'example/android/gradle.properties'],
+      ['Kotlin `val x: String by project` (s6)', {
+        'settings.gradle.kts': 'include(":app")',
+        'gradle.properties': 'appTargetSdk=33\n',
+        'app/build.gradle.kts': 'plugins { id("com.android.application") }\nval appTargetSdk: String by project\nandroid {\n  defaultConfig { applicationId = "com.example.s6"; targetSdk = appTargetSdk.toInt() }\n}',
+      }, 'gradle.properties'],
+      ['Groovy `def x = project.property(\'x\') as int` (s7)', {
+        'settings.gradle': "include ':app'",
+        'gradle.properties': 'appTargetSdk=33\n',
+        'app/build.gradle': groovyApp('appTargetSdk', "def appTargetSdk = project.property('appTargetSdk') as int\n"),
+      }, 'gradle.properties'],
+      ['Kotlin `val x = providers.gradleProperty("x").get()`', {
+        'settings.gradle.kts': 'include(":app")',
+        'gradle.properties': 'appTargetSdk=33\n',
+        'app/build.gradle.kts': 'plugins { id("com.android.application") }\nval sdk = providers.gradleProperty("appTargetSdk").get()\nandroid {\n  defaultConfig { applicationId = "com.example.s"; targetSdk = sdk.toInt() }\n}',
+      }, 'gradle.properties'],
+    ])('%s → Gradle과 같은 33 블로커', async (_name, files, file) => {
+      const report = await scanReleaseDoctor(await fixture(files), at);
+
+      expect(below(report)).toMatchObject({ file, title: expect.stringContaining('33') });
+    });
+
+    // Found while validating round 5 on the corpus (ente, Pokedex, localsend shapes).
+    describe('루트 프로젝트의 subprojects/allprojects 설정을 상속한다', () => {
+      it.each([
+        ['apply from 스크립트의 def + withPlugin (ente)', {
+          'mobile/gradle/ente-android.gradle': 'def targetSdk = 36\nsubprojects {\n  pluginManager.withPlugin("com.android.application") {\n    android.defaultConfig.targetSdk = targetSdk\n  }\n}',
+          'mobile/apps/photos/android/settings.gradle': "include ':app'",
+          'mobile/apps/photos/android/build.gradle': 'apply from: "../../../gradle/ente-android.gradle"',
+          'mobile/apps/photos/android/app/build.gradle': "plugins { id 'com.android.application' }\nandroid { defaultConfig { applicationId 'com.example.photos' } }",
+        }, 'TARGET_SDK_OK', 'mobile/gradle/ente-android.gradle'],
+        ['루트 KTS의 val = libs.versions… (Pokedex)', {
+          'settings.gradle.kts': 'include(":app")',
+          'gradle/libs.versions.toml': '[versions]\ntargetSdk = "34"\n',
+          'build.gradle.kts': 'private val targetSdkVersion = libs.versions.targetSdk.get().toInt()\nsubprojects {\n  plugins.withId("com.android.application") {\n    configure<com.android.build.gradle.BaseExtension> {\n      defaultConfig { targetSdk = targetSdkVersion }\n    }\n  }\n}',
+          'app/build.gradle.kts': 'plugins { alias(libs.plugins.android.application) }\nandroid { defaultConfig { applicationId = "com.example.dex" } }',
+        }, 'TARGET_SDK_BELOW_MINIMUM', 'gradle/libs.versions.toml'],
+      ])('%s', async (_name, files, code, file) => {
+        const report = await scanReleaseDoctor(await fixture(files), at);
+
+        expect(report.findings).toContainEqual(expect.objectContaining({ code, file }));
+      });
+
+      it('subprojects 밖의 루트 설정은 상속하지 않는다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app'",
+          'build.gradle': 'ext { targetSdkVersion = 36 }',
+          'app/build.gradle': "plugins { id 'com.android.application' }\nandroid { defaultConfig { applicationId 'com.example.a' } }",
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+      });
+
+      it('루트 스크립트가 hasPlugin("com.android.application")으로 언급만 해도 앱 모듈이 아니다 (localsend)', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'android/settings.gradle': "include ':app'",
+          'android/build.gradle': 'subprojects {\n  afterEvaluate { project ->\n    if (project.plugins.hasPlugin("com.android.application")) { project.android { compileSdkVersion 36 } }\n  }\n}\nlistOf("com.android.application", "com.android.library")',
+          'android/app/build.gradle': "plugins { id 'com.android.application' }\nandroid { defaultConfig { applicationId 'com.example.send'; targetSdkVersion 36 } }",
+        }), at);
+
+        expect(report.targetSdkModules?.map((module) => module.module)).toEqual(['android/app']);
+        expect(codes(report)).toContain('TARGET_SDK_OK');
+      });
+    });
+
+    describe('settings의 version 덮어쓰기 문법 (k1–k4)', () => {
+      const app = 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.k"; targetSdk = libs.versions.targetSdk.get().toInt() } }';
+      it.each([
+        ["Groovy 괄호 없는 version 'k', 'v'", 'settings.gradle', "include ':app'\ndependencyResolutionManagement { versionCatalogs { libs { version 'targetSdk', '33' } } }"],
+        ['KTS 여러 줄 + 끝 쉼표', 'settings.gradle.kts', 'include(":app")\ndependencyResolutionManagement {\n  versionCatalogs {\n    create("libs") {\n      version(\n        "targetSdk",\n        "33",\n      )\n    }\n  }\n}'],
+        ['from(files) 뒤 줄바꿈된 닫는 괄호', 'settings.gradle.kts', 'include(":app")\ndependencyResolutionManagement {\n  versionCatalogs {\n    create("libs") {\n      from(files("gradle/app.versions.toml"))\n      version("targetSdk", "33"\n      )\n    }\n  }\n}'],
+      ])('%s', async (_name, settings, text) => {
+        const report = await scanReleaseDoctor(await fixture({
+          [settings]: text,
+          'gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          'gradle/app.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          'app/build.gradle.kts': app,
+        }), at);
+
+        expect(below(report)).toMatchObject({ file: settings, title: expect.stringContaining('33') });
+      });
+
+      it('해석할 수 없는 version 호출이 있으면 catalog 전체를 unresolved로 둔다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle.kts': 'include(":app")\ndependencyResolutionManagement { versionCatalogs { create("libs") { version(keyFor("sdk"), "33") } } }',
+          'gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          'app/build.gradle.kts': app,
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+      });
+    });
+  });
+
+  // Runs after the scans above: the invariant was checked on each of them.
+  it('불변식이 이 파일의 모든 스캔에서 확인되었고, OK·unresolved·blocker 경로를 모두 지났다', () => {
+    expect(invariant.scans).toBeGreaterThan(150);
+    expect(invariant.ok).toBeGreaterThan(20);
+    expect(invariant.unresolvedModules).toBeGreaterThan(10);
+    expect(invariant.blockerWithUnresolved).toBeGreaterThan(0);
   });
 
   it('새 iOS·FCM 결과를 한국어와 영어로 렌더링한다', async () => {
