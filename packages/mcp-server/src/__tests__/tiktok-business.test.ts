@@ -9,10 +9,10 @@ import type { TikTokBusinessConfig } from '../tiktok-business/config.js';
 
 const config: TikTokBusinessConfig = {
   clientId: 'client-id',
-  clientSecret: 'client-secret',
+  clientSecret: 'example-client-secret',
   redirectUri: 'https://example.test/callback',
-  accessToken: 'access-token',
-  refreshToken: 'refresh-token',
+  accessToken: 'example-access-token',
+  refreshToken: 'example-refresh-token',
   accessTokenExpiresAt: '2030-01-01T00:00:00.000Z',
   refreshTokenExpiresAt: '2031-01-01T00:00:00.000Z',
   openId: 'open-id',
@@ -66,7 +66,7 @@ describe('TikTok API for Business client', () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(String(url)).toContain('/business/video/publish/');
-    expect((init.headers as Record<string, string>)['Access-Token']).toBe('access-token');
+    expect((init.headers as Record<string, string>)['Access-Token']).toBe('example-access-token');
     expect(JSON.parse(String(init.body))).toMatchObject({ business_id: 'open-id' });
   });
 
@@ -95,8 +95,8 @@ describe('TikTok API for Business client', () => {
       .mockResolvedValueOnce(response({}, 40100, 400))
       .mockResolvedValueOnce(response({}, 40100, 400));
     await expect(api.getBusinessAccount(config)).rejects.toMatchObject({ requestId: 'req-1' });
-    await expect(api.getBusinessAccount({ ...config, accessToken: 'DO-NOT-LEAK' })).rejects.not.toThrow(
-      /DO-NOT-LEAK/,
+    await expect(api.getBusinessAccount({ ...config, accessToken: 'example-do-not-leak' })).rejects.not.toThrow(
+      /example-do-not-leak/,
     );
   });
 });
@@ -109,7 +109,7 @@ describe('token lifetime and local validation', () => {
     }, Date.parse('2026-01-01T00:00:00.000Z'));
     expect(built.accessTokenExpiresAt).toBe('2026-01-01T00:01:00.000Z');
     expect(built.refreshTokenExpiresAt).toBe('2026-01-01T00:02:00.000Z');
-    expect(built.clientSecret).toBe('client-secret');
+    expect(built.clientSecret).toBe('example-client-secret');
   });
 
   it('access token은 만료 5분 전부터 갱신 대상으로 본다', () => {
@@ -130,8 +130,8 @@ describe('token lifetime and local validation', () => {
     expect(safeTokenInspection(config, {
       open_id: 'open-id',
       scope: 'video.publish',
-      access_token: 'DO-NOT-LEAK',
-      client_secret: 'DO-NOT-LEAK-EITHER',
+      access_token: 'example-do-not-leak',
+      client_secret: 'example-do-not-leak-either',
     })).toEqual({ providerVerified: true, openIdMatches: true, scope: 'video.publish' });
   });
 

@@ -48,7 +48,8 @@ index below is imported automatically; the linked docs are **not**, so `Read` th
 7. **Don't hard-code tool or domain counts in prose** — write "150+" and name the domains instead of counting
    them. Exact counts live only in `tool-manifest.json` and the blocks generated from it (`docs/domain/tool-catalog.md`,
    the README tool tables — `npm run plugin:sync` rewrites them); a guard rejects them anywhere else.
-8. **Editing `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, `LICENSE`, or `tool-manifest.json`** →
+8. **Editing `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, `LICENSE`, `SECURITY.md`, `.codexignore`, or
+   `tool-manifest.json`** →
    `npm run plugin:sync`, then commit what it regenerated (`<!-- generated:… -->` doc blocks, `plugins/mimi-seed/`).
    Never hand-edit either.
 9. **Version numbers** belong to the root `package.json` (`npm run version:set`) — never write one into a doc.

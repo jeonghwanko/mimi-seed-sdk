@@ -45,8 +45,8 @@ before changing any assertion.
 | `mcp-server/…/toolsets.test.ts` + `tool-registrar.test.ts` | `MIMI_SEED_TOOLSETS` default = everything, groups/exclude/always-on/unknown-key rules, and the registrar's guard / alias / filter / unknown-name behavior | change the default or the registrar contract | keep the default "all" — changing it removes tools from existing installs |
 | `mcp-server/…/docs-onboarding.test.ts` | EN/KO onboarding parity · `docs/credentials.md` anchors (the wizard deep-links them) · every `AuthErrorCode` has a recovery entry · the Node floor matches `.nvmrc` · relative links resolve (user docs **and** `CLAUDE.md` / `AGENTS.md` / `docs/domain/*`) · every `[[wikilink]]` resolves | add an auth error code, a credential, a `.ko` mirror gap, a broken link, or a stale "Node NN+" | write the missing doc section / fix the link |
 | `mcp-server/…/prompts-resources.test.ts` | prompts + resources smoke, and `assets/agent-guide.md` is **byte-identical** to `docs/agent-guide.md` | edit the agent guide without syncing | `npm run plugin:sync` |
-| `mcp-server/…/version-sync.test.ts` | root `package.json` version == both packages, both plugin manifests, the generated Codex manifest, both lockfiles | hand-edit a version | `npm run version:set <version>` |
-| `scripts/sync-codex-plugin.mjs --check` | `plugins/mimi-seed/` == root `.codex-plugin` · `.mcp.json` · `skills` · `docs` · `LICENSE`, plus the Codex marketplace contract | edit a distribution source, or hand-edit the generated copy | `npm run plugin:sync` |
+| `mcp-server/…/version-sync.test.ts` | root `package.json` version == both packages, both plugin manifests, the generated Codex manifest; `version --check` (in `plugin:check`) adds the three lockfiles (root + both packages) | hand-edit a version | `npm run version:set <version>` |
+| `scripts/sync-codex-plugin.mjs --check` | `plugins/mimi-seed/` == root `.codex-plugin` · `.mcp.json` · `skills` · `docs` · `LICENSE` · `SECURITY.md` · `.codexignore` (+ the root `README.md` built from `.codex-plugin/README.md`), plus the Codex marketplace contract | edit a distribution source, or hand-edit the generated copy | `npm run plugin:sync` |
 | `cli/…/i18n-coverage.test.ts` | no user-facing Hangul literal outside a `ko` catalog | hardcode a Korean string the compiler can't see | move it into `catalog(ko, en)` |
 | `cli/…/credentials.test.ts` | the credential registry's `detect`/`plan` logic, **and** every `mcp-bin` it names exists in the mcp-server `bin` map | reference a bin you didn't publish | add the `bin` + `SUBCOMMANDS` entry |
 | `mcp-server/…/package-bin-contract.test.ts` | every published `package.json` bin target maps from `dist/**/*.js` to an existing `src/**/*.ts` entrypoint, and `dist` is included in the npm package | rename or add a bin without its source file, or stop shipping the compiled directory | add/fix the source entrypoint and keep `files: ["dist", …]` |
@@ -101,6 +101,14 @@ In `packages/mcp-server` a hand-written `any` is also an error (`no-explicit-any
 mcp-server's `prepublishOnly` in the middle of a release. The publish **trigger** lives only in the `publish`
 job's `if:` (plus `on:`); the script itself does not know why it was called.
 
+`.github/workflows/plugin-scanner.yml` runs the HOL `plugin-scanner` (the gate the awesome-ai-plugins listing
+applies) on every PR and `main` push: score ≥ 80 and no **high**/**critical** finding. It scans the whole checkout,
+tests included, so it is what fails when a fixture looks like a real secret (see the conventions below), a
+workflow `uses:` an action by tag instead of a full commit SHA, or `SECURITY.md` / a lockfile goes missing.
+Reproduce it on a clean export (`git archive HEAD`), not the working tree — `node_modules` and local worktrees
+inflate the findings: `uvx plugin-scanner lint . --format text`. Every action is SHA-pinned with a `# vX.Y.Z`
+comment; `.github/dependabot.yml` keeps those pins and both packages' npm dependencies current.
+
 ## Behavior tests (the rest)
 
 `playstore-release.test.ts` checks full rollout replacement even when a target draft already exists,
@@ -119,7 +127,11 @@ Conventions worth copying when you add one:
   you build, not on a live response. `src/__tests__/helpers.ts` has `withClient` for booting an in-memory MCP
   server and calling a tool end to end.
 - **Fixtures are placeholders.** Never a real token, key, issuer id, SA email, or project id — this is a public
-  repo ([[auth-credentials]]).
+  repo ([[auth-credentials]]). Shape secret-like values so the plugin scanner (CI section above) reads them as
+  placeholders: `example-…` / `…-example` / `IGAA_EXAMPLE`, a `<bracketed>` placeholder, or a PEM body of
+  `secret-key-material` / one containing `redacted`. Any other quoted value of 8+ characters right after a key
+  named like token / secret / password / api key (`test-token`, `DO-NOT-LEAK`, a `(redacted)` marker) is a
+  **high** finding, even in a test file — put a marker you assert on in a constant instead.
 - **Test the trap, not the happy path.** Most of these files exist because a specific bug shipped once; their
   header comments say which. Keep that comment when you extend the file.
 

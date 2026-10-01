@@ -9,9 +9,9 @@ If you just want to *use* Mimi Seed, don't do any of this. Install from npm or t
 
 ## 0. What this repo is (read this first)
 
-**This is not an npm workspace.** The two packages install and build **independently** — there is no root
-lockfile and no hoisted `node_modules`. The root `package.json` exists only to hold the bootstrap script that
-walks both packages for you.
+**This is not an npm workspace.** The two packages install and build **independently** — there is no hoisted
+`node_modules`, and the root `package-lock.json` records only the dependency-free root package. The root
+`package.json` exists only to hold the bootstrap script that walks both packages for you.
 
 > Don't run `npm install` at the root expecting it to install the packages. Run `npm run setup` (below).
 

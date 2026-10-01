@@ -125,7 +125,8 @@ for `deploy` flag parsing.
 
 ## 4. Change a doc that ships to clients
 
-`docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, and `LICENSE` are the **Codex distribution sources**. After
+`docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, `LICENSE`, `SECURITY.md`, and `.codexignore` are the **Codex
+distribution sources**. After
 editing any of them:
 
 ```bash

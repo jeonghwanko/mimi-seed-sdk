@@ -78,15 +78,19 @@ describe('annotations — manifest 분류에서 파생', () => {
 });
 
 describe('previewValue — dry-run 인자 표시', () => {
+  // 마스킹 표식은 상수로 둔다 — 비밀 키 이름 바로 뒤에 따옴표 리터럴을 쓰면 공개 리포 시크릿 스캐너가
+  // 하드코딩된 비밀로 오탐한다 (테스트 값은 example-… 처럼 스캐너가 아는 자리표시자 형태로 쓴다).
+  const REDACTED = '(redacted)';
+
   it('최상위 비밀 키는 통째로 가린다 (기존 동작)', () => {
-    expect(previewValue('token', 'abc')).toBe('(redacted)');
-    expect(previewValue('keystore_base64', 'eA==')).toBe('(redacted)');
+    expect(previewValue('token', 'abc')).toBe(REDACTED);
+    expect(previewValue('keystore_base64', 'eA==')).toBe(REDACTED);
   });
 
   it('중첩 객체·배열 안의 비밀처럼 보이는 키도 가리고 나머지는 그대로 보여준다', () => {
-    const shown = previewValue('parameters', { DEPLOY_TOKEN: 'placeholder-secret', platform: 'android', nested: [{ password: 'p' }] });
-    expect(shown).not.toContain('placeholder-secret');
-    expect(JSON.parse(shown)).toEqual({ DEPLOY_TOKEN: '(redacted)', platform: 'android', nested: [{ password: '(redacted)' }] });
+    const shown = previewValue('parameters', { DEPLOY_TOKEN: 'example-secret', platform: 'android', nested: [{ password: 'p' }] });
+    expect(shown).not.toContain('example-secret');
+    expect(JSON.parse(shown)).toEqual({ DEPLOY_TOKEN: REDACTED, platform: 'android', nested: [{ password: REDACTED }] });
   });
 
   it('비밀 키가 없는 값은 예전과 똑같이 보인다', () => {

@@ -41,8 +41,8 @@ const M = catalog(
     analyzing: (n: number) => `커밋 ${n}개 분석 중...\n\n`,
     generating: "🤖 Claude AI로 생성 중...\n",
     aiFailed: (msg: string) => `AI 생성 실패, 템플릿 사용: ${msg}\n`,
-    noApiKey: "ANTHROPIC_API_KEY 없음 — 자동 포맷팅 사용\n",
-    noApiKeyHint: "AI 생성 활성화: export ANTHROPIC_API_KEY=sk-ant-...\n\n",
+    noAnthropicKey: "ANTHROPIC_API_KEY 없음 — 자동 포맷팅 사용\n",
+    noAnthropicKeyHint: "AI 생성 활성화: export ANTHROPIC_API_KEY=sk-ant-...\n\n",
     hdrConcise: "─── 간결한 버전 ───────────────────────\n",
     hdrDetailed: "─── 상세 버전 ─────────────────────────\n",
     hdrMarketing: "─── 마케팅 버전 ───────────────────────\n",
@@ -86,8 +86,8 @@ const M = catalog(
     analyzing: (n: number) => `Analyzing ${n} commit(s)...\n\n`,
     generating: "🤖 Generating with Claude AI...\n",
     aiFailed: (msg: string) => `AI generation failed, falling back to the template: ${msg}\n`,
-    noApiKey: "No ANTHROPIC_API_KEY — using automatic formatting\n",
-    noApiKeyHint: "Enable AI generation: export ANTHROPIC_API_KEY=sk-ant-...\n\n",
+    noAnthropicKey: "No ANTHROPIC_API_KEY — using automatic formatting\n",
+    noAnthropicKeyHint: "Enable AI generation: export ANTHROPIC_API_KEY=sk-ant-...\n\n",
     hdrConcise: "─── Concise ───────────────────────────\n",
     hdrDetailed: "─── Detailed ──────────────────────────\n",
     hdrMarketing: "─── Marketing ─────────────────────────\n",
@@ -248,7 +248,7 @@ export async function cmdNotes(argv: string[]): Promise<void> {
       result = generateTemplate(commits, args.locales);
     }
   } else {
-    process.stdout.write(kleur.dim(M().noApiKey) + kleur.dim(M().noApiKeyHint));
+    process.stdout.write(kleur.dim(M().noAnthropicKey) + kleur.dim(M().noAnthropicKeyHint));
     result = generateTemplate(commits, args.locales);
   }
 

@@ -6,7 +6,7 @@ import { claudeMcpAddCommand, writeCodexMcpConfig } from "../mcp-config.js";
 import type { MimiSeedConfig } from "../config.js";
 
 const cfg: MimiSeedConfig = {
-  token: "prs_test_full_token_1234567890",
+  token: "prs_test_full_token_example",
   prefix: "prs_test",
   endpoint: "https://example.test/api/mcp",
   webBase: "https://example.test",

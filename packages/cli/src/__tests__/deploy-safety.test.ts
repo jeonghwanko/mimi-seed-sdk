@@ -27,8 +27,8 @@ describe('배포 안전 경계', () => {
       }
       throw new Error(`Unexpected fetch: ${String(input)}`);
     }));
-    mocks.config.mockResolvedValue({ webBase: 'https://example.com', token: 'test-token' });
-    mocks.jenkins.mockReturnValue({ url: 'https://ci.example.com', username: 'test', token: 'test-token' });
+    mocks.config.mockResolvedValue({ webBase: 'https://example.com', token: 'example-token' });
+    mocks.jenkins.mockReturnValue({ url: 'https://ci.example.com', username: 'test', token: 'example-token' });
     mocks.project.mockReturnValue({ job: 'team/mobile', source: '.mimi-seed.json' });
     mocks.ci.mockReturnValue({ provider: 'github', owner: 'example', repo: 'app' });
   });

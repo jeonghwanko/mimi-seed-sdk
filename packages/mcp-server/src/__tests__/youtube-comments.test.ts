@@ -29,7 +29,7 @@ beforeEach(() => {
     : { data: { items: [{ id: 'reply-1', snippet: { parentId: target.parentCommentId, textDisplay: 'First reply' } }], nextPageToken: 'next' } });
   threadsList.mockImplementation(async (params) => params.id
     ? { data: { items: [thread] } }
-    : { data: { items: [thread], nextPageToken: 'thread-next' } });
+    : { data: { items: [thread], nextPageToken: 'thread-next-example' } });
 });
 
 describe('YouTube comment reading', () => {
@@ -39,7 +39,7 @@ describe('YouTube comment reading', () => {
       allThreadsRelatedToChannelId: channelId, maxResults: 10, pageToken: 'old' });
     expect(result.threads[0]).toMatchObject({ threadId: target.threadId, totalReplyCount: 2,
       repliesIncluded: false, repliesComplete: false });
-    expect(result.nextPageToken).toBe('thread-next');
+    expect(result.nextPageToken).toBe('thread-next-example');
   });
 
   it('verifies ownership before a video-specific read and preserves unknown reply count', async () => {
@@ -61,10 +61,10 @@ describe('YouTube comment reading', () => {
   });
 
   it('pages replies for a distinct thread ID and top-level comment ID', async () => {
-    const result = await listYouTubeCommentReplies(auth, { ...target, maxResults: 1, pageToken: 'reply-old' });
+    const result = await listYouTubeCommentReplies(auth, { ...target, maxResults: 1, pageToken: 'reply-old-example' });
     expect(threadsList).toHaveBeenCalledWith({ part: ['snippet'], id: [target.threadId], textFormat: 'plainText' });
     expect(commentsList).toHaveBeenCalledWith(expect.objectContaining({ parentId: target.parentCommentId,
-      maxResults: 1, pageToken: 'reply-old', textFormat: 'plainText' }));
+      maxResults: 1, pageToken: 'reply-old-example', textFormat: 'plainText' }));
     expect(result.replies).toHaveLength(1);
     expect(result.nextPageToken).toBe('next');
     expect(result.repliesComplete).toBe(false);

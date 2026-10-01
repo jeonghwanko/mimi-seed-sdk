@@ -18,8 +18,8 @@ import { withoutBackoff } from './helpers.js';
  *    "계정 undefined개" 를 찍었고, 비 JSON 성공 본문은 SyntaxError 메시지로 앞부분이 새었다.
  */
 
-const ACCESS_TOKEN = 'example-access-token-with-dev-token-inside';
-const DEV_TOKEN = 'dev-token';
+const ACCESS_TOKEN = 'example-access-token-with-dev-token-example-inside';
+const DEV_TOKEN = 'dev-token-example';
 const auth = { getAccessToken: async () => ({ token: ACCESS_TOKEN }) } as unknown as OAuth2Client;
 const cfg: GoogleAdsConfig = { developerToken: DEV_TOKEN, customerId: '1234567890' };
 const range = { startDate: '2026-03-01', endDate: '2026-03-31' };

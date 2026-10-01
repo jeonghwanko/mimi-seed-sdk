@@ -67,13 +67,13 @@ import {
 } from '../iam/key-files.js';
 import { keystoresDir, readKeystoreBase64, resolveSecretInput } from '../android/keystore-store.js';
 
-const PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nplaceholder-secret-material\n-----END PRIVATE KEY-----\n';
+const SERVICE_ACCOUNT_PEM = '-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n';
 const SA = 'ci-bot@example-project.iam.gserviceaccount.com';
 const keyJson = JSON.stringify({
   type: 'service_account',
   client_email: 'ci-bot@example-project.iam.gserviceaccount.com',
   project_id: 'example-project',
-  private_key: PRIVATE_KEY,
+  private_key: SERVICE_ACCOUNT_PEM,
 });
 
 afterAll(() => fs.rmSync(h.home, { recursive: true, force: true }));
@@ -124,7 +124,7 @@ describe('iam_create_key', () => {
     const { text } = await call('iam_create_key', { serviceAccount: SA, confirm: true });
 
     expect(text).not.toContain('PRIVATE KEY');
-    expect(text).not.toContain('placeholder-secret-material');
+    expect(text).not.toContain('secret-key-material');
     const saved = path.join(serviceAccountKeysDir(), 'ci-bot-KEY123.json');
     expect(text).toContain(saved);
     expect(fs.readFileSync(saved, 'utf8')).toBe(keyJson);

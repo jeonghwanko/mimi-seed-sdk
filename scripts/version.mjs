@@ -24,8 +24,11 @@ export const VERSIONED = [
   'plugins/mimi-seed/.codex-plugin/plugin.json',
 ];
 
-/** npm 이 패키지 버전으로 기록하는 lockfile 최상위 두 필드도 함께 맞춘다. */
+/** npm 이 패키지 버전으로 기록하는 lockfile 최상위 두 필드도 함께 맞춘다.
+ *  루트 lockfile 은 의존성이 없는 루트 패키지 하나만 기록한다 (워크스페이스가 아니다) — 공급망 스캐너가
+ *  package.json 옆에 lockfile 을 요구해서 둔다. 버전 필드는 똑같이 따라가야 한다. */
 export const VERSIONED_LOCKS = [
+  'package-lock.json',
   'packages/cli/package-lock.json',
   'packages/mcp-server/package-lock.json',
 ];

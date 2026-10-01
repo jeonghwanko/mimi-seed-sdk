@@ -5,8 +5,8 @@ import {
   type RemoteSyncDependencies,
 } from '../remote-sync.js';
 
-const appStorePrivateKey = '-----BEGIN PRIVATE KEY-----\nplaceholder\n-----END PRIVATE KEY-----';
-const playPrivateKey = '-----BEGIN PRIVATE KEY-----\nplaceholder-play\n-----END PRIVATE KEY-----';
+const appStorePrivateKey = '-----BEGIN PRIVATE KEY-----\nredacted-app-store-key\n-----END PRIVATE KEY-----';
+const playPrivateKey = '-----BEGIN PRIVATE KEY-----\nredacted-play-key\n-----END PRIVATE KEY-----';
 const serviceAccountJson = JSON.stringify({
   type: 'service_account',
   project_id: 'example-project',
@@ -17,7 +17,7 @@ const serviceAccountJson = JSON.stringify({
 function dependencies(): RemoteSyncDependencies {
   return {
     getConfig: () => ({
-      token: 'placeholder-pat',
+      token: 'example-pat',
       endpoint: 'https://example.test/api/mcp',
       webBase: 'https://example.test',
     }),
@@ -45,7 +45,7 @@ describe('syncRemoteCredentials', () => {
     expect(result).toContain('com.example.app');
     expect(result).not.toContain(appStorePrivateKey);
     expect(result).not.toContain(playPrivateKey);
-    expect(result).not.toContain('placeholder-pat');
+    expect(result).not.toContain('example-pat');
   });
 
   it('confirm=true이면 Apple과 패키지별 Play 자격증명을 전용 원격 도구로 보낸다', async () => {
@@ -69,7 +69,7 @@ describe('syncRemoteCredentials', () => {
     expect(result).toContain('Play 연결 완료');
     expect(result).not.toContain(appStorePrivateKey);
     expect(result).not.toContain(playPrivateKey);
-    expect(result).not.toContain('placeholder-pat');
+    expect(result).not.toContain('example-pat');
   });
 
   it('원격 PAT가 없으면 저장하지 않고 init 안내를 반환한다', async () => {
@@ -151,7 +151,7 @@ describe('syncRemoteCredentials — 허용 목록과 엔드포인트', () => {
     'not a url',
   ])('신뢰할 수 없는 엔드포인트 %s 로는 비밀값을 보내지 않는다', async (endpoint) => {
     const deps = dependencies();
-    deps.getConfig = () => ({ token: 'placeholder-pat', endpoint, webBase: 'https://example.test' });
+    deps.getConfig = () => ({ token: 'example-pat', endpoint, webBase: 'https://example.test' });
     const result = await syncRemoteCredentials({ confirm: true }, deps);
     expect(deps.callRemote).not.toHaveBeenCalled();
     expect(result).toContain('신뢰할 수 없어');
