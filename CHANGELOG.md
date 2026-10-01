@@ -32,7 +32,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Release Doctor judges targetSdk per Android app module and reports "meets the minimum" only when every app module's
   targetSdk was resolved from evidence it fully understood; one module it cannot evaluate makes the result
   unresolved (a value below the minimum is still a blocker). The JSON report lists each module as
-  `targetSdkModules`. A `findProperty("x") ?: N` default is no longer treated as the module's value.
+  `targetSdkModules`. A `findProperty("x") ?: N` default is no longer treated as the module's value. On top of
+  that, every `targetSdk` / `targetSdkVersion` / `setTargetSdkVersion` setting in the scanned Gradle scripts —
+  including settings scripts, `subprojects { afterEvaluate { … } }` / `plugins.withId(…)` blocks, receiver chains
+  such as `android.defaultConfig.targetSdkVersion 33`, and buildSrc / build-logic convention scripts — must be
+  recognised: one it does not model, or one it cannot attribute to an app module whose value is unresolved or below
+  the minimum, makes the result unresolved and cites the file and line. Library, sample, and Wear OS/TV modules, and
+  scripts only they apply, are left out. The JSON report lists each setting as `targetSdkTokens`.
 - Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
   unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the
   check is incomplete and names those items. They are also listed in the JSON report as `coverage.unresolved`.
@@ -80,8 +86,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   module's own build's settings (`versionCatalogs { create(…) { from(files(…)) } }`, any accessor such as
   `androidx.versions.*`, `$rootDir` paths, and literal `version("x", "33")` overrides in any call shape) plus the default
   `gradle/libs.versions.toml`, so a nested build and the repository root (or two builds sharing a key) no longer
-  overwrite each other's values; a `version` call it cannot parse leaves that catalog unresolved. A build script that
-  only mentions the application plugin (`hasPlugin("com.android.application")`) is not an app module. Comments are
+  overwrite each other's values; a `version` call it cannot parse leaves that catalog unresolved
+  (`library(…).version(…)` is not one). A `subprojects` / `allprojects` value always counts next to the module's own
+  (the lowest wins), a local variable counts only when declared before its use in an enclosing block, an extra
+  property is looked up only in the module's own project hierarchy, `ext.targetSdkVersion = …` is a property
+  definition rather than the module's targetSdk, and a name a settings script sets for every project
+  (`gradle.beforeProject { … }`) stays unresolved. Calls with nested parentheses
+  (`targetSdkVersion(libs.versions.targetSdk.get().toInt())`, `Integer.parseInt(…)`) are read in full. Every way of
+  applying the application plugin counts (`apply { plugin(…) }`, `pluginManager.apply(…)`, a multi-line `id(…)`);
+  a build script that only mentions it (`hasPlugin(…)`, `withId(…)`, `listOf(…)`, `apply false`) is not an app
+  module. Comments are
   removed with a string-aware reader (including Groovy slashy strings),
   so a glob such as `pickFirst '**/*.so'` or a URL no longer hides the code after it.
 - Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,

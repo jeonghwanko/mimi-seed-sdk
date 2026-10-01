@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closingBrace, removeBlocks, stripGradleComments } from '#core/checks/gradle-text.js';
+import { blankComments, closingBrace, maskStrings, removeBlocks, stripGradleComments } from '#core/checks/gradle-text.js';
 
 // Round-3 review: the regex stripper treated `/*` inside glob strings as a comment and ate real code up to the next
 // `*/` (Signal-Android lost its targetSdk line, Lawnchair its applicationId).
@@ -90,5 +90,29 @@ describe('stripGradleComments (string-aware)', () => {
     const stripped = stripGradleComments('a\n/* one\ntwo\nthree */\nb');
 
     expect(stripped.split('\n')).toEqual(['a', '', '', '', 'b']);
+  });
+});
+
+// Round 6: the Target API net matches tokens on masked code, at the same indexes as the original text.
+describe('maskStrings / blankComments', () => {
+  const text = 'println "targetSdk 33" // targetSdkVersion 30\n/* targetSdk = 29 */ targetSdk = 36';
+
+  it('blanks string contents and comments, keeping length and line breaks', () => {
+    const masked = maskStrings(text);
+
+    expect(masked).toHaveLength(text.length);
+    expect(masked.split('\n')).toHaveLength(2);
+    expect(masked.match(/targetSdk/g)).toHaveLength(1);
+    expect(masked.indexOf('targetSdk = 36')).toBe(text.lastIndexOf('targetSdk = 36'));
+    expect(masked).toContain('println "            "');
+  });
+
+  it('blankComments keeps strings', () => {
+    const blanked = blankComments(text);
+
+    expect(blanked).toHaveLength(text.length);
+    expect(blanked).toContain('"targetSdk 33"');
+    expect(blanked).not.toContain('targetSdkVersion 30');
+    expect(blanked).not.toContain('= 29');
   });
 });

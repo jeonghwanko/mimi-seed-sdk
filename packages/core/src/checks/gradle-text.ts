@@ -114,6 +114,32 @@ export function stripGradleComments(text: string): string {
   return out;
 }
 
+/** Gradle source with comments blanked to spaces (same length and line breaks, so indexes still line up). */
+export function blankComments(text: string): string {
+  let out = '';
+  scanGradle(text, (kind, start, end) => {
+    const slice = text.slice(start, end);
+    out += kind === 'comment' ? slice.replace(/[^\n]/g, ' ') : slice;
+  });
+  return out;
+}
+
+/**
+ * Gradle source with comments and string contents blanked (same length, line breaks kept): only code is left to
+ * match tokens against, so `"targetSdk 33"` in a string or a comment is never read as an assignment. Each string
+ * literal keeps its first and last character so `x = "…"` still shows a value is there.
+ */
+export function maskStrings(text: string): string {
+  let out = '';
+  scanGradle(text, (kind, start, end) => {
+    const slice = text.slice(start, end);
+    if (kind === 'code') out += slice;
+    else if (kind === 'comment' || slice.length < 2) out += slice.replace(/[^\n]/g, ' ');
+    else out += slice[0] + slice.slice(1, -1).replace(/[^\n]/g, ' ') + slice.at(-1);
+  });
+  return out;
+}
+
 /**
  * Index of the `}` that closes the `{` at `open`, counting braces only in code (not inside strings or comments);
  * -1 when it is never closed.
