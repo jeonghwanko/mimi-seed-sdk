@@ -20,8 +20,10 @@ store credentials, uploaded builds, metadata, or review submission behavior.
 
 ## Pre-pilot rehearsal
 
-A second preflight ran the published CLI against 12 public open-source apps (native Android, native iOS, bare
-React Native, Expo, Flutter, and Kotlin Multiplatform, several of them monorepos scanned with `--path`). Like the
+A second preflight ran the published 0.21.3 CLI against 12 public open-source apps (native Android, native iOS,
+bare React Native, Expo, Flutter, and Kotlin Multiplatform, several of them monorepos scanned with `--path`). The
+"after" column is the fix branch measured on the same 12 repositories the fixes were developed against, so it shows
+that those cases are fixed, not how the scanner does on projects it has not seen; the pilot measures that. Like the
 baseline above, it does not count toward the five independent pilot projects.
 
 | | First run | After the fixes |

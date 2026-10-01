@@ -44,27 +44,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   (also at the repository root when `--path` points into a workspace) is now mapped to the Billing version that
   release bundles, verified against every stable `react-native-iap` release through 16.7.2 — e.g. 12.15–13.x →
   Billing 7, a blocker since 2026-08-31. An installed 12.5–13.x and an app's `ext.playBillingSdkVersion` override are
-  read too; newer or unknown releases stay unresolved.
+  read too (only from the app's own root build script, comments ignored). pnpm v5/v6 single-project lockfiles are
+  read; newer or unknown releases, and `npm:` aliases that install a fork under the react-native-iap name, stay
+  unresolved.
 - A Wear OS, TV, Automotive, or XR module no longer switches off the Target API check for the whole repository; the
-  phone app is still checked, and the specialized module is reported for a category-specific check.
-- Android application IDs: strings, templates, and variables that mention `applicationId` are no longer reported
-  as IDs (or as extra app modules); `applicationId` read from the version catalog or `gradle.properties`, and the
-  `namespace` fallback, are resolved.
+  phone app is still checked, and the specialized module is reported for a category-specific check. A phone app that
+  also has a TV launcher (leanback not required) keeps the phone rule.
+- Android application IDs: strings, templates, and local variables that mention `applicationId` are no longer
+  reported as IDs (or as extra app modules); `applicationId` read from the version catalog or `gradle.properties`,
+  and the `namespace` fallback, are resolved. An app module declared through a convention plugin or a buildSrc
+  constant (`id(BuildPlugins.androidApplication)`, `libs.plugins.androidApplication`) or only by an
+  `applicationId = <expression>` assignment is still detected and checked; an ID Release Doctor cannot evaluate is
+  reported as unresolved with the expression.
 - targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`) or in Expo's
   `expo-build-properties` plugin is now read instead of reported as unresolved.
 - Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
   targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes
-  `MULTIPLE_*` warnings or a blocker that cites the wrong file.
+  `MULTIPLE_*` warnings or a blocker that cites the wrong file. Excluded app modules whose targetSdk is below the
+  minimum are listed in an info item, so a real app kept in a `demo/` folder is not dropped silently.
 - iOS bundle IDs written as `$(VAR)` / `${VAR}` are resolved from `.xcconfig` files and XcodeGen `project.yml`
   settings; when they cannot be resolved, Release Doctor reports them as unresolved instead of borrowing a nested
-  sample project's ID. Framework, test-bundle, and Debug/Profile-only IDs are left out.
+  sample project's ID. Framework, test-bundle, and Debug/Profile/Test-only IDs are left out (`TestFlight`
+  configurations are kept).
 - `MULTIPLE_IOS_BUNDLE_IDS` no longer fires for one app plus its extensions, widgets, and watch app, and
   `…UITests` IDs are filtered.
-- With `--path` inside a repository, Xcode pins in the repository root's CI files and the root Gradle version
-  catalog are read (a pin outside the path alone never makes a blocker). Composite actions
+- With `--path` inside a repository, the root Gradle version catalog is read, and when the path itself has no Xcode
+  evidence the repository root's CI pins are cited as a `NEEDS CHECK` item (they may build another app, so they
+  never decide the verdict or cancel one found inside the path). Composite actions
   (`.github/actions/**/action.yml`) count as Xcode pin sources, and Xcode Cloud `ci_scripts/` are reported as such.
 - The reusable Release Doctor workflow, and the CI command `check --local` suggests for projects that declare
-  `devEngines`, run `npx` with a throwaway prefix; inside such a project npm stopped `npx` with `EBADDEVENGINES`
+  `devEngines` (in PowerShell form on Windows), run `npx` with a throwaway prefix; inside such a project npm stopped `npx` with `EBADDEVENGINES`
   before Release Doctor started. The pilot guide and troubleshooting document the workaround.
 
 ### Tool changes
