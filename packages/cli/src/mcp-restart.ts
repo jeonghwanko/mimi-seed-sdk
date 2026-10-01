@@ -170,7 +170,7 @@ const GENERIC_MARKERS = new Set([
   'node_modules', '.bin', '.npm', '_npx', 'stdio', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
   'index.js', 'index.ts', 'index.mjs', 'index.cjs', 'main.js', 'main.ts', 'server.js', 'server.ts', 'cli.js',
 ]);
-const SCRIPT_RE = /\.(?:[cm]?js|ts)$/i;
+const SCRIPT_RE = /\.(?:[cm]?[jt]s|py)$/i;
 const WIN_EXE_RE = /\.(?:exe|cmd|bat)$/i;
 const VERSION_RE = /@(?:latest|next|\d[\w.+-]*)$/;
 
@@ -185,15 +185,19 @@ const RUNTIME_RE = /^(?:node(?:js)?\d*|bun|deno|python(?:\d+(?:\.\d+)?t?)?|pytho
 /** 다음 원소를 값으로 받는 런타임 플래그 — 그 값은 스크립트가 아니다. */
 const FLAGS_WITH_VALUE = new Set([
   '-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions', '--env-file',
+  '--title', '--inspect-port', '--debug-port', '--disable-warning', '--watch-path', '--input-type',
   '--config', '--import-map', '-W', '-X',
 ]);
+/** 같은 프로세스 안에서 다음 인자를 스크립트로 실행하는 로더 — 스크립트 자리는 그 다음 인자다. */
+const IN_PROCESS_LOADERS = new Set(['ts-node', 'ts-node-esm', 'ts-node-script', 'ts-node-transpile-only']);
 
 /** `/` 와 `\` 를 모두 구분자로 본 마지막 경로 조각 — Windows 명령줄도 같은 규칙으로 비교한다. */
 function baseName(value: string): string {
   return value.split(/[\\/]/).pop() ?? value;
 }
 
-const normalizePath = (value: string) => value.replace(/\\/g, '/').toLowerCase();
+/** 비교용 경로: 구분자 통일 · 소문자 · `..`/`//` 정리 (npm .cmd 셈은 `…\\.bin\\\\..\\<패키지>\\…` 로 띄운다). */
+const normalizePath = (value: string) => path.posix.normalize(value.replace(/\\/g, '/').toLowerCase());
 /** 실행 파일 이름: 경로 · 확장자(.exe/.cmd)를 뗀 소문자. */
 const programName = (argv0: string) => baseName(argv0).toLowerCase().replace(WIN_EXE_RE, '');
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -253,13 +257,18 @@ function candidateMarkers(cfg: Record<string, unknown>, cwd: string = process.cw
 function scriptOf(argv: string[]): string | null {
   const program = programName(argv[0] ?? '');
   const isPython = program.startsWith('py');
-  let i = (program === 'bun' || program === 'deno') && argv[1] === 'run' ? 2 : 1;
-  for (; i < argv.length; i++) {
+  const hasRunVerb = program === 'bun' || program === 'deno';
+  for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
     if (isPython && a === '-m') return argv[i + 1] ?? null;
     if ((isPython && a === '-c') || (!isPython && ['-e', '--eval', '-p', '--print'].includes(a))) return null;
     if (FLAGS_WITH_VALUE.has(a) || (program === 'deno' && a === '-c')) { i++; continue; }
     if (a.startsWith('-')) continue;
+    if (hasRunVerb && a === 'run') continue; // `bun --smol run x`, `deno run --allow-net x`
+    // `node …/.bin/ts-node src/index.ts` — ts-node 는 같은 프로세스에서 다음 인자를 실행한다.
+    if (IN_PROCESS_LOADERS.has(baseName(a).toLowerCase().replace(/\.[cm]?js$/, ''))) {
+      return scriptOf([argv[0] ?? '', ...argv.slice(i + 1)]);
+    }
     return a;
   }
   return null;
@@ -291,7 +300,8 @@ function matchesMarkers(argv: string[], markers: string[], ctx: MatchContext = {
   return markers.some((marker) => {
     if (SCRIPT_RE.test(marker)) {
       const wanted = normalizePath(marker);
-      if (absoluteScript() === wanted) return true;
+      // 파일 이름이 같을 때만 작업 폴더를 묻는다 — macOS 는 프로세스마다 lsof 를 띄운다.
+      if (baseName(s) === baseName(wanted) && absoluteScript() === wanted) return true;
       if (!wanted.includes(' ') || !isAbsoluteScript(script)) return false;
       const joined = normalizePath(argv.slice(argv.indexOf(script, 1)).join(' '));
       return joined === wanted || joined.startsWith(`${wanted} `);
@@ -422,7 +432,8 @@ function listWindowsProcesses(): ProcessEntry[] {
  * 상대경로 스크립트를 풀 때 쓰는 그 프로세스의 작업 폴더. Linux 는 /proc, macOS 는 lsof(절대경로).
  * Windows 는 Win32_Process 에 작업 폴더가 없어 알 수 없다 — 그때 상대경로 프로세스는 고르지 않는다.
  */
-const looksLikeMimiSeed = (marker: string) => /mimi-seed/i.test(marker) || /[\\/]packages[\\/]mcp-server[\\/]/i.test(marker);
+/** mimi-seed MCP 서버 식별자인가 — CLI(`mimi-seed`) 자체는 아니다. 소스 체크아웃은 packages/mcp-server 경로로 안다. */
+const looksLikeMimiSeed = (marker: string) => /mimi-seed-mcp/i.test(marker) || /[\\/]packages[\\/]mcp-server[\\/]/i.test(marker);
 
 function processCwd(pid: number): string | null {
   try {

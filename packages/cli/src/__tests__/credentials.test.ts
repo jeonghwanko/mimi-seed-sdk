@@ -64,6 +64,8 @@ describe('detectAll', () => {
     expect(detectAll(home).get('googleads')).toEqual({ present: false });
     writeCred('google-ads.json', { developerToken: 'd', customerId: 1234567890 });
     expect(detectAll(home).get('googleads')).toEqual({ present: true, detail: '1234567890' });
+    writeCred('google-ads.json', { developerToken: 'd', customerId: '1234567890', loginCustomerId: { id: 1 } });
+    expect(detectAll(home).get('googleads')).toEqual({ present: false });
   });
 
   // Play SA 는 기본 파일과 패키지별 디렉토리 양쪽을 봐야 한다 — 한쪽만 보면 오진한다.

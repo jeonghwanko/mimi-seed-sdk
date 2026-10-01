@@ -512,12 +512,15 @@ export const CREDENTIALS: readonly CredSpec[] = [
     },
     docsAnchor: "google-ads",
     detect: (home) => {
-      // MCP 의 loadConfig 와 같은 기준 — developerToken 과 customerId(문자열 또는 정수)가 둘 다 있어야 한다.
-      const cfg = readJson<{ developerToken?: unknown; customerId?: unknown }>(home, "google-ads.json");
-      const id = cfg?.customerId;
-      const hasId = (typeof id === "string" && id.trim() !== "") || (typeof id === "number" && Number.isSafeInteger(id) && id > 0);
-      return typeof cfg?.developerToken === "string" && cfg.developerToken && hasId
-        ? { present: true, detail: String(id) }
+      // MCP 의 loadConfig 와 같은 기준 — developerToken 과 customerId(문자열 또는 정수)가 있어야 하고,
+      // 비어 있지 않은 loginCustomerId 도 같은 모양이어야 한다.
+      const cfg = readJson<{ developerToken?: unknown; customerId?: unknown; loginCustomerId?: unknown }>(home, "google-ads.json");
+      const isId = (v: unknown) =>
+        (typeof v === "string" && v.trim() !== "") || (typeof v === "number" && Number.isSafeInteger(v) && v > 0);
+      const login = cfg?.loginCustomerId;
+      const loginOk = login === undefined || login === null || login === "" || isId(login);
+      return typeof cfg?.developerToken === "string" && cfg.developerToken && isId(cfg.customerId) && loginOk
+        ? { present: true, detail: String(cfg.customerId) }
         : { present: false };
     },
   },

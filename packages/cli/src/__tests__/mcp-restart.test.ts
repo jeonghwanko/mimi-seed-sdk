@@ -76,6 +76,7 @@ describe('restart 식별자 — 흔한 값은 쓰지 않는다', () => {
     expect(__testing.looksLikeMimiSeed('@yoonion/mimi-seed-mcp@latest')).toBe(true);
     expect(__testing.looksLikeMimiSeed('/home/dev/sdk/packages/mcp-server/dist/index.js')).toBe(true);
     expect(__testing.looksLikeMimiSeed('@anthropic-ai/claude-code')).toBe(false);
+    expect(__testing.looksLikeMimiSeed('mimi-seed')).toBe(false); // CLI 자체 — 진행 중인 deploy 를 죽이면 안 된다
   });
 });
 
@@ -95,6 +96,9 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.scriptOf(['deno', 'run', '-c', 'deno.json', '--allow-net', 'jsr:@scope/pkg'])).toBe('jsr:@scope/pkg');
     expect(__testing.scriptOf(['python3.13t', '-X', 'utf8', '-m', 'mcp_server_git', '--repository', '/r'])).toBe('mcp_server_git');
     expect(__testing.scriptOf(['node', '-e', 'require("mimi-seed-mcp")'])).toBeNull();
+    expect(__testing.scriptOf(['node', '--title', 'srv', '--inspect-port', '9230', '/x/a.js'])).toBe('/x/a.js');
+    expect(__testing.scriptOf(['bun', '--smol', 'run', 'src/index.ts'])).toBe('src/index.ts');
+    expect(__testing.scriptOf(['node', '/p/node_modules/.bin/ts-node', '--transpile-only', 'src/index.ts'])).toBe('src/index.ts');
   });
 
   it('기본 npx 설정의 서버(node)만 고르고 래퍼는 두고 본다 (POSIX)', () => {
@@ -113,7 +117,13 @@ describe('restart 프로세스 판정', () => {
       { pid: 22, argv: win('"C:\\Program Files\\nodejs\\node.exe" "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npx-cli.js" -y @yoonion/mimi-seed-mcp@latest') },
       { pid: 23, argv: win('"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js') },
       { pid: 24, argv: win('Node.exe "C:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js"') },
-    ], ['mimi-seed-mcp'])).toEqual([23, 24]);
+      // npm cmd-shim 이 실제로 만드는 형태: %dp0% 가 이미 \ 로 끝나 `.bin\\..\` 이 된다.
+      { pid: 25, argv: win('"C:\\Program Files\\nodejs\\node.exe"  "C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\.bin\\\\..\\@yoonion\\mimi-seed-mcp\\dist\\index.js"') },
+    ], ['mimi-seed-mcp'])).toEqual([23, 24, 25]);
+  });
+
+  it('pnpm 셈의 `.bin/../` 경로도 정리해서 비교한다', () => {
+    expect(plan([{ pid: 26, argv: ['node', '/home/dev/proj/node_modules/.bin/../@yoonion/mimi-seed-mcp/dist/index.js'] }])).toEqual([26]);
   });
 
   it('식별자가 스크립트가 아닌 자리에 있거나 이름만 겹치면 고르지 않는다', () => {
@@ -144,6 +154,17 @@ describe('restart 프로세스 판정', () => {
       { pid: 53, argv: ['node', 'src/index.ts'] },
       { pid: 54, argv: ['node', 'src/index.ts'] },
     ], marker, { 52: path.resolve('/home/dev/proj'), 53: path.resolve('/home/dev/other') })).toEqual([52]);
+  });
+
+  it('.py · .mts 스크립트도 경로로 비교한다 — 다른 폴더의 같은 파일 이름은 고르지 않는다', () => {
+    const py = __testing.candidateMarkers({ command: 'uv', args: ['run', '--no-project', 'python', 'srv/server.py'] }, '/home/dev/proj');
+    expect(py).toEqual([path.resolve('/home/dev/proj', 'srv/server.py')]);
+    expect(plan([
+      { pid: 55, argv: ['python3', 'srv/server.py'] },
+      { pid: 56, argv: ['python3', 'srv/server.py'] },
+    ], py, { 55: path.resolve('/home/dev/proj'), 56: path.resolve('/home/dev/other') })).toEqual([55]);
+    const mts = __testing.candidateMarkers({ command: 'npx', args: ['tsx', 'src/index.mts'] }, '/home/dev/proj');
+    expect(plan([{ pid: 57, argv: ['node', '--import', 'tsx', 'src/index.mts'] }], mts, { 57: path.resolve('/home/dev/other') })).toEqual([]);
   });
 
   it('스크립트 식별자는 경로가 같을 때만 (구분자 · 대소문자 무시, POSIX 공백 경로 포함)', () => {

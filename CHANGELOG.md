@@ -32,8 +32,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `--to` starting with `-`, instead of reporting "No commits found". The latest tag is read as `refs/tags/<tag>`,
   so a tag named like `HEAD` or starting with `-` is still used as the range start.
 - `mimi-seed restart` now finds servers registered as a bare command (`"command": "mimi-seed-mcp"` with no args,
-  as `scripts/install.mjs --link` registers it), on Linux and macOS servers started from a relative script path or
-  a path containing spaces, and on Windows the actual `node` server behind `npx` or an npm `.cmd` shim.
+  as `scripts/install.mjs --link` registers it), servers run through `ts-node`, servers launched through npm or
+  pnpm shims (`…/.bin/../<package>/…`), on Linux and macOS servers started from a relative script path or a path
+  containing spaces, and on Windows the actual `node` server behind `npx` or an npm `.cmd` shim.
 - A Google Ads API error whose JSON `details` contained a `null` entry was reported as ": non-JSON response" and
   lost the provider's message, codes, and `requestId`; those are now kept.
 
@@ -51,11 +52,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   file or `-m` module the runtime is running — is the configured server: a script path must match (a relative
   path is resolved against that process's working folder), and a package must be the script's bin name or the
   `node_modules/` folder it runs from. Shells and `npm exec` / `npx` / `cmd /c` wrappers are left alone; they exit
-  when the server does. With the default server name it also refuses a marker that does not look like
-  `mimi-seed`, so a repository's `.mcp.json` cannot redirect it, and it kills nothing — reporting the count —
-  when more than 10 server processes match. Docker and native-binary servers are not restarted (it reports that
-  no process was found), and on Windows a server started from a relative script path is not found, because
-  Windows does not expose another process's working folder.
+  when the server does. With the default server name it also refuses a marker that does not look like the
+  `mimi-seed-mcp` server (or a `packages/mcp-server/` checkout), so a repository's `.mcp.json` cannot redirect it
+  at other processes, and it kills nothing — reporting the count — when more than 10 server processes match.
+  Not restarted (it reports that no process was found): Docker and native-binary servers; on Windows, a server
+  started from a relative script path, because Windows does not expose another process's working folder; and on
+  Linux and macOS, an `npx` server whose npm cache path contains a space.
 - On Windows, `mimi-seed notes`, `doctor`, `restart`, and the setup commands no longer run an executable placed in
   the current folder: `powershell.exe` and `taskkill.exe` are called by absolute path, and `git` and the
   `mimi-seed-*` setup shims are looked up only in absolute `PATH` entries.
