@@ -57,8 +57,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   unresolved. Plugin sources are read from every included build except an Android app module's own sources (all of
   them in buildSrc, build-logic, and `pluginManagement { includeBuild }` roots), and a plugin build that a sample
   build also includes is not a sample. A `subprojects` block counts as library-only (not the app's) only behind a
-  single positive `withId` / `withPlugin` / `hasPlugin` of the library plugin (also as `else if` or a Kotlin
-  `when` branch); `||`, `!`, a plain `else`, or the application id make it count for the app. A plugin id that is
+  single positive `withId` / `withPlugin` / `hasPlugin` of the library plugin on the project itself (also as
+  `else if` or a Kotlin `when` branch, whose whole multi-line condition is read; a conjunction that includes the
+  check counts too); `||`, a `when` alternative, `!`, a plain `else`, the application id, or a check on another
+  project make it count for the app, and hooks on the Gradle object (`project.gradle.afterProject`, `getGradle()`)
+  inside library scripts count as reaching other projects. A plugin id that is
   only mentioned — in a dependency notation such as `implementation(plugin(libs.plugins.android.application))`, a
   `listOf(…)`, a string such as a plugin description, or `libs.plugins….get().version` — does not make a build
   script an app module. Scanning through a symlinked path gives the same result as the real path. A local

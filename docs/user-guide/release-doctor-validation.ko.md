@@ -73,11 +73,17 @@ Release Doctor는 빌드 파일을 읽을 뿐 Gradle을 실행하지 않는다. 
   설정으로 보고 가장 낮은 값을 쓴다. 단 하나의 예외는 라이브러리 플러그인만 긍정으로 확인하는 블록으로, 라이브러리
   전용으로 본다: `plugins.withId('com.android.library') { … }`(수신자 체인이 여러 줄에 걸쳐도),
   `if (…hasPlugin('com.android.library')) { … }`, `else if (…hasPlugin('com.android.library')) { … }`, Kotlin
-  `when` 분기 `plugins.hasPlugin("com.android.library") -> …`. 다른 조건(`||`, `&&`, `!`, 그냥 `else`, 변수로 준 id,
-  애플리케이션 id)은 앱에도 적용되는 것으로 세고, 라이브러리 전용 블록 안에서 다른 프로젝트에 닿는 설정
-  (`project(':app')…`, `rootProject`, `gradle.…`, 수신자 없는 `configure(…)`)도 센다.
+  `when` 분기 `plugins.hasPlugin("com.android.library") -> …`. 조건은 여러 줄에 걸쳐도 전체를 읽고, 확인 대상은
+  프로젝트 자신이어야 한다(수신자 없음, `plugins.`, `project.`, `this.`, `it.`, 클로저 매개변수). 그 확인을 포함한
+  논리곱(`!a && plugins.hasPlugin('com.android.library')`)도 라이브러리 전용이다. 그 밖의 경우 — `||`(줄 끝이나 줄
+  앞에 있어도), `when` 대안(`a, b ->`), `!`, 그냥 `else`, 삼항, 변수로 준 id, 애플리케이션 id, 다른 프로젝트의 확인
+  (`rootProject.plugins…`, `lib.plugins…`) — 은 앱에도 적용되는 것으로 세고, 라이브러리 전용 블록 안에서 다른
+  프로젝트에 닿는 설정(`project(':app')…`, `rootProject`, `gradle.…`·`project.gradle.…`·`getGradle()`, 수신자 없는
+  `configure(…)`)도 센다.
 - **다른 프로젝트 설정**은 흔한 형태(`subprojects`, `allprojects`, `project(':x')`, `afterEvaluate`,
-  `plugins.withId`)만 인식한다. 다른 경로로 다른 프로젝트의 `android` 블록에 닿는 코드는 모델링하지 않는다.
+  `plugins.withId`, Gradle 객체의 hook)만 인식한다. 다른 경로로 다른 프로젝트의 `android` 블록에 닿는 코드는
+  모델링하지 않는다. 예를 들어 라이브러리 스크립트의 `project.configure(otherProjects) { … }`는 다른 프로젝트에
+  닿는 것으로 보지 않는다.
 - **저장소 밖에서 계산되는 값**은 확정하지 못한다: Flutter의 `flutter.targetSdkVersion`(Flutter SDK가 정함)과 CI만
   넘기는 속성(`-Px=…`, `ORG_GRADLE_PROJECT_x`).
 - **Unity Gradle 템플릿:** `**TARGETSDKVERSION**` 자리표시자는 ProjectSettings 값으로 채워지고, 템플릿에 직접 쓴

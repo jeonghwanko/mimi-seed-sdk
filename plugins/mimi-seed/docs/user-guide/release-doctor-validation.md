@@ -78,11 +78,18 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   check for the library plugin, which is treated as library-only: `plugins.withId('com.android.library') { … }`
   (also with the receiver chain split over lines), `if (…hasPlugin('com.android.library')) { … }`,
   `else if (…hasPlugin('com.android.library')) { … }`, and a Kotlin `when` branch
-  `plugins.hasPlugin("com.android.library") -> …`. Any other condition (`||`, `&&`, `!`, a plain `else`, a variable
-  id, the application id) counts for the app, and a setting inside a library-only block that reaches another project
-  (`project(':app')…`, `rootProject`, `gradle.…`, a bare `configure(…)`) still counts.
+  `plugins.hasPlugin("com.android.library") -> …`. The whole condition is read, also when it spans lines, and the
+  check must be on the project itself (no receiver, `plugins.`, `project.`, `this.`, `it.`, or a closure parameter).
+  A conjunction that includes that check (`!a && plugins.hasPlugin('com.android.library')`) is library-only too.
+  Anything else — `||` (also at a line end or start), a `when` alternative (`a, b ->`), `!`, a plain `else`, a
+  ternary, a variable id, the application id, or a check on another project (`rootProject.plugins…`,
+  `lib.plugins…`) — counts for the app, and a setting inside a library-only block that reaches another project
+  (`project(':app')…`, `rootProject`, `gradle.…` / `project.gradle.…` / `getGradle()`, a bare `configure(…)`)
+  still counts.
 - **Cross-project configuration** is recognised in its common shapes (`subprojects`, `allprojects`, `project(':x')`,
-  `afterEvaluate`, `plugins.withId`); other ways of reaching another project's `android` block are not modelled.
+  `afterEvaluate`, `plugins.withId`, the Gradle object's hooks); other ways of reaching another project's `android`
+  block are not modelled — for example `project.configure(otherProjects) { … }` from a library script is not treated
+  as reaching another project.
 - **Values computed outside the repository** stay unresolved: Flutter's `flutter.targetSdkVersion` (from the Flutter
   SDK) and properties that only CI passes (`-Px=…`, `ORG_GRADLE_PROJECT_x`).
 - **Unity Gradle templates:** a `**TARGETSDKVERSION**` placeholder is filled from ProjectSettings; a literal value

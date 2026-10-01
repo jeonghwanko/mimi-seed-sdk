@@ -659,15 +659,23 @@ function appliesAndroidPlugin(text: string, id: RegExp): boolean {
   for (const match of code.matchAll(new RegExp(id.source, `${id.flags.replace('g', '')}g`))) {
     const at = match.index + match[0].length - 1;
     if (dependencies.some(([open, close]) => at > open && (close < 0 || at < close))) continue;
-    const call = enclosingCall(masked, at);
+    let call = enclosingCall(masked, at);
+    // Bare parentheses only group (`apply plugin: (isApp ? '…' : '…')`): the call around them decides.
+    while (call && call.name === '') call = enclosingCall(masked, call.open - 1);
     if (call) {
       // `plugin(…)` applies only as the statement of an `apply { … }` block; inside another call
       // (`implementation(plugin(…))`, `buildConfigField("…", plugin(…))`) it is a mention.
       const outer = enclosingCall(masked, call.open - 1);
       const block = enclosingBlocks(masked, call.open).at(-1)?.opener;
+      // A collection applies its ids when it is the map of `apply([plugin: '…'])`, or when it is iterated into
+      // `apply` (`['com.android.application', …].each { apply plugin: it }`, `listOf(…).forEach { apply(plugin = it) }`).
+      const collection = ['[', 'listOf', 'setOf', 'arrayOf', 'mutableListOf', 'mutableSetOf'].includes(call.name);
+      const close = collection ? statementEnd(masked, call.open + 1) : -1;
       const applies = PLUGIN_APPLYING_CALLS.has(call.name)
         || (call.name === 'plugin' && !outer && block === 'apply')
-        || (call.name === 'mapOf' && outer?.name === 'apply');
+        || (call.name === 'mapOf' && outer?.name === 'apply')
+        || (call.name === '[' && outer?.name === 'apply')
+        || (collection && /^\s*\??\.\s*(?:each|forEach|eachWithIndex|forEachIndexed)\s*\{[^{}]*\bapply\b/.test(masked.slice(close + 1, close + 300)));
       if (applies && !applyFalseAfter(at)) return true;
       continue;
     }
@@ -676,8 +684,11 @@ function appliesAndroidPlugin(text: string, id: RegExp): boolean {
     const before = code.slice(0, match.index);
     const start = Math.max(before.lastIndexOf('\n'), before.lastIndexOf(';'), before.lastIndexOf('{'), before.lastIndexOf('}')) + 1;
     const statement = code.slice(start, statementEnd(masked, match.index));
-    if (PLUGIN_MENTION.test(statement) || /\.\s*get\s*\(|\bversion\s*=/.test(statement)) continue;
     if (applyFalseAfter(at)) continue;
+    // A Groovy command call that applies (`id '…' version libs.versions.x.get()`, `id libs.plugins….get().pluginId`,
+    // `apply plugin: isApp ? '…' : '…'`, `plugin '…'` in `apply { }`) applies, whatever follows the id.
+    if (/^\s*(?:[\w$]+\s*\.\s*)*(?:id|alias|apply|plugin)\b(?!\s*=)/.test(statement)) return true;
+    if (PLUGIN_MENTION.test(statement) || /\.\s*get\s*\(|\bversion\s*=/.test(statement)) continue;
     return true;
   }
   return false;
@@ -1440,8 +1451,12 @@ function enclosingBlocks(masked: string, index: number): Array<{ open: number; o
  * `allprojects { … }` includes the project itself; in a library script, an `afterEvaluate` may be another project's
  * (`project(':app').afterEvaluate { … }`).
  */
-const CROSS_PROJECT_FROM_SELF = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|subprojects\b)|(?<![.\w$])(?:gradle\s*\.|configure\s*\()/;
-const CROSS_PROJECT_FROM_LIBRARY = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b|afterEvaluate\b)|(?<![.\w$])(?:gradle\s*\.|configure\s*\()/;
+// The Gradle object (`gradle.`, `project.gradle.`, `this.gradle.`, `getGradle().`) reaches every project.
+const GRADLE_OBJECT = String.raw`(?<![.\w$])(?:(?:(?:project|this)\s*\.\s*)?(?:gradle|getGradle\s*\(\s*\))\s*\.|configure\s*\()`;
+const CROSS_PROJECT_FROM_SELF = new RegExp(String.raw`\b(?:project\s*\(|findProject\s*\(|rootProject\b|subprojects\b)|${GRADLE_OBJECT}`);
+const CROSS_PROJECT_FROM_LIBRARY = new RegExp(String.raw`\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b|afterEvaluate\b)|${GRADLE_OBJECT}`);
+/** Inside a library-only block, a setting that reaches another project (`project(':app')…`, a bare `configure(…)`). */
+const LIBRARY_REACH = new RegExp(String.raw`\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b)|${GRADLE_OBJECT}`);
 /** A Groovy method declaration head (`def configure()`, `void apply(Project p)`): script locals are not visible in its body. */
 const GROOVY_METHOD = /^\s*(?:(?:public|private|protected|static|final|synchronized)\s+)*(?:def|void|int|long|boolean|double|float|short|byte|char|[A-Z]\w*(?:<[^<>]*>)?)\s+[A-Za-z_]\w*\s*\([^()]*\)\s*(?:throws\s+[\w.,\s]+)?$/;
 /** Blocks whose `targetSdk` is a different property (lint's and the test runner's), not the app's. */
@@ -1480,11 +1495,53 @@ function blockHead(masked: string, code: string, open: number): string {
  * literal argument is a library plugin id. Anything else — `||`, `&&`, `!`, `else`, a ternary, a non-literal id, or
  * the application id — runs for the app too.
  */
-const LIBRARY_PLUGIN_CHECK = String.raw`(?:[\w$]+\s*\??\.\s*)*(?:withId|withPlugin|hasPlugin)\s*\(\s*["']com\.android\.(?:library|test|fused-library|kotlin\.multiplatform\.library)["']\s*\)`;
-// `if (…)` or `else if (…)` (an else-if branch runs only when its own condition holds), or the call itself.
-const LIBRARY_ONLY_HEAD = new RegExp(`^(?:(?:else\\s+)?if\\s*\\(\\s*)?${LIBRARY_PLUGIN_CHECK}(?:\\s*\\))?$`);
-// A Kotlin `when { plugins.hasPlugin("com.android.library") -> … }` branch.
-const LIBRARY_ONLY_BRANCH = new RegExp(`^\\s*${LIBRARY_PLUGIN_CHECK}\\s*->`);
+const LIBRARY_PLUGIN_ID_LITERAL = String.raw`["']com\.android\.(?:library|test|fused-library|kotlin\.multiplatform\.library)["']`;
+
+/**
+ * A single positive check that THIS project has a library plugin: `withId` / `withPlugin` / `hasPlugin` with a
+ * literal library id, on no receiver or on the project itself (`plugins.`, `project.plugins.`, `pluginManager.`,
+ * `this.`, `it.`, or a closure parameter such as `p.plugins.`). A check on another project (`rootProject.plugins…`,
+ * `lib.plugins…` where `lib = project(':lib')`) is not.
+ */
+function selfLibraryCheck(text: string, receivers: Set<string>): boolean {
+  const call = text.trim().replace(/\?\./g, '.').replace(/\s*\.\s*/g, '.');
+  const match = call.match(new RegExp(`^(?:([A-Za-z_$][\\w$]*)\\.)?(?:project\\.)?(?:(?:plugins|pluginManager)\\.)?(?:withId|withPlugin|hasPlugin)\\s*\\(\\s*${LIBRARY_PLUGIN_ID_LITERAL}\\s*\\)$`));
+  if (!match) return false;
+  const first = match[1];
+  return first === undefined || ['plugins', 'pluginManager', 'project', 'this', 'it'].includes(first) || receivers.has(first);
+}
+
+/** `text` split at top-level occurrences of `operator` (outside parentheses and brackets). */
+function splitTopLevel(text: string, operator: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let cursor = 0; cursor < text.length; cursor++) {
+    const char = text[cursor];
+    if (char === '(' || char === '[') depth++;
+    else if (char === ')' || char === ']') depth--;
+    else if (depth === 0 && text.startsWith(operator, cursor)) {
+      parts.push(text.slice(start, cursor));
+      start = cursor + operator.length;
+      cursor += operator.length - 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/**
+ * A condition that holds only for library projects: a conjunction (`&&`) with no top-level `||`, `,`, ternary, or
+ * `else`, one of whose conjuncts is a single positive library check of this project (`!a && plugins.hasPlugin(lib)`
+ * is library-only; `hasPlugin(app) || hasPlugin(lib)` and `!hasPlugin(lib)` are not).
+ */
+function libraryOnlyCondition(condition: string, receivers: Set<string>): boolean {
+  const text = condition.trim();
+  // `,` separates alternatives in a Kotlin `when` branch (`a, b ->`): another `||`.
+  if (!text || splitTopLevel(text, '||').length > 1 || splitTopLevel(text, ',').length > 1
+    || /\?(?![.:])/.test(text.replace(/\?\./g, '')) || /\belse\b/.test(text)) return false;
+  return splitTopLevel(text, '&&').some((conjunct) => selfLibraryCheck(conjunct.trim().replace(/^\((.*)\)$/s, '$1'), receivers));
+}
 
 /** True when the token at `index` (with receiver `chain`) configures another project, or sits inside such a block. */
 function crossProjectToken(masked: string, index: number, chain: string, mode: 'self' | 'library'): boolean {
@@ -1891,18 +1948,46 @@ function targetSdkFindings(
     const masked = maskStrings(script.text);
     const code = blankComments(script.text);
     const blocks = enclosingBlocks(masked, token.index);
-    // The statement text before `at`, with its string literals (for the library id).
-    const branch = (at: number) => code.slice(at - statementPrefix(masked, at).length, at);
-    let library = blocks.findIndex((block) => LIBRARY_ONLY_HEAD.test(blockHead(masked, code, block.open))
-      || LIBRARY_ONLY_BRANCH.test(branch(block.open)));
+    // Closure parameters of the enclosing blocks (`subprojects { p -> … }`): `p.plugins.hasPlugin(…)` checks this project.
+    const receivers = new Set(blocks.map((block) => masked.slice(block.open + 1, block.open + 80).match(/^\s*([A-Za-z_$][\w$]*)\s*->/)?.[1])
+      .filter((name): name is string => Boolean(name)));
+    // `if (…) {`, `else if (…) {`, or the call itself (`plugins.withId('…') {`).
+    const headOnly = (open: number) => {
+      const head = blockHead(masked, code, open);
+      const condition = head.match(/^(?:else\s+)?if\s*\(([\s\S]*)\)$/)?.[1];
+      return condition !== undefined ? libraryOnlyCondition(condition, receivers) : selfLibraryCheck(head, receivers);
+    };
+    // A subject-less Kotlin `when { cond -> … }` branch: the FULL condition, joined across lines (`a ||\n b ->`).
+    const branchOnly = (at: number) => {
+      const lineStart = masked.lastIndexOf('\n', at - 1) + 1;
+      const arrow = masked.slice(lineStart, at).lastIndexOf('->');
+      if (arrow < 0) return false;
+      const end = lineStart + arrow;
+      const when = enclosingBlocks(masked, end).at(-1);
+      if (!when || blockHead(masked, code, when.open) !== 'when') return false;
+      let start = lineStart;
+      for (;;) {
+        const previousStart = masked.lastIndexOf('\n', start - 2) + 1;
+        if (start === 0 || previousStart <= when.open) {
+          start = Math.max(start, when.open + 1);
+          break;
+        }
+        const previous = masked.slice(previousStart, start - 1).trim();
+        const current = masked.slice(start, end).trim();
+        const open = (masked.slice(start, end).match(/\(/g) ?? []).length - (masked.slice(start, end).match(/\)/g) ?? []).length;
+        const continues = /(?:\|\||&&|[,(!.]|\?:|\?\.)$/.test(previous) || /^(?:\|\||&&|\.|\?\.|,|\?:)/.test(current) || open < 0;
+        if (!continues || /[{}]$|->/.test(previous)) break;
+        start = previousStart;
+      }
+      return libraryOnlyCondition(code.slice(start, end), receivers);
+    };
+    let library = blocks.findIndex((block) => headOnly(block.open) || branchOnly(block.open));
     // A `when` branch without braces: `plugins.hasPlugin("com.android.library") -> android.defaultConfig.targetSdk = 30`.
-    if (library < 0 && LIBRARY_ONLY_BRANCH.test(branch(token.index))) library = blocks.length;
+    if (library < 0 && branchOnly(token.index)) library = blocks.length;
     if (library < 0) return false;
     // Inside it, a setting that reaches another project (`project(':app').android…`) configures that project.
-    // A bare `configure(…)` is Project.configure (other projects); `extensions.configure(…)` is the project's own.
-    const reach = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b)|(?<![.\w$])(?:gradle\s*\.|configure\s*\()/;
-    return !reach.test(token.chain ?? '') && !reach.test(statementPrefix(masked, token.index))
-      && !blocks.slice(library + 1).some((block) => reach.test(block.head));
+    return !LIBRARY_REACH.test(token.chain ?? '') && !LIBRARY_REACH.test(statementPrefix(masked, token.index))
+      && !blocks.slice(library + 1).some((block) => LIBRARY_REACH.test(block.head));
   };
 
   const evaluate = (module: TargetSdkModule): TargetSdkModuleVerdict => {
@@ -2733,6 +2818,38 @@ async function resolvedPath(candidates: string[], context: ApplyContext, thirdPa
  * globs), or a `file:` / `link:` / `portal:` dependency spec. Null when a dependency spec says the package is the
  * repository's own (`workspace:`) but its folder cannot be found; undefined for an ordinary third-party package.
  */
+/**
+ * The folders a workspace glob names below `base`: `packages/*`, `apps/*\/mobile`, `packages/**` (any depth,
+ * node_modules and dot folders skipped), or a plain path.
+ */
+async function expandWorkspaceGlob(base: string, glob: string): Promise<string[]> {
+  const segments = glob.replace(/^\.\//, '').replace(/\/+$/, '').split('/').filter(Boolean);
+  const result: string[] = [];
+  const subdirectories = (dir: string) => fs.readdir(dir, { withFileTypes: true })
+    .then((entries) => entries.filter((entry) => entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.'))
+      .map((entry) => entry.name))
+    .catch(() => [] as string[]);
+  const walk = async (dir: string, index: number, depth: number): Promise<void> => {
+    if (result.length >= 2000 || depth > 12) return;
+    if (index === segments.length) {
+      result.push(dir);
+      return;
+    }
+    const segment = segments[index];
+    if (segment === '**') {
+      await walk(dir, index + 1, depth);
+      for (const child of await subdirectories(dir)) await walk(path.join(dir, child), index, depth + 1);
+    } else if (segment.includes('*')) {
+      const pattern = new RegExp(`^${segment.split('*').map(escapeRegExp).join('[^/]*')}$`);
+      for (const child of await subdirectories(dir)) if (pattern.test(child)) await walk(path.join(dir, child), index + 1, depth + 1);
+    } else {
+      await walk(path.join(dir, segment), index + 1, depth);
+    }
+  };
+  await walk(base, 0, 0);
+  return result;
+}
+
 async function workspacePackage(name: string, context: ApplyContext): Promise<string | null | undefined> {
   // `declared`: a member a workspace glob names, trusted wherever it lives.
   const manifests: Array<{ dir: string; json: Record<string, unknown>; declared?: boolean }> = [];
@@ -2762,13 +2879,7 @@ async function workspacePackage(name: string, context: ApplyContext): Promise<st
       ...[...(pnpm ?? '').matchAll(/^\s*-\s*["']?([^"'\n#]+?)["']?\s*$/gm)].map((match) => match[1]),
     ].filter((glob): glob is string => typeof glob === 'string' && !glob.startsWith('!'));
     for (const glob of globs) {
-      const base = glob.replace(/\/\*\*?$/, '');
-      const dirs = glob.endsWith('*')
-        ? await fs.readdir(path.join(directory, base), { withFileTypes: true })
-          .then((entries) => entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(directory, base, entry.name)))
-          .catch(() => [] as string[])
-        : [path.join(directory, base)];
-      for (const dir of dirs) {
+      for (const dir of await expandWorkspaceGlob(directory, glob)) {
         const known = manifests.find((manifest) => manifest.dir === dir);
         if (known) {
           known.declared = true;
@@ -2787,11 +2898,17 @@ async function workspacePackage(name: string, context: ApplyContext): Promise<st
       const spec = (manifest.json[field] as Record<string, unknown> | undefined)?.[name];
       if (typeof spec !== 'string') continue;
       const local = spec.match(/^(?:file|link|portal):(.+)$/)?.[1];
-      // Only a folder: `file:vendor/pkg-1.0.0.tgz` is a packed tarball, installed like any registry package.
-      if (local && await fs.stat(path.resolve(manifest.dir, local)).then((stat) => stat.isDirectory(), () => false)) {
-        return path.resolve(manifest.dir, local);
+      if (local) {
+        const target = path.resolve(manifest.dir, local);
+        const stat = await fs.stat(target).catch(() => undefined);
+        // A folder is the package; a packed tarball (`file:vendor/pkg-1.0.0.tgz`) installs like a registry package.
+        if (stat?.isDirectory()) return target;
+        if (stat) continue;
+        // A missing folder (an uninitialised submodule): the repository's own package, unreadable — unless it lies
+        // outside the repository or names a tarball.
+        if (isWithin(context.limit, target) && !/\.(?:tgz|tar|tar\.gz)$/i.test(target)) return null;
+        continue;
       }
-      if (local) continue;
       if (spec.startsWith('workspace:')) return null;
     }
   }
