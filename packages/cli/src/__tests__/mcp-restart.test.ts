@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -45,38 +44,276 @@ describe('MCP 재연결 안내', () => {
   });
 });
 
-// marker 는 레포가 커밋한 .mcp.json 에서 올 수 있다 — PowerShell 은 ’ ‘ 같은 둥근 따옴표도
-// 문자열 구분자로 받으므로, 이스케이프가 아니라 스크립트 밖(환경변수)으로 넘겨야 안전하다.
-const SMART_QUOTE_PAYLOAD = 'C:\\srv\\mimi-seed-mcp\u2019 + $(New-Item -ItemType File -Path pwned) + \u2019';
+// 설정은 레포가 커밋한 .mcp.json 에서 올 수 있다 — 식별자가 흔한 값이면 무관한 프로세스를 대량으로 죽인다.
+describe('restart 식별자 — 흔한 값은 쓰지 않는다', () => {
+  it.each([[[' ']], [['/c', 'e']], [['\\']], [['node']], [['-y', 'index.js']], [[42]], [['']], [['.bin']]])(
+    'args %j 로는 식별자를 만들지 않는다',
+    (args) => {
+      expect(__testing.candidateMarkers({ command: 'npx', args })).toEqual([]);
+    },
+  );
+
+  it('패키지는 패키지명 · bin 이름, 절대경로 스크립트는 그 경로만 쓴다', () => {
+    expect(__testing.candidateMarkers({ args: ['-y', '@yoonion/mimi-seed-mcp@latest'] }))
+      .toEqual(['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp']);
+    expect(__testing.candidateMarkers({ args: ['/home/dev/mimi-seed-sdk/packages/mcp-server/dist/index.js'] }))
+      .toEqual(['/home/dev/mimi-seed-sdk/packages/mcp-server/dist/index.js']);
+  });
+
+  it('상대경로 스크립트는 현재 폴더 기준 절대경로로 쓴다', () => {
+    expect(__testing.candidateMarkers({ command: 'npx', args: ['tsx', 'src/index.ts'] }, '/home/dev/proj'))
+      .toEqual([path.resolve('/home/dev/proj', 'src/index.ts')]);
+  });
+
+  it('args 없이 링크된 bin 을 command 로 등록해도 식별자를 얻는다', () => {
+    expect(__testing.candidateMarkers({ command: 'mimi-seed-mcp', args: [] })).toEqual(['mimi-seed-mcp']);
+    expect(__testing.candidateMarkers({ command: 'C:\\npm\\mimi-seed-mcp.cmd' })).toEqual(['mimi-seed-mcp']);
+    expect(__testing.candidateMarkers({ command: 'node', args: [] })).toEqual([]);
+    expect(__testing.candidateMarkers({ command: 'github-mcp-server', args: ['stdio'] })).toEqual(['github-mcp-server']);
+  });
+
+  it('기본 이름(mimi-seed)은 mimi-seed 서버 식별자만 받는다 — 글자 섞기 · `..` 위장은 거부', () => {
+    const sdk = path.resolve('/home/dev/sdk/packages/mcp-server');
+    const other = path.resolve('/home/dev/other/packages/mcp-server');
+    const pkgs: Record<string, { name: string; bin?: Record<string, string> }> = {
+      [sdk]: { name: '@yoonion/mimi-seed-mcp', bin: { 'mimi-seed-mcp': 'dist/index.js', 'mimi-seed-auth': 'dist/auth/cli.js' } },
+      [other]: { name: 'other-mcp' },
+    };
+    const read = (dir: string) => pkgs[dir] ?? null;
+    const ok = (m: string) => __testing.looksLikeMimiSeed(m, read);
+    expect(['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp'].every(ok)).toBe(true);
+    expect(ok(path.join(sdk, 'dist', 'index.js'))).toBe(true);
+    expect(ok(path.join(sdk, 'src', 'index.ts'))).toBe(true);
+    expect(ok(path.join(other, 'dist', 'index.js'))).toBe(false); // 흔한 폴더 이름만으로는 아니다
+    expect(ok(path.join(sdk, 'dist', 'auth', 'cli.js'))).toBe(false); // 같은 패키지의 설정 마법사는 아니다
+    expect(ok('@yoonion/mimi-seed-mcp@^0.21')).toBe(true);
+    expect(ok('/usr/local/bin/mimi-seed-mcp')).toBe(true);
+    expect(ok('C:\\npm\\mimi-seed-mcp.cmd')).toBe(true);
+    expect(ok('@yoonion/mimi-seed-mcp@x/../../vitest')).toBe(false);
+    expect(ok('/mimi-seed-mcp/../home/dev/other/packages/mcp-server/dist/index.js')).toBe(false);
+    expect(ok('mimi-seed')).toBe(false); // CLI 자체 — 진행 중인 deploy 를 죽이면 안 된다
+    expect(ok('@anthropic-ai/claude-code')).toBe(false);
+    const evil = __testing.candidateMarkers({ command: 'npx', args: ['-y', 'evil-mimi-seed-mcp/vitest'] });
+    expect(evil.every(ok)).toBe(false);
+  });
+});
+
+describe('restart 프로세스 판정', () => {
+  const pkg = ['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp'];
+  const win = __testing.splitWindowsCommandLine;
+  const cwdOf = (map: Record<number, string> = {}) => (pid: number) => map[pid] ?? null;
+  const plan = (
+    processes: Array<{ pid: number; argv: string[]; uid?: number }>,
+    markers = pkg,
+    cwds: Record<number, string> = {},
+  ) => __testing.planKill(processes, markers, { uid: 1000, cwdOf: cwdOf(cwds) }).pids;
+
+  it('런타임이 실행 중인 스크립트를 찾는다 — 플래그 · run · python -m 처리', () => {
+    expect(__testing.scriptOf(['node', '--enable-source-maps', '-r', 'dotenv/config', '/x/server.js', 'stdio'])).toBe('/x/server.js');
+    expect(__testing.scriptOf(['bun', 'run', 'src/index.ts'])).toBe('src/index.ts');
+    expect(__testing.scriptOf(['deno', 'run', '-c', 'deno.json', '--allow-net', 'jsr:@scope/pkg'])).toBe('jsr:@scope/pkg');
+    expect(__testing.scriptOf(['python3.13t', '-X', 'utf8', '-m', 'mcp_server_git', '--repository', '/r'])).toBe('mcp_server_git');
+    expect(__testing.scriptOf(['node', '-e', 'require("mimi-seed-mcp")'])).toBeNull();
+    expect(__testing.scriptOf(['node', '--title', 'srv', '--inspect-port', '9230', '/x/a.js'])).toBe('/x/a.js');
+    expect(__testing.scriptOf(['bun', '--smol', 'run', 'src/index.ts'])).toBe('src/index.ts');
+    expect(__testing.scriptOf(['node', '/p/node_modules/.bin/ts-node', '--transpile-only', 'src/index.ts'])).toBe('src/index.ts');
+    expect(__testing.scriptOf(['node', 'C:\\p\\node_modules\\ts-node\\dist\\bin.js', '-P', 'tsconfig.json', 'src\\index.ts'])).toBe('src\\index.ts');
+    expect(__testing.scriptOf(['node', '/home/dev/tools/ts-node.js', 'src/index.ts'])).toBe('/home/dev/tools/ts-node.js'); // 이름만 같은 스크립트
+    expect(__testing.scriptOf(['python3', '-P', 'server.py'])).toBe('server.py'); // python -P 는 값을 받지 않는다
+    expect(__testing.scriptOf(['node', '/p/node_modules/.bin/ts-node', '-D', '2307', '--transpiler', 'sucrase', 'src/index.ts'])).toBe('src/index.ts');
+  });
+
+  it('기본 npx 설정의 서버(node)만 고르고 래퍼는 두고 본다 (POSIX)', () => {
+    expect(plan([
+      { pid: 11, argv: ['npm', 'exec', '@yoonion/mimi-seed-mcp@latest'] },
+      { pid: 12, argv: ['sh', '-c', 'mimi-seed-mcp'] },
+      { pid: 13, argv: ['node', '/home/dev/.npm/_npx/abc/node_modules/.bin/mimi-seed-mcp'] },
+      { pid: 14, argv: ['/opt/homebrew/bin/node', '/usr/local/lib/node_modules/@yoonion/mimi-seed-mcp/dist/index.js'] },
+      { pid: 15, argv: ['node22', '/usr/local/bin/mimi-seed-mcp'] },
+    ])).toEqual([13, 14, 15]);
+  });
+
+  it('Windows npx · .cmd 셈이 띄운 node 서버만 고른다', () => {
+    expect(plan([
+      { pid: 21, argv: win('C:\\Windows\\system32\\cmd.exe /c npx -y @yoonion/mimi-seed-mcp@latest') },
+      { pid: 22, argv: win('"C:\\Program Files\\nodejs\\node.exe" "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npx-cli.js" -y @yoonion/mimi-seed-mcp@latest') },
+      { pid: 23, argv: win('"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js') },
+      { pid: 24, argv: win('Node.exe "C:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js"') },
+      // npm cmd-shim 이 실제로 만드는 형태: %dp0% 가 이미 \ 로 끝나 `.bin\\..\` 이 된다.
+      { pid: 25, argv: win('"C:\\Program Files\\nodejs\\node.exe"  "C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\.bin\\\\..\\@yoonion\\mimi-seed-mcp\\dist\\index.js"') },
+    ], ['mimi-seed-mcp'])).toEqual([23, 24, 25]);
+  });
+
+  it('패키지 폴더에서 띄운 경우 그 bin 진입점만 — 같은 패키지의 설정 마법사(하위 CLI)는 두고 본다', () => {
+    const read = (dir: string) => (/mimi-seed-mcp$/i.test(dir.replace(/[\\/]+$/, ''))
+      ? { name: '@yoonion/mimi-seed-mcp', bin: { 'mimi-seed-mcp': 'dist/index.js', 'mimi-seed-auth': 'dist/auth/cli.js' } }
+      : null);
+    const base = 'C:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist';
+    expect(__testing.planKill([
+      { pid: 71, argv: win(`node ${base}\\index.js`) },
+      { pid: 72, argv: win(`node ${base}\\auth\\cli.js`) },
+      { pid: 73, argv: ['node', '/usr/lib/node_modules/@yoonion/mimi-seed-mcp/dist/firebase/cli.js'] },
+      // 소문자로 바꾸면 길이가 늘어나는 글자(İ)가 경로에 있어도 패키지 폴더를 제대로 자른다.
+      { pid: 74, argv: win('node C:\\Users\\İsmail\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js') },
+    ], pkg, { uid: 1000, readPackageJson: read }).pids).toEqual([71, 74]);
+  });
+
+  it('버전 범위 · 태그 · Windows bin 경로로 등록해도 실제 서버를 찾는다 (보호 검사만 통과하고 못 찾으면 안 된다)', () => {
+    const server = { pid: 81, argv: ['node', '/home/dev/.npm/_npx/abc/node_modules/.bin/mimi-seed-mcp'] };
+    for (const [command, args] of [
+      ['npx', ['-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['cmd', ['/c', 'npx', '-y', '@yoonion/mimi-seed-mcp@beta']],
+      ['cmd', ['/c', 'C:\\npm\\mimi-seed-mcp.cmd']],
+      ['npm', ['exec', '--yes', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['bun', ['x', '@yoonion/mimi-seed-mcp@beta']],
+      ['pnpm', ['dlx', '@yoonion/mimi-seed-mcp@~0.21.0']],
+      ['C:\\Program Files\\nodejs\\NPX.CMD', ['-y', 'mimi-seed-mcp@next']],
+      ['pwsh', ['-NoProfile', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['NODE_OPTIONS=--max-old-space-size=4096', 'npx', '-y', '@yoonion/mimi-seed-mcp@beta']],
+      ['npx', ['--registry', 'https://registry.example.com', '-y', '@yoonion/mimi-seed-mcp@1.0.0-beta.1+build']],
+      ['npx', ['-y', '@yoonion/mimi-seed-mcp@>=0.21']],
+      ['npx', ['--loglevel', 'warn', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['-u', 'FOO', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['pwsh', ['-ExecutionPolicy', 'Bypass', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['pwsh', ['-ExecutionPolicy:Bypass', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['my-var=1', 'FOO.BAR=2', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['-S', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['-P', '/opt/bin', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['npx', ['-y', '@yoonion/mimi-seed-mcp@>=0.21 <1']],
+    ] as const) {
+      const markers = __testing.candidateMarkers({ command, args: [...args] });
+      expect(markers.every((m) => __testing.looksLikeMimiSeed(m))).toBe(true);
+      expect(plan([server], markers)).toEqual([81]);
+    }
+  });
+
+  it('패키지 실행기가 아니면 `user@host` 같은 인자에서 @ 뒤를 떼지 않는다', () => {
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@build-host', 'mcp-server'] })).not.toContain('dev');
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@10.0.0.5', 'mcp-server'] })).not.toContain('dev');
+    // 인자 어딘가의 npx 는 실행기가 아니다 — 실행기는 command 자리(또는 cmd /c 바로 뒤)에 있어야 한다.
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@build-host', 'npx', '-y', 'srv'] })).not.toContain('dev');
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['admin@10-0-0-5.nip.io', 'mcp-server'] })).not.toContain('admin');
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['deploy@1-build', 'mcp-server'] })).not.toContain('deploy');
+    expect(__testing.candidateMarkers({ command: 'npx', args: ['--registry', 'https://admin@r.example.com', '-y', 'some-srv'] })).toEqual(['some-srv']);
+    expect(__testing.candidateMarkers({ command: 'uvx', args: ['some_srv', 'log-level=debug'] })).toEqual(['some_srv']);
+    // Python 버전 고정(`pkg==1.0`)이 대입으로 빠져도 실행기 단어(pipx · tool)가 식별자가 되면 안 된다.
+    expect(__testing.candidateMarkers({ command: 'pipx', args: ['run', 'mcp-server-fetch==1.0'] })).not.toContain('pipx');
+    expect(__testing.candidateMarkers({ command: 'uv', args: ['tool', 'run', 'mcp-server-fetch==1.0'] })).not.toContain('tool');
+    // 경로의 폴더 이름에 든 `=` 는 대입이 아니다.
+    expect(__testing.candidateMarkers({ command: 'node', args: ['/home/x=y/node_modules/.bin/mimi-seed-mcp'] })).toContain('mimi-seed-mcp');
+    expect(__testing.candidateMarkers({ command: 'npx', args: ['-y', 'some-server@sha256:abc'] })).not.toContain('some-server');
+  });
+
+  it('pnpm 셈의 `.bin/../` 경로도 정리해서 비교한다', () => {
+    expect(plan([{ pid: 26, argv: ['node', '/home/dev/proj/node_modules/.bin/../@yoonion/mimi-seed-mcp/dist/index.js'] }])).toEqual([26]);
+  });
+
+  it('식별자가 스크립트가 아닌 자리에 있거나 이름만 겹치면 고르지 않는다', () => {
+    expect(plan([
+      { pid: 31, argv: ['vim', '/home/u/code/mimi-seed-mcp/src/index.ts'] },
+      { pid: 32, argv: ['node', '/home/u/code/mimi-seed-mcp/node_modules/.bin/vitest', '--watch'] },
+      { pid: 33, argv: ['node', '/home/u/proj/node_modules/.bin/vitest', 'run', 'mimi-seed-mcp'] },
+      { pid: 34, argv: ['bash', '-c', 'mimi-seed', 'restart', '&&', 'echo', 'mimi-seed-mcp'] },
+      { pid: 35, argv: ['/bin/bash', '-c', 'source', '/x/snapshot.sh', '&&', 'eval', "'grep", '-rn', 'mimi-seed-mcp', "docs'"] },
+      { pid: 36, argv: ['node', '/home/dev/mimi-seed/dist/index.js', 'restart'] },
+      { pid: 37, argv: ['node', '/x/serve.js', 'mimi-seed-mcp'] },
+    ])).toEqual([]);
+  });
+
+  it('런타임이 아닌 프로그램은 식별자로 지목돼도 죽이지 않는다', () => {
+    expect(plan([
+      { pid: 41, argv: ['/lib/systemd/systemd', '--user'] },
+      { pid: 42, argv: win('C:\\Windows\\Explorer.EXE') },
+      { pid: 43, argv: ['docker', 'run', '-i', '--rm', 'ghcr.io/example/systemd'] },
+    ], ['systemd', 'Explorer'])).toEqual([]);
+  });
+
+  it('상대경로로 띄운 서버는 그 프로세스의 작업 폴더로 풀어서 비교한다', () => {
+    const marker = [path.resolve('/home/dev/proj', 'src/index.ts')];
+    expect(plan([
+      { pid: 51, argv: ['node', '/x/tsx/cli.mjs', 'src/index.ts'] },
+      { pid: 52, argv: ['node', 'src/index.ts'] },
+      { pid: 53, argv: ['node', 'src/index.ts'] },
+      { pid: 54, argv: ['node', 'src/index.ts'] },
+    ], marker, { 52: path.resolve('/home/dev/proj'), 53: path.resolve('/home/dev/other') })).toEqual([52]);
+  });
+
+  it('.py · .mts 스크립트도 경로로 비교한다 — 다른 폴더의 같은 파일 이름은 고르지 않는다', () => {
+    const py = __testing.candidateMarkers({ command: 'uv', args: ['run', '--no-project', 'python', 'srv/server.py'] }, '/home/dev/proj');
+    expect(py).toEqual([path.resolve('/home/dev/proj', 'srv/server.py')]);
+    expect(plan([
+      { pid: 55, argv: ['python3', 'srv/server.py'] },
+      { pid: 56, argv: ['python3', 'srv/server.py'] },
+    ], py, { 55: path.resolve('/home/dev/proj'), 56: path.resolve('/home/dev/other') })).toEqual([55]);
+    const mts = __testing.candidateMarkers({ command: 'npx', args: ['tsx', 'src/index.mts'] }, '/home/dev/proj');
+    expect(plan([{ pid: 57, argv: ['node', '--import', 'tsx', 'src/index.mts'] }], mts, { 57: path.resolve('/home/dev/other') })).toEqual([]);
+  });
+
+  it('스크립트 식별자는 경로가 같을 때만 (구분자 · 대소문자 무시, POSIX 공백 경로 포함)', () => {
+    expect(plan([{ pid: 61, argv: win('node C:\\SRV\\mimi\\dist\\index.js --stdio') }], ['C:/srv/mimi/dist/index.js'])).toEqual([61]);
+    expect(plan([{ pid: 62, argv: win('node C:\\srv\\other\\dist\\index.js') }], ['C:/srv/mimi/dist/index.js'])).toEqual([]);
+    const line = 'node /home/dev/My Projects/mimi/dist/index.js --stdio';
+    expect(plan([{ pid: 63, argv: line.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([63]);
+    const other = 'node /home/dev/My /home/dev/My Projects/mimi/dist/index.js';
+    expect(plan([{ pid: 64, argv: other.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([]);
+    const trailing = 'node /home/dev/My Projects/x.js /../mimi/dist/index.js';
+    expect(plan([{ pid: 65, argv: trailing.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([]);
+    const withArgs = 'node /home/dev/My Projects/mimi/dist/index.js ../../cfg';
+    expect(plan([{ pid: 66, argv: withArgs.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([66]);
+  });
+
+  it('다른 사용자의 프로세스와 자기 자신은 빼고, 너무 많이 맞으면 하나도 죽이지 않는다', () => {
+    const server = (pid: number, uid = 1000) => ({ pid, uid, argv: ['node', '/x/node_modules/@yoonion/mimi-seed-mcp/dist/index.js'] });
+    expect(plan([server(101), server(102, 0), server(process.pid)])).toEqual([101]);
+    expect(plan(Array.from({ length: __testing.MAX_SERVERS }, (_, i) => server(1000 + i)))).toHaveLength(__testing.MAX_SERVERS);
+    const tooMany = Array.from({ length: __testing.MAX_SERVERS + 1 }, (_, i) => server(5000 + i));
+    expect(__testing.planKill(tooMany, pkg, { uid: 1000 })).toEqual({ pids: [], refused: __testing.MAX_SERVERS + 1 });
+    expect(__testing.planKill([server(101)], [], { uid: 1000 })).toEqual({ pids: [], refused: 0 });
+  });
+
+  it('Windows 명령줄을 CommandLineToArgvW 규칙으로 나눈다', () => {
+    expect(win('"C:\\Program Files\\nodejs\\node.exe" "C:\\a b\\x.js"  --stdio')).toEqual(['C:\\Program Files\\nodejs\\node.exe', 'C:\\a b\\x.js', '--stdio']);
+    expect(win('"C:\\x\\node.exe"x.js y')).toEqual(['C:\\x\\node.exe', 'x.js', 'y']);
+    expect(win('"C:\\Program Files\\nodejs\\" x.js')).toEqual(['C:\\Program Files\\nodejs\\', 'x.js']);
+    expect(win('p a\\\\\\"b "c\\\\" d')).toEqual(['p', 'a\\"b', 'c\\', 'd']);
+    expect(win('p "a""b"')).toEqual(['p', 'a"b']);
+    expect(win('x ""')).toEqual(['x', '']);
+  });
+
+  it('ConvertTo-Json 의 단일 객체 · 배열 출력을 모두 읽고 명령줄 없는 항목은 뺀다', () => {
+    expect(__testing.parseWindowsProcesses('{"ProcessId":7,"CommandLine":"node a.js"}')).toEqual([{ pid: 7, argv: ['node', 'a.js'] }]);
+    expect(__testing.parseWindowsProcesses('[{"ProcessId":4,"CommandLine":null},{"ProcessId":8,"CommandLine":"x"}]')).toEqual([{ pid: 8, argv: ['x'] }]);
+    expect(__testing.parseWindowsProcesses('not json')).toEqual([]);
+  });
+});
+
 const shell = os.platform() === 'win32' ? 'powershell' : 'pwsh';
 const hasShell = spawnSync(shell, ['-NoProfile', '-Command', 'exit 0']).status === 0;
 
-describe('Windows restart PID query', () => {
-  it('keeps the marker out of the PowerShell script and passes it as data', () => {
-    const { args, env } = __testing.windowsPidQuery(SMART_QUOTE_PAYLOAD);
-    expect(args.join(' ')).not.toContain('pwned');
-    expect(env.MIMI_SEED_MARKER).toBe(SMART_QUOTE_PAYLOAD);
+describe('Windows 프로세스 목록 쿼리', () => {
+  // 식별자는 쿼리에 들어가지 않는다 — 상수 스크립트라 주입될 자리가 없다.
+  it('쿼리는 상수이고 출력은 UTF-8 JSON 이다', () => {
+    expect(__testing.WINDOWS_PROCESS_QUERY).toContain('[Text.Encoding]::UTF8');
+    expect(__testing.WINDOWS_PROCESS_QUERY).toContain('ConvertTo-Json');
   });
 
-  it.skipIf(!hasShell)('matches case-insensitively and never runs code from the marker', () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-restart-test-'));
-    try {
-      const { args, env } = __testing.windowsPidQuery(SMART_QUOTE_PAYLOAD);
-      // Get-WmiObject 대신 가짜 프로세스 목록 — 명령줄도 환경변수로 넣어 테스트 쪽 인용 문제를 없앤다.
-      const fake = '@([pscustomobject]@{ ProcessId = 101; CommandLine = $env:FAKE_A }, ' +
-        '[pscustomobject]@{ ProcessId = 102; CommandLine = $env:FAKE_B }, ' +
-        '[pscustomobject]@{ ProcessId = 103; CommandLine = $null })';
-      const script = args[2].replace('Get-WmiObject Win32_Process', fake);
-      expect(script).not.toBe(args[2]);
-      const out = execFileSync(shell, [...args.slice(0, 2), script], {
-        cwd,
-        encoding: 'utf8',
-        env: { ...env, FAKE_A: `node ${SMART_QUOTE_PAYLOAD.toUpperCase()} --stdio`, FAKE_B: 'node other.js' },
-      });
-      expect(out.trim().split(/\r?\n/)).toEqual(['101']);
-      expect(fs.existsSync(path.join(cwd, 'pwned'))).toBe(false);
-    } finally {
-      fs.rmSync(cwd, { recursive: true, force: true });
-    }
+  it.skipIf(!hasShell)('비ASCII 명령줄도 깨지지 않고 JSON 으로 읽힌다', () => {
+    const fake = '@([pscustomobject]@{ ProcessId = 101; CommandLine = $env:FAKE_A }, ' +
+      '[pscustomobject]@{ ProcessId = 102; CommandLine = $null })';
+    const script = __testing.WINDOWS_PROCESS_QUERY.replace('Get-CimInstance Win32_Process', fake);
+    expect(script).not.toBe(__testing.WINDOWS_PROCESS_QUERY);
+    const out = execFileSync(shell, ['-NoProfile', '-Command', script], {
+      encoding: 'utf8',
+      env: { ...process.env, FAKE_A: 'node C:\\Users\\개발자\\mimi\\dist\\index.js' },
+    });
+    expect(__testing.parseWindowsProcesses(out)).toEqual([{ pid: 101, argv: ['node', 'C:\\Users\\개발자\\mimi\\dist\\index.js'] }]);
+  });
+
+  it.runIf(os.platform() === 'win32')('실제 Windows 에서 자기 자신을 목록에서 찾는다', () => {
+    const out = execFileSync(shell, ['-NoProfile', '-NonInteractive', '-Command', __testing.WINDOWS_PROCESS_QUERY], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(__testing.parseWindowsProcesses(out).some((p) => p.pid === process.pid)).toBe(true);
   });
 });

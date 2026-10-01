@@ -133,11 +133,13 @@ export const catalog = {
    * `layout`: 불릿 순서. 'R' | 'W' | 'D' = 그 분류의 "나머지" 도구 한 불릿, 객체 = 따로 묶은 불릿
    * (`label` 선택, `tools` 는 그 도메인 도구, `after` 는 불릿 끝에 붙는 산문). 생략하면 ['R', 'W', 'D'].
    * `impl`: 섹션 제목의 "· impl `…`" 부분.
+   * `parts`: register 가 하위 모듈로 나뉜 도메인의 실제 정의 위치 — 제목과 개수 표에 "→ `…`" 로 붙는다.
    */
   sections: {
     playstore: { impl: 'playstore/*.ts' },
     appstore: {
       impl: 'appstore/*.ts',
+      parts: 'registers/appstore/*.ts',
       layout: [
         'R',
         { label: '분석/매출', tools: ['appstore_get_sales_report', 'appstore_get_finance_report'] },

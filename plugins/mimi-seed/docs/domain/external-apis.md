@@ -152,8 +152,9 @@ alone does not prove that an existing client is fixed; smoke-test the actual cal
   `conversions` and `costPerConversion` fields to historical install/CPI aliases.
 - Guard: `src/__tests__/googleads.test.ts` covers request bodies, pagination, long-range totals, removed
   campaigns, dates, supported campaign fields, partial failure, provider diagnostics and secret redaction;
-  `googleads-reports.test.ts` pins report parsing, micros rounding, malformed-response rejection and the
-  accessible-customers shape, and `googleads-mcp.test.ts` runs config + tools end to end against a temp home.
+  `googleads-reports.test.ts` pins report parsing, micros conversion (fractional cost micros rejected, fractional
+  CPC / CPA micros allowed), malformed-response rejection and the accessible-customers shape, and
+  `googleads-mcp.test.ts` runs config + tools end to end against a temp home.
 
 Provider references: [pagination](https://developers.google.com/google-ads/api/docs/reporting/paging),
 [release notes](https://developers.google.com/google-ads/api/docs/release-notes).

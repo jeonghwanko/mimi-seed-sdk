@@ -83,6 +83,23 @@ beforeEach(() => {
   mocks.upsertSecretFile.mockResolvedValue('created');
 });
 
+/** iam_create_key 가 저장하는 자리에 키를 둔다 — 그 테스트가 먼저 돌았는지에 기대지 않도록(순서 독립). */
+function savedKey(): string {
+  const saved = path.join(serviceAccountKeysDir(), 'ci-bot-KEY123.json');
+  fs.mkdirSync(path.dirname(saved), { recursive: true });
+  fs.writeFileSync(saved, keyJson, { mode: 0o600 });
+  return saved;
+}
+
+/** keys 디렉터리 밖의 자격증명 파일 — 경로 봉쇄 테스트가 각자 준비한다. keys 디렉터리도 있어야
+ *  "keys 가 없습니다" 가 아니라 "안에 있어야" 거절 경로를 탄다. */
+function outsideFile(): string {
+  savedKey();
+  const outside = path.join(h.home, '.mimi-seed', 'tokens.json');
+  fs.writeFileSync(outside, '{"refresh_token":"placeholder"}');
+  return outside;
+}
+
 async function call(name: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
   return withClient(async (client) => {
     const r = await client.callTool({ name, arguments: args });
@@ -115,7 +132,7 @@ describe('iam_create_key', () => {
   });
 
   it('저장된 키 경로를 소비 도구가 받아 쓸 수 있다', () => {
-    const saved = path.join(serviceAccountKeysDir(), 'ci-bot-KEY123.json');
+    const saved = savedKey();
     expect(resolveServiceAccountJsonInput({ jsonPath: saved })).toBe(keyJson);
     expect(resolveServiceAccountJsonInput({ json: '{"a":1}' })).toBe('{"a":1}');
     expect(() => resolveServiceAccountJsonInput({})).toThrow(/serviceAccountJsonPath/);
@@ -125,9 +142,7 @@ describe('iam_create_key', () => {
 
 describe('키/keystore 경로 입력 — 봉쇄', () => {
   it('keys 디렉터리 밖의 파일은 읽지 않는다', () => {
-    const outside = path.join(h.home, '.mimi-seed', 'tokens.json');
-    fs.mkdirSync(path.dirname(outside), { recursive: true });
-    fs.writeFileSync(outside, '{"refresh_token":"placeholder"}');
+    const outside = outsideFile();
 
     expect(() => readServiceAccountKeyFile(outside)).toThrow(/안에 있어야/);
     expect(() => readServiceAccountKeyFile(path.join(serviceAccountKeysDir(), '..', 'tokens.json'))).toThrow(/안에 있어야/);
@@ -146,7 +161,7 @@ describe('키/keystore 경로 입력 — 봉쇄', () => {
   });
 
   it('playstore_register_service_account 는 keys 밖 경로를 거부하고 아무것도 등록하지 않는다', async () => {
-    const outside = path.join(h.home, '.mimi-seed', 'tokens.json');
+    const outside = outsideFile();
     const { text, isError } = await call('playstore_register_service_account', {
       packageName: 'com.example.app',
       serviceAccountJsonPath: outside,
@@ -158,7 +173,7 @@ describe('키/keystore 경로 입력 — 봉쇄', () => {
   });
 
   it('jenkins_upload_playstore_sa 는 keys 안의 키 파일을 올린다', async () => {
-    const saved = path.join(serviceAccountKeysDir(), 'ci-bot-KEY123.json');
+    const saved = savedKey();
     const { text, isError } = await call('jenkins_upload_playstore_sa', {
       package_name: 'com.example.app',
       service_account_json_path: saved,
