@@ -1,0 +1,39 @@
+# Dependency update PRs. Workflow actions are pinned to full commit SHAs (supply-chain hygiene);
+# Dependabot keeps those SHAs — and their `# vX.Y.Z` comments — current.
+#
+# The repo is not an npm workspace: each package has its own lockfile, so each gets its own entry.
+# The root package.json has no dependencies, so it needs none.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: npm
+    directory: /packages/mcp-server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      mcp-server-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+
+  - package-ecosystem: npm
+    directory: /packages/cli
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      cli-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)

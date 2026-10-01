@@ -13,6 +13,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,7 +25,22 @@ const marketplacePath = path.join(root, '.agents', 'plugins', 'marketplace.json'
 const checkOnly = process.argv.includes('--check');
 
 // 이 목록이 Codex 플러그인 아카이브의 계약이다. packages/ 구현은 npx MCP가 제공하므로 넣지 않는다.
-const ENTRIES = ['.codex-plugin', '.mcp.json', 'skills', 'docs', 'LICENSE'];
+const ENTRIES = ['.codex-plugin', '.mcp.json', 'skills', 'docs', 'LICENSE', 'SECURITY.md', '.codexignore'];
+
+// 플러그인 루트의 README.md 는 `.codex-plugin/README.md` 한 벌에서 만든다 (원본은 그대로 `.codex-plugin/` 에도 복사된다).
+// 원본은 `.codex-plugin/` 안에 있어 링크가 `../docs/…` 꼴이다 — 루트로 올리면서 `../` 한 단계를 걷어낸다.
+// 플러그인 스캐너(awesome-ai-plugins 게이트)가 플러그인 루트의 README.md 를 요구한다.
+const README_SOURCE = path.join('.codex-plugin', 'README.md');
+const rootReadme = (markdown) => {
+  // 한 단계 위(`../x`)로 쓴 상대 링크만 루트로 올릴 수 있다 — `./x` · `../../x` 는 번들 사본에서 깨진다.
+  for (const [, href] of markdown.matchAll(/\]\(([^)\s]+)/g)) {
+    if (/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(href)) continue;
+    if (!href.startsWith('../') || href.startsWith('../../')) {
+      throw new Error(`${README_SOURCE}: relative link "${href}" must be written as ../<path> so the bundled README resolves`);
+    }
+  }
+  return markdown.replaceAll('](../', '](');
+};
 
 function validateMarketplace() {
   const marketplace = JSON.parse(readFileSync(marketplacePath, 'utf8'));
@@ -54,6 +70,7 @@ function materialize(destination) {
     if (!existsSync(source)) throw new Error(`Codex plugin source is missing: ${entry}`);
     cpSync(source, path.join(destination, entry), { recursive: true });
   }
+  writeFileSync(path.join(destination, 'README.md'), rootReadme(readFileSync(path.join(root, README_SOURCE), 'utf8')));
 }
 
 function filesUnder(directory, prefix = '') {

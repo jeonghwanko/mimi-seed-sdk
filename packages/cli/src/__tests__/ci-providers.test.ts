@@ -9,14 +9,14 @@ import {
 
 const ghCfg: CiProviderConfig = {
   provider: 'github',
-  token: 'ghp_test',
+  token: 'ghp_example',
   owner: 'octo',
   repo: 'app',
 };
 
 const glCfg: CiProviderConfig = {
   provider: 'gitlab',
-  token: 'glpat-test',
+  token: 'glpat-example',
   owner: 'group',
   repo: 'app',
 };

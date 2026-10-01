@@ -111,7 +111,7 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
   it("MIMI_SEED_WEB_BASE 가 설정돼 있어도 원격을 쓰는 것으로 본다", async () => {
     expect(await remoteConfigured(cwd, {})).toBe(false);
     expect(await remoteConfigured(cwd, { MIMI_SEED_WEB_BASE: "https://console.example.test" })).toBe(true);
-    expect(await remoteConfigured(cwd, { MIMI_SEED_TOKEN: "placeholder" })).toBe(true);
+    expect(await remoteConfigured(cwd, { MIMI_SEED_TOKEN: "example-token" })).toBe(true);
   });
 
   // 기본 종료 코드는 ✗ 가 있어도 0 — doctor 는 설치 스킬·시작 가이드의 마지막 확인 단계이고, 새 머신
@@ -119,8 +119,8 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
   describe("종료 코드", () => {
     const rejectedToken = () => {
       mocks.config.mockResolvedValue({
-        token: "placeholder-token",
-        prefix: "placehol",
+        token: "example-token",
+        prefix: "example-",
         endpoint: "https://console.example.test/api/mcp",
         webBase: "https://console.example.test",
         createdAt: "2026-01-01T00:00:00.000Z",
@@ -164,8 +164,8 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
 
   it("서버에 닿지 않아도 doctor 가 죽지 않고 ✗ 한 줄로 남긴다", async () => {
     mocks.config.mockResolvedValue({
-      token: "placeholder-token",
-      prefix: "placehol",
+      token: "example-token",
+      prefix: "example-",
       endpoint: "https://console.example.test/api/mcp",
       webBase: "https://console.example.test",
       createdAt: "2026-01-01T00:00:00.000Z",

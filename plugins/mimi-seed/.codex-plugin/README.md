@@ -51,3 +51,10 @@ mimi-seed mcp codex --write
 ## 프로젝트 측 설정
 
 프로젝트에서 `mimi-seed init`을 실행하면 Claude Code용 `.claude/mimi-seed.md`와 Codex용 `AGENTS.md`에 같은 운영 컨텍스트가 기록됩니다.
+
+## 보안
+
+자격증명은 내 컴퓨터의 `~/.mimi-seed/` 에만 저장되며(권한 `0600`), 이 플러그인 번들에는 비밀값이 들어 있지
+않습니다. 파괴적 도구는 `confirm=true` 로 다시 호출하기 전까지 미리보기만 보여주고 아무것도 바꾸지 않습니다. 팀에서 자격증명을 나누는 방법은
+[`docs/user-guide/team-security.ko.md`](../docs/user-guide/team-security.ko.md), 취약점 제보는 공개 이슈가 아니라
+[`SECURITY.md`](../SECURITY.md) 의 비공개 경로로 해주세요.

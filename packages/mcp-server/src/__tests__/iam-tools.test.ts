@@ -90,7 +90,7 @@ describe('createServiceAccountKey', () => {
     type: 'service_account',
     client_email: SA,
     project_id: 'my-project',
-    private_key: '-----BEGIN PRIVATE KEY-----\nplaceholder\n-----END PRIVATE KEY-----',
+    private_key: '-----BEGIN PRIVATE KEY-----\nredacted-key-material\n-----END PRIVATE KEY-----',
   });
 
   it('base64 privateKeyData 를 디코딩해 원본 JSON 을 그대로 돌려준다', async () => {

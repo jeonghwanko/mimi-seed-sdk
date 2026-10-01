@@ -55,7 +55,7 @@ beforeEach(async () => {
   h.home = mkdtempSync(path.join(os.tmpdir(), 'mimi-google-profile-'));
   h.clients = [];
   h.requestedScopes = [];
-  h.tokenResponse = { access_token: 'test-access', refresh_token: 'test-refresh', expiry_date: Date.now() + 3600000,
+  h.tokenResponse = { access_token: 'example-access', refresh_token: 'example-refresh', expiry_date: Date.now() + 3600000,
     scope: 'https://www.googleapis.com/auth/youtube.force-ssl' };
   h.channelList.mockResolvedValue({ data: { items: [{ id: channelA, snippet: { title: 'Example A' } }] } });
   auth = await import('../auth/google-auth.js');
@@ -103,15 +103,15 @@ describe('Google account/channel profiles', () => {
   it('계정별로 저장하고 기본 로그인으로 폴백하지 않으며 공개 목록에는 비밀값이 없다', async () => {
     await login();
     await login('channel-a', channelA);
-    h.tokenResponse.refresh_token = 'test-refresh-b';
+    h.tokenResponse.refresh_token = 'example-refresh-b';
     h.channelList.mockResolvedValue({ data: { items: [{ id: channelB }] } });
     await login('channel-b', channelB);
-    expect(auth.getStoredTokens()?.refresh_token).toBe('test-refresh');
+    expect(auth.getStoredTokens()?.refresh_token).toBe('example-refresh');
     expect(auth.getStoredTokens('channel-a')?.youtubeChannel?.id).toBe(channelA);
-    expect(auth.getStoredTokens('channel-b')?.refresh_token).toBe('test-refresh-b');
+    expect(auth.getStoredTokens('channel-b')?.refresh_token).toBe('example-refresh-b');
     expect(auth.getStoredTokens('missing')).toBeNull();
     expect(auth.getAuthenticatedClient('missing')).toBeNull();
-    expect(JSON.stringify(auth.listGoogleProfiles())).not.toMatch(/test-refresh|example-secret|test-access/);
+    expect(JSON.stringify(auth.listGoogleProfiles())).not.toMatch(/example-refresh|example-secret|example-access/);
     expect(() => auth.getStoredTokens('../tokens')).toThrow('Invalid Google profile');
     expect(() => auth.getStoredTokens('')).toThrow('Invalid Google profile');
   });
@@ -140,22 +140,22 @@ describe('Google account/channel profiles', () => {
     await login('channel-a', channelA);
     auth.getAuthenticatedClient('channel-a');
     const oldClient = h.clients.at(-1)!;
-    h.tokenResponse = { ...h.tokenResponse, refresh_token: 'new-grant', scope: 'new-scope' };
+    h.tokenResponse = { ...h.tokenResponse, refresh_token: 'example-new-grant', scope: 'new-scope' };
     await login('channel-a', channelA);
-    oldClient.handler?.({ access_token: 'stale-access' });
+    oldClient.handler?.({ access_token: 'example-stale-access' });
     expect(auth.getStoredTokens('channel-a')?.scope).toBe('new-scope');
-    expect(auth.getStoredTokens('channel-a')?.access_token).toBe('test-access');
+    expect(auth.getStoredTokens('channel-a')?.access_token).toBe('example-access');
   });
 
   it('만료 토큰은 해당 프로필만 갱신하고 채널 메타데이터를 보존한다', async () => {
     await login('channel-a', channelA);
-    h.tokenResponse = { ...h.tokenResponse, refresh_token: 'refresh-b', expiry_date: 1 };
+    h.tokenResponse = { ...h.tokenResponse, refresh_token: 'example-rotated-refresh', expiry_date: 1 };
     h.channelList.mockResolvedValue({ data: { items: [{ id: channelB }] } });
     await login('channel-b', channelB);
     h.refresh.mockResolvedValue({ credentials: { access_token: 'fresh-b', expiry_date: Date.now() + 3600000 } });
     expect((await auth.ensureFreshAccessToken(undefined, 'channel-b')).status).toBe('refreshed');
     expect(auth.getStoredTokens('channel-b')?.youtubeChannel?.id).toBe(channelB);
-    expect(auth.getStoredTokens('channel-a')?.access_token).toBe('test-access');
+    expect(auth.getStoredTokens('channel-a')?.access_token).toBe('example-access');
   });
 
   it('검증된 채널의 클라이언트로 업로드하고 결과에 채널을 반환한다', async () => {
@@ -209,7 +209,7 @@ describe('로그인 계정 식별 (다른 계정 로그인이 "✅ 연결됨" �
   });
 
   it('id_token 이 없거나 깨졌으면 이메일 없이 로그인은 성공한다', async () => {
-    h.tokenResponse.id_token = 'not-a-jwt';
+    h.tokenResponse.id_token = 'example-not-a-jwt';
     await login();
     expect(auth.getStoredTokens()?.accountEmail).toBeUndefined();
     expect(auth.emailFromIdToken(undefined)).toBeUndefined();
@@ -237,12 +237,12 @@ describe('로그인 계정 식별 (다른 계정 로그인이 "✅ 연결됨" �
   it('조회 도중 다른 계정으로 재로그인되면 옛 이메일을 새 토큰에 붙이지 않는다', async () => {
     await login();
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => {
-      h.tokenResponse = { ...h.tokenResponse, refresh_token: 'other-grant' };
+      h.tokenResponse = { ...h.tokenResponse, refresh_token: 'example-other-grant' };
       await login();
       return { ok: true, json: async () => ({ email: 'old@example.com' }) };
     }));
     await auth.resolveAccountEmail();
-    expect(auth.getStoredTokens()?.refresh_token).toBe('other-grant');
+    expect(auth.getStoredTokens()?.refresh_token).toBe('example-other-grant');
     expect(auth.getStoredTokens()?.accountEmail).toBeUndefined();
   });
 

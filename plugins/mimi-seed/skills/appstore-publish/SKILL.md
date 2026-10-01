@@ -21,7 +21,7 @@ mimi-seed auth appstore    # App Store Connect 만 따로
 ```
 
 App Store Connect 는 Issuer ID · Key ID · `.p8` 파일 3개가 필요하고, **`.p8` 은 딱 한 번만 다운로드된다**.
-발급 절차: [`docs/credentials.md`](../../docs/credentials.md#app-store-connect)
+발급 절차: [`docs/credentials.md`](../../docs/credentials.md) 의 "App Store Connect" 섹션
 
 ## 도구 로딩
 

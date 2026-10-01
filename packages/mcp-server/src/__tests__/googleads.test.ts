@@ -79,7 +79,7 @@ describe('googleads 요청', () => {
   it('모든 조회 페이지에서 pageSize를 생략하고 nextPageToken으로 비용을 누락 없이 읽는다', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({
       results: [{ campaign: { id: '1', status: 'REMOVED' }, customer: { currencyCode: 'USD', timeZone: 'UTC' }, metrics: { costMicros: '1234567' } }],
-      nextPageToken: 'page-two',
+      nextPageToken: 'page-two-example',
     }) }).mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({
       results: [{ campaign: { id: '2' }, metrics: { costMicros: '2000000' } }],
     }) });
@@ -90,7 +90,7 @@ describe('googleads 요청', () => {
     expect(bodies).toHaveLength(2);
     expect(Object.keys(bodies[0])).toEqual(['query']);
     expect(Object.keys(bodies[1]).sort()).toEqual(['pageToken', 'query']);
-    expect(bodies[1].pageToken).toBe('page-two');
+    expect(bodies[1].pageToken).toBe('page-two-example');
     expect(bodies[1].query).toBe(bodies[0].query);
     expect(bodies[0].query).not.toMatch(/LIMIT|status\s*!=/i);
   });

@@ -23,13 +23,13 @@ import { withClient } from './helpers.js';
 const cfg: JenkinsConfig = {
   url: 'https://jenkins.example.test',
   username: 'builder',
-  token: 'placeholder-token',
+  token: 'example-token',
 };
 
 // MCP 경유 테스트는 실제 ~/.mimi-seed/jenkins.json 대신 이 설정을 쓴다.
 vi.mock('../jenkins/config.js', async (original) => {
   const actual = await original<typeof import('../jenkins/config.js')>();
-  const fixture = { url: 'https://jenkins.example.test', username: 'builder', token: 'placeholder-token' };
+  const fixture = { url: 'https://jenkins.example.test', username: 'builder', token: 'example-token' };
   return { ...actual, requireJenkinsConfig: () => fixture, loadJenkinsConfig: () => fixture };
 });
 
@@ -189,15 +189,15 @@ describe('triggerBuild — 빌드 요청', () => {
 
   it('영속 receipt에는 토큰이나 파라미터 원문을 저장하지 않는다', async () => {
     fetchMock.mockResolvedValueOnce(response(201, { location: '/queue/item/61/' }));
-    await triggerBuild({ ...cfg, token: 'secret-token-value' }, {
+    await triggerBuild({ ...cfg, token: 'example-secret-token-value' }, {
       job: 'release', request_id: 'private_data_1',
-      parameters: { password: 'secret-parameter-value' },
+      parameters: { password: 'example-secret-parameter-value' },
     });
 
     const [file] = receiptFiles(path.join(home, '.mimi-seed', 'jenkins-build-requests'));
     const receiptText = readFileSync(file, 'utf8');
-    expect(receiptText).not.toContain('secret-token-value');
-    expect(receiptText).not.toContain('secret-parameter-value');
+    expect(receiptText).not.toContain('example-secret-token-value');
+    expect(receiptText).not.toContain('example-secret-parameter-value');
     expect(JSON.parse(receiptText)).toMatchObject({ state: 'queued', queue_id: 61 });
   });
 
@@ -241,7 +241,7 @@ describe('triggerBuild — 빌드 요청', () => {
     });
     expect(otherUser).toMatchObject({ state: 'queued', replayed: false, queue_id: 65 });
 
-    const rotatedToken = await triggerBuild({ ...cfg, token: 'rotated-token' }, {
+    const rotatedToken = await triggerBuild({ ...cfg, token: 'example-rotated-token' }, {
       job: 'release', request_id: 'identity_scope',
     });
     expect(rotatedToken).toMatchObject({ state: 'queued', replayed: true, queue_id: 64 });
@@ -504,11 +504,11 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
     await withClient(async client => {
       const preview = await client.callTool({
         name: 'jenkins_trigger_build',
-        arguments: { job: 'my-app', request_id: 'redact_1', parameters: { DEPLOY_TOKEN: 'placeholder-secret-value', platform: 'ios' } },
+        arguments: { job: 'my-app', request_id: 'redact_1', parameters: { DEPLOY_TOKEN: 'example-secret-value', platform: 'ios' } },
       });
       const text = textOf(preview);
       expect(text).toContain(CONFIRM_PREVIEW_MARKER);
-      expect(text).not.toContain('placeholder-secret-value');
+      expect(text).not.toContain('example-secret-value');
       expect(text).toContain('"DEPLOY_TOKEN":"(redacted)"');
       expect(text).toContain('"platform":"ios"');
     });

@@ -71,7 +71,8 @@ npm run build && npm test
    The full step list is [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
 6. User-visible change? Add a bullet to `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) (tool additions,
    renames, and removals go under its `Tool changes` heading).
-7. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, or `LICENSE`? Run
+7. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, `LICENSE`, `SECURITY.md`, or
+   `.codexignore`? Run
    `npm run plugin:sync` and commit the regenerated `plugins/mimi-seed/` — root `npm test` rejects drift.
 
 ## Releasing (maintainers)

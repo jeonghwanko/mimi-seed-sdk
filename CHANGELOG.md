@@ -18,8 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-Release Doctor fixes from a pre-pilot rehearsal on 12 open-source apps (most warnings were false positives and one
-real Billing blocker was missed).
+### Added
+
+- `SECURITY.md` — how to report a vulnerability privately, which versions get fixes, and what is in scope. It also
+  ships inside the Codex plugin bundle.
 
 ### Changed
 
@@ -64,6 +66,10 @@ real Billing blocker was missed).
 - The reusable Release Doctor workflow, and the CI command `check --local` suggests for projects that declare
   `devEngines`, run `npx` with a throwaway prefix; inside such a project npm stopped `npx` with `EBADDEVENGINES`
   before Release Doctor started. The pilot guide and troubleshooting document the workaround.
+
+### Tool changes
+
+- none
 
 ## [0.21.3] - 2026-10-01
 
