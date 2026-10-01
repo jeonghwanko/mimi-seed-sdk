@@ -39,3 +39,31 @@ Native, Expo, Flutter, Kotlin Multiplatform이며 일부는 `--path`로 검사�
 Library의 마감일이 지난 `react-native-iap` 릴리스였다. 남은 경고는 실제 상황이다: 여러 앱을 담은 저장소 두 개와
 저장소의 정적 파일 밖에 있는 targetSdk 값 두 개. 한 저장소는 `devEngines` 선언 때문에 CLI가 실행되기 전에
 `npx`가 멈췄다. 우회 방법은 [파일럿 안내](release-doctor-pilot.ko.md)에 있다.
+
+## Target API 검사의 알려진 한계
+
+Release Doctor는 빌드 파일을 읽을 뿐 Gradle을 실행하지 않는다. 찾은 설정을 모두 이해했을 때만 targetSdk를
+확정하므로, 아래 한계는 결과를 틀리게 하기보다 *확정하지 못함*(`확인 필요` 경고)으로 만드는 경우가 많다. 설정을
+놓칠 수 있는 한계는 그렇다고 적었다.
+
+- **바이너리·Maven Gradle 플러그인은 읽지 않는다.** 배포된 플러그인이 targetSdk를 바꾸면 보이지 않는다. 저장소 안에서
+  빌드하는 컨벤션 플러그인(buildSrc/, build-logic/, `includeBuild(…)` 루트)은 읽는다.
+- **서드파티 패키지 스크립트**(node_modules/로 가는 `apply from:`, React Native의 `project(':pkg').projectDir…`,
+  `@sentry/react-native` 8의 `buildscript.sourceFile` 심, Expo의 `node --print` 형태)는 찾을 수 있으면 읽는다.
+  찾지 못하면 바이너리 플러그인처럼 읽지 않고 정보 항목에 나열한다. JavaScript 의존성을 설치한 뒤 다시 실행하면
+  읽는다.
+- **따라갈 수 없는 저장소 소유 `apply from:`** — URL, 계산된 경로, 선택적이거나 git이 무시하는 로컬 파일(예: CI에만
+  있는 서명 스크립트), 저장소 밖 경로 — 은 해당 앱 모듈을 확정하지 못함으로 만든다.
+- **계산된 `includeBuild(…)` 경로**나 node_modules/ 아래의 included 빌드는 읽지 않는다. 프로젝트 탐색은 디렉터리
+  깊이 7에서 멈춘다(컨벤션 빌드는 빌드별 예산 안에서 깊이 제한 없이 읽고, 다 읽지 못하면 확정하지 못함으로 보고한다).
+- **실행되지 않거나 조건부인 코드도 센다.** `if` 안의 설정, 꺼진 분기, 실행되지 않는 코드도 유효한 설정으로 보고
+  가장 낮은 값을 쓴다.
+- **다른 프로젝트 설정**은 흔한 형태(`subprojects`, `allprojects`, `project(':x')`, `afterEvaluate`,
+  `plugins.withId`)만 인식한다. 다른 경로로 다른 프로젝트의 `android` 블록에 닿는 코드는 모델링하지 않는다.
+- **저장소 밖에서 계산되는 값**은 확정하지 못한다: Flutter의 `flutter.targetSdkVersion`(Flutter SDK가 정함)과 CI만
+  넘기는 속성(`-Px=…`, `ORG_GRADLE_PROJECT_x`).
+- **Unity Gradle 템플릿:** `**TARGETSDKVERSION**` 자리표시자는 ProjectSettings 값으로 채워지고, 템플릿에 직접 쓴
+  값은 앱의 값으로 센다.
+- **Gradle 읽기는 휴리스틱을 쓰는 렉서**이지 Groovy·Kotlin 컴파일러가 아니다. 모델링하지 않은 형태는 추측하지 않고
+  확정하지 못함으로 보고한다. 예를 들어 여는 중괄호가 다음 줄에 있는 Groovy 메서드(Allman 스타일) 안에서 쓴 이름은
+  확정하지 못한다.

@@ -43,10 +43,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   a vendored or submodule folder. Convention builds are read whole, at any depth: buildSrc/, build-logic/ (also
   nested, as in `gradle/build-logic/`), and every `includeBuild(…)` root, in Kotlin, Groovy, Java, and script form.
   String-keyed sets (`setProperty('targetSdk', …)`, `['targetSdk'] = …`), `++` / `--`, and compound assignments are
-  recognised as settings it cannot evaluate; `lint { targetSdk … }` and `testOptions.targetSdk` are other properties
-  and no longer count as the app's. An `apply from:` it cannot follow (a URL, a computed path, a missing file, a
-  script in an uninstalled node_modules/ package) makes the module unresolved; `apply from:` is followed through
-  nested scripts and any file extension. A local variable that is reassigned anywhere in the script is unresolved,
+  recognised as settings it cannot evaluate (also a receiver-less `setProperty('targetSdk', …)` inside
+  `defaultConfig { }`); `lint { targetSdk … }` and `testOptions.targetSdk` are other properties and no longer count
+  as the app's. A repository-owned `apply from:` it cannot follow (a URL, a computed path, a missing or ignored
+  file) makes the module unresolved; `apply from:` is followed through nested scripts and any file extension.
+  Scripts of JavaScript packages (node_modules/, React Native's `project(':pkg').projectDir…`, `@sentry/react-native`
+  8's `sentry.gradle.kts` shim, Expo's `node --print` form) are read when found and otherwise listed in a new info
+  item, `TARGET_SDK_THIRD_PARTY_SCRIPTS_NOT_READ`, like binary plugins, with an install hint when installing the
+  dependencies would make them readable. Convention builds are read within a per-build budget, plugin builds
+  first; one too large to read completely makes the result unresolved. Plugin sources are read only from plugin
+  builds (never from an included app build), and a plugin build that a sample build also includes is not a
+  sample. The user guide's validation page lists the check's known limits. A local variable that is reassigned anywhere in the script is unresolved,
   and inside a Groovy method the name is read as the project property, as Gradle does. The JSON report lists each
   setting as `targetSdkTokens`.
 - Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an

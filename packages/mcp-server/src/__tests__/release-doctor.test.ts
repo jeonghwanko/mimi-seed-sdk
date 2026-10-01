@@ -2330,7 +2330,6 @@ describe('Release Doctor local scan', () => {
         ['URL (X6)', "apply from: 'https://example.com/targets.gradle'"],
         ['계산된 경로', 'apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"'],
         ['없는 파일', "apply from: '../gradle/missing.gradle'"],
-        ['설치 안 된 node_modules', 'apply from: "../../node_modules/example-sdk/example.gradle"'],
       ])('%s', async (_name, line) => {
         const report = await scanReleaseDoctor(await fixture({ 'settings.gradle': "include ':app'", 'app/build.gradle': `${app36}\n${line}` }), at);
 
@@ -2461,6 +2460,179 @@ describe('Release Doctor local scan', () => {
         expect(below(report)).toBeUndefined();
         expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
       });
+    });
+  });
+
+  // Round-8 shapes: the React Native sample (react-native-config, @sentry/react-native 8, Expo bare), fx8 P1–P13,
+  // and the real-AGP probes SP1/SP2.
+  describe('8차 리뷰 회귀', () => {
+    const at = new Date('2026-10-01T00:00:00Z');
+    const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
+    const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
+    const unresolved = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_UNRESOLVED');
+    const notRead = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_THIRD_PARTY_SCRIPTS_NOT_READ');
+    const rnApp = (line: string) => [
+      "apply plugin: 'com.android.application'",
+      line,
+      'android { defaultConfig { applicationId "com.example.rn"; targetSdkVersion rootProject.ext.targetSdkVersion } }',
+    ].join('\n');
+    const rn = (line: string, extra: Record<string, string> = {}) => ({
+      'package.json': '{"dependencies":{"react-native":"0.76.0","react-native-config":"1.7.2","@sentry/react-native":"8.29.0"}}',
+      'android/settings.gradle': "include ':app'",
+      'android/build.gradle': 'buildscript { ext { targetSdkVersion = 36 } }',
+      'android/app/build.gradle': rnApp(line),
+      ...extra,
+    });
+    const dotenv = 'apply from: project(\':react-native-config\').projectDir.getPath() + "/dotenv.gradle"';
+    const sentry = 'apply from: "../../node_modules/@sentry/react-native/sentry.gradle"';
+
+    describe('N3: 서드파티 패키지 스크립트는 바이너리 플러그인처럼 — 찾으면 읽고, 못 찾으면 info로 남긴다', () => {
+      it.each([
+        ['react-native-config dotenv.gradle', dotenv],
+        ['@sentry/react-native sentry.gradle', sentry],
+        ['Expo bare SDK ≤51 native_modules.gradle', 'apply from: new File(["node", "--print", "require.resolve(\'@react-native-community/cli-platform-android/package.json\')"].execute(null, rootDir).text.trim(), "../native_modules.gradle")'],
+      ])('설치 안 된 %s → OK + 설치 안내', async (_name, line) => {
+        const report = await scanReleaseDoctor(await fixture(rn(line)), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_OK');
+        expect(notRead(report)).toMatchObject({ severity: 'info', action: expect.stringContaining('Install the JavaScript dependencies') });
+      });
+
+      it('설치된 react-native-config의 dotenv.gradle은 읽는다', async () => {
+        const report = await scanReleaseDoctor(await fixture(rn(dotenv, {
+          'node_modules/react-native-config/package.json': '{"name":"react-native-config"}',
+          'node_modules/react-native-config/android/dotenv.gradle': 'android.defaultConfig.targetSdkVersion 33',
+        })), at);
+
+        expect(below(report)).toMatchObject({ file: 'node_modules/react-native-config/android/dotenv.gradle' });
+        expect(notRead(report)).toBeUndefined();
+      });
+
+      it('settings가 project(\':x\').projectDir를 node_modules로 연결해도 서드파티다', async () => {
+        const report = await scanReleaseDoctor(await fixture(rn(dotenv, {
+          'android/settings.gradle': "include ':app', ':react-native-config'\nproject(':react-native-config').projectDir = new File(rootProject.projectDir, '../node_modules/react-native-config/android')",
+        })), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_OK');
+        expect(notRead(report)?.detail).toContain('dotenv.gradle');
+      });
+
+      it('@sentry/react-native 8의 buildscript.sourceFile 심을 따라 .kts까지 읽는다', async () => {
+        const report = await scanReleaseDoctor(await fixture(rn(sentry, {
+          'node_modules/@sentry/react-native/package.json': '{"name":"@sentry/react-native"}',
+          'node_modules/@sentry/react-native/sentry.gradle': 'apply from: new File(buildscript.sourceFile.parentFile, "sentry.gradle.kts")',
+          'node_modules/@sentry/react-native/sentry.gradle.kts': 'android.defaultConfig.targetSdk = 33',
+        })), at);
+
+        expect(below(report)).toMatchObject({ file: 'node_modules/@sentry/react-native/sentry.gradle.kts' });
+      });
+
+      it('설치된 패키지에 없는 스크립트는 설치 안내 없이 info로 남긴다', async () => {
+        const report = await scanReleaseDoctor(await fixture(rn(sentry, {
+          'node_modules/@sentry/react-native/package.json': '{"name":"@sentry/react-native"}',
+          'node_modules/@sentry/react-native/sentry.gradle': 'apply from: new File(buildscript.sourceFile.parentFile, "sentry.gradle.kts")',
+        })), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_OK');
+        expect(notRead(report)?.detail).toContain('not in the installed package');
+        expect(notRead(report)?.action).toBeUndefined();
+      });
+
+      it('저장소 소유 스크립트의 계산된 경로는 여전히 unresolved (organicmaps 모양)', async () => {
+        const report = await scanReleaseDoctor(await fixture(rn('def securityFile = rootProject.file(\'app/secure.properties\')\nif (securityFile.exists()) apply from: securityFile')), at);
+
+        expect(unresolved(report)?.detail).toContain('apply from: securityFile');
+        expect(notRead(report)).toBeUndefined();
+      });
+    });
+
+    describe('N2: 컨벤션 빌드 읽기 예산', () => {
+      it('큰 included 빌드보다 플러그인 빌드를 먼저 읽는다 (P1)', async () => {
+        const lib = Object.fromEntries(Array.from({ length: 5100 }, (_, index) => [`lib/src/main/kotlin/F${index}.kt`, `class F${index}`]));
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle.kts': 'pluginManagement { includeBuild("gradle/build-logic") }\nincludeBuild("lib")\ninclude(":app")',
+          'lib/settings.gradle': "rootProject.name = 'lib'",
+          ...lib,
+          'gradle/build-logic/convention/src/main/kotlin/AppConv.kt': 'class AppConv { fun apply(e: ApplicationExtension) { e.defaultConfig.targetSdk = 33 } }',
+          'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.p1"; targetSdk = 36 } }',
+        }), at);
+
+        expect(unresolved(report)?.detail).toContain('AppConv.kt:1');
+      }, 60_000);
+
+      it('다 읽지 못한 컨벤션 빌드가 있으면 OK가 아니다', async () => {
+        const sources = Object.fromEntries(Array.from({ length: 5001 }, (_, index) => [`buildSrc/src/main/kotlin/F${index}.kt`, `class F${index}`]));
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle': "include ':app'",
+          ...sources,
+          'app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.n2'; targetSdk 36 } }",
+        }), at);
+
+        expect(unresolved(report)?.detail).toContain('buildSrc (a convention build too large to read completely)');
+      }, 60_000);
+    });
+
+    it("N7: subprojects { apply from } 스크립트의 withId('com.android.library') 값은 앱의 값이 아니다 (P13)", async () => {
+      const report = await scanReleaseDoctor(await fixture({
+        'settings.gradle': "include ':app', ':lib'",
+        'build.gradle': 'subprojects { apply from: "$rootDir/gradle/android.gradle" }',
+        'gradle/android.gradle': "plugins.withId('com.android.library') { android.defaultConfig.targetSdk 30 }\nplugins.withId('com.android.application') { android.defaultConfig.targetSdk 36 }",
+        'app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.p13' } }",
+        'lib/build.gradle': "apply plugin: 'com.android.library'",
+      }), at);
+
+      expect(codes(report)).toContain('TARGET_SDK_OK');
+      expect(report.targetSdkTokens).toContainEqual(expect.objectContaining({ file: 'gradle/android.gradle', line: 1, excluded: 'library' }));
+    });
+
+    it.each(['sample', 'samples', 'example', 'examples'])('N1: 샘플 빌드도 includeBuild하는 플러그인 빌드는 표본이 아니다 (P11-%s)', async (dir) => {
+      const report = await scanReleaseDoctor(await fixture({
+        'settings.gradle.kts': 'pluginManagement { includeBuild("build-plugins") }\ninclude(":app")',
+        [`${dir}/settings.gradle.kts`]: 'pluginManagement { includeBuild("../build-plugins") }\ninclude(":demoapp")',
+        [`${dir}/demoapp/build.gradle.kts`]: 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.demo"; targetSdk = 36 } }',
+        'build-plugins/build.gradle.kts': 'plugins { `kotlin-dsl` }',
+        'build-plugins/src/main/kotlin/AppConv.kt': 'class AppConv { fun apply(e: ApplicationExtension) { e.defaultConfig.targetSdk = 33 } }',
+        'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.p11"; targetSdk = 36 } }',
+      }), at);
+
+      expect(unresolved(report)?.detail).toContain('build-plugins/src/main/kotlin/AppConv.kt:1');
+    });
+
+    it.each([
+      ["defaultConfig { setProperty('targetSdk', 33) } (SP1)", "android { defaultConfig { applicationId 'com.example.sp'; targetSdk 36\n  setProperty('targetSdk', 33) } }"],
+      ["android.defaultConfig { setProperty('targetSdkVersion', 33) } (SP2)", "android { defaultConfig { applicationId 'com.example.sp'; targetSdk 36 } }\nandroid.defaultConfig { setProperty('targetSdkVersion', 33) }"],
+    ])('N4: 블록 안의 수신자 없는 %s는 OK가 아니다', async (_name, body) => {
+      const report = await scanReleaseDoctor(await fixture({ 'settings.gradle': "include ':app'", 'app/build.gradle': `plugins { id 'com.android.application' }\n${body}` }), at);
+
+      expect(codes(report)).not.toContain('TARGET_SDK_OK');
+      expect(unresolved(report)?.detail).toContain("setProperty('targetSdk");
+    });
+
+    it.each([
+      ["includeBuild('src/android')의 앱 (P9)", {
+        'settings.gradle': "includeBuild('src/android')",
+        'src/android/settings.gradle': "include ':app'",
+        'src/android/app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.p9'; targetSdk 33 } }",
+      }, 'src/android/app/build.gradle'],
+      ['java-gradle-plugin도 적용하는 앱 모듈 (P12)', {
+        'settings.gradle': "include ':app'",
+        'app/build.gradle': "plugins { id 'com.android.application'; id 'java-gradle-plugin' }\ngradlePlugin { plugins { x { id = 'x'; implementationClass = 'X' } } }\nandroid { defaultConfig { applicationId 'com.example.p12'; targetSdk 33 } }",
+      }, 'app/build.gradle'],
+    ])('%s는 앱으로 판정한다', async (_name, files, file) => {
+      const report = await scanReleaseDoctor(await fixture(files), at);
+
+      expect(below(report)).toMatchObject({ file });
+    });
+
+    it('included 앱 빌드의 Java 소스는 읽지 않는다 (P8b)', async () => {
+      const report = await scanReleaseDoctor(await fixture({
+        'settings.gradle': "includeBuild('android')",
+        'android/settings.gradle': "include ':app'",
+        'android/app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.p8'; targetSdk 36 } }",
+        'android/app/src/main/java/com/example/p8/Main.java': 'class Main { int t(android.content.Context c) { int targetSdkVersion = c.getApplicationInfo().targetSdkVersion; return targetSdkVersion; } }',
+      }), at);
+
+      expect(codes(report)).toContain('TARGET_SDK_OK');
     });
   });
 

@@ -185,62 +185,110 @@ interface ConventionRoot {
   /** Flags of the place the convention build sits in (never of folders inside it, such as `com/example/`). */
   sample: boolean;
   demo: boolean;
+  /** Known to build Gradle plugins: buildSrc/, build-logic/, or a `pluginManagement { includeBuild(…) }` root. */
+  plugin: boolean;
 }
 
 /**
- * Every source of the convention builds in the scan: buildSrc/ and build-logic/ folders at any depth (also nested,
- * as in `gradle/build-logic/`) and every `includeBuild("…")` root a settings script declares inside the scanned tree,
- * read with no depth limit. Package folders inside them (`com/example/…`, `test/`) never mark a file as a sample.
- * Included builds under node_modules/ are third-party plugins, like binary plugins, and are not read.
+ * Every Gradle script and plugin source of the convention builds in the scan: buildSrc/ and build-logic/ folders at
+ * any depth (also nested, as in `gradle/build-logic/`) and every `includeBuild("…")` root a settings script declares
+ * inside the scanned tree, read with no depth limit of the project walk. Package folders inside them (`com/example/…`,
+ * `test/`) never mark a file as a sample; a root several builds include is a sample only when every including build
+ * is. Kotlin / Java / Groovy sources are read only from plugin builds (buildSrc, build-logic, a
+ * `pluginManagement { includeBuild }` root, or a build whose script is a plugin build), never from an included app.
+ * Plugin roots are read first, each within its own budget; a root the walk could not read completely is returned in
+ * `truncated`, and the Target API check then cannot be OK. Included builds under node_modules/ are third-party
+ * plugins, like binary plugins, and are not read.
  */
-async function conventionFiles(root: string, files: ProjectFile[], found: ConventionRoot[]): Promise<ProjectFile[]> {
-  const roots = [...found];
+async function conventionFiles(root: string, files: ProjectFile[], found: ConventionRoot[]): Promise<{ files: ProjectFile[]; truncated: string[] }> {
+  const declared: ConventionRoot[] = found.map((owner) => ({ ...owner, plugin: true }));
   for (const settings of files.filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative))) {
     const dir = path.dirname(settings.absolute);
-    for (const match of stripGradleComments(settings.text).matchAll(/\bincludeBuild\s*\(?\s*["']([^"'$]+)["']/g)) {
+    const code = stripGradleComments(settings.text);
+    const pluginManagement = /\bpluginManagement\s*\{/.exec(code);
+    const pluginRange = pluginManagement
+      ? [pluginManagement.index, closingBrace(code, pluginManagement.index + pluginManagement[0].length - 1)] as const
+      : undefined;
+    for (const match of code.matchAll(/\bincludeBuild\s*\(?\s*["']([^"'$]+)["']/g)) {
       const target = path.resolve(dir, match[1]);
       if (!isWithin(root, target) || isWithin(target, dir)) continue;
       if (path.relative(root, target).split(path.sep).some((segment) => SKIP_DIRS.has(segment))) continue;
-      roots.push({ dir: target, sample: Boolean(settings.sample), demo: Boolean(settings.demo) });
+      const plugin = Boolean(pluginRange && match.index > pluginRange[0] && (pluginRange[1] < 0 || match.index < pluginRange[1]));
+      declared.push({ dir: target, sample: Boolean(settings.sample), demo: Boolean(settings.demo), plugin });
     }
   }
+  // One entry per directory: a sample only when every build that includes it is one.
+  const byDir = new Map<string, ConventionRoot>();
+  for (const owner of declared) {
+    const existing = byDir.get(owner.dir);
+    byDir.set(owner.dir, existing
+      ? { dir: owner.dir, sample: existing.sample && owner.sample, demo: existing.demo && owner.demo, plugin: existing.plugin || owner.plugin }
+      : owner);
+  }
+  // Plugin builds first, then non-sample ones, then outer before inner: a directory is read once, by the first root
+  // that reaches it, so a nested non-sample plugin root never takes an outer sample root's flags.
+  const roots = [...byDir.values()].sort((left, right) => Number(right.plugin) - Number(left.plugin)
+    || Number(left.sample) - Number(right.sample) || left.dir.length - right.dir.length);
   const result: ProjectFile[] = [];
+  const truncated: string[] = [];
   const seen = new Set<string>();
-  async function visit(dir: string, depth: number, owner: ConventionRoot): Promise<void> {
-    if (depth > MAX_CONVENTION_DEPTH || result.length >= MAX_CONVENTION_FILES || seen.has(dir)) return;
-    seen.add(dir);
-    let entries;
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const absolute = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) await visit(absolute, depth + 1, owner);
-        continue;
+  for (const owner of roots) {
+    const scripts: string[] = [];
+    const sources: string[] = [];
+    let incomplete = false;
+    const visit = async (dir: string, depth: number): Promise<void> => {
+      if (seen.has(dir)) return;
+      if (depth > MAX_CONVENTION_DEPTH || scripts.length + sources.length >= MAX_CONVENTION_PATHS) {
+        incomplete = true;
+        return;
       }
-      const relative = path.relative(root, absolute).replace(/\\/g, '/');
-      if (!entry.isFile() || !(CONVENTION_SOURCE_FILE.test(entry.name) || isRelevantFile(entry.name, relative))) continue;
-      if (result.length >= MAX_CONVENTION_FILES) return;
+      seen.add(dir);
+      let entries;
       try {
-        if ((await fs.stat(absolute)).size > MAX_SOURCE_BYTES) continue;
-        result.push({ absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: owner.sample, demo: owner.demo, convention: true });
+        entries = await fs.readdir(dir, { withFileTypes: true });
       } catch {
-        // Unreadable convention sources are skipped like any other unreadable file.
+        return;
       }
+      for (const entry of entries) {
+        const absolute = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!SKIP_DIRS.has(entry.name)) await visit(absolute, depth + 1);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const relative = path.relative(root, absolute).replace(/\\/g, '/');
+        if (isRelevantFile(entry.name, relative)) scripts.push(absolute);
+        else if (CONVENTION_SOURCE_FILE.test(entry.name)) sources.push(absolute);
+      }
+    };
+    await visit(owner.dir, 0);
+    const read = async (absolute: string): Promise<ProjectFile | undefined> => {
+      try {
+        if ((await fs.stat(absolute)).size > MAX_SOURCE_BYTES) return undefined;
+        const relative = path.relative(root, absolute).replace(/\\/g, '/');
+        return { absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: owner.sample, demo: owner.demo, convention: true };
+      } catch {
+        return undefined;
+      }
+    };
+    const scriptFiles = (await Promise.all(scripts.map(read))).filter((file): file is ProjectFile => Boolean(file));
+    result.push(...scriptFiles);
+    const plugin = owner.plugin || scriptFiles.some((file) => /\.gradle(?:\.kts)?$/.test(file.relative) && isGradlePluginBuild(file.text));
+    if (plugin) {
+      if (sources.length > MAX_CONVENTION_FILES) incomplete = true;
+      result.push(...(await Promise.all(sources.slice(0, MAX_CONVENTION_FILES).map(read))).filter((file): file is ProjectFile => Boolean(file)));
     }
+    if (incomplete) truncated.push(path.relative(root, owner.dir).replace(/\\/g, '/') || '.');
   }
-  // Outermost roots first, so a root nested in another is read once, with the outer root's flags.
-  for (const owner of roots.sort((left, right) => left.dir.length - right.dir.length)) await visit(owner.dir, 0, owner);
-  return result;
+  return { files: result, truncated };
 }
 
 async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 7): Promise<{
   files: ProjectFile[];
   fcmSources: ProjectFile[];
   sourceScanTruncated: boolean;
+  /** Convention-build roots that could not be read completely. */
+  conventionTruncated: string[];
 }> {
   const files: ProjectFile[] = [];
   const conventionRoots: ConventionRoot[] = [];
@@ -264,7 +312,7 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
       if (entry.isDirectory()) {
         // A convention build is read whole by `conventionFiles` (no depth limit, no sample flags from inside it).
         if (CONVENTION_DIRS.has(entry.name)) {
-          conventionRoots.push({ dir: absolute, sample: sampleHere, demo });
+          conventionRoots.push({ dir: absolute, sample: sampleHere, demo, plugin: true });
           continue;
         }
         if (!SKIP_DIRS.has(entry.name)) {
@@ -294,11 +342,13 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
   }
   await visit(root, 0, false, false, false);
   // Files the project walk already read keep its flags (an included build can be a whole app, with its own samples),
-  // except plugin sources under `src/`, whose package folders (`com/example/…`) never make them samples. The
-  // convention walk adds what that walk does not read (deep, or Kotlin/Java/Groovy plugin sources).
+  // except plugin sources under `src/main/{kotlin,java,groovy}/`, whose package folders (`com/example/…`) never make
+  // them samples. The convention walk adds what that walk does not read (deep, or Kotlin/Java/Groovy plugin sources).
   const merged = new Map(files.map((file) => [file.absolute, file]));
-  for (const file of await conventionFiles(root, files, conventionRoots)) {
-    const pluginSource = /(?:^|\/)src\//.test(file.relative) && CONVENTION_SOURCE_FILE.test(file.relative);
+  const convention = await conventionFiles(root, files, conventionRoots);
+  for (const file of convention.files) {
+    const pluginSource = /(?:^|\/)src\/main\/(?:kotlin|java|groovy)\//.test(file.relative)
+      && !/(?:^|\/)(?:build|settings)\.gradle(?:\.kts)?$/.test(file.relative);
     if (!merged.has(file.absolute) || pluginSource) merged.set(file.absolute, file);
   }
   files.splice(0, files.length, ...merged.values());
@@ -310,6 +360,7 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
     files,
     fcmSources: await readFcmSources(prioritized.slice(0, maxSourceFiles)),
     sourceScanTruncated: prioritized.length > maxSourceFiles,
+    conventionTruncated: convention.truncated,
   };
 }
 
@@ -398,8 +449,12 @@ function isRelevantFile(name: string, relative: string): boolean {
 const CONVENTION_DIRS = new Set(['buildSrc', 'build-logic', 'build_logic', 'buildLogic']);
 /** Convention-build sources the Target API net reads: scripts and plugin sources in every JVM build language. */
 const CONVENTION_SOURCE_FILE = /\.(?:gradle|gradle\.kts|kts|kt|java|groovy)$/;
-/** Bounds for the convention walk (it has no depth limit of its own, unlike the project walk). */
+/**
+ * Bounds for each root of the convention walk (it has no depth limit of its own, unlike the project walk): a root that
+ * exceeds them is reported as not fully read, so the Target API check cannot pass on a partial read.
+ */
 const MAX_CONVENTION_DEPTH = 40;
+const MAX_CONVENTION_PATHS = 20000;
 const MAX_CONVENTION_FILES = 5000;
 
 function unique(values: string[]): string[] {
@@ -554,7 +609,7 @@ const ANDROID_LIBRARY_PLUGIN_ID = /(?<![\w.:-])com\.android\.(?:library|test|fus
 // `apply false` declaration. Every other line naming the id applies it — `id(…)` (also split over lines), `alias(…)`,
 // `apply plugin:`, `apply { plugin(…) }`, `pluginManager.apply(…)`, `plugins.apply(…)`. A deny-list, so a new way of
 // applying the plugin still finds the app.
-const PLUGIN_MENTION = /\b(?:hasPlugin|withId|withPlugin|findPlugin|getPlugin|findByName|getByName|listOf|setOf|arrayOf|mutableListOf|mutableSetOf|contains|containsKey|equals|startsWith|endsWith|matches|filter|any|none)\s*\(|[=!]=|->|\bin\s*[[(]|\b(?:def|val|var|const)\s+[A-Za-z_]\w*\s*(?::\s*[\w<>?.]+\s*)?=|\bclasspath\b|\bapply\s*\(?\s*false\b/;
+const PLUGIN_MENTION = /\b(?:hasPlugin|withId|withPlugin|findPlugin|getPlugin|findByName|getByName|listOf|setOf|arrayOf|mutableListOf|mutableSetOf|contains|containsKey|equals|startsWith|endsWith|matches|filter|any|none)\s*\(|[=!]=|->|\bin\s*[[(]|\b(?:def|val|var|const)\s+[A-Za-z_]\w*\s*(?::\s*[\w<>?.]+\s*)?=|\bclasspath\b|\bpluginId\b|\bid\s*=(?!=)|\bapply\s*\(?\s*false\b/;
 
 function appliesAndroidPlugin(text: string, id: RegExp): boolean {
   const lines = blankComments(text).split(/\r?\n/);
@@ -566,6 +621,12 @@ function appliesAndroidPlugin(text: string, id: RegExp): boolean {
 
 /** A build script of a Gradle plugin project (convention plugins), not of an app. */
 const GRADLE_PLUGIN_BUILD = /\bgradlePlugin\s*\{|`kotlin-dsl`|\bid\s*\(?\s*["'](?:java-gradle-plugin|groovy-gradle-plugin|kotlin-dsl)["']|\bkotlin-dsl\b/;
+
+/** A Gradle plugin project's build script: it builds plugins and applies no Android application plugin itself. */
+function isGradlePluginBuild(text: string): boolean {
+  const code = stripGradleComments(text);
+  return GRADLE_PLUGIN_BUILD.test(code) && !appliesAndroidAppPlugin(code);
+}
 
 /** Applies the Android application plugin — a root `plugins { … apply false }` declaration only makes it available. */
 function appliesAndroidAppPlugin(text: string): boolean {
@@ -1058,7 +1119,7 @@ async function detectProject(files: ProjectFile[], root: string) {
   // must be well-formed). The word inside a string, a template, or a local variable name does not count.
   // A Gradle plugin build (build-logic/, buildSrc/, a `gradlePlugin { … }` / kotlin-dsl project) registers plugins
   // whose ids may name the application plugin; it is never an app module itself.
-  const androidAppGradleFiles = gradleFiles.filter((file) => !file.convention && !GRADLE_PLUGIN_BUILD.test(file.text)
+  const androidAppGradleFiles = gradleFiles.filter((file) => !file.convention && !isGradlePluginBuild(file.text)
     && (appliesAndroidAppPlugin(file.text) || APPLICATION_ID_ANY.test(gradleDslText(file.text))));
   const androidAppManifestFiles = files.filter((file) =>
     /(?:^|\/)android\/app\/src\/main\/AndroidManifest\.xml$/.test(file.relative));
@@ -1482,14 +1543,22 @@ function targetSdkTokens(text: string): ScannedToken[] {
     let kind: TargetSdkToken['kind'] | undefined;
     if (/\bsetProperty\s*\(\s*$/.test(before)) {
       const receiver = before.match(/((?:[A-Za-z_$][\w$]*\s*\.\s*)*)setProperty\s*\(\s*$/)?.[1].replace(/\s/g, '') ?? '';
-      kind = /^(?:(?:rootProject|project)\.)?(?:(?:ext|extra)\.)?$/.test(receiver) ? 'define' : 'unknown';
+      // Receiver-less inside `defaultConfig { }` (or any block but ext/extra), Groovy delegates it to that block's
+      // object: `setProperty('targetSdk', 33)` there sets the DSL property itself.
+      const block = enclosingBlocks(masked, index).at(-1)?.opener;
+      const projectLevel = receiver !== '' || block === undefined || ['ext', 'extra'].includes(block);
+      kind = projectLevel && /^(?:(?:rootProject|project)\.)?(?:(?:ext|extra)\.)?$/.test(receiver) ? 'define' : 'unknown';
     } else if (/\[\s*$/.test(before)) {
       kind = extra(receiverOf(/\[\s*$/)) ? (assigned ? 'define' : 'read') : 'unknown';
     } else if (/\.\s*$/.test(before)) {
       kind = extra(receiverOf(/\.\s*$/)) ? (assigned ? 'define' : 'read') : 'unknown';
     }
     if (kind) {
-      const statement = `${before.match(/[\w.$]*[[.(]?\s*$/)?.[0] ?? ''}${literal[0]}${code.slice(index + literal[0].length).match(/^[^\n;]*/)?.[0] ?? ''}`;
+      const restStart = index + literal[0].length;
+      const restEnd = statementEnd(masked, restStart);
+      // Past the call's `)` or the index's `]` to the end of the statement (`['targetSdk'] = 33`).
+      const rest = code.slice(restStart, [')', ']'].includes(masked[restEnd]) ? statementEnd(masked, restEnd + 1) : restEnd);
+      const statement = `${before.match(/[\w.$]*[[.(]?\s*$/)?.[0] ?? ''}${literal[0]}${rest}`;
       result.push({ index, line: lineOf(index), kind, expression: statement.trim() });
     }
   }
@@ -1529,6 +1598,8 @@ function targetSdkFindings(
   properties?: { scope: PropertyScope; ciOverrides: Set<string>; settingsTexts?: string[] },
   modules: TargetSdkModule[] = [],
   net: TargetSdkNetScript[] = [],
+  /** Convention-build roots the walk could not read completely: the net is incomplete there. */
+  unreadConventionRoots: string[] = [],
 ): { findings: ReleaseDoctorFinding[]; modules: TargetSdkModuleVerdict[]; tokens: TargetSdkToken[] } {
   const catalogFiles = gradleFiles.filter((candidate) => candidate.relative.endsWith('.versions.toml'));
   const reactNativeCatalog = catalogFiles.find((candidate) => candidate.relative === REACT_NATIVE_CATALOG);
@@ -1576,7 +1647,14 @@ function targetSdkFindings(
         new RegExp(`\\b(?:ext|extra|extraProperties)\\s*\\[\\s*["']${quoted}["']\\s*\\]\\s*=(?!=)\\s*([^\\n;]+)`, 'g'),
         new RegExp(`\\b(?:set|setProperty)\\s*\\(\\s*["']${quoted}["']\\s*,\\s*([^)\\n]+)\\)`, 'g'),
       ]) {
-        for (const match of code.matchAll(pattern)) add(match[1], file.relative);
+        for (const match of code.matchAll(pattern)) {
+          // A receiver-less `setProperty(…)` inside a DSL block sets that block's property, not an extra property.
+          if (/^setProperty/.test(match[0]) && !/\.\s*$/.test(code.slice(Math.max(0, match.index - 40), match.index))) {
+            const block = enclosingBlocks(maskStrings(file.text), match.index).at(-1)?.opener;
+            if (block !== undefined && !['ext', 'extra'].includes(block)) continue;
+          }
+          add(match[1], file.relative);
+        }
       }
       // `ext.x -= 3`, `ext.x++`, `--ext.x`: a computed change — the property is no longer a plain number.
       const changed = new RegExp(`\\b(?:ext|extra|extraProperties)\\s*\\.\\s*${quoted}\\s*(?:\\+\\+|--|(?:[-+*/%&|^]|<<|>>>?)=)|(?:\\+\\+|--)\\s*(?:[\\w$]+\\s*\\.\\s*)*(?:ext|extra|extraProperties)\\s*\\.\\s*${quoted}\\b`, 'g');
@@ -1696,6 +1774,18 @@ function targetSdkFindings(
     inventory.set(key, { file: script.relative, line: token.line, kind: token.kind, ...row });
   };
 
+  // `plugins.withId('com.android.library') { … }` (or withPlugin / hasPlugin) configures libraries only: those
+  // settings are inventoried as library settings, never as an app's.
+  const libraryOnlyTokens = new Set<string>();
+  const libraryOnly = (script: ProjectFile, token: ScannedToken) => {
+    const masked = maskStrings(script.text);
+    const code = blankComments(script.text);
+    return enclosingBlocks(masked, token.index).some((block) => {
+      const head = code.slice(block.open - block.head.length, block.open);
+      return /\b(?:withId|withPlugin|hasPlugin)\b/.test(head) && ANDROID_LIBRARY_PLUGIN_ID.test(head);
+    });
+  };
+
   const evaluate = (module: TargetSdkModule): TargetSdkModuleVerdict => {
     const verdict: TargetSdkModuleVerdict = { module: moduleDir(module.file.relative), values: [], resolved: true, unresolved: [] };
     let assignments = 0;
@@ -1726,26 +1816,23 @@ function targetSdkFindings(
         if (!crossProjectToken(masked, token.index, token.chain ?? '', 'self')) consider(script, token);
       }
     }
-    // Scripts the build root applies to every project count whole.
+    // Scripts the build root applies to every project count whole, except their library-only blocks.
     for (const script of new Set(module.everyProject ?? [])) {
       if (module.scripts.includes(script)) continue;
-      for (const token of tokensOf(script)) consider(script, token);
+      for (const token of tokensOf(script)) {
+        if (libraryOnly(script, token)) libraryOnlyTokens.add(`${script.absolute}\u0000${token.index}`);
+        else consider(script, token);
+      }
     }
     // The build root's every-project configuration always counts — a root `afterEvaluate` or `plugins.withId` may
     // override what the module sets.
     for (const script of new Set(module.inherited ?? [])) {
       if (module.scripts.includes(script) || (module.everyProject ?? []).includes(script)) continue;
       const ranges = everyProjectBlocks(script.text);
-      const masked = maskStrings(script.text);
-      const code = blankComments(script.text);
       for (const token of tokensOf(script)) {
         if (!ranges.some(([open, close]) => token.index > open && token.index < close)) continue;
-        // `plugins.withId('com.android.library') { … }` configures libraries only: left to the net.
-        const libraryOnly = enclosingBlocks(masked, token.index).some((block) => {
-          const head = code.slice(block.open - block.head.length, block.open);
-          return /\b(?:withId|withPlugin|hasPlugin)\b/.test(head) && ANDROID_LIBRARY_PLUGIN_ID.test(head);
-        });
-        if (!libraryOnly) consider(script, token);
+        if (libraryOnly(script, token)) libraryOnlyTokens.add(`${script.absolute}\u0000${token.index}`);
+        else consider(script, token);
       }
     }
     if (assignments === 0) {
@@ -1769,7 +1856,7 @@ function targetSdkFindings(
     netScripts.set(entry.file.absolute, file ? { ...entry, file, excluded: undefined } : entry);
   }
   for (const file of used.values()) if (!netScripts.has(file.absolute)) netScripts.set(file.absolute, { file });
-  const netIssues: string[] = [];
+  const netIssues: string[] = unreadConventionRoots.map((dir) => `${dir} (a convention build too large to read completely)`);
   for (const { file: script, excluded: scriptExcluded, inherited } of netScripts.values()) {
     const masked = maskStrings(script.text);
     for (const token of tokensOf(script)) {
@@ -1777,6 +1864,7 @@ function targetSdkFindings(
       let excluded = scriptExcluded;
       // A library or Wear module that configures another project (`project(':app').afterEvaluate { … }`) stays in.
       if ((excluded === 'library' || excluded === 'specialized') && crossProjectToken(masked, token.index, token.chain ?? '', 'library')) excluded = undefined;
+      if (!excluded && libraryOnlyTokens.has(`${script.absolute}\u0000${token.index}`)) excluded = 'library';
       // Unity templates: only a `**PLACEHOLDER**` value is Unity's to fill; a literal in the template counts.
       if (!excluded && token.kind === 'assign' && /^\*\*[A-Z0-9_]+\*\*$/.test(token.expression ?? '')) excluded = 'template';
       if (excluded || token.kind === 'read' || token.kind === 'define' || token.kind === 'other') {
@@ -2442,14 +2530,136 @@ function applyFromReferences(text: string): string[] {
   });
 }
 
+/** A path through a node_modules/ folder: a third-party package's file. */
+function inNodeModules(file: string): boolean {
+  return /(?:^|[\\/])node_modules[\\/]/.test(file);
+}
+
+/** How an `apply from:` argument resolved. */
+interface AppliedScriptResolution {
+  /** The readable file it names. */
+  absolute?: string;
+  /** The script belongs to a third-party package (read when it resolves, otherwise only noted). */
+  thirdParty: boolean;
+  /** Why it was not read. */
+  reason?: string;
+  /** The package folder is missing: installing the JavaScript dependencies would make it readable. */
+  installHint?: boolean;
+}
+
+interface ApplyContext {
+  /** The applying project's directory (relative paths resolve against it). */
+  projectDir: string;
+  /** The directory of the script that contains the `apply from:` (for `buildscript.sourceFile`). */
+  scriptDir: string;
+  limit: string;
+  known: ProjectFile[];
+}
+
+/** Whether a file exists (known to the walk or readable). */
+async function exists(absolute: string, known: ProjectFile[]): Promise<boolean> {
+  return known.some((candidate) => candidate.absolute === absolute) || await readText(absolute) !== undefined;
+}
+
+/** The package folder a node_modules/ path belongs to (`…/node_modules/@scope/name`). */
+function packageDir(file: string): string | undefined {
+  const match = file.replace(/\\/g, '/').match(/^(.*\/node_modules\/(?:@[^/]+\/)?[^/]+)/);
+  return match?.[1];
+}
+
+/** A resolved file path's outcome: read it, or say why not (third-party when it is inside node_modules/). */
+async function resolvedPath(candidates: string[], context: ApplyContext, thirdParty = false): Promise<AppliedScriptResolution> {
+  for (const absolute of candidates) {
+    if (!isWithin(context.limit, absolute)) continue;
+    if (await exists(absolute, context.known)) return { absolute, thirdParty: thirdParty || inNodeModules(absolute) };
+  }
+  const first = candidates.find((candidate) => isWithin(context.limit, candidate)) ?? candidates[0];
+  const external = thirdParty || (first !== undefined && inNodeModules(first));
+  if (!external) return { thirdParty: false };
+  const pkg = first === undefined ? undefined : packageDir(first);
+  const installed = pkg !== undefined && await readText(path.join(pkg, 'package.json')) !== undefined;
+  return installed
+    ? { thirdParty: true, reason: 'not in the installed package' }
+    : { thirdParty: true, reason: 'its package is not installed', installHint: pkg !== undefined };
+}
+
 /**
- * The file an `apply from:` argument names, when it is a readable file inside `limit`: a literal path (relative to
- * the applying project's directory, or rooted with `$rootDir` / `${rootProject.projectDir}` / `$projectDir`),
- * `file("…")`, `project.file("…")`, `rootProject.file("…")`, or `new File(rootDir, "…")`. Undefined for a URL, any
- * other computed path, a missing file, or one outside the repository.
+ * The Gradle project directory `:name` maps to: a settings `project(':name').projectDir = new File(rootProject.projectDir,
+ * '…')` / `file('…')`, otherwise React Native autolinking's `node_modules/<name>/android` when present, otherwise the
+ * default `<settings dir>/<name>`. Third-party when it lies in node_modules/ or names a package.json dependency.
  */
-async function appliedScriptPath(reference: string, projectDir: string, limit: string, known: ProjectFile[]): Promise<string | undefined> {
+async function projectDirectory(name: string, context: ApplyContext): Promise<{ dir: string; thirdParty: boolean }> {
+  const settingsFiles = context.known.filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative)
+    && isWithin(path.dirname(file.absolute), context.projectDir))
+    .sort((left, right) => right.absolute.length - left.absolute.length);
+  const settingsDir = settingsFiles[0] ? path.dirname(settingsFiles[0].absolute) : context.projectDir;
+  const quoted = escapeRegExp(name);
+  for (const settings of settingsFiles) {
+    const code = stripGradleComments(settings.text);
+    const mapping = code.match(new RegExp(`project\\(\\s*["']:${quoted}["']\\s*\\)\\.projectDir\\s*=\\s*(?:new\\s+File\\(\\s*(?:rootProject\\.projectDir|settingsDir|rootDir)\\s*,\\s*["']([^"'$]+)["']\\s*\\)|file\\(\\s*["']([^"'$]+)["']\\s*\\))`));
+    if (mapping) {
+      const dir = path.resolve(path.dirname(settings.absolute), mapping[1] ?? mapping[2]);
+      return { dir, thirdParty: inNodeModules(dir) };
+    }
+  }
+  // React Native names an autolinked `@scope/pkg` project `:scope_pkg`.
+  const packageNames = [name, ...(/^([^_]+)_(.+)$/.test(name) ? [name.replace(/^([^_]+)_(.+)$/, '@$1/$2')] : [])];
+  for (const directory of ancestorsUpTo(context.projectDir, context.limit)) {
+    for (const packageName of packageNames) {
+      if (await readText(path.join(directory, 'node_modules', packageName, 'package.json')) !== undefined) {
+        return { dir: path.join(directory, 'node_modules', packageName, 'android'), thirdParty: true };
+      }
+    }
+  }
+  const dependency = packageNames.find((packageName) => context.known.some((file) => path.posix.basename(file.relative) === 'package.json'
+    && new RegExp(`"(?:dependencies|devDependencies)"\\s*:\\s*\\{[^}]*"${escapeRegExp(packageName)}"\\s*:`).test(file.text)));
+  return dependency
+    ? { dir: path.join(settingsDir, '..', 'node_modules', dependency, 'android'), thirdParty: true }
+    : { dir: path.join(settingsDir, ...name.split(':')), thirdParty: false };
+}
+
+/**
+ * The file an `apply from:` argument names. Repository paths: a literal path (relative to the applying project's
+ * directory, or rooted with `$rootDir` / `${rootProject.projectDir}` / `$projectDir`), `file("…")`,
+ * `project.file("…")`, `rootProject.file("…")`, `new File(rootDir, "…")`. Third-party package scripts (React
+ * Native): a path through node_modules/, `project(':pkg').projectDir…` (react-native-config's `dotenv.gradle`),
+ * `new File(buildscript.sourceFile.parentFile, "…")` relative to the applying script (@sentry/react-native 8's
+ * `sentry.gradle.kts` shim), and Expo's `new File(["node", "--print", "require.resolve('…')"].execute(…).text.trim(),
+ * "…")`. Without a file: a repository reference (a URL, another computed path, a missing file, one outside the
+ * repository) is unresolved; a third-party one comes with the reason it was not read.
+ */
+async function appliedScriptPath(reference: string, context: ApplyContext): Promise<AppliedScriptResolution> {
   const literal = (value: string) => value.match(/^(["'])([^"'\n]*)\1$/)?.[2];
+  const fromScript = inNodeModules(context.scriptDir);
+
+  // Expo bare templates: the folder comes from running node.
+  const nodeResolve = reference.match(/\bnode\b[\s\S]*--print[\s\S]*require\.resolve\(\s*\\?["']([^"'\\]+)\\?["']/);
+  if (nodeResolve && /\.execute\(/.test(reference)) {
+    const child = reference.match(/,\s*(["'])([^"'\n]+)\1\s*\)\s*$/)?.[2] ?? '';
+    const candidates = ancestorsUpTo(context.projectDir, context.limit)
+      .map((directory) => path.resolve(path.join(directory, 'node_modules', nodeResolve[1]), child));
+    const resolution = await resolvedPath(candidates, context, true);
+    return resolution.absolute ? resolution : { ...resolution, reason: `${resolution.reason ?? 'not found'} (the path is computed by running node)` };
+  }
+
+  // `new File(buildscript.sourceFile.parentFile, "x")`, `"${buildscript.sourceFile.parent}/x"`.
+  const sourceRelative = reference.match(/^new\s+File\(\s*buildscript\.sourceFile\.parentFile\s*,\s*(["'])([^"'$\n]+)\1\s*\)$/)?.[2]
+    ?? reference.match(/^(["'])\$\{buildscript\.sourceFile\.parent(?:File)?\}\/([^"'$\n]+)\1$/)?.[2];
+  if (sourceRelative !== undefined) return resolvedPath([path.resolve(context.scriptDir, sourceRelative)], context, fromScript);
+
+  // `project(':pkg').projectDir.getPath() + "/x"`, `"${project(':pkg').projectDir}/x"`, `new File(project(':pkg').projectDir, "x")`.
+  const projectForms: Array<[RegExp, number, number]> = [
+    [/^project\(\s*["']:([^"']+)["']\s*\)\.projectDir(?:\.getPath\(\)|\.path|\.absolutePath)?\s*\+\s*(["'])\/?([^"'$\n]+)\2$/, 1, 3],
+    [/^(["'])\$\{project\(\s*["']:([^"']+)["']\s*\)\.projectDir\}\/([^"'$\n]+)\1$/, 2, 3],
+    [/^new\s+File\(\s*project\(\s*["']:([^"']+)["']\s*\)\.projectDir\s*,\s*(["'])([^"'$\n]+)\2\s*\)$/, 1, 3],
+  ];
+  for (const [form, nameGroup, fileGroup] of projectForms) {
+    const match = reference.match(form);
+    if (!match) continue;
+    const project = await projectDirectory(match[nameGroup], context);
+    return resolvedPath([path.resolve(project.dir, match[fileGroup])], context, project.thirdParty || fromScript);
+  }
+
   let target = literal(reference);
   const call = reference.match(/^(rootProject\.|project\.)?file\(\s*(.+?)\s*\)$/);
   if (target === undefined && call) {
@@ -2458,25 +2668,23 @@ async function appliedScriptPath(reference: string, projectDir: string, limit: s
   }
   const rootFile = reference.match(/^new\s+File\(\s*(?:rootDir|rootProject\.(?:rootDir|projectDir))\s*,\s*(.+?)\s*\)$/);
   if (target === undefined && rootFile && literal(rootFile[1]) !== undefined) target = `$rootDir/${literal(rootFile[1])}`;
-  if (target === undefined || /^[a-z][a-z0-9+.-]*:/i.test(target)) return undefined;
+  const computed = { thirdParty: fromScript || inNodeModules(reference), reason: 'the path is computed' };
+  if (target === undefined || /^[a-z][a-z0-9+.-]*:/i.test(target)) return computed;
   const rooted = target.match(/^\$\{?(?:rootDir|rootProject\.(?:projectDir|rootDir)|project\.rootDir)\}?\/(.+)$/);
-  const projectRelative = target.match(/^\$\{?(?:projectDir|project\.projectDir)\}?\/(.+)$/);
-  if (!rooted && !projectRelative && target.includes('$')) return undefined;
+  const projectDirRelative = target.match(/^\$\{?(?:projectDir|project\.projectDir)\}?\/(.+)$/);
+  if (!rooted && !projectDirRelative && target.includes('$')) return computed;
   const candidates = rooted
-    ? ancestorsUpTo(projectDir, limit).map((directory) => path.join(directory, rooted[1]))
-    : [path.resolve(projectDir, projectRelative ? projectRelative[1] : target)];
-  for (const absolute of candidates) {
-    if (!isWithin(limit, absolute)) continue;
-    if (known.some((candidate) => candidate.absolute === absolute) || await readText(absolute) !== undefined) return absolute;
-  }
-  return undefined;
+    ? ancestorsUpTo(context.projectDir, context.limit).map((directory) => path.join(directory, rooted[1]))
+    : [path.resolve(context.projectDir, projectDirRelative ? projectDirRelative[1] : target)];
+  return resolvedPath(candidates, context, fromScript);
 }
 
 /**
  * Scripts the given Gradle files pull in with `apply from:`, followed transitively (a script applied by an applied
  * script runs in the same project), whatever their extension (`.gradle`, `.gradle.kts`, `.groovy`). Values set in a
- * shared `common.gradle` count for every module that applies it. A reference that cannot be followed — a URL, a
- * computed path, a missing file, a file outside the repository — is added to `missed` (as written, with the file).
+ * shared `common.gradle` count for every module that applies it. A repository reference that cannot be followed — a
+ * URL, a computed path, a missing file, a file outside the repository — is added to `missed`; a third-party package
+ * script that cannot be read (like a binary plugin, which is never read either) is added to `notes` with the reason.
  */
 async function appliedGradleScripts(
   gradleFiles: ProjectFile[],
@@ -2484,6 +2692,7 @@ async function appliedGradleScripts(
   limit: string,
   known: ProjectFile[],
   missed?: string[],
+  notes?: Array<{ reference: string; reason: string; installHint: boolean }>,
 ): Promise<ProjectFile[]> {
   const result: ProjectFile[] = [];
   const seen = new Set(gradleFiles.map((file) => file.absolute));
@@ -2493,10 +2702,14 @@ async function appliedGradleScripts(
   for (let next = queue.shift(); next; next = queue.shift()) {
     const { file, projectDir } = next;
     for (const reference of applyFromReferences(file.text)) {
-      const absolute = await appliedScriptPath(reference, projectDir, limit, known);
+      const resolution = await appliedScriptPath(reference, { projectDir, scriptDir: path.dirname(file.absolute), limit, known });
+      const absolute = resolution.absolute;
       if (!absolute) {
-        // A script in an uninstalled node_modules/ package (React Native) becomes readable after an install.
-        missed?.push(`apply from: ${reference} (${file.relative}${/node_modules\//.test(reference) ? '; install the JavaScript dependencies so node_modules/ exists, then re-run' : ''})`);
+        if (resolution.thirdParty) {
+          notes?.push({ reference: `apply from: ${reference} (${file.relative})`, reason: resolution.reason ?? 'not readable', installHint: Boolean(resolution.installHint) });
+        } else {
+          missed?.push(`apply from: ${reference} (${file.relative})`);
+        }
         continue;
       }
       if (seen.has(absolute)) continue;
@@ -2672,7 +2885,7 @@ export async function scanReleaseDoctor(
   }
   if (!stat.isDirectory()) throw new Error(`Project path is not a directory: ${root}`);
 
-  const { files, fcmSources, sourceScanTruncated } = await walk(root, maxSourceFiles);
+  const { files, fcmSources, sourceScanTruncated, conventionTruncated } = await walk(root, maxSourceFiles);
   const reactNativeCatalog = path.join(root, 'node_modules', 'react-native', 'gradle', 'libs.versions.toml');
   try {
     files.push({
@@ -2788,6 +3001,7 @@ export async function scanReleaseDoctor(
         .sort((left, right) => right.length - left.length)[0];
       const projectScript = (dir: string) => files.find((candidate) =>
         /(?:^|\/)build\.gradle(?:\.kts)?$/.test(candidate.relative) && path.dirname(candidate.absolute) === dir);
+      const thirdPartyNotes: Array<{ reference: string; reason: string; installHint: boolean }> = [];
       const judged = await Promise.all(detected.appGradleFiles
         .filter((file) => !specialized.has(moduleDir(file.relative)))
         .map(async (file) => {
@@ -2804,9 +3018,10 @@ export async function scanReleaseDoctor(
             if (parent) hierarchy.push({ ...parent, text: stripGradleComments(parent.text) });
           }
           // An `apply from:` the scanner cannot follow, in the module or its build root, leaves the module unresolved.
+          // A third-party package script that cannot be read is noted instead, like a binary plugin.
           const unfollowed: string[] = [];
-          const scripts = [file, ...await appliedGradleScripts([file], root, limit, files, unfollowed)];
-          const inherited = rootText ? [rootText, ...await appliedGradleScripts([rootText], root, limit, files, unfollowed)] : [];
+          const scripts = [file, ...await appliedGradleScripts([file], root, limit, files, unfollowed, thirdPartyNotes)];
+          const inherited = rootText ? [rootText, ...await appliedGradleScripts([rootText], root, limit, files, unfollowed, thirdPartyNotes)] : [];
           // Scripts the build root applies inside subprojects { … } / allprojects { … } run in this module.
           const ranges = rootText ? everyProjectBlocks(rootText.text) : [];
           const everyProjectText = rootText && ranges.length > 0
@@ -2859,10 +3074,29 @@ export async function scanReleaseDoctor(
       }));
       const targetSdk = targetSdkFindings(
         [...scoped, ...applied], now, detected.targetSdkEvidence, detected.resolveCatalogs, detected.properties, judged, net,
+        conventionTruncated,
       );
       findings.push(...targetSdk.findings);
       targetSdkModules = targetSdk.modules;
       targetSdkTokens = targetSdk.tokens;
+      const notRead = [...new Map(thirdPartyNotes.map((note) => [note.reference, note])).values()];
+      if (notRead.length > 0) {
+        const listed = notRead.slice(0, 3).map((note) => `${note.reference}: ${note.reason}`).join('; ')
+          + (notRead.length > 3 ? `; +${notRead.length - 3}` : '');
+        const install = notRead.some((note) => note.installHint);
+        findings.push({
+          code: 'TARGET_SDK_THIRD_PARTY_SCRIPTS_NOT_READ',
+          severity: 'info',
+          title: 'Some third-party Gradle scripts were not read',
+          detail: `Gradle scripts of JavaScript packages (node_modules/) are read when they can be found and otherwise treated like binary Gradle plugins, which Release Doctor does not read either. These were not read: ${listed}.`,
+          ...(install ? { action: 'Install the JavaScript dependencies (npm, yarn, or pnpm install) and re-run to read the scripts of packages that are not installed.' } : {}),
+          ko: {
+            title: '읽지 않은 서드파티 Gradle 스크립트가 있음',
+            detail: `JavaScript 패키지(node_modules/)의 Gradle 스크립트는 찾을 수 있으면 읽고, 찾을 수 없으면 Release Doctor가 읽지 않는 바이너리 Gradle 플러그인처럼 다룹니다. 다음 스크립트는 읽지 않았습니다: ${listed}.`,
+            ...(install ? { action: '설치되지 않은 패키지의 스크립트를 읽으려면 JavaScript 의존성을 설치(npm, yarn 또는 pnpm install)한 뒤 다시 실행하세요.' } : {}),
+          },
+        });
+      }
       if (specialized.size > 0) {
         findings.push({
           code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
