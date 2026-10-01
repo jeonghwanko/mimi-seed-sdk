@@ -30,6 +30,8 @@
 2. **Register** in `mcp-server/src/registers/<domain>.ts` with `server.tool(name, description, zodSchema, handler)`
    (`server` is the `ToolRegistrar` — never call `McpServer.tool`/`registerTool` directly).
    Keep the handler thin: validate → call `tools.ts` → format the response.
+   *App Store?* `registers/appstore.ts` is only the entry — add the tool to the matching
+   `registers/appstore/<part>.ts` function ([[architecture]]).
    *New domain?* also add `registerXxxTools(registrar)` to **`src/server.ts`** — `index.ts` is only the stdio entry
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
 3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then
