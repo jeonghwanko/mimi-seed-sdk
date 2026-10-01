@@ -120,7 +120,7 @@ async function main() {
   console.log(M.probing);
   try {
     const customers = await listAccessibleCustomers(auth, cfg);
-    console.log(M.probeOk(customers.length));
+    console.log(M.probeOk(customers.resourceNames.length));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.log(M.probeFail(msg));
