@@ -512,8 +512,13 @@ export const CREDENTIALS: readonly CredSpec[] = [
     },
     docsAnchor: "google-ads",
     detect: (home) => {
-      const cfg = readJson<{ customerId?: string }>(home, "google-ads.json");
-      return cfg?.customerId ? { present: true, detail: cfg.customerId } : { present: false };
+      // MCP 의 loadConfig 와 같은 기준 — developerToken 과 customerId(문자열 또는 정수)가 둘 다 있어야 한다.
+      const cfg = readJson<{ developerToken?: unknown; customerId?: unknown }>(home, "google-ads.json");
+      const id = cfg?.customerId;
+      const hasId = (typeof id === "string" && id.trim() !== "") || (typeof id === "number" && Number.isSafeInteger(id) && id > 0);
+      return typeof cfg?.developerToken === "string" && cfg.developerToken && hasId
+        ? { present: true, detail: String(id) }
+        : { present: false };
     },
   },
   {

@@ -25,14 +25,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   echoed into the error message. `googleads_list_accessible_customers` now returns `{"resourceNames": []}` instead
   of `{}` when no account is accessible, and rejects a malformed success response instead of passing it through.
 - A hand-edited `~/.mimi-seed/google-ads.json` with an unquoted numeric `customerId` / `loginCustomerId` was read
-  as "no Google Ads config"; numbers are now accepted. A file missing `developerToken` or `customerId` is now
-  reported as not configured instead of failing later.
+  as "no Google Ads config"; numbers are now accepted. A file missing `developerToken` or `customerId`, or with an
+  invalid `loginCustomerId`, is now reported as not configured — by both the MCP tools and `mimi-seed doctor` —
+  instead of failing later.
 - `mimi-seed notes` now stops with an error for a missing or out-of-range `--limit` (1–10000) or a `--from` /
   `--to` starting with `-`, instead of reporting "No commits found". The latest tag is read as `refs/tags/<tag>`,
   so a tag named like `HEAD` or starting with `-` is still used as the range start.
 - `mimi-seed restart` now finds servers registered as a bare command (`"command": "mimi-seed-mcp"` with no args,
-  as `scripts/install.mjs --link` registers it), servers started from a relative script path, and, on Linux and
-  macOS, script paths containing spaces.
+  as `scripts/install.mjs --link` registers it), on Linux and macOS servers started from a relative script path or
+  a path containing spaces, and on Windows the actual `node` server behind `npx` or an npm `.cmd` shim.
 - A Google Ads API error whose JSON `details` contained a `null` entry was reported as ": non-JSON response" and
   lost the provider's message, codes, and `requestId`; those are now kept.
 
@@ -46,10 +47,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   it in the CLI, so quotes in an argument (including Unicode curly quotes) can no longer run a command.
 - `mimi-seed restart` could kill unrelated processes chosen by the configured arguments: it matched any command
   line containing that text (`node`, a single letter, a bare `index.js`, or a program name such as `explorer`).
-  It now only stops your own Node/Python/Bun/Deno server processes and their `npm` / `npx` / `sh -c` / `cmd /c`
-  wrappers, ignores generic values, matches script paths by path and packages by argument or `node_modules/`
-  location, and kills nothing — reporting the count instead — when more than 10 server processes match. On
-  Windows it also checks every marker, so the actual `node` server is found rather than only its `npx` wrapper.
+  It now stops only your own (on Linux and macOS) Node / Bun / Deno / Python processes whose **script** — the
+  file or `-m` module the runtime is running — is the configured server: a script path must match (a relative
+  path is resolved against that process's working folder), and a package must be the script's bin name or the
+  `node_modules/` folder it runs from. Shells and `npm exec` / `npx` / `cmd /c` wrappers are left alone; they exit
+  when the server does. With the default server name it also refuses a marker that does not look like
+  `mimi-seed`, so a repository's `.mcp.json` cannot redirect it, and it kills nothing — reporting the count —
+  when more than 10 server processes match. Docker and native-binary servers are not restarted (it reports that
+  no process was found), and on Windows a server started from a relative script path is not found, because
+  Windows does not expose another process's working folder.
 - On Windows, `mimi-seed notes`, `doctor`, `restart`, and the setup commands no longer run an executable placed in
   the current folder: `powershell.exe` and `taskkill.exe` are called by absolute path, and `git` and the
   `mimi-seed-*` setup shims are looked up only in absolute `PATH` entries.

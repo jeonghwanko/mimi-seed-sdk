@@ -79,4 +79,8 @@ describe('absoluteWindowsPathDirs', () => {
     const PATH = '.;relative\\bin;%SystemRoot%\\system32;\\rooted-no-drive;"C:\\Tools;x\\bin";C:\\Git\\cmd;\\\\server\\share\\bin;;';
     expect(absoluteWindowsPathDirs({ Path: PATH })).toEqual(['C:\\Tools;x\\bin', 'C:\\Git\\cmd', '\\\\server\\share\\bin']);
   });
+
+  it('does not drop later entries after an unterminated quote', () => {
+    expect(absoluteWindowsPathDirs({ PATH: 'C:\\x;"C:\\unterminated;C:\\Git\\cmd' })).toEqual(['C:\\x', 'C:\\unterminated', 'C:\\Git\\cmd']);
+  });
 });

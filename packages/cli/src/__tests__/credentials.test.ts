@@ -58,6 +58,14 @@ describe('detectAll', () => {
     expect(d.get('googleads')).toEqual({ present: true, detail: '1234567890' });
   });
 
+  // MCP 의 googleads loadConfig 와 같은 기준 — 한쪽만 "설정됨" 이라 하면 doctor 와 도구가 엇갈린다.
+  it('Google Ads: developerToken 과 customerId 가 둘 다 있어야 감지, 숫자 ID 도 받는다', () => {
+    writeCred('google-ads.json', { customerId: '1234567890' });
+    expect(detectAll(home).get('googleads')).toEqual({ present: false });
+    writeCred('google-ads.json', { developerToken: 'd', customerId: 1234567890 });
+    expect(detectAll(home).get('googleads')).toEqual({ present: true, detail: '1234567890' });
+  });
+
   // Play SA 는 기본 파일과 패키지별 디렉토리 양쪽을 봐야 한다 — 한쪽만 보면 오진한다.
   it('Play SA: 기본 파일로 감지', () => {
     writeCred('play-service-account.json', { client_email: 'sa@x' });

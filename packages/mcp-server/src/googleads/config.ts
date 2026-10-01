@@ -44,9 +44,10 @@ export function loadConfig(): GoogleAdsConfig | null {
     // URL/login-customer-id 헤더가 항상 숫자만 포함하도록 보장 (write 경로 의존 제거).
     const customerId = readCustomerId(cfg.customerId);
     if (typeof cfg.developerToken !== 'string' || !cfg.developerToken || !customerId) return null;
-    const loginCustomerId = cfg.loginCustomerId === undefined || cfg.loginCustomerId === ''
-      ? undefined
-      : readCustomerId(cfg.loginCustomerId) ?? undefined;
+    // 비어 있지 않은 loginCustomerId 가 이상하면 조용히 버리지 않는다 — MCC 헤더 없이 호출하면 엉뚱한 권한 오류가 난다.
+    const hasLogin = cfg.loginCustomerId !== undefined && cfg.loginCustomerId !== null && cfg.loginCustomerId !== '';
+    const loginCustomerId = hasLogin ? readCustomerId(cfg.loginCustomerId) : undefined;
+    if (loginCustomerId === null) return null;
     return { ...cfg, developerToken: cfg.developerToken, customerId, loginCustomerId };
   } catch {
     return null;

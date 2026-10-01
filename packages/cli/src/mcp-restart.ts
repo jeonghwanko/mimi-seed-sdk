@@ -43,6 +43,8 @@ const M = catalog(
     unknownWriteOutcome:
       '  직전 호출이 업로드·게시 같은 쓰기였다면 결과가 불명일 수 있습니다. 대상 서비스에서 실제 반영 여부를 확인한 뒤 재시도하세요.',
     killed: (server: string, n: number) => `✓ ${server} 종료됨 (${n}개 프로세스)`,
+    notMimiSeed: (marker: string) =>
+      `'mimi-seed' 설정의 식별자(${marker})가 mimi-seed MCP 서버로 보이지 않아 아무것도 종료하지 않았습니다. 이 폴더의 .mcp.json 을 확인하세요.`,
     tooMany: (n: number) =>
       `식별자와 맞는 서버 프로세스가 ${n}개라 아무것도 종료하지 않았습니다 — 너무 많습니다. MCP 설정의 args 를 확인하세요.`,
   },
@@ -78,6 +80,8 @@ const M = catalog(
     unknownWriteOutcome:
       '  If the previous call was a write such as an upload or publish, its outcome may be unknown. Check the target service before retrying.',
     killed: (server: string, n: number) => `✓ ${server} killed (${n} process(es))`,
+    notMimiSeed: (marker: string) =>
+      `The 'mimi-seed' config's marker (${marker}) does not look like the mimi-seed MCP server, so nothing was killed. Check this folder's .mcp.json.`,
     tooMany: (n: number) =>
       `${n} server processes match the marker, so nothing was killed — too many. Check the args in the MCP config.`,
   },
@@ -163,7 +167,7 @@ function collectServers(): { servers: ServerMap; sources: string[] } {
 const GENERIC_MARKERS = new Set([
   'node', 'nodejs', 'npx', 'npm', 'pnpm', 'pnpx', 'yarn', 'bun', 'bunx', 'deno', 'tsx', 'ts-node',
   'python', 'python3', 'uv', 'uvx', 'pip', 'cmd', 'sh', 'bash', 'zsh', 'powershell', 'pwsh',
-  'node_modules', '.bin', '.npm', '_npx', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
+  'node_modules', '.bin', '.npm', '_npx', 'stdio', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
   'index.js', 'index.ts', 'index.mjs', 'index.cjs', 'main.js', 'main.ts', 'server.js', 'server.ts', 'cli.js',
 ]);
 const SCRIPT_RE = /\.(?:[cm]?js|ts)$/i;
@@ -171,12 +175,18 @@ const WIN_EXE_RE = /\.(?:exe|cmd|bat)$/i;
 const VERSION_RE = /@(?:latest|next|\d[\w.+-]*)$/;
 
 /**
- * MCP 서버를 띄우는 런타임과 그 래퍼. 종료 대상은 이 프로그램이 실행한 프로세스로 한정한다 — 그래야 설정이
- * `systemd` · `explorer` 같은 이름을 식별자로 내밀어도 그 프로세스 자체는 걸리지 않는다.
- * RUNTIMES 는 실제 서버 프로세스라 상한(MAX_SERVERS)을 셀 때 쓴다.
+ * 서버 프로세스를 실행하는 런타임 (node · node22 · bun · deno · python3.12 · python3.13t · pythonw · pypy3 …).
+ * 종료 대상은 이 런타임이 **실행 중인 스크립트**가 식별자와 맞는 프로세스뿐이다. 셸 · `npm exec` · `npx` ·
+ * `cmd /c` 같은 래퍼는 자식이 끝나면 스스로 끝나므로 건드리지 않는다 — 래퍼의 `-c "…"` 문자열은 `ps` 가
+ * 토큰으로 쪼개 보여 주므로, 거기서 식별자를 찾으면 무관한 셸까지 걸린다. 설정이 `systemd` · `explorer`
+ * 같은 이름을 내밀어도 런타임이 아니니 걸리지 않는다. Docker · 네이티브 바이너리 서버는 대상이 아니다.
  */
-const RUNTIMES = new Set(['node', 'nodejs', 'bun', 'deno', 'python', 'python3', 'py', 'uv', 'uvx']);
-const WRAPPERS = new Set(['npm', 'npx', 'pnpm', 'pnpx', 'yarn', 'bunx', 'tsx', 'ts-node', 'sh', 'bash', 'zsh', 'dash', 'cmd']);
+const RUNTIME_RE = /^(?:node(?:js)?\d*|bun|deno|python(?:\d+(?:\.\d+)?t?)?|pythonw|pypy\d*|py)$/;
+/** 다음 원소를 값으로 받는 런타임 플래그 — 그 값은 스크립트가 아니다. */
+const FLAGS_WITH_VALUE = new Set([
+  '-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions', '--env-file',
+  '--config', '--import-map', '-W', '-X',
+]);
 
 /** `/` 와 `\` 를 모두 구분자로 본 마지막 경로 조각 — Windows 명령줄도 같은 규칙으로 비교한다. */
 function baseName(value: string): string {
@@ -184,8 +194,8 @@ function baseName(value: string): string {
 }
 
 const normalizePath = (value: string) => value.replace(/\\/g, '/').toLowerCase();
-/** 실행 파일 이름: 경로 · 확장자(.exe/.cmd) · 마이너 버전(`python3.12`)을 뗀 소문자. */
-const programName = (argv0: string) => baseName(argv0).toLowerCase().replace(WIN_EXE_RE, '').replace(/^(python3)\.\d+$/, '$1');
+/** 실행 파일 이름: 경로 · 확장자(.exe/.cmd)를 뗀 소문자. */
+const programName = (argv0: string) => baseName(argv0).toLowerCase().replace(WIN_EXE_RE, '');
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const isAbsoluteScript = (value: string) => path.posix.isAbsolute(value) || path.win32.isAbsolute(value);
 
@@ -214,7 +224,7 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
   // 4순위: 링크된 bin 을 command 로 직접 등록한 경우 (`command: "mimi-seed-mcp"`, args 없음)
   const command = typeof cfg.command === 'string' ? baseName(cfg.command).replace(WIN_EXE_RE, '') : '';
   const program = command.toLowerCase();
-  return command && !RUNTIMES.has(program) && !WRAPPERS.has(program) && isSpecificMarker(command) ? command : null;
+  return command && !RUNTIME_RE.test(program) && isSpecificMarker(command) ? command : null;
 }
 
 /**
@@ -222,13 +232,13 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
  *
  * `npx -y @yoonion/mimi-seed-mcp` 라도, 전역 설치나 `npm link` 가 있으면 npx 는 링크된
  * bin 을 그대로 exec 한다 — 그 순간 cmdline 에서 패키지명이 사라지고 `mimi-seed-mcp` 만
- * 남는다. 그래서 bin 이름(패키지명의 마지막 세그먼트)도 후보에 넣는다. 스크립트는 경로만 쓴다 —
- * 상대경로면 MCP 클라이언트가 그대로 넘긴 원문과, 지금 폴더 기준 절대경로를 함께 쓴다.
+ * 남는다. 그래서 bin 이름(패키지명의 마지막 세그먼트)도 후보에 넣는다. 스크립트는 절대경로로 쓴다 —
+ * 상대경로면 지금 폴더 기준으로 풀고, 프로세스 쪽도 그 프로세스의 작업 폴더 기준으로 풀어 비교한다.
  */
 function candidateMarkers(cfg: Record<string, unknown>, cwd: string = process.cwd()): string[] {
   const primary = findProcessMarker(cfg);
   if (!primary) return [];
-  if (SCRIPT_RE.test(primary)) return isAbsoluteScript(primary) ? [primary] : [primary, path.resolve(cwd, primary)];
+  if (SCRIPT_RE.test(primary)) return [isAbsoluteScript(primary) ? primary : path.resolve(cwd, primary)];
   const base = primary.split('/').pop()?.replace(WIN_EXE_RE, '');
   const executableBase = base?.replace(VERSION_RE, '');
   return [...new Set([primary, base, executableBase])].filter(
@@ -237,30 +247,61 @@ function candidateMarkers(cfg: Record<string, unknown>, cwd: string = process.cw
 }
 
 /**
- * argv 가 식별자 중 하나와 맞는가. 명령줄 부분일치는 쓰지 않는다 — `pkill -f <marker>` 식으로 하면
- * 자기 자신을 실행한 셸까지, 흔한 문자열이면 무관한 프로세스까지 걸린다. 맞는 경우는:
- *   - 스크립트 식별자: argv 원소의 전체 경로가 같다 (구분자 · 대소문자 무시). POSIX `ps` 는 공백으로만
- *     나눠 주므로, 공백이 든 경로는 원래 명령줄(line)에서 앞뒤 공백까지 맞춰 찾는다.
- *   - 패키지/bin 식별자: argv 원소가 정확히 같거나, 그 파일 이름(버전 · 확장자 제외)이 bin 이름이거나,
- *     그 경로가 `node_modules/<패키지>/` 아래다. 아무 폴더 이름과 겹치는 것(`~/code/mimi-seed-mcp/…`)은 아니다.
+ * 런타임이 실행 중인 스크립트(또는 `python -m` 모듈). 플래그와 그 값을 건너뛴 첫 인자다 — `node [플래그] <스크립트>`,
+ * `bun run <스크립트>`, `deno run [플래그] <스크립트>`. 인라인 코드(`node -e`, `python -c`)는 스크립트가 없다.
  */
-function matchesMarkers(argv: string[], markers: string[], line?: string): boolean {
-  const rest = argv.slice(1);
+function scriptOf(argv: string[]): string | null {
+  const program = programName(argv[0] ?? '');
+  const isPython = program.startsWith('py');
+  let i = (program === 'bun' || program === 'deno') && argv[1] === 'run' ? 2 : 1;
+  for (; i < argv.length; i++) {
+    const a = argv[i];
+    if (isPython && a === '-m') return argv[i + 1] ?? null;
+    if ((isPython && a === '-c') || (!isPython && ['-e', '--eval', '-p', '--print'].includes(a))) return null;
+    if (FLAGS_WITH_VALUE.has(a) || (program === 'deno' && a === '-c')) { i++; continue; }
+    if (a.startsWith('-')) continue;
+    return a;
+  }
+  return null;
+}
+
+type MatchContext = { processCwd?: () => string | null };
+
+/**
+ * 런타임 프로세스의 스크립트가 식별자와 맞는가. 명령줄 부분일치는 쓰지 않는다. 맞는 경우는:
+ *   - 스크립트 식별자(절대경로): 스크립트 경로가 같다 (구분자 · 대소문자 무시). 상대경로로 띄운 프로세스는
+ *     그 프로세스의 작업 폴더 기준으로 풀어서 비교한다 — 다른 프로젝트의 같은 상대경로는 걸리지 않는다.
+ *     POSIX `ps` 는 공백으로만 나눠 주므로, 공백이 든 경로는 스크립트 자리부터 argv 를 이어 붙여 비교한다.
+ *   - 패키지/bin 식별자: 스크립트 파일 이름(버전 · 확장자 제외)이 bin 이름이거나, 스크립트가
+ *     `node_modules/<패키지>/` 아래다. 아무 폴더 이름과 겹치는 것(`~/code/mimi-seed-mcp/…`)은 아니다.
+ */
+function matchesMarkers(argv: string[], markers: string[], ctx: MatchContext = {}): boolean {
+  if (!RUNTIME_RE.test(programName(argv[0] ?? ''))) return false;
+  const script = scriptOf(argv);
+  if (!script) return false;
+  const s = normalizePath(script);
+  let resolved: string | null | undefined;
+  const absoluteScript = () => {
+    if (resolved === undefined) {
+      const cwd = isAbsoluteScript(script) ? null : ctx.processCwd?.() ?? null;
+      resolved = isAbsoluteScript(script) ? s : cwd ? normalizePath(path.resolve(cwd, script)) : null;
+    }
+    return resolved;
+  };
   return markers.some((marker) => {
     if (SCRIPT_RE.test(marker)) {
       const wanted = normalizePath(marker);
-      return rest.some((a) => normalizePath(a) === wanted)
-        || (line !== undefined && ` ${normalizePath(line)} `.includes(` ${wanted} `));
+      if (absoluteScript() === wanted) return true;
+      if (!wanted.includes(' ') || !isAbsoluteScript(script)) return false;
+      const joined = normalizePath(argv.slice(argv.indexOf(script, 1)).join(' '));
+      return joined === wanted || joined.startsWith(`${wanted} `);
     }
     const name = normalizePath(marker.replace(VERSION_RE, '').replace(WIN_EXE_RE, ''));
-    const underNodeModules = name.includes('/')
-      ? (p: string) => p.includes(`/node_modules/${name}/`)
-      : (p: string) => new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}/`).test(p);
-    return rest.some((a) => {
-      if (a === marker) return true;
-      const p = normalizePath(a);
-      return baseName(p).replace(WIN_EXE_RE, '').replace(VERSION_RE, '') === name || underNodeModules(`/${p}/`);
-    });
+    if (s === name || baseName(s).replace(/\.(?:[cm]?js|ts|exe|cmd)$/, '').replace(VERSION_RE, '') === name) return true;
+    const padded = `/${s}/`;
+    return name.includes('/')
+      ? padded.includes(`/node_modules/${name}/`)
+      : new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}/`).test(padded);
   });
 }
 
@@ -314,15 +355,12 @@ function splitWindowsCommandLine(line: string): string[] {
   return argv;
 }
 
-type ProcessEntry = { pid: number; argv: string[]; line?: string; uid?: number };
+type ProcessEntry = { pid: number; argv: string[]; uid?: number };
 
-/**
- * 한 번에 재시작할 수 있는 서버 수 상한. 세션마다 래퍼(npm exec · sh -c · cmd)와 런타임(node)이 함께 걸리므로
- * 런타임 프로세스만 센다 — 열린 세션 여러 개는 괜찮고, 그보다 많으면 식별자를 의심한다.
- */
+/** 한 번에 재시작할 수 있는 서버 프로세스 수 상한. 열린 세션 여러 개는 괜찮고, 그보다 많으면 식별자를 의심한다. */
 const MAX_SERVERS = 10;
 
-/** POSIX: `ps` 로 PID · 소유자 · argv 목록 (원래 명령줄도 남긴다 — 공백 든 경로 비교용). */
+/** POSIX: `ps` 로 PID · 소유자 · argv 목록. */
 function listPosixProcesses(): ProcessEntry[] {
   let out: string;
   try {
@@ -333,7 +371,7 @@ function listPosixProcesses(): ProcessEntry[] {
   const list: ProcessEntry[] = [];
   for (const row of out.split('\n')) {
     const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
-    if (m) list.push({ pid: Number(m[1]), uid: Number(m[2]), line: m[3], argv: m[3].split(/\s+/).filter(Boolean) });
+    if (m) list.push({ pid: Number(m[1]), uid: Number(m[2]), argv: m[3].split(/\s+/).filter(Boolean) });
   }
   return list;
 }
@@ -381,24 +419,38 @@ function listWindowsProcesses(): ProcessEntry[] {
 }
 
 /**
- * 죽일 PID 목록, 또는 상한을 넘어 거부한 서버 수. 대상은 자기 자신 · 부모(이 명령을 실행한 셸)를 뺀,
- * 같은 사용자 소유(POSIX)의 런타임/래퍼 프로세스 중 식별자와 맞는 것뿐이다.
+ * 상대경로 스크립트를 풀 때 쓰는 그 프로세스의 작업 폴더. Linux 는 /proc, macOS 는 lsof(절대경로).
+ * Windows 는 Win32_Process 에 작업 폴더가 없어 알 수 없다 — 그때 상대경로 프로세스는 고르지 않는다.
+ */
+const looksLikeMimiSeed = (marker: string) => /mimi-seed/i.test(marker) || /[\\/]packages[\\/]mcp-server[\\/]/i.test(marker);
+
+function processCwd(pid: number): string | null {
+  try {
+    if (process.platform === 'linux') return fs.readlinkSync(`/proc/${pid}/cwd`);
+    if (process.platform === 'darwin') {
+      const out = execFileSync('/usr/sbin/lsof', ['-a', '-d', 'cwd', '-Fn', '-p', String(pid)], { encoding: 'utf8', stdio: 'pipe' });
+      return out.split('\n').find((l) => l.startsWith('n'))?.slice(1) ?? null;
+    }
+  } catch { /* 이미 끝났거나 권한 없음 */ }
+  return null;
+}
+
+/**
+ * 죽일 PID 목록, 또는 상한을 넘어 거부한 서버 수. 대상은 자기 자신 · 부모를 뺀, 같은 사용자 소유(POSIX)의
+ * 런타임 프로세스 중 스크립트가 식별자와 맞는 것뿐이다.
  */
 function planKill(
   processes: ProcessEntry[],
   markers: string[],
-  uid: number | undefined = process.getuid?.(),
+  { uid = process.getuid?.(), cwdOf = processCwd }: { uid?: number; cwdOf?: (pid: number) => string | null } = {},
 ): { pids: number[]; refused: number } {
   if (markers.length === 0) return { pids: [], refused: 0 };
   const skip = new Set<number>([process.pid, process.ppid]);
-  const matched = processes.filter((p) => {
-    if (skip.has(p.pid)) return false;
-    if (uid !== undefined && p.uid !== undefined && p.uid !== uid) return false;
-    const program = programName(p.argv[0] ?? '');
-    return (RUNTIMES.has(program) || WRAPPERS.has(program)) && matchesMarkers(p.argv, markers, p.line);
-  });
-  const servers = matched.filter((p) => RUNTIMES.has(programName(p.argv[0] ?? ''))).length;
-  return servers > MAX_SERVERS ? { pids: [], refused: servers } : { pids: matched.map((p) => p.pid), refused: 0 };
+  const pids = processes
+    .filter((p) => !skip.has(p.pid) && (uid === undefined || p.uid === undefined || p.uid === uid))
+    .filter((p) => matchesMarkers(p.argv, markers, { processCwd: () => cwdOf(p.pid) }))
+    .map((p) => p.pid);
+  return pids.length > MAX_SERVERS ? { pids: [], refused: pids.length } : { pids, refused: 0 };
 }
 
 function killByMarkers(markers: string[]): { killed: number; refused: number } {
@@ -449,6 +501,12 @@ export async function cmdRestart(args: string[]): Promise<void> {
     log(kleur.dim(M().configLine(JSON.stringify(cfg))));
     process.exit(1);
   }
+  // 기본 이름은 레포의 `.mcp.json` 이 가로챌 수 있다 — mimi-seed 서버로 보이지 않는 식별자로는 아무것도 죽이지 않는다.
+  if (serverName === 'mimi-seed' && !markers.some(looksLikeMimiSeed)) {
+    log(kleur.red(M().notMimiSeed(marker)));
+    log(kleur.dim(M().configLine(JSON.stringify(cfg))));
+    process.exit(1);
+  }
 
   log(kleur.dim(M().markerLine(marker)));
   const { killed, refused } = killByMarkers(markers);
@@ -475,5 +533,5 @@ export async function cmdRestart(args: string[]): Promise<void> {
 
 export const __testing = {
   detectMcpClient, recoveryMessages, resolveServerConfig,
-  candidateMarkers, matchesMarkers, splitWindowsCommandLine, parseWindowsProcesses, planKill, WINDOWS_PROCESS_QUERY, MAX_SERVERS,
+  candidateMarkers, matchesMarkers, scriptOf, splitWindowsCommandLine, parseWindowsProcesses, planKill, WINDOWS_PROCESS_QUERY, MAX_SERVERS, looksLikeMimiSeed,
 };
