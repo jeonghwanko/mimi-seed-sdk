@@ -3,7 +3,7 @@
 > ★ Ontology core. How the two packages, the MCP server, and the tool-registration pattern fit together. For the
 > full tool list see [[tool-catalog]]; for credentials see [[auth-credentials]]; for the CLI see [[cli-deploy]].
 >
-> SSOT: `packages/mcp-server/src/server.ts` (+ `src/index.ts`), `packages/mcp-server/src/registers/*.ts`,
+> SSOT: `packages/mcp-server/src/server.ts` (+ `src/index.ts`), `packages/mcp-server/src/registers/**/*.ts`,
 > `packages/cli/src/index.ts`, the two published `package.json` files, `packages/core/src/`. Step-by-step
 > checklists live in [[recipes]].
 
@@ -56,7 +56,7 @@ mcp-server/src/server.ts   buildServer(version, { env })   ← the single assemb
   (prompts/resources use `McpServer` directly). A **new register module must be added here**; `index.ts` only
   picks a run mode and hands `buildServer()` a transport. `tool-manifest.test.ts` boots this same function, so
   a module that never got wired shows up as missing tools rather than silence.
-- Each `registers/<domain>.ts` declares tools with `server.tool(...)` — but `server` is a `ToolRegistrar`, not
+- Each `registers/<domain>.ts` (App Store: `registers/appstore/<part>.ts`) declares tools with `server.tool(...)` — but `server` is a `ToolRegistrar`, not
   the SDK's deprecated `McpServer.tool`. Input validation is **zod** schemas; there is no separate schema file.
 
 ### The tool registrar (`lib/tool-registrar.ts`)
