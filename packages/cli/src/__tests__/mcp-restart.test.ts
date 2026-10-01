@@ -175,6 +175,11 @@ describe('restart 프로세스 판정', () => {
       ['npx', ['--loglevel', 'warn', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
       ['env', ['-u', 'FOO', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
       ['pwsh', ['-ExecutionPolicy', 'Bypass', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['pwsh', ['-ExecutionPolicy:Bypass', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['my-var=1', 'FOO.BAR=2', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['-S', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['-P', '/opt/bin', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['npx', ['-y', '@yoonion/mimi-seed-mcp@>=0.21 <1']],
     ] as const) {
       const markers = __testing.candidateMarkers({ command, args: [...args] });
       expect(markers.every((m) => __testing.looksLikeMimiSeed(m))).toBe(true);
@@ -190,6 +195,7 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.candidateMarkers({ command: 'ssh', args: ['admin@10-0-0-5.nip.io', 'mcp-server'] })).not.toContain('admin');
     expect(__testing.candidateMarkers({ command: 'ssh', args: ['deploy@1-build', 'mcp-server'] })).not.toContain('deploy');
     expect(__testing.candidateMarkers({ command: 'npx', args: ['--registry', 'https://admin@r.example.com', '-y', 'some-srv'] })).toEqual(['some-srv']);
+    expect(__testing.candidateMarkers({ command: 'uvx', args: ['some_srv', 'log-level=debug'] })).toEqual(['some_srv']);
     expect(__testing.candidateMarkers({ command: 'npx', args: ['-y', 'some-server@sha256:abc'] })).not.toContain('some-server');
   });
 

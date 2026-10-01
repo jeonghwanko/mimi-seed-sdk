@@ -181,7 +181,7 @@ const VERSION_RE = /@(?:latest|next|\d+(?:\.\d+){0,2}|\d+\.\d+\.\d+(?:-[\w.-]+)?
  * 패키지 식별자의 버전 · 태그 · 범위 (`@latest`, `@beta`, `@^0.21`). 패키지 실행기(npx 등)로 등록했을 때만 뗀다 —
  * 그 밖의 `user@host` 같은 인자에서 떼면 `user` 처럼 너무 넓은 식별자가 생긴다. `:` 가 든 값(digest, `npm:` 별칭)은 버전이 아니다.
  */
-const PACKAGE_VERSION_RE = /@[^@/\\\s:]+$/;
+const PACKAGE_VERSION_RE = /@[^@/\\:]+$/; // 공백 든 범위(`@>=0.21 <1`)도
 /** 패키지 실행기 — 바로 실행(npx 등) 또는 하위 명령이 붙는 것(`npm exec`, `bun x`, `pnpm dlx` …). */
 const DIRECT_RUNNERS = new Set(['npx', 'bunx', 'pnpx', 'uvx']);
 const RUNNER_SUBCOMMANDS: Record<string, string[]> = { npm: ['exec', 'x'], bun: ['x'], pnpm: ['dlx'], yarn: ['dlx'], pipx: ['run'] };
@@ -194,7 +194,7 @@ const RUNNER_FLAGS_WITH_VALUE = new Set([
 ]);
 /** 셸 래퍼(PowerShell) · env 에서 값을 받는 플래그 — 그 값을 실행기로 읽지 않는다. 셸의 `-c` · `/c` 는 값이 아니라 명령이 뒤따른다. */
 const SHELL_FLAGS_WITH_VALUE = new Set(['-executionpolicy', '-ep', '-workingdirectory', '-wd', '-windowstyle', '-inputformat', '-outputformat']);
-const ENV_FLAGS_WITH_VALUE = new Set(['-u', '--unset', '-c', '--chdir', '-s', '--split-string']);
+const ENV_FLAGS_WITH_VALUE = new Set(['-u', '--unset', '-c', '--chdir', '-p']); // -P altpath (BSD). -S 의 값은 명령 자체라 넣지 않는다.
 
 /**
  * 패키지 실행기가 실행하는 패키지 인자의 위치. 실행기는 `command` 자리(또는 `cmd /c` · `sh -c` 바로 뒤)에 있어야
@@ -207,7 +207,7 @@ function runnerPackageIndex(cfg: Record<string, unknown>): number | null {
   let i = 0;
   if (SHELL_WRAPPERS.has(program)) {
     // /c /d /s -c -l -NoProfile -Command, 그리고 -ExecutionPolicy Bypass 처럼 값을 받는 것
-    while (i < args.length && /^(?:\/[a-z]|-[a-z]+)$/i.test(args[i])) {
+    while (i < args.length && /^(?:\/[a-z]|-[a-z]+(?::\S+)?)$/i.test(args[i])) { // -ExecutionPolicy:Bypass 도
       i += SHELL_FLAGS_WITH_VALUE.has(args[i].toLowerCase()) ? 2 : 1;
     }
     program = word(args[i]);
@@ -215,7 +215,7 @@ function runnerPackageIndex(cfg: Record<string, unknown>): number | null {
   }
   if (program === 'env') {
     // env -i -u FOO -C dir KEY=1 npx …
-    while (i < args.length && (args[i].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(args[i]))) {
+    while (i < args.length && (args[i].startsWith('-') || args[i].includes('='))) { // env 는 `=` 든 인자를 모두 대입으로 본다
       i += ENV_FLAGS_WITH_VALUE.has(args[i].toLowerCase()) ? 2 : 1;
     }
     program = word(args[i]);
@@ -293,8 +293,9 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
   const fileArg = args.find((a) => SCRIPT_RE.test(a) && isSpecificMarker(a));
   if (fileArg) return fileArg;
   // 2순위: npm 패키지명 (@ 또는 -가 포함된 식별자)
-  // `KEY=value`(env 대입) · URL(`--registry` 값)은 식별자가 아니다. `@>=0.21` 같은 범위의 `=` 는 해당 없다.
-  const notValue = (a: string) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(a) && !a.includes('://');
+  // `KEY=value`(대입) · URL(`--registry` 값)은 식별자가 아니다. 대입의 `=` 는 `@` 앞에 오고,
+  // 버전 범위(`@>=0.21`)의 `=` 는 `@` 뒤에 온다.
+  const notValue = (a: string) => !/^[^@]*=/.test(a) && !a.includes('://');
   const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && notValue(a) && isSpecificMarker(a));
   if (pkgArg) return pkgArg;
   // 3순위: 마지막 의미 있는 arg
@@ -575,7 +576,7 @@ function looksLikeMimiSeed(marker: string, read: (dir: string) => PackageJson | 
   }
   // 경로로 적은 링크된 bin (`/usr/local/bin/mimi-seed-mcp`)은 파일 이름으로 본다. 버전은 범위(`@^0.21`)도 받는다.
   const name = /[\\/]/.test(marker) && !marker.startsWith('@') ? baseName(marker).replace(WIN_EXE_RE, '') : marker;
-  return /^(?:@yoonion\/)?mimi-seed-mcp(?:@[^/\\\s]+)?$/i.test(name);
+  return /^(?:@yoonion\/)?mimi-seed-mcp(?:@[^/\\]+)?$/i.test(name);
 }
 
 /**
