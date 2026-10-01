@@ -158,6 +158,15 @@ describe('restart 프로세스 판정', () => {
     ], pkg, { uid: 1000, readPackageJson: read }).pids).toEqual([71, 74]);
   });
 
+  it('버전 범위 · 태그 · Windows bin 경로로 등록해도 실제 서버를 찾는다 (보호 검사만 통과하고 못 찾으면 안 된다)', () => {
+    const server = { pid: 81, argv: ['node', '/home/dev/.npm/_npx/abc/node_modules/.bin/mimi-seed-mcp'] };
+    for (const args of [['-y', '@yoonion/mimi-seed-mcp@^0.21'], ['-y', '@yoonion/mimi-seed-mcp@beta'], ['/c', 'C:\\npm\\mimi-seed-mcp.cmd']]) {
+      const markers = __testing.candidateMarkers({ command: 'cmd', args });
+      expect(markers.every((m) => __testing.looksLikeMimiSeed(m))).toBe(true);
+      expect(plan([server], markers)).toEqual([81]);
+    }
+  });
+
   it('pnpm 셈의 `.bin/../` 경로도 정리해서 비교한다', () => {
     expect(plan([{ pid: 26, argv: ['node', '/home/dev/proj/node_modules/.bin/../@yoonion/mimi-seed-mcp/dist/index.js'] }])).toEqual([26]);
   });
