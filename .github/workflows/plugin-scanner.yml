@@ -24,7 +24,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hashgraph-online/ai-plugin-scanner-action@c57f042a11fe3b7f5849ed95757888561ae95368 # v1.2.738 (plugin-scanner 3.15.5)
+      - name: Scan (latest scanner)
+        uses: hashgraph-online/ai-plugin-scanner-action@c57f042a11fe3b7f5849ed95757888561ae95368 # v1.2.738 (plugin-scanner 3.15.5)
+        with:
+          plugin_dir: "."
+          min_score: 80
+          fail_on_severity: high
+          pr_comment: off # no GITHUB_TOKEN is passed; results go to the step summary
+
+      # awesome-ai-plugins' central scan pins an older action (see its CONTRIBUTING.md); older scanners flag
+      # shapes the newer one exempts (e.g. a quoted `token="<placeholder>"`), so gate on both.
+      - name: Scan (version used by the awesome-ai-plugins central scan)
+        uses: hashgraph-online/ai-plugin-scanner-action@caba2e96aa8ad2feb6cf6fca52442b52e22e779f # v1.2.635 (plugin-scanner 3.0.123)
         with:
           plugin_dir: "."
           min_score: 80
