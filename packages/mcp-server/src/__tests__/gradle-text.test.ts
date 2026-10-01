@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripGradleComments } from '#core/checks/gradle-text.js';
+import { closingBrace, removeBlocks, stripGradleComments } from '#core/checks/gradle-text.js';
 
 // Round-3 review: the regex stripper treated `/*` inside glob strings as a comment and ate real code up to the next
 // `*/` (Signal-Android lost its targetSdk line, Lawnchair its applicationId).
@@ -61,6 +61,28 @@ describe('stripGradleComments (string-aware)', () => {
     expect(stripped).toContain("'''groovy /* text */'''");
     expect(stripped).toContain('targetSdk = 34');
     expect(stripped).not.toContain('trailing');
+  });
+
+  // Round-4 review: Groovy slashy strings and unclosed /* must not delete the rest of the file.
+  it.each([
+    ['slashy regex with \\/*', 'exclude ~/.*\\/*.so/\ntargetSdk 33\n'],
+    ['dollar-slashy with /*', 'def x = $/ a/* /$\ntargetSdk 33\napplicationId "x.y"\n'],
+    ['slashy after ( with an apostrophe', 'def r = "a".replaceAll(/\'/, "")\ntargetSdk 33\n'],
+    ['/* with no closing */', 'def glob = 1 /* unterminated\ntargetSdk 33\n'],
+    ['unterminated template "${"', 'def s = "${"\n// targetSdk 36\ntargetSdk 33\n'],
+  ])('%s keeps the code after it', (_name, text) => {
+    const stripped = stripGradleComments(text);
+
+    expect(stripped).toMatch(/targetSdk 33/);
+    expect(stripped).not.toContain('36');
+    expect(stripped.split('\n')).toHaveLength(text.split('\n').length);
+  });
+
+  it('closingBrace and removeBlocks ignore braces inside strings and comments', () => {
+    const text = 'subprojects { println("}") /* } */ ext.x = 1 }\nbuildscript { ext { y = 2 } }';
+
+    expect(removeBlocks(text, /\bsubprojects\s*\{/)).toBe('\nbuildscript { ext { y = 2 } }');
+    expect(closingBrace(text, text.indexOf('{'))).toBe(text.indexOf('\n') - 1);
   });
 
   it('keeps line numbers: a block comment becomes the newlines it spanned', () => {

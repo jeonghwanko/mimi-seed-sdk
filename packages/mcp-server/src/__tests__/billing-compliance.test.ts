@@ -428,6 +428,20 @@ describe('Google Play Billing compliance', () => {
       if (status === 'blocker') expect(result.detectedVersions).toEqual(['7.0.0']);
     });
 
+    // Round-4 review: braces inside strings must not decide where `subprojects { … }` ends.
+    it.each([
+      ['subprojects 안의 println("{")가 루트 ext override를 삼키지 않는다 (b2)', 'subprojects { afterEvaluate { println("configuring {") } }\nbuildscript { ext { targetSdkVersion = 36; playBillingSdkVersion = "8.0.0" } }', 'warning'],
+      ['println("}")가 subprojects를 일찍 닫아 그 안의 ext를 루트 override로 만들지 않는다 (b3)', 'subprojects { afterEvaluate { println("}") ; ext.playBillingSdkVersion = "8.0.0" } }\nbuildscript { ext { targetSdkVersion = 36 } }', 'blocker'],
+    ])('%s', async (_name, text, status) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '12.16.2' } }),
+        'android/settings.gradle': 'include ":app"',
+        'android/build.gradle': text,
+      });
+
+      expect((await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'))).status).toBe(status);
+    });
+
     it('pnpm v9 alias의 `version: react-native-iap@x`에서 버전을 읽는다 (n9c)', async () => {
       const root = await fixture({
         'package.json': JSON.stringify({ dependencies: { iap: 'npm:react-native-iap@12.16.2' } }),

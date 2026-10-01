@@ -54,8 +54,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A Wear OS, TV, Automotive, or XR module no longer switches off the Target API check for the whole repository; the
   phone app is still checked, and the specialized module is reported for a category-specific check. A module that has
   the phone launcher (in its main or a flavor manifest, or in a library module merged into it) keeps the phone rule; a
-  module with only the TV launcher, or whose main manifest requires leanback, is a TV app. Debug-only manifests are
-  ignored.
+  module with only the TV launcher, or whose main manifest requires leanback (unless a flavor removes or relaxes that
+  with `tools:node="remove"` / `tools:replace`), is a TV app. Debug-only manifests are ignored.
 - Android application IDs: strings, templates, comments, local variables, and extra properties
   (`ext.applicationId`, `ext { applicationId = … }`) that mention `applicationId` are no longer reported as IDs (or
   as extra app modules); `applicationId` read from the version catalog or `gradle.properties`,
@@ -66,12 +66,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`), in a Kotlin DSL root script
   (`extra["targetSdkVersion"] = 36`), or in Expo's `expo-build-properties` plugin is now read instead of reported as
   unresolved, as are targetSdk values named through Gradle properties or extras (`gradle.properties`,
-  `project.property("x")`, `rootProject.ext.x`, `set("x", 36)`) and AGP's `targetSdk { version = release(36) }`.
-  Version catalogs resolve the way Gradle does: from the module's own build's settings (`versionCatalogs { create(…)
-  { from(files(…)) } }`, any accessor such as `androidx.versions.*`) plus the default `gradle/libs.versions.toml`, so
-  a nested build and the repository root (or two builds sharing a key) no longer overwrite each other's values.
-  Comments are removed with a string-aware reader, so a glob such as `pickFirst '**/*.so'` or a URL no longer hides
-  the code after it.
+  `project.property("x")`, `rootProject.ext.x`, `set("x", 36)`, with `findProperty("x") ?: 33` defaults) and AGP's
+  `targetSdk { version = release(36) }`. A property counts only from the module's own build (gradle.properties on the
+  path from its settings directory, not other modules, included builds, or demo trees); a name that CI overrides
+  (`-Px=`, `ORG_GRADLE_PROJECT_x`), that a script redeclares as a local, assigns from an expression, or that two
+  sources disagree on stays unresolved rather than guessed. Version catalogs resolve the way Gradle does: from the
+  module's own build's settings (`versionCatalogs { create(…) { from(files(…)) } }`, any accessor such as
+  `androidx.versions.*`, `$rootDir` paths, and literal `version("x", "33")` overrides) plus the default
+  `gradle/libs.versions.toml`, so a nested build and the repository root (or two builds sharing a key) no longer
+  overwrite each other's values. Comments are removed with a string-aware reader (including Groovy slashy strings),
+  so a glob such as `pickFirst '**/*.so'` or a URL no longer hides the code after it.
 - Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
   targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes
   `MULTIPLE_*` warnings or a blocker that cites the wrong file. Excluded app modules whose targetSdk is below the

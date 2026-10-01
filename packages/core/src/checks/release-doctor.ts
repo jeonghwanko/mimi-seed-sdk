@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { checkBillingCompliance, reactNativeIapUpgradeTarget, type BillingComplianceResult } from './billing.js';
-import { stripGradleComments } from './gradle-text.js';
+import { blockContents, closingBrace, removeBlocks, stripGradleComments } from './gradle-text.js';
 import { lockedPackageVersion, lockfileDirectories, readText, repositoryRoot } from './lockfile.js';
 
 const SKIP_DIRS = new Set([
@@ -463,7 +463,7 @@ function appliesAndroidAppPlugin(text: string): boolean {
 /** `[versions]` entries of the scanned Gradle version catalogs (React Native's bundled catalog excluded unless asked). */
 function catalogVersions(files: ProjectFile[], includeReactNative = false): Map<string, { value: string; file: string }> {
   const result = new Map<string, { value: string; file: string }>();
-  for (const file of files.filter((candidate) => candidate.relative.endsWith('.versions.toml'))) {
+  for (const file of files) {
     if (file.relative === REACT_NATIVE_CATALOG && !includeReactNative) continue;
     let section = '';
     for (const rawLine of file.text.split(/\r?\n/)) {
@@ -506,26 +506,42 @@ type CatalogVersions = Map<string, { value: string; file: string }>;
 /** Version catalogs visible to a Gradle file, by accessor (`libs`, `androidx`); null when declared but unreadable. */
 type CatalogResolver = (file: ProjectFile) => Map<string, CatalogVersions | null>;
 
-/** The text of the first balanced `{ … }` block opened by `opener` in `code`, or undefined. */
-function balancedBlock(code: string, opener: RegExp): string | undefined {
-  const start = opener.exec(code);
-  if (!start) return undefined;
-  let depth = 0;
-  for (let index = start.index + start[0].length - 1; index < code.length; index++) {
-    if (code[index] === '{') depth++;
-    else if (code[index] === '}' && --depth === 0) return code.slice(start.index + start[0].length, index);
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** `[versions]` of one catalog file, whatever its name (a settings `from(files(…))` may point at any file). */
+function parseCatalogFile(file: ProjectFile): CatalogVersions {
+  return catalogVersions([file], true);
+}
+
+/**
+ * The top-level `name { … }` / `create("name") { … }` entries of a `versionCatalogs { … }` block, braces matched on
+ * lexed text (nested `version("x") { strictly(…) }` blocks stay inside their entry).
+ */
+function catalogEntries(block: string): Array<[string, string]> {
+  const entries: Array<[string, string]> = [];
+  const opener = /\bcreate\(\s*["']([\w-]+)["']\s*\)\s*\{|(?:^|[\s;])([A-Za-z_]\w*)\s*\{/g;
+  for (let match = opener.exec(block); match; match = opener.exec(block)) {
+    const open = match.index + match[0].length - 1;
+    const close = closingBrace(block, open);
+    if (close < 0) break;
+    entries.push([match[1] ?? match[2], block.slice(open + 1, close)]);
+    opener.lastIndex = close + 1;
   }
-  return undefined;
+  return entries;
 }
 
 /**
  * Resolves `<accessor>.versions.<key>` the way Gradle does: from the settings file of the build a module belongs to
  * (the nearest settings.gradle(.kts) above it), `versionCatalogs { create("x") { from(files("…")) } }` (Groovy
- * `x { from(files('…')) }`) plus the default `libs` = `<build>/gradle/libs.versions.toml`. A catalog declared from a
- * Maven coordinate is null (unresolvable). Without a settings file in sight, the nearest `gradle/libs.versions.toml`
- * that contains the module (or a sole one) stands in for `libs`.
+ * `x { from(files('…')) }`) plus the default `libs` = `<build>/gradle/libs.versions.toml`. Literal
+ * `version("key", "33")` overrides in the entry win over the file; a non-literal override leaves that key
+ * unresolved. A path using `$rootDir` is expanded to the settings directory; any other template, or a catalog
+ * declared from a Maven coordinate, is unresolvable (null). Without a settings file in sight, the nearest
+ * `gradle/libs.versions.toml` that contains the module (or a sole one) stands in for `libs`.
  */
-async function catalogResolver(files: ProjectFile[]): Promise<CatalogResolver> {
+async function catalogResolver(files: ProjectFile[], root: string): Promise<CatalogResolver> {
   const tomls = files.filter((file) => file.relative.endsWith('.versions.toml') && file.relative !== REACT_NATIVE_CATALOG);
   const byAbsolute = new Map(tomls.map((file) => [file.absolute, file]));
   const builds = new Map<string, Map<string, CatalogVersions | null>>();
@@ -533,31 +549,41 @@ async function catalogResolver(files: ProjectFile[]): Promise<CatalogResolver> {
     const dir = path.dirname(settings.absolute);
     const code = stripGradleComments(settings.text);
     const catalogs = new Map<string, CatalogVersions | null>();
-    const block = balancedBlock(code, /\bversionCatalogs\s*\{/);
-    const entries = block === undefined ? [] : [
-      ...[...block.matchAll(/\bcreate\(\s*["']([\w-]+)["']\s*\)\s*\{([^{}]*)\}/g)].map((match) => [match[1], match[2]] as const),
-      ...[...block.matchAll(/(?:^|[\s{;])([A-Za-z_]\w*)\s*\{([^{}]*)\}/g)]
-        .filter((match) => match[1] !== 'create')
-        .map((match) => [match[1], match[2]] as const),
-    ];
-    for (const [name, body] of entries) {
-      const relative = body.match(/\bfrom\s*\(?\s*files\s*\(\s*["']([^"']+)["']/)?.[1];
-      if (!relative) {
-        catalogs.set(name, null);
-        continue;
+    const block = blockContents(code, /\bversionCatalogs\s*\{/);
+    const defaultCatalog = byAbsolute.get(path.join(dir, 'gradle', 'libs.versions.toml'));
+    for (const [name, body] of block === undefined ? [] : catalogEntries(block)) {
+      let versions: CatalogVersions;
+      if (!/\bfrom\s*\(/.test(body)) {
+        // No `from(…)`: the entry only adds versions — to the default gradle/libs.versions.toml for `libs`.
+        versions = name === 'libs' && defaultCatalog ? catalogVersions([defaultCatalog], true) : new Map();
+      } else {
+        const declared = body.match(/\bfrom\s*\(?\s*files\s*\(\s*["']([^"']+)["']/)?.[1];
+        const expanded = declared?.replace(/^\$\{?rootDir\}?(?=\/)/, dir);
+        // A Maven coordinate (`from("group:name:1.0")`) or a templated path cannot be read from the repository.
+        if (!expanded || expanded.includes('$')) {
+          catalogs.set(name, null);
+          continue;
+        }
+        const absolute = path.resolve(dir, expanded);
+        let catalog = byAbsolute.get(absolute);
+        if (!catalog) {
+          const text = await readText(absolute);
+          if (text !== undefined) catalog = { absolute, relative: path.relative(root, absolute).replace(/\\/g, '/'), text };
+        }
+        if (!catalog) {
+          catalogs.set(name, null);
+          continue;
+        }
+        versions = parseCatalogFile(catalog);
       }
-      const absolute = path.resolve(dir, relative);
-      let catalog = byAbsolute.get(absolute);
-      if (!catalog) {
-        const text = await readText(absolute);
-        if (text !== undefined) catalog = { absolute, relative: absolute, text };
+      // `version("targetSdk", "33")` in the settings entry overrides the file; anything else about that key is unknown.
+      for (const override of body.matchAll(/\bversion\s*\(\s*["']([\w.-]+)["']\s*(,\s*([^)\n]*))?\)/g)) {
+        const literal = override[3]?.trim().match(/^["']([^"']*)["']$/)?.[1];
+        versions.set(override[1], { value: literal ?? '', file: settings.relative });
       }
-      catalogs.set(name, catalog ? catalogVersions([catalog], true) : null);
+      catalogs.set(name, versions);
     }
-    if (!catalogs.has('libs')) {
-      const fallback = byAbsolute.get(path.join(dir, 'gradle', 'libs.versions.toml'));
-      if (fallback) catalogs.set('libs', catalogVersions([fallback], true));
-    }
+    if (!catalogs.has('libs') && defaultCatalog) catalogs.set('libs', catalogVersions([defaultCatalog], true));
     builds.set(dir, catalogs);
   }
   const defaults = tomls.filter((file) => path.posix.basename(file.relative) === 'libs.versions.toml');
@@ -568,6 +594,43 @@ async function catalogResolver(files: ProjectFile[]): Promise<CatalogResolver> {
     if (build !== undefined) return builds.get(build)!;
     const nearest = nearestCatalog(file, defaults);
     return new Map(nearest ? [['libs', catalogVersions([nearest], true)]] : []);
+  };
+}
+
+/**
+ * gradle.properties a module actually sees: the files on the path from its build's root (nearest settings
+ * directory) down to the module, outside sample/demo trees. Files of other modules, other (included) builds, and
+ * example apps are out of scope. A key with two different values in scope is null (unresolved).
+ */
+type PropertyScope = (file: ProjectFile) => Map<string, { value: string; file: string } | null>;
+
+function gradlePropertyScope(files: ProjectFile[]): PropertyScope {
+  const settingsDirs = files
+    .filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative))
+    .map((file) => path.dirname(file.absolute));
+  const propertyFiles = files
+    .filter((file) => path.posix.basename(file.relative) === 'gradle.properties' && !file.sample)
+    .map((file) => ({
+      dir: path.dirname(file.absolute),
+      file: file.relative,
+      rows: new Map(file.text.split(/\r?\n/)
+        .map((line) => line.match(/^\s*([A-Za-z_][\w.]*)\s*[=:]\s*(.*?)\s*$/))
+        .filter((match): match is RegExpMatchArray => Boolean(match))
+        .map((match) => [match[1], match[2]] as const)),
+    }));
+  return (file) => {
+    const build = settingsDirs
+      .filter((dir) => isWithin(dir, file.absolute))
+      .sort((left, right) => right.length - left.length)[0];
+    const result = new Map<string, { value: string; file: string } | null>();
+    for (const properties of propertyFiles) {
+      if (!isWithin(properties.dir, file.absolute) || (build !== undefined && !isWithin(build, properties.dir))) continue;
+      for (const [key, value] of properties.rows) {
+        const existing = result.get(key);
+        result.set(key, existing === undefined ? { value, file: properties.file } : existing?.value === value ? existing : null);
+      }
+    }
+    return result;
   };
 }
 
@@ -595,41 +658,12 @@ function gradleProperties(files: ProjectFile[]): Map<string, string> {
   return new Map([...values].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]]));
 }
 
-/** Numeric gradle.properties values (one value repo-wide) with the file they come from. */
-function numericGradleProperties(files: ProjectFile[]): Map<string, { value: number; file: string }> {
-  const rows = new Map<string, Array<{ value: string; file: string }>>();
-  for (const file of files.filter((candidate) => candidate.relative.endsWith('gradle.properties'))) {
-    for (const line of file.text.split(/\r?\n/)) {
-      const match = line.match(/^\s*([A-Za-z_][\w.]*)\s*[=:]\s*(.*?)\s*$/);
-      if (match) rows.set(match[1], [...(rows.get(match[1]) ?? []), { value: match[2], file: file.relative }]);
-    }
-  }
-  const result = new Map<string, { value: number; file: string }>();
-  for (const [key, values] of rows) {
-    if (new Set(values.map((row) => row.value)).size === 1 && /^\d+$/.test(values[0].value)) {
-      result.set(key, { value: Number.parseInt(values[0].value, 10), file: values[0].file });
-    }
-  }
-  return result;
-}
-
 /**
  * Gradle text for app-module detection and ID extraction: comments removed (a commented-out `// applicationId "…"`
  * is not an ID) and `ext { … }` / `extra { … }` blocks removed (extra properties are not the DSL's applicationId).
  */
 function gradleDslText(text: string): string {
-  let result = stripGradleComments(text);
-  for (;;) {
-    const start = /\b(?:ext|extra)\s*\{/.exec(result);
-    if (!start) return result;
-    let depth = 0;
-    let end = start.index + start[0].length - 1;
-    for (; end < result.length; end++) {
-      if (result[end] === '{') depth++;
-      else if (result[end] === '}' && --depth === 0) break;
-    }
-    result = result.slice(0, start.index) + result.slice(end + 1);
-  }
+  return removeBlocks(stripGradleComments(text), /\b(?:ext|extra)\s*\{/);
 }
 
 /** `applicationId = <expr>` assignments in an app module, as written (for an unresolved-ID report). */
@@ -688,6 +722,16 @@ function specializedAndroidModules(manifests: ProjectFile[], appModules: string[
     const text = file.text.replace(/<!--[\s\S]*?-->/g, '');
     byModule.set(module, [...(byModule.get(module) ?? []), text]);
     if (/(?:^|\/)src\/main\/AndroidManifest\.xml$/.test(file.relative) && LEANBACK_REQUIRED.test(text)) requiredInMain.add(module);
+  }
+  // A (non-debug) flavor manifest that removes the leanback requirement (`tools:node="remove"`) or relaxes it
+  // (`android:required="false"` with `tools:replace`) makes that flavor installable on phones.
+  for (const file of shipping) {
+    if (/(?:^|\/)src\/main\//.test(file.relative)) continue;
+    const feature = file.text.match(/<uses-feature\b[^>]*android\.software\.leanback[^>]*>/)?.[0] ?? '';
+    if (/tools:node\s*=\s*["']remove["']/.test(feature)
+      || (/tools:replace/.test(feature) && /android:required\s*=\s*["']false["']/.test(feature))) {
+      requiredInMain.delete(moduleDir(file.relative));
+    }
   }
   const libraryPhoneLauncher = [...byModule].some(([module, texts]) =>
     !appModules.includes(module) && texts.some((text) => PHONE_LAUNCHER.test(text)));
@@ -874,7 +918,7 @@ async function detectProject(files: ProjectFile[], root: string) {
   const pbxFiles = files.filter((file) => file.relative.endsWith('project.pbxproj'));
   const plistFiles = files.filter((file) => file.relative.endsWith('Info.plist'));
   const allCatalogs = files.filter((file) => path.posix.basename(file.relative) === 'libs.versions.toml');
-  const resolveCatalogs = await catalogResolver(files);
+  const resolveCatalogs = await catalogResolver(files, root);
   const properties = gradleProperties(files);
   // An app module applies the Android application plugin or assigns `applicationId` in the DSL (any value, so a
   // convention-plugin module with `applicationId = AppConfig.applicationId` still counts; only the extracted ID
@@ -981,7 +1025,13 @@ async function detectProject(files: ProjectFile[], root: string) {
     // App modules left out as example/sample/demo/test apps because a shipped app exists.
     sampleAppGradleFiles: shippedOnly ? androidAppGradleFiles.filter((file) => file.sample) : [],
     resolveCatalogs,
-    gradleNumbers: numericGradleProperties(files),
+    // Gradle properties for targetSdk names, and the ones CI overrides (`-PNAME=`, ORG_GRADLE_PROJECT_NAME).
+    properties: {
+      scope: gradlePropertyScope(files),
+      ciOverrides: new Set(files
+        .filter((file) => isXcodePinFile(path.posix.basename(file.relative), file.relative))
+        .flatMap((file) => [...file.text.matchAll(/(?:-P|\bORG_GRADLE_PROJECT_)([A-Za-z_][\w.]*)=?/g)].map((match) => match[1]))),
+    },
     manifests,
     gradleFiles: [...androidGradleFiles, ...(shippedOnly ? allCatalogs.filter((file) => !file.sample) : allCatalogs)],
     targetSdkEvidence: [...unityTargetSdkEvidence, ...expo.targetSdkEvidence],
@@ -1004,7 +1054,7 @@ function targetSdkFindings(
   now: Date,
   supplementalEvidence: Array<{ file: string; value: number }> = [],
   resolveCatalogs?: CatalogResolver,
-  gradleNumbers: Map<string, { value: number; file: string }> = new Map(),
+  properties?: { scope: PropertyScope; ciOverrides: Set<string> },
 ): ReleaseDoctorFinding[] {
   const evidence: Array<{ file: string; value: number }> = [...supplementalEvidence];
   let hasUnresolvedExpression = false;
@@ -1014,27 +1064,51 @@ function targetSdkFindings(
   const reactNativeTargetSdk = reactNativeValue && /^\d+$/.test(reactNativeValue.value)
     ? { value: Number.parseInt(reactNativeValue.value, 10), file: reactNativeValue.file }
     : undefined;
-  // Numbers a targetSdk expression can name: gradle.properties, plus literal extra properties set in the scanned
-  // scripts (`ext { x = 36 }`, `ext.x = 36`, `extra["x"] = 36`, `set("x", 36)`). A name with two different values
-  // stays unresolved.
   const scripts = gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative));
-  const extras = new Map<string, Array<{ value: number; file: string }>>();
-  const addExtra = (key: string, value: string, file: string) =>
-    extras.set(key, [...(extras.get(key) ?? []), { value: Number.parseInt(value, 10), file }]);
-  for (const file of scripts) {
-    for (const match of file.text.matchAll(/\b(?:ext|extra)\.(\w+)\s*=\s*(\d+)\b/g)) addExtra(match[1], match[2], file.relative);
-    for (const match of file.text.matchAll(/\bextra\[\s*["'](\w+)["']\s*\]\s*=\s*(\d+)\b/g)) addExtra(match[1], match[2], file.relative);
-    for (const match of file.text.matchAll(/\bset\(\s*["'](\w+)["']\s*,\s*(\d+)\s*\)/g)) addExtra(match[1], match[2], file.relative);
-    for (const block of file.text.matchAll(/\b(?:ext|extra)\s*\{([^{}]*)\}/g)) {
-      for (const match of block[1].matchAll(/(?:^|[\s;])(\w+)\s*=\s*(\d+)\b/g)) addExtra(match[1], match[2], file.relative);
+  // What a targetSdk expression names, resolved conservatively: a gradle.properties value in the module's scope or a
+  // literal extra property (`ext.x = 36`, `ext["x"] = 36`, `ext { x = 36 }`, `extra["x"] = 36`, `set("x", 36)`).
+  // The name is unresolved — never guessed — when CI overrides it, a script declares a local of that name, any
+  // assignment to it is not a plain number (a conditional, an expression), or two sources disagree.
+  const assignments = (name: string) => {
+    const quoted = escapeRegExp(name);
+    const rows: Array<{ value?: number; file: string }> = [];
+    const add = (raw: string, file: string) => {
+      const value = raw.trim();
+      rows.push({ value: /^\d+$/.test(value) ? Number.parseInt(value, 10) : undefined, file });
+    };
+    let local = false;
+    for (const file of scripts) {
+      if (new RegExp(`\\b(?:def|val|var)\\s+${quoted}\\b`).test(file.text)) local = true;
+      for (const pattern of [
+        new RegExp(`\\b(?:ext|extra)\\.${quoted}\\s*=(?!=)\\s*([^\\n;]+)`, 'g'),
+        new RegExp(`\\b(?:ext|extra)\\s*\\[\\s*["']${quoted}["']\\s*\\]\\s*=(?!=)\\s*([^\\n;]+)`, 'g'),
+        new RegExp(`\\bset\\s*\\(\\s*["']${quoted}["']\\s*,\\s*([^)\\n]+)\\)`, 'g'),
+      ]) {
+        for (const match of file.text.matchAll(pattern)) add(match[1], file.relative);
+      }
+      for (const opener of file.text.matchAll(/\b(?:ext|extra)\s*\{/g)) {
+        const open = opener.index + opener[0].length - 1;
+        const close = closingBrace(file.text, open);
+        const body = close < 0 ? '' : file.text.slice(open + 1, close);
+        for (const match of body.matchAll(new RegExp(`(?:^|[\\s;])${quoted}\\s*=(?!=)\\s*([^\\n;}]+)`, 'g'))) add(match[1], file.relative);
+      }
     }
-  }
-  const named = new Map(gradleNumbers);
-  for (const [key, rows] of extras) {
-    if (new Set(rows.map((row) => row.value)).size !== 1) continue;
-    if (named.has(key) && named.get(key)!.value !== rows[0].value) named.delete(key);
-    else if (!named.has(key)) named.set(key, rows[0]);
-  }
+    return { rows, local };
+  };
+  const resolveName = (file: ProjectFile, name: string): { value: number; file: string } | 'unresolved' | undefined => {
+    if (properties?.ciOverrides.has(name)) return 'unresolved';
+    const { rows, local } = assignments(name);
+    if (local || rows.some((row) => row.value === undefined)) return 'unresolved';
+    const candidates = rows.map((row) => ({ value: row.value!, file: row.file }));
+    const property = properties?.scope(file).get(name);
+    if (property === null) return 'unresolved';
+    if (property) {
+      if (!/^\d+$/.test(property.value)) return 'unresolved';
+      candidates.push({ value: Number.parseInt(property.value, 10), file: property.file });
+    }
+    if (candidates.length === 0) return undefined;
+    return new Set(candidates.map((row) => row.value)).size === 1 ? candidates[0] : 'unresolved';
+  };
   // `project.properties.x`, `project.property("x")`, `findProperty("x")`, `rootProject.ext.x`, `extra["x"]`,
   // `providers.gradleProperty("x")`, or a bare property name (`propTargetSdkVersion.toInteger()`).
   const PROPERTY_TARGET_SDK = /\btargetSdk(?:Version)?\b\s*(?:=\s*)?\(?\s*(?:(?:rootProject|project)\.)?(?:(?:ext|extra|properties)\.|(?:property|findProperty|properties\.get)\(\s*["']|(?:ext|extra|properties)\[\s*["']|providers\.gradleProperty\(\s*["'])?([A-Za-z_]\w*)/g;
@@ -1062,9 +1136,19 @@ function targetSdkFindings(
       evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
     }
     for (const match of file.text.matchAll(PROPERTY_TARGET_SDK)) {
-      const resolved = named.get(match[1]);
+      const resolved = resolveName(file, match[1]);
+      if (resolved === 'unresolved') continue;
       if (resolved) {
         evidence.push({ file: resolved.file, value: resolved.value });
+        resolvedIndirectly = true;
+        continue;
+      }
+      // Not defined anywhere the module can see: Gradle uses the expression's own default
+      // (`findProperty("x") ?: 33`, `gradleProperty("x").getOrElse("33")`).
+      const line = file.text.slice(match.index, file.text.indexOf('\n', match.index) >>> 0);
+      const fallback = line.match(/\?:\s*(\d+)\b/)?.[1] ?? line.match(/\b(?:getOrElse|orElse)\(\s*["']?(\d+)["']?\s*\)/)?.[1];
+      if (fallback && /\b(?:findProperty|gradleProperty|properties\.get)\b/.test(line)) {
+        evidence.push({ file: file.relative, value: Number.parseInt(fallback, 10) });
         resolvedIndirectly = true;
       }
     }
@@ -2020,7 +2104,7 @@ export async function scanReleaseDoctor(
         file.relative.endsWith('libs.versions.toml') || !specialized.has(moduleDir(file.relative)));
       const limit = repo && isWithin(repo, root) ? repo : root;
       const applied = await appliedGradleScripts(scoped, root, limit, files);
-      findings.push(...targetSdkFindings([...scoped, ...applied], now, detected.targetSdkEvidence, detected.resolveCatalogs, detected.gradleNumbers));
+      findings.push(...targetSdkFindings([...scoped, ...applied], now, detected.targetSdkEvidence, detected.resolveCatalogs, detected.properties));
       if (specialized.size > 0) {
         findings.push({
           code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
@@ -2042,7 +2126,7 @@ export async function scanReleaseDoctor(
     // modules would fail the general rule.
     const minimum = targetPolicy(now).minimum;
     const failingSamples = detected.sampleAppGradleFiles.flatMap((file) => {
-      const verdict = targetSdkFindings([file], now, [], detected.resolveCatalogs, detected.gradleNumbers)[0];
+      const verdict = targetSdkFindings([file], now, [], detected.resolveCatalogs, detected.properties)[0];
       return verdict?.code === 'TARGET_SDK_BELOW_MINIMUM' ? [`${moduleDir(file.relative)} (${verdict.title.match(/targetSdk (\d+)/)?.[1]})`] : [];
     });
     if (failingSamples.length > 0 && minimum !== null) {

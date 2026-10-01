@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { stripGradleComments } from './gradle-text.js';
+import { removeBlocks, stripGradleComments } from './gradle-text.js';
 import { lockedPackageVersion, lockfileDirectories } from './lockfile.js';
 
 const BILLING_MODULE = /com\.android\.billingclient:billing(?:-ktx)?/;
@@ -282,18 +282,8 @@ const LITERAL_VERSION = /^["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']$/;
  */
 export function playBillingSdkOverride(text: string): Omit<ReactNativeIapBillingOverride, 'file'> | undefined {
   // `subprojects { … }` sets extras on the subprojects, not on rootProject, so it never reaches react-native-iap.
-  let code = stripGradleComments(text);
-  for (;;) {
-    const start = /\bsubprojects\s*\{/.exec(code);
-    if (!start) break;
-    let depth = 0;
-    let end = start.index + start[0].length - 1;
-    for (; end < code.length; end++) {
-      if (code[end] === '{') depth++;
-      else if (code[end] === '}' && --depth === 0) break;
-    }
-    code = code.slice(0, start.index) + code.slice(end + 1);
-  }
+  // Braces are matched on lexed text, so `println("{")` inside the block cannot swallow the root `ext { … }`.
+  const code = removeBlocks(stripGradleComments(text), /\bsubprojects\s*\{/);
   const forms = [
     // Not a local variable that happens to share the name (`def playBillingSdkVersion = …`).
     /(?<!\b(?:def|val|var)\s+)\bplayBillingSdkVersion\s*=(?!=)\s*([^\n;}]+)/,

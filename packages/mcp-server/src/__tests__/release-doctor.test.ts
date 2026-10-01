@@ -1626,6 +1626,149 @@ describe('Release Doctor local scan', () => {
     });
   });
 
+  // Fourth adversarial review (round 4): property-based targetSdk must never produce a guessed OK.
+  describe('4차 리뷰 회귀', () => {
+    const at = new Date('2026-10-01T00:00:00Z');
+    const codes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.map((row) => row.code);
+    const below = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
+    const kts = (expression: string, before = '') => ({
+      'settings.gradle.kts': 'include(":app")',
+      'app/build.gradle.kts': `plugins { id("com.android.application") }\n${before}android { defaultConfig { applicationId = "com.example.p"; targetSdk = ${expression} } }`,
+    });
+
+    describe('범위 밖 속성은 쓰지 않고 식의 기본값으로 판정한다 (p1, p6, p10)', () => {
+      it.each([
+        ['라이브러리 모듈의 gradle.properties', { ...kts('(findProperty("sdkTarget") as String?)?.toInt() ?: 33'), 'settings.gradle.kts': 'include(":app", ":lib")', 'lib/build.gradle.kts': 'plugins { id("com.android.library") }', 'lib/gradle.properties': 'sdkTarget=36\n' }],
+        ['demo/의 gradle.properties', { ...kts('(findProperty("sdkTarget") as String?)?.toInt() ?: 33'), 'demo/gradle.properties': 'sdkTarget=36\n' }],
+        ['includeBuild한 다른 빌드의 gradle.properties', { ...kts('providers.gradleProperty("sdkTarget").getOrElse("33").toInt()'), 'settings.gradle.kts': 'includeBuild("tools")\ninclude(":app")', 'tools/settings.gradle.kts': 'rootProject.name = "tools"', 'tools/gradle.properties': 'sdkTarget=36\n' }],
+      ])('%s', async (_name, files) => {
+        const report = await scanReleaseDoctor(await fixture(files), at);
+
+        expect(below(report)).toMatchObject({ file: 'app/build.gradle.kts', title: expect.stringContaining('33') });
+      });
+
+      it('같은 빌드 루트의 gradle.properties 값은 기본값보다 우선한다', async () => {
+        const report = await scanReleaseDoctor(await fixture({ ...kts('(findProperty("sdkTarget") as String?)?.toInt() ?: 33'), 'gradle.properties': 'sdkTarget=36\n' }), at);
+
+        expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_OK', file: 'gradle.properties' }));
+      });
+    });
+
+    it.each([
+      ['같은 이름의 Groovy 지역 변수 (p12)', {
+        'settings.gradle': "include ':app'",
+        'gradle.properties': 'sdkTarget=36\n',
+        'app/build.gradle': "apply plugin: 'com.android.application'\ndef sdkTarget = 33\nandroid { defaultConfig { applicationId \"com.example.p\"; targetSdkVersion sdkTarget } }",
+      }],
+      ['같은 이름의 Kotlin val (p5)', { ...kts('sdkTarget', 'val sdkTarget = 33\n'), 'gradle.properties': 'sdkTarget=36\n' }],
+      ['rootProject.ext["x"] = 33과 루트 ext.x = 36의 충돌 (p4)', {
+        'settings.gradle': "include ':app'",
+        'build.gradle': 'ext.sdkTarget = 36',
+        'app/build.gradle': "apply plugin: 'com.android.application'\nrootProject.ext[\"sdkTarget\"] = 33\nandroid { defaultConfig { applicationId \"com.example.p\"; targetSdkVersion rootProject.ext.sdkTarget } }",
+      }],
+      ['조건식 ext.x = cond ? 33 : 36 (p7)', {
+        'settings.gradle': "include ':app'",
+        'build.gradle': 'ext { sdkTarget = 36 }',
+        'app/build.gradle': "apply plugin: 'com.android.application'\next.sdkTarget = project.hasProperty('legacy') ? 33 : 36\nandroid { defaultConfig { applicationId \"com.example.p\"; targetSdkVersion project.ext.sdkTarget } }",
+      }],
+      ['subprojects의 extra.set을 앱이 식으로 덮어씀 (p13)', {
+        ...kts('extra["sdkTarget"] as Int', 'extra["sdkTarget"] = if (hasProperty("legacy")) 33 else 33\n'),
+        'build.gradle.kts': 'subprojects { extra.set("sdkTarget", 36) }',
+      }],
+      ['CI가 -PsdkTarget=34로 덮어씀 (p3)', {
+        ...kts('project.property("sdkTarget").toString().toInt()'),
+        'gradle.properties': 'sdkTarget=36\n',
+        '.github/workflows/release.yml': 'jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./gradlew bundleRelease -PsdkTarget=34\n',
+      }],
+      ['ORG_GRADLE_PROJECT_ 환경 변수로 덮어씀', {
+        ...kts('project.property("sdkTarget").toString().toInt()'),
+        'gradle.properties': 'sdkTarget=36\n',
+        '.gitlab-ci.yml': 'release:\n  variables:\n    ORG_GRADLE_PROJECT_sdkTarget: "34"\n  script: ./gradlew bundleRelease\n',
+      }],
+    ])('%s → 추측한 OK가 아니라 unresolved', async (_name, files) => {
+      const report = await scanReleaseDoctor(await fixture(files), at);
+
+      expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+      expect(codes(report)).not.toContain('TARGET_SDK_OK');
+    });
+
+    describe('settings의 catalog 선언을 Gradle처럼 해석한다 (c1, c2, c5, c6, c8)', () => {
+      const app = (accessor: string) => ({
+        'app/build.gradle.kts': `plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.c"; targetSdk = ${accessor}.versions.targetSdk.get().toInt() } }`,
+      });
+
+      it.each([
+        ['$rootDir 경로', {
+          'android/settings.gradle.kts': 'dependencyResolutionManagement { versionCatalogs { create("shared") { from(files("$rootDir/../gradle/shared.versions.toml")) } } }\ninclude(":app")',
+          'android/gradle/shared.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          'gradle/shared.versions.toml': '[versions]\ntargetSdk = "33"\n',
+          ...Object.fromEntries(Object.entries(app('shared')).map(([file, text]) => [`android/${file}`, text])),
+        }, 'gradle/shared.versions.toml'],
+        ['settings의 version("x", "33") 덮어쓰기', {
+          'settings.gradle.kts': 'dependencyResolutionManagement { versionCatalogs { create("deps") { from(files("gradle/deps.versions.toml")); version("targetSdk", "33") } } }\ninclude(":app")',
+          'gradle/deps.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          ...app('deps'),
+        }, 'settings.gradle.kts'],
+        ['중첩 version 블록이 있는 Groovy libs { … }', {
+          'settings.gradle': "dependencyResolutionManagement {\n  versionCatalogs {\n    libs {\n      from(files('catalog/app.versions.toml'))\n      version('kotlin') { strictly '2.0.0' }\n    }\n  }\n}\ninclude ':app'",
+          'catalog/app.versions.toml': '[versions]\ntargetSdk = "33"\n',
+          'gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          ...app('libs'),
+        }, 'catalog/app.versions.toml'],
+        ['주석과 .versions.toml이 아닌 파일 이름', {
+          'settings.gradle.kts': 'dependencyResolutionManagement {\n  versionCatalogs {\n    // create("old") { from(files("x")) }\n    create("libs") { from(files("catalog/libs.toml")) } // }\n  }\n}\ninclude(":app")',
+          'catalog/libs.toml': '[versions]\ntargetSdk = "33"\n',
+          'gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          ...app('libs'),
+        }, 'catalog/libs.toml'],
+      ])('%s', async (_name, files, file) => {
+        const report = await scanReleaseDoctor(await fixture(files), at);
+
+        expect(below(report)).toMatchObject({ file, title: expect.stringContaining('33') });
+        expect(report.findings.some((row) => row.code === 'TARGET_SDK_OK')).toBe(false);
+      });
+
+      it('from(…) 없이 version()만 더하는 create("libs")는 기본 libs.versions.toml을 그대로 쓴다 (Tasks)', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle.kts': 'dependencyResolutionManagement {\n  versionCatalogs {\n    create("libs") {\n      val code = providers.gradleProperty("code").get()\n      version("versionCode", code)\n    }\n  }\n}\ninclude(":app")',
+          'gradle/libs.versions.toml': '[versions]\nandroid-targetSdk = "35"\n',
+          'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.t"; targetSdk = libs.versions.android.targetSdk.get().toInt() } }',
+        }), at);
+
+        expect(below(report)).toMatchObject({ file: 'gradle/libs.versions.toml' });
+      });
+
+      it.each([
+        ['Maven 좌표로 선언한 catalog', 'create("libs") { from("com.example:catalog:1.0") }'],
+        ['$rootDir 외의 템플릿 경로', 'create("libs") { from(files("${property("catalogDir")}/libs.versions.toml")) }'],
+        ['계산식 version 덮어쓰기', 'create("libs") { from(files("gradle/libs.versions.toml")); version("targetSdk", providers.gradleProperty("sdk").get()) }'],
+      ])('%s는 unresolved', async (_name, entry) => {
+        const report = await scanReleaseDoctor(await fixture({
+          'settings.gradle.kts': `dependencyResolutionManagement { versionCatalogs { ${entry} } }\ninclude(":app")`,
+          'gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+          ...app('libs'),
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_UNRESOLVED');
+      });
+    });
+
+    it.each([
+      ['tools:node="remove"', '<uses-feature android:name="android.software.leanback" tools:node="remove"/>'],
+      ['tools:replace로 required="false"', '<uses-feature android:name="android.software.leanback" android:required="false" tools:replace="android:required"/>'],
+    ])('휴대전화 flavor가 필수 leanback을 %s로 풀면 휴대전화 기준 (tve, tvf)', async (_name, feature) => {
+      const header = '<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">';
+      const report = await scanReleaseDoctor(await fixture({
+        'settings.gradle': "include ':app'",
+        'app/build.gradle': "apply plugin: 'com.android.application'\nandroid {\n  defaultConfig { applicationId \"com.example.tv\"; targetSdkVersion 33 }\n  productFlavors { tv {}; mobile {} }\n}",
+        'app/src/main/AndroidManifest.xml': `${header}\n  <uses-feature android:name="android.software.leanback" android:required="true"/>\n  <application><activity android:name=".Main"><intent-filter>\n    <category android:name="android.intent.category.LAUNCHER"/>\n    <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>\n  </intent-filter></activity></application>\n</manifest>`,
+        'app/src/mobile/AndroidManifest.xml': `${header}\n  ${feature}\n</manifest>`,
+      }), at);
+
+      expect(below(report)).toMatchObject({ file: 'app/build.gradle' });
+    });
+  });
+
   it('새 iOS·FCM 결과를 한국어와 영어로 렌더링한다', async () => {
     const root = await fixture({
       'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
