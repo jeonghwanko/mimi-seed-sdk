@@ -173,8 +173,12 @@ const GENERIC_MARKERS = new Set([
 const SCRIPT_RE = /\.(?:[cm]?[jt]s|py)$/i;
 const WIN_EXE_RE = /\.(?:exe|cmd|bat)$/i;
 const VERSION_RE = /@(?:latest|next|\d[\w.+-]*)$/;
-/** 패키지 식별자의 버전 · 태그 · 범위 (`@latest`, `@beta`, `@^0.21`) — 스크립트 파일 이름엔 쓰지 않는다. */
-const PACKAGE_VERSION_RE = /@[^@/\\\s]+$/;
+/**
+ * 패키지 식별자의 버전 · 태그 · 범위 (`@latest`, `@beta`, `@^0.21`). 패키지 실행기(npx 등)로 등록했을 때만 뗀다 —
+ * 그 밖의 `user@host` 같은 인자에서 떼면 `user` 처럼 너무 넓은 식별자가 생긴다. `:` 가 든 값(digest, `npm:` 별칭)은 버전이 아니다.
+ */
+const PACKAGE_VERSION_RE = /@[^@/\\\s:]+$/;
+const PACKAGE_RUNNERS = new Set(['npx', 'bunx', 'pnpm', 'pnpx', 'yarn', 'uvx', 'pipx']);
 
 /**
  * 서버 프로세스를 실행하는 런타임 (node · node22 · bun · deno · python3.12 · python3.13t · pythonw · pypy3 …).
@@ -258,7 +262,10 @@ function candidateMarkers(cfg: Record<string, unknown>, cwd: string = process.cw
   if (!primary) return [];
   if (SCRIPT_RE.test(primary)) return [isAbsoluteScript(primary) ? primary : path.resolve(cwd, primary)];
   const base = baseName(primary).replace(WIN_EXE_RE, '');
-  const executableBase = base.replace(PACKAGE_VERSION_RE, '');
+  const words = [cfg.command, ...(Array.isArray(cfg.args) ? cfg.args : [])]
+    .filter((a): a is string => typeof a === 'string')
+    .map((a) => baseName(a).toLowerCase().replace(WIN_EXE_RE, ''));
+  const executableBase = base.replace(words.some((w) => PACKAGE_RUNNERS.has(w)) ? PACKAGE_VERSION_RE : VERSION_RE, '');
   return [...new Set([primary, base, executableBase])].filter(
     (value): value is string => typeof value === 'string' && isSpecificMarker(value),
   );
@@ -353,7 +360,7 @@ function matchesMarkers(argv: string[], markers: string[], ctx: MatchContext = {
       }
       return false;
     }
-    const name = normalizePath(marker.replace(WIN_EXE_RE, '').replace(PACKAGE_VERSION_RE, ''));
+    const name = normalizePath(marker.replace(WIN_EXE_RE, '').replace(VERSION_RE, ''));
     const binName = baseName(name);
     // 링크된 bin (`…/.bin/mimi-seed-mcp`, `/usr/local/bin/mimi-seed-mcp`) — 파일 이름이 곧 bin 이름이다.
     if (s === name || baseName(s).replace(/\.(?:[cm]?js|ts|exe|cmd)$/, '').replace(VERSION_RE, '') === binName) return true;
