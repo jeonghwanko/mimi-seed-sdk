@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { checkBillingCompliance, reactNativeIapUpgradeTarget, type BillingComplianceResult } from './billing.js';
-import { blankComments, blockContents, closingBrace, maskStrings, removeBlocks, stripGradleComments } from './gradle-text.js';
+import { blankComments, blockContents, closingBrace, keepStrings, maskStrings, removeBlocks, stripGradleComments } from './gradle-text.js';
 import { lockedPackageVersion, lockfileDirectories, readText, repositoryRoot } from './lockfile.js';
 
 const SKIP_DIRS = new Set([
@@ -273,11 +273,12 @@ async function conventionFiles(root: string, files: ProjectFile[], found: Conven
     const scriptFiles = (await Promise.all(scripts.map(read))).filter((file): file is ProjectFile => Boolean(file));
     result.push(...scriptFiles);
     // Plugin sources are read from every included build; only an Android application module's own sources (its
-    // app code, never a Gradle plugin) are skipped.
+    // app code, never a Gradle plugin) are skipped — and never in a plugin root (buildSrc, build-logic, a
+    // `pluginManagement { includeBuild }` root), whose every source is read.
     // A source belongs to the nearest project folder above it, so a plugin project nested in an app's folder is read.
     const projects = scriptFiles
       .filter((file) => /(?:^|\/)build\.gradle(?:\.kts)?$/.test(file.relative))
-      .map((file) => ({ dir: path.dirname(file.absolute), app: appliesAndroidAppPlugin(stripGradleComments(file.text)) }))
+      .map((file) => ({ dir: path.dirname(file.absolute), app: !owner.plugin && appliesAndroidAppPlugin(file.text) && !GRADLE_PLUGIN_BUILD.test(stripGradleComments(file.text)) }))
       .sort((left, right) => right.dir.length - left.dir.length);
     const pluginSources = sources.filter((source) => !projects.find((project) => isWithin(project.dir, source))?.app);
     if (pluginSources.length > MAX_CONVENTION_FILES) incomplete = true;
@@ -615,33 +616,75 @@ const ANDROID_LIBRARY_PLUGIN_ID = /(?<![\w.:-])com\.android\.(?:library|test|fus
 // applying the plugin still finds the app.
 const PLUGIN_MENTION = /\b(?:hasPlugin|withId|withPlugin|findPlugin|getPlugin|findByName|getByName|listOf|setOf|arrayOf|mutableListOf|mutableSetOf|contains|containsKey|equals|startsWith|endsWith|matches|filter|any|none)\s*\(|[=!]=|->|\bin\s*[[(]|\b(?:def|val|var|const)\s+[A-Za-z_]\w*\s*(?::\s*[\w<>?.]+\s*)?=|\b(?:classpath|implementation|api|compileOnly|runtimeOnly|testImplementation|androidTestImplementation|debugImplementation|releaseImplementation|annotationProcessor|kapt|ksp|lintChecks)\b|\.toDep\(\)|\bpluginId\b|\bid\s*=(?!=)|\bapply\s*\(?\s*false\b/;
 
+/**
+ * The call whose argument list encloses `index` in masked code: its name (`id`, `apply`, `listOf`, `[` for a list
+ * literal) and where its `(` is, or undefined at statement level (`apply plugin: '…'`, `id '…'`).
+ */
+function enclosingCall(masked: string, index: number): { name: string; open: number } | undefined {
+  let depth = 0;
+  for (let cursor = index; cursor >= 0 && cursor > index - 2000; cursor--) {
+    const char = masked[cursor];
+    if (char === ')' || char === ']') depth++;
+    else if (char === '(' || char === '[') {
+      if (depth === 0) {
+        if (char === '[') return { name: '[', open: cursor };
+        const name = masked.slice(Math.max(0, cursor - 80), cursor).match(/([A-Za-z_$][\w$]*)\s*$/)?.[1] ?? '';
+        return { name, open: cursor };
+      }
+      depth--;
+    } else if ((char === '{' || char === '}' || char === ';') && depth === 0) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Calls whose argument applies a plugin: `id(…)`, `alias(…)`, `apply(…)` / `pluginManager.apply(…)` / `plugins.apply(…)`. */
+const PLUGIN_APPLYING_CALLS = new Set(['id', 'alias', 'apply']);
+
 function appliesAndroidPlugin(text: string, id: RegExp): boolean {
-  const code = blankComments(text);
+  // Lexed code with only id-shaped string literals kept: an id inside a longer string (`description = "Applies
+  // com.android.application"`) or a comment is never an application.
+  const code = keepStrings(text, (literal) => /^(["'])[\w.:-]+\1$/.test(literal));
   const masked = maskStrings(text);
   // Inside `dependencies { … }` an id is a dependency notation (`implementation(plugin(libs.plugins.android.application))`).
   const dependencies = [...masked.matchAll(/\bdependencies\s*\{/g)]
     .map((match) => [match.index, closingBrace(code, match.index + match[0].length - 1)] as const);
-  const lines = code.split('\n');
-  let lineStart = 0;
-  for (let index = 0; index < lines.length; lineStart += lines[index].length + 1, index++) {
-    // Judged per statement, so `implementation(…); apply plugin: '…'` on one line still applies the plugin.
-    let statementStart = lineStart;
-    for (const statement of lines[index].split(';')) {
-      const at = statementStart;
-      statementStart += statement.length + 1;
-      const match = id.exec(statement);
-      if (!match || PLUGIN_MENTION.test(statement)) continue;
-      if (dependencies.some(([open, close]) => at + match.index > open && (close < 0 || at + match.index < close))) continue;
-      // `id(\n  "com.android.application"\n) apply false`
-      if (lines.slice(index + 1, index + 3).some((next) => /^\s*\)?\s*(?:version\b[^\n]*?)?\bapply\s*\(?\s*false\b/.test(next))) continue;
-      return true;
+  const applyFalseAfter = (from: number) => {
+    const end = statementEnd(masked, from);
+    const closer = [')', ']'].includes(masked[end]) ? statementEnd(masked, end + 1) : end;
+    return /\bapply\s*\(?\s*false\b/.test(masked.slice(from, closer))
+      || /^[^\n]*\n\s*\)?\s*(?:version\b[^\n]*?)?\bapply\s*\(?\s*false\b/.test(masked.slice(from, from + 400));
+  };
+  for (const match of code.matchAll(new RegExp(id.source, `${id.flags.replace('g', '')}g`))) {
+    const at = match.index + match[0].length - 1;
+    if (dependencies.some(([open, close]) => at > open && (close < 0 || at < close))) continue;
+    const call = enclosingCall(masked, at);
+    if (call) {
+      // `plugin(…)` applies only as the statement of an `apply { … }` block; inside another call
+      // (`implementation(plugin(…))`, `buildConfigField("…", plugin(…))`) it is a mention.
+      const outer = enclosingCall(masked, call.open - 1);
+      const block = enclosingBlocks(masked, call.open).at(-1)?.opener;
+      const applies = PLUGIN_APPLYING_CALLS.has(call.name)
+        || (call.name === 'plugin' && !outer && block === 'apply')
+        || (call.name === 'mapOf' && outer?.name === 'apply');
+      if (applies && !applyFalseAfter(at)) return true;
+      continue;
     }
+    // Statement level (`apply plugin: '…'`, Groovy `id '…'`, a catalog alias in `plugins { }`): judged per statement,
+    // so `classpath …; apply plugin: '…'` on one line still applies the plugin.
+    const before = code.slice(0, match.index);
+    const start = Math.max(before.lastIndexOf('\n'), before.lastIndexOf(';'), before.lastIndexOf('{'), before.lastIndexOf('}')) + 1;
+    const statement = code.slice(start, statementEnd(masked, match.index));
+    if (PLUGIN_MENTION.test(statement) || /\.\s*get\s*\(|\bversion\s*=/.test(statement)) continue;
+    if (applyFalseAfter(at)) continue;
+    return true;
   }
   return false;
 }
 
 /** A build script of a Gradle plugin project (convention plugins), not of an app. */
-const GRADLE_PLUGIN_BUILD = /\bgradlePlugin\s*\{|`kotlin-dsl`|\bid\s*\(?\s*["'](?:java-gradle-plugin|groovy-gradle-plugin|kotlin-dsl)["']|\bkotlin-dsl\b/;
+const GRADLE_PLUGIN_BUILD = /\bgradlePlugin\s*\{|`(?:kotlin-dsl|java-gradle-plugin|groovy-gradle-plugin)`|["'](?:java-gradle-plugin|groovy-gradle-plugin|kotlin-dsl)["']|\bkotlin-dsl\b/;
 
 /** A Gradle plugin project's build script: it builds plugins and applies no Android application plugin itself. */
 function isGradlePluginBuild(text: string): boolean {
@@ -1397,8 +1440,8 @@ function enclosingBlocks(masked: string, index: number): Array<{ open: number; o
  * `allprojects { … }` includes the project itself; in a library script, an `afterEvaluate` may be another project's
  * (`project(':app').afterEvaluate { … }`).
  */
-const CROSS_PROJECT_FROM_SELF = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|subprojects\b|gradle\s*\.|configure\s*\()/;
-const CROSS_PROJECT_FROM_LIBRARY = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b|gradle\s*\.|configure\s*\(|afterEvaluate\b)/;
+const CROSS_PROJECT_FROM_SELF = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|subprojects\b)|(?<![.\w$])(?:gradle\s*\.|configure\s*\()/;
+const CROSS_PROJECT_FROM_LIBRARY = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b|afterEvaluate\b)|(?<![.\w$])(?:gradle\s*\.|configure\s*\()/;
 /** A Groovy method declaration head (`def configure()`, `void apply(Project p)`): script locals are not visible in its body. */
 const GROOVY_METHOD = /^\s*(?:(?:public|private|protected|static|final|synchronized)\s+)*(?:def|void|int|long|boolean|double|float|short|byte|char|[A-Z]\w*(?:<[^<>]*>)?)\s+[A-Za-z_]\w*\s*\([^()]*\)\s*(?:throws\s+[\w.,\s]+)?$/;
 /** Blocks whose `targetSdk` is a different property (lint's and the test runner's), not the app's. */
@@ -1419,8 +1462,16 @@ function blockHead(masked: string, code: string, open: number): string {
     }
     cursor--;
   }
-  // The receiver chain and keyword before it, on that line (`project.plugins.hasPlugin`, `if`, `else`).
-  while (cursor >= 0 && /[\w$.?\t ]/.test(masked[cursor])) cursor--;
+  // The receiver chain and keyword before it (`project.plugins.hasPlugin`, `if`, `else if`), also when the chain is
+  // split over lines (`project.plugins\n    .withId(…)`).
+  for (;;) {
+    while (cursor >= 0 && /[\w$.?\t ]/.test(masked[cursor])) cursor--;
+    if (masked[cursor] === '\n' && /^\s*\??\./.test(masked.slice(cursor + 1, open))) {
+      cursor--;
+      continue;
+    }
+    break;
+  }
   return code.slice(cursor + 1, open).trim();
 }
 
@@ -1429,7 +1480,11 @@ function blockHead(masked: string, code: string, open: number): string {
  * literal argument is a library plugin id. Anything else — `||`, `&&`, `!`, `else`, a ternary, a non-literal id, or
  * the application id — runs for the app too.
  */
-const LIBRARY_ONLY_HEAD = /^(?:if\s*\(\s*)?(?:[\w$]+\??\.)*(?:withId|withPlugin|hasPlugin)\s*\(\s*["']com\.android\.(?:library|test|fused-library|kotlin\.multiplatform\.library)["']\s*\)(?:\s*\))?$/;
+const LIBRARY_PLUGIN_CHECK = String.raw`(?:[\w$]+\s*\??\.\s*)*(?:withId|withPlugin|hasPlugin)\s*\(\s*["']com\.android\.(?:library|test|fused-library|kotlin\.multiplatform\.library)["']\s*\)`;
+// `if (…)` or `else if (…)` (an else-if branch runs only when its own condition holds), or the call itself.
+const LIBRARY_ONLY_HEAD = new RegExp(`^(?:(?:else\\s+)?if\\s*\\(\\s*)?${LIBRARY_PLUGIN_CHECK}(?:\\s*\\))?$`);
+// A Kotlin `when { plugins.hasPlugin("com.android.library") -> … }` branch.
+const LIBRARY_ONLY_BRANCH = new RegExp(`^\\s*${LIBRARY_PLUGIN_CHECK}\\s*->`);
 
 /** True when the token at `index` (with receiver `chain`) configures another project, or sits inside such a block. */
 function crossProjectToken(masked: string, index: number, chain: string, mode: 'self' | 'library'): boolean {
@@ -1836,10 +1891,16 @@ function targetSdkFindings(
     const masked = maskStrings(script.text);
     const code = blankComments(script.text);
     const blocks = enclosingBlocks(masked, token.index);
-    const library = blocks.findIndex((block) => LIBRARY_ONLY_HEAD.test(blockHead(masked, code, block.open)));
+    // The statement text before `at`, with its string literals (for the library id).
+    const branch = (at: number) => code.slice(at - statementPrefix(masked, at).length, at);
+    let library = blocks.findIndex((block) => LIBRARY_ONLY_HEAD.test(blockHead(masked, code, block.open))
+      || LIBRARY_ONLY_BRANCH.test(branch(block.open)));
+    // A `when` branch without braces: `plugins.hasPlugin("com.android.library") -> android.defaultConfig.targetSdk = 30`.
+    if (library < 0 && LIBRARY_ONLY_BRANCH.test(branch(token.index))) library = blocks.length;
     if (library < 0) return false;
     // Inside it, a setting that reaches another project (`project(':app').android…`) configures that project.
-    const reach = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b|gradle\s*\.|configure\s*\()/;
+    // A bare `configure(…)` is Project.configure (other projects); `extensions.configure(…)` is the project's own.
+    const reach = /\b(?:project\s*\(|findProject\s*\(|rootProject\b|allprojects\b|subprojects\b)|(?<![.\w$])(?:gradle\s*\.|configure\s*\()/;
     return !reach.test(token.chain ?? '') && !reach.test(statementPrefix(masked, token.index))
       && !blocks.slice(library + 1).some((block) => reach.test(block.head));
   };
@@ -2631,9 +2692,19 @@ async function resolvedPath(candidates: string[], context: ApplyContext, thirdPa
     if (!isWithin(context.limit, absolute)) continue;
     if (!await exists(absolute, context.known)) continue;
     // A package linked into node_modules/ from a local folder (yarn / pnpm / npm workspaces, `link:`) is local code,
-    // even when the folder lies outside the scanned path.
-    const real = await fs.realpath(absolute).catch(() => absolute);
-    if (real !== absolute && !inNodeModules(real)) return { absolute: real, thirdParty: false };
+    // even when the folder lies outside the scanned path. Only node_modules paths are resolved: a scan root reached
+    // through a symlink (or macOS /tmp → /private/tmp) keeps every other path as the walk saw it.
+    if (inNodeModules(absolute)) {
+      const real = await fs.realpath(absolute).catch(() => absolute);
+      if (!inNodeModules(real)) {
+        // Back in the walk's coordinates: under the nearest ancestor of the scan limit whose real path holds it.
+        for (let directory = context.limit; ; directory = path.dirname(directory)) {
+          const realDirectory = await fs.realpath(directory).catch(() => directory);
+          if (isWithin(realDirectory, real)) return { absolute: path.join(directory, path.relative(realDirectory, real)), thirdParty: false };
+          if (path.dirname(directory) === directory) return { absolute: real, thirdParty: false };
+        }
+      }
+    }
     return { absolute, thirdParty: thirdParty || inNodeModules(absolute) };
   }
   const first = candidates.find((candidate) => isWithin(context.limit, candidate)) ?? candidates[0];
@@ -2663,7 +2734,8 @@ async function resolvedPath(candidates: string[], context: ApplyContext, thirdPa
  * repository's own (`workspace:`) but its folder cannot be found; undefined for an ordinary third-party package.
  */
 async function workspacePackage(name: string, context: ApplyContext): Promise<string | null | undefined> {
-  const manifests: Array<{ dir: string; json: Record<string, unknown> }> = [];
+  // `declared`: a member a workspace glob names, trusted wherever it lives.
+  const manifests: Array<{ dir: string; json: Record<string, unknown>; declared?: boolean }> = [];
   const parse = (text: string | undefined) => {
     try {
       return text === undefined ? undefined : JSON.parse(text) as Record<string, unknown>;
@@ -2671,6 +2743,9 @@ async function workspacePackage(name: string, context: ApplyContext): Promise<st
       return undefined;
     }
   };
+  // Test fixtures, samples, and vendored trees may hold a package.json with the same name: never the package.
+  const excludedTree = (dir: string) => path.relative(context.limit, dir).split(path.sep)
+    .some((segment) => EXCLUDED_EVIDENCE_DIRS.has(segment) || SAMPLE_ONLY_DIRS.has(segment) || TEST_TARGET_DIR.test(segment) || segment === 'node_modules');
   for (const file of context.known) {
     if (path.posix.basename(file.relative) !== 'package.json' || inNodeModules(file.absolute)) continue;
     const json = parse(file.text);
@@ -2694,20 +2769,29 @@ async function workspacePackage(name: string, context: ApplyContext): Promise<st
           .catch(() => [] as string[])
         : [path.join(directory, base)];
       for (const dir of dirs) {
-        if (manifests.some((manifest) => manifest.dir === dir)) continue;
+        const known = manifests.find((manifest) => manifest.dir === dir);
+        if (known) {
+          known.declared = true;
+          continue;
+        }
         const member = parse(await readText(path.join(dir, 'package.json')));
-        if (member) manifests.push({ dir, json: member });
+        if (member) manifests.push({ dir, json: member, declared: true });
       }
     }
   }
-  const own = manifests.find((manifest) => manifest.json.name === name && isWithin(context.limit, manifest.dir));
+  const own = manifests.find((manifest) => manifest.json.name === name && isWithin(context.limit, manifest.dir)
+    && (manifest.declared || !excludedTree(manifest.dir)));
   if (own) return own.dir;
   for (const manifest of manifests) {
     for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
       const spec = (manifest.json[field] as Record<string, unknown> | undefined)?.[name];
       if (typeof spec !== 'string') continue;
       const local = spec.match(/^(?:file|link|portal):(.+)$/)?.[1];
-      if (local) return path.resolve(manifest.dir, local);
+      // Only a folder: `file:vendor/pkg-1.0.0.tgz` is a packed tarball, installed like any registry package.
+      if (local && await fs.stat(path.resolve(manifest.dir, local)).then((stat) => stat.isDirectory(), () => false)) {
+        return path.resolve(manifest.dir, local);
+      }
+      if (local) continue;
       if (spec.startsWith('workspace:')) return null;
     }
   }
@@ -2719,7 +2803,7 @@ async function workspacePackage(name: string, context: ApplyContext): Promise<st
  * '…')` / `file('…')`, otherwise React Native autolinking's `node_modules/<name>/android` when present, otherwise the
  * default `<settings dir>/<name>`. Third-party when it lies in node_modules/ or names a package.json dependency.
  */
-async function projectDirectory(name: string, context: ApplyContext): Promise<{ dir: string; thirdParty: boolean }> {
+async function projectDirectory(name: string, context: ApplyContext): Promise<{ dir?: string; thirdParty: boolean }> {
   const settingsFiles = context.known.filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative)
     && isWithin(path.dirname(file.absolute), context.projectDir))
     .sort((left, right) => right.absolute.length - left.absolute.length);
@@ -2735,8 +2819,17 @@ async function projectDirectory(name: string, context: ApplyContext): Promise<{ 
   }
   // A project the settings include by name, without a mapping, lives in its default folder (a repository module that
   // happens to share an npm package's name).
+  // …only when that folder exists and no settings script assigns the project a folder in a form not parsed above
+  // (`project(':x').projectDir = new File(nodeModules, 'x/android')`): then the package lookup below decides.
   const included = settingsFiles.some((settings) => new RegExp(`\\binclude\\b[^\\n]*["']:${quoted}["']`).test(stripGradleComments(settings.text)));
-  if (included) return { dir: path.join(settingsDir, ...name.split(':')), thirdParty: false };
+  const assignment = settingsFiles.map((settings) => stripGradleComments(settings.text)
+    .match(new RegExp(`project\\(\\s*["']:${quoted}["']\\s*\\)\\.projectDir\\s*=[^\\n;]*`))?.[0]).find(Boolean);
+  const assigned = assignment !== undefined;
+  // An assignment not parsed above that does not point into node_modules (`new File(modulesDir, 'x')`) names a
+  // repository folder the scanner cannot compute: unresolved, never an npm package of the same name.
+  if (assigned && !/node_?modules|nodemodule/i.test(assignment)) return { thirdParty: false };
+  const defaultDir = path.join(settingsDir, ...name.split(':'));
+  if (included && !assigned && await fs.stat(defaultDir).then((stat) => stat.isDirectory(), () => false)) return { dir: defaultDir, thirdParty: false };
   // React Native names an autolinked `@scope/pkg` project `:scope_pkg`.
   const packageNames = [name, ...(/^([^_]+)_(.+)$/.test(name) ? [name.replace(/^([^_]+)_(.+)$/, '@$1/$2')] : [])];
   for (const directory of ancestorsUpTo(context.projectDir, context.limit)) {
@@ -2792,6 +2885,7 @@ async function appliedScriptPath(reference: string, context: ApplyContext): Prom
     const match = reference.match(form);
     if (!match) continue;
     const project = await projectDirectory(match[nameGroup], context);
+    if (project.dir === undefined) return { thirdParty: fromScript, reason: 'the project folder is computed' };
     return resolvedPath([path.resolve(project.dir, match[fileGroup])], context, project.thirdParty || fromScript);
   }
 

@@ -141,6 +141,21 @@ export function maskStrings(text: string): string {
 }
 
 /**
+ * Like `maskStrings`, but string literals for which `keep(literal)` is true stay verbatim (`literal` includes its
+ * quotes). Comments are blanked. Same length and line breaks as `text`.
+ */
+export function keepStrings(text: string, keep: (literal: string) => boolean): string {
+  let out = '';
+  scanGradle(text, (kind, start, end) => {
+    const slice = text.slice(start, end);
+    if (kind === 'code' || (kind === 'string' && keep(slice))) out += slice;
+    else if (kind === 'comment' || slice.length < 2) out += slice.replace(/[^\n]/g, ' ');
+    else out += slice[0] + slice.slice(1, -1).replace(/[^\n]/g, ' ') + slice.at(-1);
+  });
+  return out;
+}
+
+/**
  * Index of the `}` that closes the `{` at `open`, counting braces only in code (not inside strings or comments);
  * -1 when it is never closed.
  */

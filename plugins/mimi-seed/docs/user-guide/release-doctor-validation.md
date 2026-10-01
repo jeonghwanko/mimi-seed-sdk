@@ -55,22 +55,32 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   info item instead, like binary plugins, and **such an unread script can hide a setting while the result still
   shows OK**; install the dependencies and re-run to read them. A computed `apply from:` inside a third-party
   script is noted the same way, not reported as unresolved. Packages the repository provides itself (yarn / pnpm /
-  npm workspace packages, `file:` / `link:` dependencies, a package linked into node_modules/) are not third-party:
-  they are read from their folder, and an unfollowable reference in them makes the result unresolved.
-- **A Gradle project named like an npm package** (`project(':pkg')`) that settings neither include by name nor map
-  to a folder is resolved the way React Native autolinking does, to that package in node_modules/, and so is
-  treated as third-party.
+  npm workspace packages, `file:` / `link:` dependencies pointing at a folder, a package linked into node_modules/)
+  are not third-party: they are read from their folder, and an unfollowable reference in them makes the result
+  unresolved. A package linked into node_modules/ from a folder outside the repository (`yarn link`) is read the
+  same way, so files outside the scanned repository may be read. A `package.json` with the same name inside a
+  test, fixture, sample, or vendored folder is ignored unless a workspace glob declares it.
+- **A Gradle project named like an npm package** (`project(':pkg')`) is resolved from the settings: a parsed
+  `projectDir` mapping wins; a project the settings include by name, with no `projectDir` assignment, uses its
+  default folder when that folder exists. A `projectDir` assignment the scanner cannot parse counts as a node_modules
+  package only when it mentions node_modules (`new File(nodeModules, 'pkg/android')`, `resolveNodeModuleDir(…)`);
+  otherwise the result is unresolved. Without any of these, the project is resolved the way React Native
+  autolinking does, to that package in node_modules/, and so is treated as third-party.
 - **Repository-owned `apply from:` that cannot be followed** — a URL, a computed path, an optional or git-ignored
   local file (for example a signing or secrets script that only CI or a release machine has), or a path outside the
   repository — makes the app module unresolved, even when the script is applied only if it exists.
 - **Included builds** given by a computed `includeBuild(…)` path, or living under node_modules/, are not read. The
   project walk stops at directory depth 7 (convention builds are read at any depth, within a per-build budget; a
-  build too large to read completely makes the result unresolved).
+  build too large to read completely makes the result unresolved — for example an included build that is not a
+  plugin build and has more than 5,000 Kotlin, Java, or Groovy sources outside its app modules).
 - **Dead or conditional code counts.** A setting inside an `if` (whatever its condition), a disabled branch, or code
   that never runs is treated as live; the lowest value wins. The one exception is a block behind a single positive
-  check for the library plugin (`plugins.withId('com.android.library') { … }`,
-  `if (plugins.hasPlugin('com.android.library'))`), which is treated as library-only; any other condition (`||`, `!`,
-  `else`, the application id) counts for the app.
+  check for the library plugin, which is treated as library-only: `plugins.withId('com.android.library') { … }`
+  (also with the receiver chain split over lines), `if (…hasPlugin('com.android.library')) { … }`,
+  `else if (…hasPlugin('com.android.library')) { … }`, and a Kotlin `when` branch
+  `plugins.hasPlugin("com.android.library") -> …`. Any other condition (`||`, `&&`, `!`, a plain `else`, a variable
+  id, the application id) counts for the app, and a setting inside a library-only block that reaches another project
+  (`project(':app')…`, `rootProject`, `gradle.…`, a bare `configure(…)`) still counts.
 - **Cross-project configuration** is recognised in its common shapes (`subprojects`, `allprojects`, `project(':x')`,
   `afterEvaluate`, `plugins.withId`); other ways of reaching another project's `android` block are not modelled.
 - **Values computed outside the repository** stay unresolved: Flutter's `flutter.targetSdkVersion` (from the Flutter

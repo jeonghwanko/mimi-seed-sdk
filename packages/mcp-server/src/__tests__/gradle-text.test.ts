@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blankComments, closingBrace, maskStrings, removeBlocks, stripGradleComments } from '#core/checks/gradle-text.js';
+import { blankComments, closingBrace, keepStrings, maskStrings, removeBlocks, stripGradleComments } from '#core/checks/gradle-text.js';
 
 // Round-3 review: the regex stripper treated `/*` inside glob strings as a comment and ate real code up to the next
 // `*/` (Signal-Android lost its targetSdk line, Lawnchair its applicationId).
@@ -114,5 +114,17 @@ describe('maskStrings / blankComments', () => {
     expect(blanked).toContain('"targetSdk 33"');
     expect(blanked).not.toContain('targetSdkVersion 30');
     expect(blanked).not.toContain('= 29');
+  });
+});
+
+describe('keepStrings', () => {
+  it('keeps only the string literals the predicate accepts, blanking the rest and comments', () => {
+    const text = 'id("com.android.application") // id("x")\ndescription = "applies com.android.application"';
+    const kept = keepStrings(text, (literal) => /^"[\w.]+"$/.test(literal));
+
+    expect(kept).toHaveLength(text.length);
+    expect(kept).toContain('id("com.android.application")');
+    expect(kept).not.toContain('applies');
+    expect(kept).not.toContain('id("x")');
   });
 });

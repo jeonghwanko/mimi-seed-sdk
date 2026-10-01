@@ -54,11 +54,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   packages, `file:` / `link:` dependencies, a package linked into node_modules/) are the repository's own code:
   they are read from their folder, and when they cannot be followed the module is unresolved. Convention builds are
   read within a per-build budget, plugin builds first; one too large to read completely makes the result
-  unresolved. Plugin sources are read from every included build except an Android app module's own sources, and a
-  plugin build that a sample build also includes is not a sample. A `subprojects` block counts as library-only
-  (not the app's) only behind a single positive `withId` / `withPlugin` / `hasPlugin` of the library plugin; `||`,
-  `!`, `else`, or the application id make it count for the app. A dependency notation such as
-  `implementation(plugin(libs.plugins.android.application))` does not make a plugin build an app module. A local
+  unresolved. Plugin sources are read from every included build except an Android app module's own sources (all of
+  them in buildSrc, build-logic, and `pluginManagement { includeBuild }` roots), and a plugin build that a sample
+  build also includes is not a sample. A `subprojects` block counts as library-only (not the app's) only behind a
+  single positive `withId` / `withPlugin` / `hasPlugin` of the library plugin (also as `else if` or a Kotlin
+  `when` branch); `||`, `!`, a plain `else`, or the application id make it count for the app. A plugin id that is
+  only mentioned — in a dependency notation such as `implementation(plugin(libs.plugins.android.application))`, a
+  `listOf(…)`, a string such as a plugin description, or `libs.plugins….get().version` — does not make a build
+  script an app module. Scanning through a symlinked path gives the same result as the real path. A local
   variable that is reassigned anywhere in the script is unresolved, and inside a Groovy method the name is read as
   the project property, as Gradle does. The user guide's validation page lists the check's known limits. The JSON
   report lists each setting as `targetSdkTokens`.

@@ -53,19 +53,29 @@ Release Doctor는 빌드 파일을 읽을 뿐 Gradle을 실행하지 않는다. 
   찾지 못하면(대개 JavaScript 의존성을 설치하지 않은 경우) 바이너리 플러그인처럼 읽지 않고 정보 항목에 나열하며,
   **이렇게 읽지 않은 스크립트가 설정을 숨긴 채 결과가 OK로 나올 수 있다**. 의존성을 설치한 뒤 다시 실행하면 읽는다.
   서드파티 스크립트 안의 계산된 `apply from:`도 같은 방식으로 기록할 뿐 확정하지 못함으로 보고하지 않는다. 저장소가
-  직접 제공하는 패키지(yarn·pnpm·npm 워크스페이스 패키지, `file:`·`link:` 의존성, node_modules/에 링크된 패키지)는
-  서드파티가 아니다. 해당 폴더에서 읽고, 따라갈 수 없는 참조가 있으면 확정하지 못함으로 보고한다.
-- **npm 패키지와 같은 이름의 Gradle 프로젝트**(`project(':pkg')`)를 settings가 이름으로 include하지도, 폴더로
-  매핑하지도 않으면 React Native autolinking처럼 node_modules/의 그 패키지로 해석하므로 서드파티로 다룬다.
+  직접 제공하는 패키지(yarn·pnpm·npm 워크스페이스 패키지, 폴더를 가리키는 `file:`·`link:` 의존성, node_modules/에
+  링크된 패키지)는 서드파티가 아니다. 해당 폴더에서 읽고, 따라갈 수 없는 참조가 있으면 확정하지 못함으로 보고한다.
+  저장소 밖 폴더를 node_modules/에 링크한 패키지(`yarn link`)도 같은 방식으로 읽으므로, 검사 대상 저장소 밖의 파일을
+  읽을 수 있다. test·fixture·sample·vendor 폴더 안의 같은 이름 `package.json`은 워크스페이스 glob이 선언하지 않는 한
+  무시한다.
+- **npm 패키지와 같은 이름의 Gradle 프로젝트**(`project(':pkg')`)는 settings로 해석한다: 해석한 `projectDir` 매핑이
+  우선하고, settings가 이름으로 include하면서 `projectDir`를 지정하지 않은 프로젝트는 기본 폴더가 있을 때 그 폴더를
+  쓴다. 해석하지 못한 `projectDir` 지정은 node_modules를 언급할 때만(`new File(nodeModules, 'pkg/android')`,
+  `resolveNodeModuleDir(…)`) node_modules 패키지로 보고, 아니면 확정하지 못함으로 보고한다. 어느 것도 없으면
+  React Native autolinking처럼 node_modules/의 그 패키지로 해석하므로 서드파티로 다룬다.
 - **따라갈 수 없는 저장소 소유 `apply from:`** — URL, 계산된 경로, 선택적이거나 git이 무시하는 로컬 파일(예: CI나
   릴리스 머신에만 있는 서명·비밀값 스크립트), 저장소 밖 경로 — 은 파일이 있을 때만 적용하더라도 해당 앱 모듈을
   확정하지 못함으로 만든다.
 - **계산된 `includeBuild(…)` 경로**나 node_modules/ 아래의 included 빌드는 읽지 않는다. 프로젝트 탐색은 디렉터리
-  깊이 7에서 멈춘다(컨벤션 빌드는 빌드별 예산 안에서 깊이 제한 없이 읽고, 다 읽지 못하면 확정하지 못함으로 보고한다).
+  깊이 7에서 멈춘다(컨벤션 빌드는 빌드별 예산 안에서 깊이 제한 없이 읽고, 다 읽지 못하면 확정하지 못함으로 보고한다.
+  예: 플러그인 빌드가 아닌 included 빌드에 앱 모듈 밖 Kotlin·Java·Groovy 소스가 5,000개를 넘는 경우).
 - **실행되지 않거나 조건부인 코드도 센다.** 조건과 상관없이 `if` 안의 설정, 꺼진 분기, 실행되지 않는 코드도 유효한
-  설정으로 보고 가장 낮은 값을 쓴다. 단 하나의 예외는 라이브러리 플러그인만 긍정으로 확인하는 블록
-  (`plugins.withId('com.android.library') { … }`, `if (plugins.hasPlugin('com.android.library'))`)으로, 라이브러리
-  전용으로 본다. 다른 조건(`||`, `!`, `else`, 애플리케이션 id)은 앱에도 적용되는 것으로 센다.
+  설정으로 보고 가장 낮은 값을 쓴다. 단 하나의 예외는 라이브러리 플러그인만 긍정으로 확인하는 블록으로, 라이브러리
+  전용으로 본다: `plugins.withId('com.android.library') { … }`(수신자 체인이 여러 줄에 걸쳐도),
+  `if (…hasPlugin('com.android.library')) { … }`, `else if (…hasPlugin('com.android.library')) { … }`, Kotlin
+  `when` 분기 `plugins.hasPlugin("com.android.library") -> …`. 다른 조건(`||`, `&&`, `!`, 그냥 `else`, 변수로 준 id,
+  애플리케이션 id)은 앱에도 적용되는 것으로 세고, 라이브러리 전용 블록 안에서 다른 프로젝트에 닿는 설정
+  (`project(':app')…`, `rootProject`, `gradle.…`, 수신자 없는 `configure(…)`)도 센다.
 - **다른 프로젝트 설정**은 흔한 형태(`subprojects`, `allprojects`, `project(':x')`, `afterEvaluate`,
   `plugins.withId`)만 인식한다. 다른 경로로 다른 프로젝트의 `android` 블록에 닿는 코드는 모델링하지 않는다.
 - **저장소 밖에서 계산되는 값**은 확정하지 못한다: Flutter의 `flutter.targetSdkVersion`(Flutter SDK가 정함)과 CI만
