@@ -171,6 +171,10 @@ describe('restart 프로세스 판정', () => {
       ['pwsh', ['-NoProfile', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
       ['env', ['NODE_OPTIONS=--max-old-space-size=4096', 'npx', '-y', '@yoonion/mimi-seed-mcp@beta']],
       ['npx', ['--registry', 'https://registry.example.com', '-y', '@yoonion/mimi-seed-mcp@1.0.0-beta.1+build']],
+      ['npx', ['-y', '@yoonion/mimi-seed-mcp@>=0.21']],
+      ['npx', ['--loglevel', 'warn', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['env', ['-u', 'FOO', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['pwsh', ['-ExecutionPolicy', 'Bypass', '-Command', 'npx', '-y', '@yoonion/mimi-seed-mcp@^0.21']],
     ] as const) {
       const markers = __testing.candidateMarkers({ command, args: [...args] });
       expect(markers.every((m) => __testing.looksLikeMimiSeed(m))).toBe(true);

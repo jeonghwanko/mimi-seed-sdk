@@ -189,8 +189,12 @@ const RUNNER_SUBCOMMANDS: Record<string, string[]> = { npm: ['exec', 'x'], bun: 
 const SHELL_WRAPPERS = new Set(['cmd', 'sh', 'bash', 'zsh', 'dash', 'powershell', 'pwsh']);
 const RUNNER_FLAGS_WITH_VALUE = new Set([
   '--registry', '--cache', '--userconfig', '--globalconfig', '--prefix', '-w', '--workspace', '-c', '--call',
-  '--node-options', '--shell', '--script-shell', '--python', '--index-url', '--from',
+  '--node-options', '--shell', '--script-shell', '--python', '--index-url', '--from', '--loglevel', '--location',
+  '--with', '--with-editable', '--with-requirements',
 ]);
+/** 셸 래퍼(PowerShell) · env 에서 값을 받는 플래그 — 그 값을 실행기로 읽지 않는다. 셸의 `-c` · `/c` 는 값이 아니라 명령이 뒤따른다. */
+const SHELL_FLAGS_WITH_VALUE = new Set(['-executionpolicy', '-ep', '-workingdirectory', '-wd', '-windowstyle', '-inputformat', '-outputformat']);
+const ENV_FLAGS_WITH_VALUE = new Set(['-u', '--unset', '-c', '--chdir', '-s', '--split-string']);
 
 /**
  * 패키지 실행기가 실행하는 패키지 인자의 위치. 실행기는 `command` 자리(또는 `cmd /c` · `sh -c` 바로 뒤)에 있어야
@@ -202,12 +206,18 @@ function runnerPackageIndex(cfg: Record<string, unknown>): number | null {
   let program = word(cfg.command);
   let i = 0;
   if (SHELL_WRAPPERS.has(program)) {
-    while (i < args.length && /^(?:\/[a-z]|-[a-z]+)$/i.test(args[i])) i++; // /c /d /s -c -l -NoProfile -Command
+    // /c /d /s -c -l -NoProfile -Command, 그리고 -ExecutionPolicy Bypass 처럼 값을 받는 것
+    while (i < args.length && /^(?:\/[a-z]|-[a-z]+)$/i.test(args[i])) {
+      i += SHELL_FLAGS_WITH_VALUE.has(args[i].toLowerCase()) ? 2 : 1;
+    }
     program = word(args[i]);
     i++;
   }
   if (program === 'env') {
-    while (i < args.length && (args[i].startsWith('-') || args[i].includes('='))) i++; // env -i FOO=1 npx …
+    // env -i -u FOO -C dir KEY=1 npx …
+    while (i < args.length && (args[i].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(args[i]))) {
+      i += ENV_FLAGS_WITH_VALUE.has(args[i].toLowerCase()) ? 2 : 1;
+    }
     program = word(args[i]);
     i++;
   }
@@ -283,8 +293,8 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
   const fileArg = args.find((a) => SCRIPT_RE.test(a) && isSpecificMarker(a));
   if (fileArg) return fileArg;
   // 2순위: npm 패키지명 (@ 또는 -가 포함된 식별자)
-  // `KEY=value`(env 대입) · URL(`--registry` 값)은 식별자가 아니다.
-  const notValue = (a: string) => !a.includes('=') && !a.includes('://');
+  // `KEY=value`(env 대입) · URL(`--registry` 값)은 식별자가 아니다. `@>=0.21` 같은 범위의 `=` 는 해당 없다.
+  const notValue = (a: string) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(a) && !a.includes('://');
   const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && notValue(a) && isSpecificMarker(a));
   if (pkgArg) return pkgArg;
   // 3순위: 마지막 의미 있는 arg
