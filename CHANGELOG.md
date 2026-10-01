@@ -18,6 +18,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- `mimi-seed-googleads-auth` reported "undefined account(s)" after a successful connection check; it now prints
+  the number of accessible Google Ads accounts. A non-JSON success body from a proxy on that check is no longer
+  echoed into the error message. `googleads_list_accessible_customers` now returns `{"resourceNames": []}` instead
+  of `{}` when no account is accessible, and rejects a malformed success response instead of passing it through.
+
 ### Security
 
 - `mimi-seed notes` no longer passes git refs through a shell. A repository tag name may contain `$(…)`, `;`, or

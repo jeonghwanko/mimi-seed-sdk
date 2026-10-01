@@ -145,7 +145,12 @@ function microsToCurrency(micros: string | number | undefined): number {
 
 // ─── 접근 가능한 고객 목록 (API 연결 확인용) ─────────────────────
 
-export async function listAccessibleCustomers(auth: OAuth2Client, cfg: GoogleAdsConfig) {
+/**
+ * 응답은 배열이 아니라 `{ resourceNames: ['customers/<id>', …] }` 다 — 계정이 없으면 protobuf JSON 이
+ * 필드를 생략하므로 빈 배열로 채운다. 반환 타입을 고정해 두지 않으면 호출부가 `.length` 를 읽어도
+ * 컴파일러가 못 잡는다(setup-cli 가 "계정 undefined개" 를 찍었다).
+ */
+export async function listAccessibleCustomers(auth: OAuth2Client, cfg: GoogleAdsConfig): Promise<{ resourceNames: string[] }> {
   const accessToken = await getAccessToken(auth);
   const url = `${BASE}/customers:listAccessibleCustomers`;
   const res = await fetchWithTimeout(url, {
@@ -156,7 +161,15 @@ export async function listAccessibleCustomers(auth: OAuth2Client, cfg: GoogleAds
   if (!res.ok) {
     throw googleAdsError(res.status, text, [accessToken, cfg.developerToken]);
   }
-  return JSON.parse(text);
+  // SyntaxError 메시지는 본문 앞부분을 그대로 싣는다 — search() 와 같이 프록시 본문을 노출하지 않는다.
+  let json: unknown;
+  try { json = JSON.parse(text); } catch { throw new Error('Google Ads returned invalid JSON.'); }
+  // search() 와 같이 200 + error 본문도 거절한다 — 안 그러면 setup 이 "계정 0개" 로 저장해 버린다.
+  const names = isRecord(json) && !('error' in json) ? json.resourceNames ?? [] : null;
+  if (!Array.isArray(names) || names.some((name) => typeof name !== 'string')) {
+    throw new Error('Google Ads returned an invalid accessible-customers response.');
+  }
+  return { resourceNames: names as string[] };
 }
 
 // ─── 캠페인 목록 ─────────────────────────────────────────────
