@@ -22,7 +22,7 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 Google Play 도구로 스토�
    ```
    SA 를 쓴다면 그 GCP 프로젝트에 **Android Publisher API 가 활성화**되어 있어야 한다 — 아니면 모든 호출이
    403 이고, 겉보기엔 권한 문제와 똑같지만 아니다. Play Console 권한 부여 후 **~5분 전파**도 필요하다.
-   발급 절차: [`docs/credentials.md`](../../docs/credentials.md#play-service-account)
+   발급 절차: [`docs/credentials.md`](../../docs/credentials.md) 의 "Play service account" 섹션
 
 ## 도구 로딩
 

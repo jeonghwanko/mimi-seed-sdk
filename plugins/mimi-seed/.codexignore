@@ -1,0 +1,23 @@
+# Paths Codex should not read or package. Copied into plugins/mimi-seed/ by `npm run plugin:sync`.
+
+# Build output and installed dependencies
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local state, generated media, agent worktrees
+.claude/worktrees/
+.codex/
+.work/
+artifacts/
+output/
+
+# Secrets — Mimi Seed keeps credentials in ~/.mimi-seed/, never in a checkout
+.env
+.env.*
+*.p8
+*.p12
+*.jks
+*.keystore
+*.pem

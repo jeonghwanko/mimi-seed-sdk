@@ -92,7 +92,8 @@ Package-specific rules live in [`packages/cli/AGENTS.md`](packages/cli/AGENTS.md
   written by `scripts/gen-docs.mjs` from `tool-manifest.json` + `scripts/docs-spec.mjs`. Edit those inputs, then
   `npm run plugin:sync`; `npm run plugin:check` fails on a stale block.
 - Keep English and `.ko` onboarding documents structurally equivalent when changing user-facing guidance.
-- Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, `LICENSE`, or `tool-manifest.json` require
+- Changes to `.codex-plugin/`, `.mcp.json`, `skills/`, `docs/`, `LICENSE`, `SECURITY.md`, `.codexignore`, or
+  `tool-manifest.json` require
   `npm run plugin:sync`. Commit what it regenerated (generated doc blocks, `plugins/mimi-seed/`); do not hand-edit it.
 - `packages/core` may import only `node:` builtins and its own files, and never calls `fetch`;
   `core-boundary.test.ts` enforces it, because the installed packages have no `node_modules` for core.

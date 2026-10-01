@@ -13,7 +13,7 @@ codex plugin add mimi-seed@yoonion
 새 대화를 시작해야 스킬과 MCP 도구가 로드됩니다.
 
 처음 설치한 뒤 앱 빌드·스토어 배포·Firebase/AdMob·소셜 게시까지 이어지는 사람용 절차는
-[`docs/user-guide/README.ko.md`](../docs/user-guide/README.ko.md)에서 시작합니다.
+[`docs/user-guide/README.ko.md`](docs/user-guide/README.ko.md)에서 시작합니다.
 
 ## 포함 내용
 
@@ -56,5 +56,5 @@ mimi-seed mcp codex --write
 
 자격증명은 내 컴퓨터의 `~/.mimi-seed/` 에만 저장되며(권한 `0600`), 이 플러그인 번들에는 비밀값이 들어 있지
 않습니다. 파괴적 도구는 `confirm=true` 로 다시 호출하기 전까지 미리보기만 보여주고 아무것도 바꾸지 않습니다. 팀에서 자격증명을 나누는 방법은
-[`docs/user-guide/team-security.ko.md`](../docs/user-guide/team-security.ko.md), 취약점 제보는 공개 이슈가 아니라
-[`SECURITY.md`](../SECURITY.md) 의 비공개 경로로 해주세요.
+[`docs/user-guide/team-security.ko.md`](docs/user-guide/team-security.ko.md), 취약점 제보는 공개 이슈가 아니라
+[`SECURITY.md`](SECURITY.md) 의 비공개 경로로 해주세요.
