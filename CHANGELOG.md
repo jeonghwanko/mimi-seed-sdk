@@ -24,15 +24,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   the number of accessible Google Ads accounts. A non-JSON success body from a proxy on that check is no longer
   echoed into the error message. `googleads_list_accessible_customers` now returns `{"resourceNames": []}` instead
   of `{}` when no account is accessible, and rejects a malformed success response instead of passing it through.
+- A hand-edited `~/.mimi-seed/google-ads.json` with an unquoted numeric `customerId` / `loginCustomerId` was read
+  as "no Google Ads config"; numbers are now accepted.
+- `mimi-seed notes` now stops with an error for an invalid `--limit` or a `--from` / `--to` starting with `-`
+  instead of reporting "No commits found", and reads the latest tag as `refs/tags/<tag>` so a branch with the same
+  name cannot change the range.
+- A Google Ads API error whose JSON `details` contained a `null` entry was reported as ": non-JSON response" and
+  lost the provider's message, codes, and `requestId`; those are now kept.
 
 ### Security
 
 - `mimi-seed notes` no longer passes git refs through a shell. A repository tag name may contain `$(…)`, `;`, or
   `|`, so running it in a repository with a crafted tag (or passing such a value to `--from` / `--to`) could run
   a command. A ref starting with `-` is now rejected instead of being read as a `git log` option.
-- On Windows, `mimi-seed restart` no longer builds a `cmd.exe` / PowerShell command line from the MCP server's
-  configured arguments, which may come from a repository's `.mcp.json`. The argument is passed to PowerShell as
-  data, so quotes in it (including Unicode curly quotes) can no longer end the string and run a command.
+- `mimi-seed restart` no longer builds a `cmd.exe` / PowerShell command line from the MCP server's configured
+  arguments, which may come from a repository's `.mcp.json`. On Windows it now reads the process list and matches
+  it in the CLI, so quotes in an argument (including Unicode curly quotes) can no longer run a command.
+- `mimi-seed restart` could kill unrelated processes when the configured arguments were generic (`node`, a single
+  letter, a bare `index.js`): it matched any command line containing that text. It now ignores generic values,
+  matches script paths by full path and packages by argument or path segment, and kills nothing — listing the
+  count instead — when more than 10 processes match. On Windows it also checks every marker, so the actual
+  `node` server is found rather than only its `npx` wrapper.
+- On Windows, `mimi-seed notes`, `doctor`, and `restart` no longer run a `git.exe`, `powershell.exe`, or
+  `taskkill.exe` placed in the current folder: system tools are called by absolute path and `git` is looked up
+  only in absolute `PATH` entries.
 
 ### Tool changes
 

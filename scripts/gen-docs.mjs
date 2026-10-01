@@ -88,6 +88,11 @@ function checkTool(model, errors, where, name, { domain, allowDeprecated = false
 // ── 렌더러: tool-catalog.md ────────────────────────────────────────────────────
 
 const code = (s) => `\`${s}\``;
+/** 도메인의 register 파일. 하위 모듈로 나뉜 도메인은 `catalog.sections.<id>.parts` 를 함께 보인다. */
+const registerRef = (id) => {
+  const parts = spec.catalog.sections[id]?.parts;
+  return code(`registers/${id}.ts`) + (parts ? ` → ${code(parts)}` : '');
+};
 const RANK = { R: 0, W: 1, D: 2 };
 
 function toolRef(model, name) {
@@ -168,7 +173,7 @@ function renderSection(model, errors, id, section) {
   }
   const n = model.tools(id).length;
   const impl = section.impl ? ` · impl ${code(section.impl)}` : '';
-  return [`## ${spec.domains[id].en} — ${code(`registers/${id}.ts`)} (${n})${impl}`, '', ...bullets].join('\n');
+  return [`## ${spec.domains[id].en} — ${registerRef(id)} (${n})${impl}`, '', ...bullets].join('\n');
 }
 
 function renderTable(model, errors, name, table) {
@@ -203,7 +208,7 @@ function catalogBlocks(model, errors) {
     [
       '| Domain | Register file | Tools |',
       '|--------|---------------|------:|',
-      ...model.order.map((id) => `| ${spec.domains[id].en} | ${code(`registers/${id}.ts`)} | ${model.tools(id).length} |`),
+      ...model.order.map((id) => `| ${spec.domains[id].en} | ${registerRef(id)} | ${model.tools(id).length} |`),
       `| **Total** | **${model.order.length} modules** | **${total}** |`,
     ].join('\n'),
   );

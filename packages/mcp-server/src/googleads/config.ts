@@ -12,9 +12,12 @@ export interface GoogleAdsConfig {
   loginCustomerId?: string; // MCC 계정 사용 시
 }
 
-/** 하이픈 제거 (API는 숫자만 허용) */
-export function normalizeCustomerId(id: string): string {
-  return id.replace(/-/g, '');
+/**
+ * 하이픈 제거 (API는 숫자만 허용). 손으로 적은 설정 파일엔 따옴표 없는 숫자(`"customerId": 1234567890`)도
+ * 오므로 숫자도 받는다 — 안 그러면 `.replace` 가 던져 "설정 없음" 으로 읽힌다.
+ */
+export function normalizeCustomerId(id: string | number): string {
+  return String(id).replace(/-/g, '');
 }
 
 export function saveConfig(cfg: GoogleAdsConfig): void {
@@ -29,7 +32,10 @@ export function saveConfig(cfg: GoogleAdsConfig): void {
 export function loadConfig(): GoogleAdsConfig | null {
   if (!fs.existsSync(CONFIG_PATH)) return null;
   try {
-    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as GoogleAdsConfig;
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Omit<GoogleAdsConfig, 'customerId' | 'loginCustomerId'> & {
+      customerId: string | number;
+      loginCustomerId?: string | number;
+    };
     // 읽기 시점에도 정규화 — 하이픈 포함 값이 손으로 적히거나 구버전이 쓴 경우에도
     // URL/login-customer-id 헤더가 항상 숫자만 포함하도록 보장 (write 경로 의존 제거).
     return {

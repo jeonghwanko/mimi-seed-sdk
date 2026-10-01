@@ -190,6 +190,18 @@ describe('listAccessibleCustomers — 응답 모양', () => {
 });
 
 describe('googleAdsError — 진단 보존과 비밀 제거', () => {
+  it('JSON 오류 본문의 null 항목은 건너뛰고, non-JSON 으로 잘못 표시하지 않는다', () => {
+    const body = JSON.stringify({ error: {
+      message: 'Request contains an invalid argument.',
+      details: [null, { errors: [null, { message: 'bad id' }], fieldViolations: [null], requestId: 'example-request-id' }],
+    } });
+    const message = googleAdsError(400, body, []).message;
+    expect(message).not.toContain('non-JSON');
+    expect(message).toContain('Request contains an invalid argument.');
+    expect(message).toContain(': bad id');
+    expect(message).toContain('requestId=example-request-id');
+  });
+
   it('search 오류는 세부 코드·필드 위반·requestId 를 남기고 현재 자격증명을 지운다', async () => {
     fetchMock.mockResolvedValueOnce(ads({ error: {
       message: `Authorization: Bearer ${ACCESS_TOKEN}; developer-token ${DEV_TOKEN}`,

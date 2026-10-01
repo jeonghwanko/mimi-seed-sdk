@@ -43,6 +43,8 @@ const M = catalog(
     unknownWriteOutcome:
       '  직전 호출이 업로드·게시 같은 쓰기였다면 결과가 불명일 수 있습니다. 대상 서비스에서 실제 반영 여부를 확인한 뒤 재시도하세요.',
     killed: (server: string, n: number) => `✓ ${server} 종료됨 (${n}개 프로세스)`,
+    tooMany: (n: number) =>
+      `식별자와 맞는 프로세스가 ${n}개라 아무것도 종료하지 않았습니다 — 서버 하나로 보기엔 너무 많습니다. MCP 설정의 args 를 확인하세요.`,
   },
   {
     killedPid: (pid: string) => `  PID ${pid} killed`,
@@ -76,6 +78,8 @@ const M = catalog(
     unknownWriteOutcome:
       '  If the previous call was a write such as an upload or publish, its outcome may be unknown. Check the target service before retrying.',
     killed: (server: string, n: number) => `✓ ${server} killed (${n} process(es))`,
+    tooMany: (n: number) =>
+      `${n} processes match the marker, so nothing was killed — too many for one server. Check the args in the MCP config.`,
   },
 );
 
@@ -152,17 +156,46 @@ function collectServers(): { servers: ServerMap; sources: string[] } {
   return { servers, sources };
 }
 
+/**
+ * 프로세스 식별자로 쓰기엔 너무 흔한 값. 설정은 레포가 커밋한 `.mcp.json` 에서 올 수도 있어서,
+ * `node` · `dist` · `index.js` 같은 값이 식별자가 되면 사용자의 무관한 프로세스를 대량으로 죽인다.
+ */
+const GENERIC_MARKERS = new Set([
+  'node', 'nodejs', 'npx', 'npm', 'pnpm', 'pnpx', 'yarn', 'bun', 'bunx', 'deno', 'tsx', 'ts-node',
+  'python', 'python3', 'uv', 'uvx', 'pip', 'cmd', 'sh', 'bash', 'zsh', 'powershell', 'pwsh',
+  'node_modules', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
+  'index.js', 'index.ts', 'index.mjs', 'index.cjs', 'main.js', 'main.ts', 'server.js', 'server.ts', 'cli.js',
+]);
+const SCRIPT_RE = /\.(?:[cm]?js|ts)$/i;
+
+/** `/` 와 `\` 를 모두 구분자로 본 마지막 경로 조각 — Windows 명령줄도 같은 규칙으로 비교한다. */
+function baseName(value: string): string {
+  return value.split(/[\\/]/).pop() ?? value;
+}
+
+const normalizePath = (value: string) => value.replace(/\\/g, '/').toLowerCase();
+
+/**
+ * 식별자가 될 수 있는 값: 4자 이상, 영문자 포함, 흔한 이름이 아님. 스크립트는 전체 경로로 비교하므로
+ * 절대경로면 파일 이름이 `index.js` 여도 된다 — 상대경로(`dist/index.js`)는 다른 서버와 겹친다.
+ */
+function isSpecificMarker(value: string): boolean {
+  const v = value.trim();
+  if (v.length < 4 || !/[a-z]/i.test(v)) return false;
+  if (SCRIPT_RE.test(v) && (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))) return true;
+  return !GENERIC_MARKERS.has(baseName(v).toLowerCase());
+}
+
 function findProcessMarker(cfg: Record<string, unknown>): string | null {
-  const args = cfg.args as string[] | undefined;
-  if (!args) return null;
-  // 1순위: .ts / .js 파일 경로 (가장 고유)
-  const fileArg = args.find((a) => a.endsWith('.ts') || a.endsWith('.js'));
+  const args = Array.isArray(cfg.args) ? cfg.args.filter((a): a is string => typeof a === 'string') : [];
+  // 1순위: 스크립트 파일 경로 (가장 고유)
+  const fileArg = args.find((a) => SCRIPT_RE.test(a) && isSpecificMarker(a));
   if (fileArg) return fileArg;
   // 2순위: npm 패키지명 (@ 또는 -가 포함된 식별자)
-  const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && a !== '-y');
+  const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && isSpecificMarker(a));
   if (pkgArg) return pkgArg;
   // 3순위: 마지막 의미 있는 arg
-  const meaningful = args.filter((a) => !a.startsWith('-') && a !== '/c' && a !== 'npx' && a !== 'cmd');
+  const meaningful = args.filter((a) => !a.startsWith('-') && a !== '/c' && isSpecificMarker(a));
   return meaningful.at(-1) ?? null;
 }
 
@@ -171,98 +204,168 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
  *
  * `npx -y @yoonion/mimi-seed-mcp` 라도, 전역 설치나 `npm link` 가 있으면 npx 는 링크된
  * bin 을 그대로 exec 한다 — 그 순간 cmdline 에서 패키지명이 사라지고 `mimi-seed-mcp` 만
- * 남는다. 그래서 bin 이름(패키지명의 마지막 세그먼트)도 후보에 넣는다.
+ * 남는다. 그래서 bin 이름(패키지명의 마지막 세그먼트)도 후보에 넣는다. 스크립트 경로는 전체
+ * 경로만 쓴다 — 파일 이름(`index.js`)만으로는 다른 서버와 구분되지 않는다.
  */
 function candidateMarkers(cfg: Record<string, unknown>): string[] {
   const primary = findProcessMarker(cfg);
   if (!primary) return [];
+  if (SCRIPT_RE.test(primary)) return [primary];
   const base = primary.split('/').pop();
   const executableBase = base?.replace(/@(?:latest|\d+(?:\.\d+){1,3}(?:[-+][\w.-]+)?)$/, '');
-  return [...new Set([primary, base, executableBase].filter((value): value is string => Boolean(value)))];
+  return [...new Set([primary, base, executableBase])].filter(
+    (value): value is string => typeof value === 'string' && isSpecificMarker(value),
+  );
 }
 
 /**
- * 후보와 일치하는 프로세스 PID.
- *
- * `pkill -f <marker>` 를 쓰면 **자기 자신을 실행한 셸까지** 매칭된다 (셸 명령줄에도 그
- * 문자열이 들어 있으므로). 그래서 cmdline 부분일치가 아니라 "실행 파일이 그 bin 이거나,
- * argv 원소가 정확히 그 패키지/파일인" 경우만 고른다.
+ * argv 가 식별자 중 하나와 맞는가. 명령줄 부분일치는 쓰지 않는다 — `pkill -f <marker>` 식으로 하면
+ * 자기 자신을 실행한 셸까지, 흔한 문자열이면 무관한 프로세스까지 걸린다. 맞는 경우는:
+ *   - 스크립트 식별자: argv 원소의 전체 경로가 같다 (구분자 · 대소문자 무시)
+ *   - 패키지/bin 식별자: 실행 파일 이름이 그 bin 이거나, argv 원소(또는 그 파일 이름)가 정확히 같거나,
+ *     argv 원소의 연속된 경로 조각이 그 패키지명이다 (`…/node_modules/@scope/pkg/dist/index.js`)
  */
-function findPids(markers: string[]): number[] {
+function matchesMarkers(argv: string[], markers: string[]): boolean {
+  const exeBase = baseName(argv[0] ?? '').replace(/\.(?:exe|cmd|bat)$/i, '');
+  const rest = argv.slice(1);
+  return markers.some((marker) => {
+    if (SCRIPT_RE.test(marker)) return rest.some((a) => normalizePath(a) === normalizePath(marker));
+    const segment = `/${normalizePath(marker.replace(/@(?:latest|\d[\w.+-]*)$/, ''))}/`;
+    return exeBase === marker
+      || rest.includes(marker)
+      || rest.some((a) => baseName(a) === marker)
+      || rest.some((a) => `/${normalizePath(a)}/`.includes(segment));
+  });
+}
+
+/** Windows 명령줄을 argv 로 나눈다 (CommandLineToArgvW 의 따옴표 · 역슬래시 규칙). */
+function splitWindowsCommandLine(line: string): string[] {
+  const argv: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let hasToken = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '\\') {
+      let n = 0;
+      while (line[i + n] === '\\') n++;
+      if (line[i + n] === '"') {
+        current += '\\'.repeat(Math.floor(n / 2));
+        if (n % 2 === 1) current += '"';
+        else inQuotes = !inQuotes;
+        i += n;
+      } else {
+        current += '\\'.repeat(n);
+        i += n - 1;
+      }
+      hasToken = true;
+    } else if (c === '"') {
+      inQuotes = !inQuotes;
+      hasToken = true;
+    } else if ((c === ' ' || c === '\t') && !inQuotes) {
+      if (hasToken) argv.push(current);
+      current = '';
+      hasToken = false;
+    } else {
+      current += c;
+      hasToken = true;
+    }
+  }
+  if (hasToken) argv.push(current);
+  return argv;
+}
+
+type ProcessEntry = { pid: number; argv: string[] };
+
+/** 한 번에 죽일 수 있는 프로세스 상한. 서버 하나는 래퍼 + node 정도라, 이보다 많으면 식별자를 의심한다. */
+const MAX_KILL = 10;
+
+/** POSIX: `ps` 로 PID + argv 목록. */
+function listPosixProcesses(): ProcessEntry[] {
   let out: string;
   try {
     out = execSync('ps -eo pid=,args=', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
   } catch {
     return [];
   }
-  const skip = new Set<number>([process.pid, process.ppid]);
-  const pids: number[] = [];
-
+  const list: ProcessEntry[] = [];
   for (const line of out.split('\n')) {
     const m = /^\s*(\d+)\s+(.*)$/.exec(line);
-    if (!m) continue;
-    const pid = Number(m[1]);
-    if (skip.has(pid)) continue;
-    const argv = m[2].split(/\s+/).filter(Boolean);
-    const exeBase = path.basename(argv[0] ?? '');
-    const rest = argv.slice(1);
-
-    const hit = markers.some((marker) => {
-      const base = path.basename(marker);
-      return exeBase === base || rest.includes(marker) || rest.some((a) => path.basename(a) === base);
-    });
-    if (hit) pids.push(pid);
+    if (m) list.push({ pid: Number(m[1]), argv: m[2].split(/\s+/).filter(Boolean) });
   }
-  return pids;
+  return list;
+}
+
+/** Windows 시스템 도구는 절대경로로 — 이름만 주면 현재 폴더(레포)에 놓인 같은 이름 exe 를 먼저 찾는다. */
+function systemExe(...segments: string[]): string {
+  return path.win32.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', ...segments);
 }
 
 /**
- * Windows: CommandLine 에 marker 가 든 프로세스를 찾는 PowerShell 호출.
- *
- * marker 는 MCP 설정의 args 에서 온다 — 레포가 커밋한 `.mcp.json` 일 수도 있다. 그래서 스크립트
- * 텍스트에는 절대 넣지 않고 환경변수로 넘긴다. 따옴표 이스케이프로는 못 막는다: PowerShell 은
- * 유니코드 둥근 따옴표도 문자열 구분자로 받는다. 비교는 -like 처럼 대소문자 무시, 와일드카드 없음.
+ * Windows: 모든 프로세스의 PID + 명령줄을 JSON 으로 받는다. 식별자는 PowerShell 에 넘기지 않고
+ * 판정은 JS(matchesMarkers)가 한다 — 스크립트가 상수라 주입될 자리가 없다. 비ASCII 경로(한글 사용자
+ * 폴더 등)가 깨지지 않게 출력은 UTF-8 로 받는다.
  */
-function windowsPidQuery(marker: string): { args: string[]; env: NodeJS.ProcessEnv } {
-  const script =
-    'Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -and ' +
-    '$_.CommandLine.IndexOf($env:MIMI_SEED_MARKER, [StringComparison]::OrdinalIgnoreCase) -ge 0 } | ' +
-    'Select-Object -ExpandProperty ProcessId';
-  return { args: ['-NoProfile', '-Command', script], env: { ...process.env, MIMI_SEED_MARKER: marker } };
+const WINDOWS_PROCESS_QUERY =
+  '[Console]::OutputEncoding = [Text.Encoding]::UTF8; ' +
+  'Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress';
+
+/** ConvertTo-Json 은 결과가 하나면 배열이 아니라 객체를 낸다 — 둘 다 받는다. */
+function parseWindowsProcesses(json: string): ProcessEntry[] {
+  let parsed: unknown;
+  try { parsed = JSON.parse(json); } catch { return []; }
+  const list: ProcessEntry[] = [];
+  for (const row of Array.isArray(parsed) ? parsed : [parsed]) {
+    if (!row || typeof row !== 'object') continue;
+    const { ProcessId: pid, CommandLine: line } = row as { ProcessId?: unknown; CommandLine?: unknown };
+    if (typeof pid === 'number' && Number.isInteger(pid) && typeof line === 'string' && line) {
+      list.push({ pid, argv: splitWindowsCommandLine(line) });
+    }
+  }
+  return list;
 }
 
-function killByMarkers(markers: string[]): { killed: number } {
-  const isWin = os.platform() === 'win32';
-  if (isWin) {
-    const { args, env } = windowsPidQuery(markers[0]);
-    const skip = new Set([String(process.pid), String(process.ppid)]);
-    let pids: string[];
-    try {
-      const out = execFileSync('powershell', args, { encoding: 'utf8', env, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-      pids = out.split(/\r?\n/).map((s) => s.trim()).filter((s) => /^\d+$/.test(s) && !skip.has(s));
-    } catch {
-      return { killed: 0 };
-    }
-    let killed = 0;
-    for (const pid of pids) {
-      try {
-        execFileSync('taskkill', ['/F', '/PID', pid], { stdio: 'pipe' });
-        log(kleur.dim(M().killedPid(pid)));
-        killed++;
-      } catch { /* ignore: process may have already exited */ }
-    }
-    return { killed };
-  } else {
-    let killed = 0;
-    for (const pid of findPids(markers)) {
-      try {
-        process.kill(pid, 'SIGTERM');
-        log(kleur.dim(M().killedPid(String(pid))));
-        killed += 1;
-      } catch { /* 이미 종료됐을 수 있다 */ }
-    }
-    return { killed };
+function listWindowsProcesses(): ProcessEntry[] {
+  try {
+    const out = execFileSync(
+      systemExe('WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_PROCESS_QUERY],
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 },
+    );
+    return parseWindowsProcesses(out);
+  } catch {
+    return [];
   }
+}
+
+/** 식별자와 맞는 PID — 자기 자신과 부모(이 명령을 실행한 셸)는 뺀다. */
+function findPids(processes: ProcessEntry[], markers: string[]): number[] {
+  const skip = new Set<number>([process.pid, process.ppid]);
+  return processes.filter((p) => !skip.has(p.pid) && matchesMarkers(p.argv, markers)).map((p) => p.pid);
+}
+
+/** 죽일 PID 목록, 또는 상한을 넘어 거부한 개수. */
+function planKill(processes: ProcessEntry[], markers: string[]): { pids: number[]; refused: number } {
+  const pids = markers.length ? findPids(processes, markers) : [];
+  return pids.length > MAX_KILL ? { pids: [], refused: pids.length } : { pids, refused: 0 };
+}
+
+function killByMarkers(markers: string[]): { killed: number; refused: number } {
+  if (markers.length === 0) return { killed: 0, refused: 0 };
+  const isWin = os.platform() === 'win32';
+  const { pids, refused } = planKill(isWin ? listWindowsProcesses() : listPosixProcesses(), markers);
+  if (refused) return { killed: 0, refused };
+
+  let killed = 0;
+  for (const pid of pids) {
+    try {
+      if (isWin) execFileSync(systemExe('taskkill.exe'), ['/F', '/PID', String(pid)], { stdio: 'pipe' });
+      else process.kill(pid, 'SIGTERM');
+      log(kleur.dim(M().killedPid(String(pid))));
+      killed += 1;
+    } catch { /* 이미 종료됐을 수 있다 */ }
+  }
+  return { killed, refused: 0 };
 }
 
 export async function cmdRestart(args: string[]): Promise<void> {
@@ -297,7 +400,12 @@ export async function cmdRestart(args: string[]): Promise<void> {
   }
 
   log(kleur.dim(M().markerLine(marker)));
-  const { killed } = killByMarkers(markers);
+  const { killed, refused } = killByMarkers(markers);
+  if (refused > 0) {
+    log(kleur.red(M().tooMany(refused)));
+    log(kleur.dim(M().configLine(JSON.stringify(cfg))));
+    process.exit(1);
+  }
   const recovery = recoveryMessages(detectMcpClient(), killed > 0);
 
   if (killed === 0) {
@@ -314,4 +422,7 @@ export async function cmdRestart(args: string[]): Promise<void> {
   log(kleur.cyan(recovery.verify));
 }
 
-export const __testing = { detectMcpClient, recoveryMessages, resolveServerConfig, windowsPidQuery };
+export const __testing = {
+  detectMcpClient, recoveryMessages, resolveServerConfig,
+  candidateMarkers, matchesMarkers, splitWindowsCommandLine, parseWindowsProcesses, planKill, WINDOWS_PROCESS_QUERY,
+};

@@ -27,7 +27,7 @@
 <!-- generated:catalog-counts:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` | 63 |
+| App Store Connect | `registers/appstore.ts` → `registers/appstore/*.ts` | 63 |
 | Google Play | `registers/playstore.ts` | 38 |
 | Firebase | `registers/firebase.ts` | 21 |
 | AdMob | `registers/admob.ts` | 7 |
@@ -80,7 +80,7 @@
   `purchaseOptions` 포함 — 구매 옵션 활성화 토글의 입력) are **not** duplicates; both stay.
 
 <!-- generated:catalog-domain:appstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## App Store Connect — `registers/appstore.ts` (63) · impl `appstore/*.ts`
+## App Store Connect — `registers/appstore.ts` → `registers/appstore/*.ts` (63) · impl `appstore/*.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·

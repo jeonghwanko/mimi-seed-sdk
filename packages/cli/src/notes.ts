@@ -36,6 +36,8 @@ const M = catalog(
     range: (from: string, to: string) => `범위: ${from} → ${to}\n`,
     recentCommits: (limit: number) => `최근 ${limit}개 커밋\n`,
     noCommits: "커밋을 찾을 수 없습니다.\n",
+    invalidLimit: (value: string) => `--limit 은 1 이상의 정수여야 합니다: ${value}\n`,
+    invalidRef: (ref: string) => `'-' 로 시작하는 ref 는 쓸 수 없습니다 (git 옵션으로 읽힘): ${ref}\n`,
     analyzing: (n: number) => `커밋 ${n}개 분석 중...\n\n`,
     generating: "🤖 Claude AI로 생성 중...\n",
     aiFailed: (msg: string) => `AI 생성 실패, 템플릿 사용: ${msg}\n`,
@@ -79,6 +81,8 @@ const M = catalog(
     range: (from: string, to: string) => `Range: ${from} → ${to}\n`,
     recentCommits: (limit: number) => `Last ${limit} commit(s)\n`,
     noCommits: "No commits found.\n",
+    invalidLimit: (value: string) => `--limit must be a positive integer: ${value}\n`,
+    invalidRef: (ref: string) => `A ref cannot start with '-' (git would read it as an option): ${ref}\n`,
     analyzing: (n: number) => `Analyzing ${n} commit(s)...\n\n`,
     generating: "🤖 Generating with Claude AI...\n",
     aiFailed: (msg: string) => `AI generation failed, falling back to the template: ${msg}\n`,
@@ -110,7 +114,8 @@ interface NotesArgs {
   limit: number;
 }
 
-function parseArgs(argv: string[]): NotesArgs {
+/** 인자 해석. 잘못된 `--limit` · `-` 로 시작하는 ref 는 "커밋 없음" 으로 조용히 넘기지 않고 오류로 돌려준다. */
+function parseArgs(argv: string[]): NotesArgs | { error: string } {
   const args: NotesArgs = { to: "HEAD", locales: ["ko", "en-US"], apply: false, noInteractive: false, limit: 30 };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--from" && argv[i + 1]) args.from = argv[++i];
@@ -118,8 +123,13 @@ function parseArgs(argv: string[]): NotesArgs {
     if (argv[i] === "--locale" && argv[i + 1]) args.locales = argv[++i].split(",").map((l) => l.trim());
     if (argv[i] === "--apply") args.apply = true;
     if (argv[i] === "--no-interactive") args.noInteractive = true;
-    if (argv[i] === "--limit" && argv[i + 1]) args.limit = parseInt(argv[++i], 10);
+    if (argv[i] === "--limit" && argv[i + 1]) {
+      const raw = argv[++i];
+      if (!/^\d+$/.test(raw) || Number(raw) < 1) return { error: M().invalidLimit(raw) };
+      args.limit = Number(raw);
+    }
   }
+  for (const ref of [args.from, args.to]) if (ref?.startsWith("-")) return { error: M().invalidRef(ref) };
   return args;
 }
 
@@ -190,8 +200,15 @@ function parseFirstApp(text: string): { id: string; packageName?: string; name?:
   return null;
 }
 
+export const __testing = { parseArgs };
+
 export async function cmdNotes(argv: string[]): Promise<void> {
-  const args = parseArgs(argv);
+  const parsed = parseArgs(argv);
+  if ("error" in parsed) {
+    process.stderr.write(kleur.red(parsed.error));
+    process.exit(1);
+  }
+  const args = parsed;
   const cwd = process.cwd();
 
   process.stdout.write(kleur.bold(M().title));
@@ -207,7 +224,10 @@ export async function cmdNotes(argv: string[]): Promise<void> {
     kleur.dim(fromRef ? M().range(fromRef, args.to) : M().recentCommits(args.limit)),
   );
 
-  const commits = getGitLog(cwd, { from: fromRef, to: args.to, limit: args.limit });
+  // 최신 태그는 refs/tags/ 로 한정한다 — 같은 이름의 브랜치와 헷갈리지 않고, 레포 태그가 `-` 로
+  // 시작해도 git 옵션으로 읽히지 않는다.
+  const fromForGit = args.from ?? (latestTag ? `refs/tags/${latestTag}` : undefined);
+  const commits = getGitLog(cwd, { from: fromForGit, to: args.to, limit: args.limit });
   if (commits.length === 0) {
     process.stdout.write(kleur.yellow(M().noCommits));
     process.exit(0);

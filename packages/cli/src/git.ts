@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface GitCommit {
   hash: string;
@@ -7,9 +9,34 @@ export interface GitCommit {
   author: string;
 }
 
+/**
+ * 실행할 git. Windows 는 이름만 주면 현재 폴더(= 분석 대상 레포)의 git.exe 를 PATH 보다 먼저 찾으므로,
+ * PATH 의 절대경로 디렉터리에서만 git.exe 를 고른다. 못 찾으면 null — git 이 없는 것으로 다룬다.
+ */
+export function gitBinary(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  exists: (file: string) => boolean = fs.existsSync,
+): string | null {
+  if (platform !== "win32") return "git";
+  for (const entry of (env.PATH ?? env.Path ?? "").split(";")) {
+    const dir = entry.trim().replace(/^"(.*)"$/, "$1");
+    if (!dir || !path.win32.isAbsolute(dir)) continue;
+    const candidate = path.win32.join(dir, "git.exe");
+    if (exists(candidate)) return candidate;
+  }
+  return null;
+}
+
+function git(cwd: string, args: string[]): string {
+  const bin = gitBinary();
+  if (!bin) throw new Error("git not found on PATH");
+  return execFileSync(bin, args, { cwd, stdio: "pipe" }).toString();
+}
+
 export function isGitRepo(cwd: string): boolean {
   try {
-    execFileSync("git", ["rev-parse", "--git-dir"], { cwd, stdio: "pipe" });
+    git(cwd, ["rev-parse", "--git-dir"]);
     return true;
   } catch {
     return false;
@@ -18,9 +45,7 @@ export function isGitRepo(cwd: string): boolean {
 
 export function getLatestTag(cwd: string): string | null {
   try {
-    return execFileSync("git", ["describe", "--tags", "--abbrev=0"], { cwd, stdio: "pipe" })
-      .toString()
-      .trim();
+    return git(cwd, ["describe", "--tags", "--abbrev=0"]).trim();
   } catch {
     return null;
   }
@@ -40,10 +65,7 @@ export function getGitLog(
 
   let out: string;
   try {
-    out = execFileSync("git", ["log", `--max-count=${limit}`, `--format=${format}`, range, "--"], {
-      cwd,
-      stdio: "pipe",
-    }).toString();
+    out = git(cwd, ["log", `--max-count=${limit}`, `--format=${format}`, range, "--"]);
   } catch {
     return [];
   }
