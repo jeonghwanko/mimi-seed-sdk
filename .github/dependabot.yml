@@ -3,6 +3,9 @@
 #
 # The repo is not an npm workspace: each package has its own lockfile, so each gets its own entry.
 # The root package.json has no dependencies, so it needs none.
+#
+# Major versions are ignored everywhere: a major bump (zod 4, vitest 5, actions/checkout v7, @types/node past the
+# Node floor in .nvmrc) is planned work with its own PR, not a weekly chore.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -13,6 +16,13 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+      # plugin-scanner.yml runs this action twice on purpose: latest, and the exact version the
+      # awesome-ai-plugins central scan pins. Bumping it would drop the second gate — update by hand
+      # when the listing changes its pin.
+      - dependency-name: hashgraph-online/ai-plugin-scanner-action
     commit-message:
       prefix: ci
 
@@ -24,6 +34,9 @@ updates:
     groups:
       mcp-server-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     commit-message:
       prefix: chore(deps)
 
@@ -35,5 +48,8 @@ updates:
     groups:
       cli-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
     commit-message:
       prefix: chore(deps)
