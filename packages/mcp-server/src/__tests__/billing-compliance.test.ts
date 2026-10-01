@@ -408,6 +408,48 @@ describe('Google Play Billing compliance', () => {
       if (status === 'unresolved') expect(result.summary).toContain('playBillingSdkVersion = rootProject.findProperty("billing")');
     });
 
+    // Round-3 review: which playBillingSdkVersion assignments reach rootProject.ext.
+    it.each([
+      ['subprojects와 buildscript에 같은 이름의 지역 변수 (n6a)', 'android/build.gradle', 'subprojects { def billingVersion = "8.0.0" }\nbuildscript {\n  def billingVersion = "7.0.0"\n  ext { playBillingSdkVersion = billingVersion }\n}', 'blocker'],
+      ['같은 이름의 Groovy 지역 변수일 뿐 (n6b)', 'android/build.gradle', 'buildscript {\n  def playBillingSdkVersion = "8.0.0"\n  ext { targetSdkVersion = 36 }\n}', 'blocker'],
+      ['같은 이름의 Kotlin 지역 변수일 뿐 (n6c)', 'android/build.gradle.kts', 'val playBillingSdkVersion = "8.0.0"\nextra["targetSdkVersion"] = 36', 'blocker'],
+      ['subprojects { ext { … } } (n6d)', 'android/build.gradle', 'subprojects { ext { playBillingSdkVersion = "8.0.0" } }', 'blocker'],
+      ['같은 스코프에서 두 번 정의된 지역 변수', 'android/build.gradle', 'buildscript {\n  def v = "8.0.0"\n  if (System.getenv("CI")) { def v = "7.0.0" }\n  ext { playBillingSdkVersion = v }\n}', 'unresolved'],
+    ])('%s', async (_name, file, text, status) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '12.16.2' } }),
+        'android/settings.gradle': 'include ":app"',
+        [file]: text,
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe(status);
+      if (status === 'blocker') expect(result.detectedVersions).toEqual(['7.0.0']);
+    });
+
+    it('pnpm v9 alias의 `version: react-native-iap@x`에서 버전을 읽는다 (n9c)', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { iap: 'npm:react-native-iap@12.16.2' } }),
+        'pnpm-lock.yaml': "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      iap:\n        specifier: npm:react-native-iap@12.16.2\n        version: react-native-iap@12.16.2\npackages:\n  react-native-iap@12.16.2:\n    resolution: {integrity: sha512-x}\n",
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('blocker');
+      expect(result.evidence).toContainEqual(expect.objectContaining({ expression: expect.stringContaining('react-native-iap 12.16.2 from pnpm-lock.yaml') }));
+    });
+
+    it('다른 이름으로 설치한 fork는 Billing 미사용이 아니라 unresolved다 (n9d)', async () => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { iap: 'npm:@example-fork/react-native-iap@12.16.2' } }),
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('unresolved');
+    });
+
     it('다른 이름으로 설치한 react-native-iap(npm: alias)도 Billing 근거로 쓴다', async () => {
       const root = await fixture({
         'package.json': JSON.stringify({ dependencies: { iap: 'npm:react-native-iap@^12.16.0' } }),

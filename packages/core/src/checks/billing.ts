@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { stripGradleComments } from './gradle-text.js';
 import { lockedPackageVersion, lockfileDirectories } from './lockfile.js';
 
 const BILLING_MODULE = /com\.android\.billingclient:billing(?:-ktx)?/;
@@ -258,10 +259,6 @@ async function nearestNodePackage(packageDir: string, root: string, dependencyNa
   return null;
 }
 
-// Gradle (Groovy/Kotlin) source without line comments and block comments (`://` in URLs is kept).
-export function stripGradleComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'])\/\/.*$/gm, '$1');
-}
 
 function displayPath(root: string, file: string): string {
   return path.relative(root, file).replace(/\\/g, '/');
@@ -284,9 +281,22 @@ const LITERAL_VERSION = /^["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']$/;
  * (`extra["x"] = …`, `extra.set("x", …)`). A same-file `def/val/var name = "x.y.z"` is followed once.
  */
 export function playBillingSdkOverride(text: string): Omit<ReactNativeIapBillingOverride, 'file'> | undefined {
-  const code = stripGradleComments(text);
+  // `subprojects { … }` sets extras on the subprojects, not on rootProject, so it never reaches react-native-iap.
+  let code = stripGradleComments(text);
+  for (;;) {
+    const start = /\bsubprojects\s*\{/.exec(code);
+    if (!start) break;
+    let depth = 0;
+    let end = start.index + start[0].length - 1;
+    for (; end < code.length; end++) {
+      if (code[end] === '{') depth++;
+      else if (code[end] === '}' && --depth === 0) break;
+    }
+    code = code.slice(0, start.index) + code.slice(end + 1);
+  }
   const forms = [
-    /\bplayBillingSdkVersion\s*=(?!=)\s*([^\n;}]+)/,
+    // Not a local variable that happens to share the name (`def playBillingSdkVersion = …`).
+    /(?<!\b(?:def|val|var)\s+)\bplayBillingSdkVersion\s*=(?!=)\s*([^\n;}]+)/,
     /\bextra\s*\[\s*["']playBillingSdkVersion["']\s*\]\s*=(?!=)\s*([^\n;}]+)/,
     /\b(?:extra|ext)\.set\(\s*["']playBillingSdkVersion["']\s*,\s*([^\n;)]+)/,
   ];
@@ -297,7 +307,11 @@ export function playBillingSdkOverride(text: string): Omit<ReactNativeIapBilling
     const literal = value.match(LITERAL_VERSION)?.[1];
     if (literal) return { version: literal };
     const identifier = value.match(/^([A-Za-z_]\w*)$/)?.[1];
-    if (identifier) {
+    // Follow a local only when it is defined exactly once in the file (several scopes could define it differently).
+    const definitions = identifier
+      ? code.match(new RegExp(`\\b(?:def|val|var)\\s+${identifier}\\b`, 'g'))?.length ?? 0
+      : 0;
+    if (identifier && definitions === 1) {
       const local = new RegExp(`\\b(?:def|val|var)\\s+${identifier}\\s*(?::\\s*String\\s*)?=\\s*(["'][^"'\\n]*["'])`).exec(code)?.[1];
       const resolved = local?.match(LITERAL_VERSION)?.[1];
       if (resolved) return { version: resolved };
@@ -327,7 +341,9 @@ async function reactNativeIapEvidence(
   const entries = dependencyGroups.flatMap((group) => Object.entries(group))
     .filter((entry): entry is [string, string] => typeof entry[1] === 'string');
   const entry = entries.find(([name]) => name === 'react-native-iap')
-    ?? entries.find(([, spec]) => /^npm:react-native-iap@/.test(spec));
+    ?? entries.find(([, spec]) => /^npm:react-native-iap@/.test(spec))
+    // A fork installed under another name (`"iap": "npm:@acme/react-native-iap@…"`): reported as unresolved below.
+    ?? entries.find(([, spec]) => /^npm:(?:@[^/@]+\/)?react-native-iap(?:-[\w.-]+)?@/.test(spec));
   if (!entry) return null;
   const [dependencyName, declaredVersion] = entry;
   // The version range react-native-iap itself is declared with, and whether the name points at a fork.

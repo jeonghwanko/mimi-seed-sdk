@@ -85,6 +85,7 @@ const SEMVER_PREFIX = /^(\d+\.\d+\.\d+[^\s_('"]*)/;
  * nested `specifier:` / `version: 1.2.3(peer@x)` pair (v6+).
  */
 function pnpmLockedVersion(text: string, name: string, fromLock: string): { version?: string; alias?: string } | undefined {
+  // (an aliased entry also carries the installed package's version: `react-native-iap@12.16.2`)
   const lines = text.split(/\r?\n/);
   const importers = lines.findIndex((line) => /^importers:\s*$/.test(line));
   let start: number;
@@ -123,8 +124,8 @@ function pnpmLockedVersion(text: string, name: string, fromLock: string): { vers
       const version = value.match(SEMVER_PREFIX)?.[1];
       if (version) return { version };
       // pnpm writes an aliased dependency's version as `/@fork/pkg/1.2.3`, `@fork/pkg@1.2.3`, or `npm:@fork/pkg@1.2.3`.
-      const alias = value.match(/^(?:npm:|\/)?((?:@[^/@]+\/)?[^/@\s]+)[/@]\d/)?.[1];
-      if (alias) return { alias };
+      const alias = value.match(/^(?:npm:|\/)?((?:@[^/@]+\/)?[^/@\s]+)[/@](\d+\.\d+\.\d+[^\s_('"]*)/);
+      if (alias) return { alias: alias[1], version: alias[2] };
     }
   }
   return undefined;
@@ -167,10 +168,10 @@ export async function lockedPackageVersion(
   const pnpmLock = await readText(path.join(lockDir, 'pnpm-lock.yaml'));
   if (pnpmLock) {
     const locked = pnpmLockedVersion(pnpmLock, name, fromLock);
+    if (locked?.alias) return { version: locked.version ?? '', lockfile: 'pnpm-lock.yaml', aliasOf: locked.alias };
     if (locked?.version) {
       return { version: locked.version, lockfile: 'pnpm-lock.yaml', ...(declaredAlias ? { aliasOf: declaredAlias } : {}) };
     }
-    if (locked?.alias) return { version: '', lockfile: 'pnpm-lock.yaml', aliasOf: locked.alias };
   }
   const yarnLock = await readText(path.join(lockDir, 'yarn.lock'));
   if (yarnLock) {

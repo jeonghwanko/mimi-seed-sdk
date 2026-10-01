@@ -46,13 +46,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Billing 7, a blocker since 2026-08-31. An installed 12.5–13.x and an app's `ext.playBillingSdkVersion` override are
   read too (only from the app's own root build script, comments ignored; Groovy `ext` and Kotlin `extra[…]` /
   `extra.set(…)` forms; an override Release Doctor cannot evaluate makes the result unresolved instead of using the
-  default). react-native-iap installed under another name (`"iap": "npm:react-native-iap@…"`) is recognised. pnpm v5/v6 single-project lockfiles are
+  default; local variables and `subprojects { … }` extras are not overrides). react-native-iap installed under another
+  name (`"iap": "npm:react-native-iap@…"`, including pnpm v9 lockfiles) is recognised, and a fork installed under
+  another name is reported as unresolved. pnpm v5/v6 single-project lockfiles are
   read; newer or unknown releases, and `npm:` aliases that install a fork under the react-native-iap name, stay
   unresolved.
 - A Wear OS, TV, Automotive, or XR module no longer switches off the Target API check for the whole repository; the
   phone app is still checked, and the specialized module is reported for a category-specific check. A module that has
-  the phone launcher next to its TV launcher keeps the phone rule; a module with only the TV launcher (or with
-  leanback required) is a TV app.
+  the phone launcher (in its main or a flavor manifest, or in a library module merged into it) keeps the phone rule; a
+  module with only the TV launcher, or whose main manifest requires leanback, is a TV app. Debug-only manifests are
+  ignored.
 - Android application IDs: strings, templates, comments, local variables, and extra properties
   (`ext.applicationId`, `ext { applicationId = … }`) that mention `applicationId` are no longer reported as IDs (or
   as extra app modules); `applicationId` read from the version catalog or `gradle.properties`,
@@ -62,13 +65,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   reported as unresolved with the expression.
 - targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`), in a Kotlin DSL root script
   (`extra["targetSdkVersion"] = 36`), or in Expo's `expo-build-properties` plugin is now read instead of reported as
-  unresolved. `libs.versions.*` resolves against the module's own build's version catalog, so a nested build and the
-  repository root (or two builds sharing a key) no longer overwrite each other's values.
+  unresolved, as are targetSdk values named through Gradle properties or extras (`gradle.properties`,
+  `project.property("x")`, `rootProject.ext.x`, `set("x", 36)`) and AGP's `targetSdk { version = release(36) }`.
+  Version catalogs resolve the way Gradle does: from the module's own build's settings (`versionCatalogs { create(…)
+  { from(files(…)) } }`, any accessor such as `androidx.versions.*`) plus the default `gradle/libs.versions.toml`, so
+  a nested build and the repository root (or two builds sharing a key) no longer overwrite each other's values.
+  Comments are removed with a string-aware reader, so a glob such as `pickFirst '**/*.so'` or a URL no longer hides
+  the code after it.
 - Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
   targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes
   `MULTIPLE_*` warnings or a blocker that cites the wrong file. Excluded app modules whose targetSdk is below the
   minimum are listed in an info item, so a real app kept in a `demo/` folder is not dropped silently; when the only
-  app lives in `demo/`, its Xcode pins and FCM sources are still checked.
+  app lives in `demo/`, its Xcode pins (when the iOS app is there) and FCM sources are still checked.
 - A Billing blocker in a repository with several apps names only the versions below the minimum and cites the
   failing app's file.
 - iOS bundle IDs written as `$(VAR)` / `${VAR}` are resolved from `.xcconfig` files and XcodeGen `project.yml`

@@ -1,11 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {
-  checkBillingCompliance,
-  reactNativeIapUpgradeTarget,
-  stripGradleComments,
-  type BillingComplianceResult,
-} from './billing.js';
+import { checkBillingCompliance, reactNativeIapUpgradeTarget, type BillingComplianceResult } from './billing.js';
+import { stripGradleComments } from './gradle-text.js';
 import { lockedPackageVersion, lockfileDirectories, readText, repositoryRoot } from './lockfile.js';
 
 const SKIP_DIRS = new Set([
@@ -160,6 +156,8 @@ interface ProjectFile {
   sample?: boolean;
   /** Read from the enclosing repository root, outside the scanned `--path` (CI files, the root version catalog). */
   outside?: boolean;
+  /** Inside a demo/ or demos/ tree (a subset of `sample`). */
+  demo?: boolean;
 }
 
 /** Codes whose check could not decide; see `coverage.unresolved`. */
@@ -179,11 +177,11 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
   sourceScanTruncated: boolean;
 }> {
   const files: ProjectFile[] = [];
-  const sourceCandidates: Array<{ absolute: string; relative: string; depth: number; sample: boolean }> = [];
+  const sourceCandidates: Array<{ absolute: string; relative: string; depth: number; sample: boolean; demo: boolean }> = [];
   // `excluded`: inside a test/fixture/vendored tree or a nested repository (a directory with its own `.git`).
   // Manifest files there are still read exactly as before; Xcode pins and FCM source evidence are not.
   // `sample` additionally covers app projects inside a nested Swift package (a component library's demo app).
-  async function visit(dir: string, depth: number, excluded: boolean, sample: boolean): Promise<void> {
+  async function visit(dir: string, depth: number, excluded: boolean, sample: boolean, demo: boolean): Promise<void> {
     if (depth > maxDepth) return;
     let entries;
     try {
@@ -202,7 +200,8 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
             || EXCLUDED_EVIDENCE_DIRS.has(entry.name)
             || TEST_TARGET_DIR.test(entry.name)
             || entry.name.startsWith('.next');
-          await visit(absolute, depth + 1, excludedChild, sampleHere || excludedChild || SAMPLE_ONLY_DIRS.has(entry.name));
+          const demoChild = demo || SAMPLE_ONLY_DIRS.has(entry.name);
+          await visit(absolute, depth + 1, excludedChild, sampleHere || excludedChild || demoChild, demoChild);
         }
         continue;
       }
@@ -211,17 +210,17 @@ async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxDepth = 
       if (isRelevantFile(entry.name, relative)) {
         if (excludedHere && isXcodePinFile(entry.name, relative)) continue;
         try {
-          files.push({ absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: sampleHere });
+          files.push({ absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: sampleHere, demo });
         } catch {
           // Unreadable files are ignored; other evidence can still produce a useful partial report.
         }
         continue;
       }
       if (excludedHere || !SOURCE_EXTENSIONS.has(path.extname(entry.name)) || TEST_SOURCE_FILE.test(entry.name)) continue;
-      sourceCandidates.push({ absolute, relative, depth, sample: sampleHere });
+      sourceCandidates.push({ absolute, relative, depth, sample: sampleHere, demo });
     }
   }
-  await visit(root, 0, false, false);
+  await visit(root, 0, false, false, false);
   // Shallow files first, so a deep generated tree cannot crowd the project's own sources out of the cap.
   const prioritized = sourceCandidates
     .map((candidate, order) => ({ ...candidate, order }))
@@ -248,7 +247,9 @@ function stripComments(text: string, style: { slash: boolean; hash: boolean }): 
 }
 
 // Source files are read only for the FCM markers; the text is kept only when a marker matches.
-async function readFcmSources(candidates: Array<{ absolute: string; relative: string; sample: boolean }>): Promise<ProjectFile[]> {
+async function readFcmSources(
+  candidates: Array<{ absolute: string; relative: string; sample: boolean; demo: boolean }>,
+): Promise<ProjectFile[]> {
   const matches: ProjectFile[] = [];
   let next = 0;
   async function worker(): Promise<void> {
@@ -261,7 +262,7 @@ async function readFcmSources(candidates: Array<{ absolute: string; relative: st
         if (!FCM_HINT.test(raw)) continue;
         const hash = HASH_COMMENT_EXTENSIONS.has(path.extname(candidate.absolute));
         const text = stripComments(raw, { slash: !hash, hash });
-        if (FCM_HINT.test(text)) matches.push({ absolute: candidate.absolute, relative: candidate.relative, text, sample: candidate.sample });
+        if (FCM_HINT.test(text)) matches.push({ absolute: candidate.absolute, relative: candidate.relative, text, sample: candidate.sample, demo: candidate.demo });
       } catch {
         // Source files only add optional FCM evidence.
       }
@@ -299,7 +300,9 @@ function isRelevantFile(name: string, relative: string): boolean {
     || /^app\.config\.(?:js|cjs|mjs|ts)$/.test(name)
     || name === 'build.gradle'
     || name === 'build.gradle.kts'
-    || name === 'libs.versions.toml'
+    || name.endsWith('.versions.toml')
+    || name === 'settings.gradle'
+    || name === 'settings.gradle.kts'
     || name === 'gradle.properties'
     || name === 'AndroidManifest.xml'
     || name === 'Info.plist'
@@ -443,7 +446,7 @@ const ANDROID_APPLICATION_ID = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*
 // property (`ext.applicationId`, `project.ext.applicationId`; `ext { … }` blocks are removed before matching).
 const APPLICATION_ID_ASSIGNMENT = String.raw`(?<![\w$"'{])(?<!\b(?:val|var|def|const)\s+)(?<!\b(?:ext|extra)\.)applicationId(?:\s*=\s*|[ \t]+)`;
 const APPLICATION_ID_LITERAL = new RegExp(`${APPLICATION_ID_ASSIGNMENT}["']([^"'\\n]+)["']`, 'g');
-const APPLICATION_ID_CATALOG = new RegExp(`${APPLICATION_ID_ASSIGNMENT}libs\\.versions\\.([A-Za-z0-9_.-]+?)\\.get\\(\\)`, 'g');
+const APPLICATION_ID_CATALOG = new RegExp(`${APPLICATION_ID_ASSIGNMENT}([A-Za-z_]\\w*)\\.versions\\.([A-Za-z0-9_.-]+?)\\.get\\(\\)`, 'g');
 // `applicationId APPLICATION_ID` / `applicationId = project.APPLICATION_ID`: a gradle.properties key.
 const APPLICATION_ID_PROPERTY = new RegExp(`${APPLICATION_ID_ASSIGNMENT}(?:project\\.)?([A-Za-z_]\\w*)[ \\t]*(?=$|[;)}])`, 'gm');
 const APPLICATION_ID_ANY = new RegExp(`${APPLICATION_ID_ASSIGNMENT}\\S`);
@@ -460,7 +463,7 @@ function appliesAndroidAppPlugin(text: string): boolean {
 /** `[versions]` entries of the scanned Gradle version catalogs (React Native's bundled catalog excluded unless asked). */
 function catalogVersions(files: ProjectFile[], includeReactNative = false): Map<string, { value: string; file: string }> {
   const result = new Map<string, { value: string; file: string }>();
-  for (const file of files.filter((candidate) => candidate.relative.endsWith('libs.versions.toml'))) {
+  for (const file of files.filter((candidate) => candidate.relative.endsWith('.versions.toml'))) {
     if (file.relative === REACT_NATIVE_CATALOG && !includeReactNative) continue;
     let section = '';
     for (const rawLine of file.text.split(/\r?\n/)) {
@@ -491,11 +494,87 @@ function catalogBuildRoot(file: ProjectFile): string {
  * catalog is used.
  */
 function nearestCatalog(file: ProjectFile, catalogs: ProjectFile[]): ProjectFile | undefined {
-  const candidates = catalogs.filter((catalog) => catalog.relative !== REACT_NATIVE_CATALOG);
+  const candidates = catalogs.filter((catalog) => catalog.relative !== REACT_NATIVE_CATALOG
+    && path.posix.basename(catalog.relative) === 'libs.versions.toml');
   const containing = candidates
     .filter((catalog) => isWithin(catalogBuildRoot(catalog), file.absolute))
     .sort((left, right) => catalogBuildRoot(right).length - catalogBuildRoot(left).length);
   return containing[0] ?? (candidates.length === 1 ? candidates[0] : undefined);
+}
+
+type CatalogVersions = Map<string, { value: string; file: string }>;
+/** Version catalogs visible to a Gradle file, by accessor (`libs`, `androidx`); null when declared but unreadable. */
+type CatalogResolver = (file: ProjectFile) => Map<string, CatalogVersions | null>;
+
+/** The text of the first balanced `{ … }` block opened by `opener` in `code`, or undefined. */
+function balancedBlock(code: string, opener: RegExp): string | undefined {
+  const start = opener.exec(code);
+  if (!start) return undefined;
+  let depth = 0;
+  for (let index = start.index + start[0].length - 1; index < code.length; index++) {
+    if (code[index] === '{') depth++;
+    else if (code[index] === '}' && --depth === 0) return code.slice(start.index + start[0].length, index);
+  }
+  return undefined;
+}
+
+/**
+ * Resolves `<accessor>.versions.<key>` the way Gradle does: from the settings file of the build a module belongs to
+ * (the nearest settings.gradle(.kts) above it), `versionCatalogs { create("x") { from(files("…")) } }` (Groovy
+ * `x { from(files('…')) }`) plus the default `libs` = `<build>/gradle/libs.versions.toml`. A catalog declared from a
+ * Maven coordinate is null (unresolvable). Without a settings file in sight, the nearest `gradle/libs.versions.toml`
+ * that contains the module (or a sole one) stands in for `libs`.
+ */
+async function catalogResolver(files: ProjectFile[]): Promise<CatalogResolver> {
+  const tomls = files.filter((file) => file.relative.endsWith('.versions.toml') && file.relative !== REACT_NATIVE_CATALOG);
+  const byAbsolute = new Map(tomls.map((file) => [file.absolute, file]));
+  const builds = new Map<string, Map<string, CatalogVersions | null>>();
+  for (const settings of files.filter((file) => /(?:^|\/)settings\.gradle(?:\.kts)?$/.test(file.relative))) {
+    const dir = path.dirname(settings.absolute);
+    const code = stripGradleComments(settings.text);
+    const catalogs = new Map<string, CatalogVersions | null>();
+    const block = balancedBlock(code, /\bversionCatalogs\s*\{/);
+    const entries = block === undefined ? [] : [
+      ...[...block.matchAll(/\bcreate\(\s*["']([\w-]+)["']\s*\)\s*\{([^{}]*)\}/g)].map((match) => [match[1], match[2]] as const),
+      ...[...block.matchAll(/(?:^|[\s{;])([A-Za-z_]\w*)\s*\{([^{}]*)\}/g)]
+        .filter((match) => match[1] !== 'create')
+        .map((match) => [match[1], match[2]] as const),
+    ];
+    for (const [name, body] of entries) {
+      const relative = body.match(/\bfrom\s*\(?\s*files\s*\(\s*["']([^"']+)["']/)?.[1];
+      if (!relative) {
+        catalogs.set(name, null);
+        continue;
+      }
+      const absolute = path.resolve(dir, relative);
+      let catalog = byAbsolute.get(absolute);
+      if (!catalog) {
+        const text = await readText(absolute);
+        if (text !== undefined) catalog = { absolute, relative: absolute, text };
+      }
+      catalogs.set(name, catalog ? catalogVersions([catalog], true) : null);
+    }
+    if (!catalogs.has('libs')) {
+      const fallback = byAbsolute.get(path.join(dir, 'gradle', 'libs.versions.toml'));
+      if (fallback) catalogs.set('libs', catalogVersions([fallback], true));
+    }
+    builds.set(dir, catalogs);
+  }
+  const defaults = tomls.filter((file) => path.posix.basename(file.relative) === 'libs.versions.toml');
+  return (file) => {
+    const build = [...builds.keys()]
+      .filter((dir) => isWithin(dir, file.absolute))
+      .sort((left, right) => right.length - left.length)[0];
+    if (build !== undefined) return builds.get(build)!;
+    const nearest = nearestCatalog(file, defaults);
+    return new Map(nearest ? [['libs', catalogVersions([nearest], true)]] : []);
+  };
+}
+
+/** `<accessor>.versions.<alias>` looked up in the resolved catalogs; undefined when unknown. */
+function catalogValue(catalogs: Map<string, CatalogVersions | null>, accessor: string, alias: string) {
+  const catalog = catalogs.get(accessor);
+  return catalog ? catalogLookup(catalog, alias) : undefined;
 }
 
 /** `libs.versions.a.b` may be declared as `a-b`, `a_b`, or `a.b` in the catalog. */
@@ -514,6 +593,24 @@ function gradleProperties(files: ProjectFile[]): Map<string, string> {
     }
   }
   return new Map([...values].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]]));
+}
+
+/** Numeric gradle.properties values (one value repo-wide) with the file they come from. */
+function numericGradleProperties(files: ProjectFile[]): Map<string, { value: number; file: string }> {
+  const rows = new Map<string, Array<{ value: string; file: string }>>();
+  for (const file of files.filter((candidate) => candidate.relative.endsWith('gradle.properties'))) {
+    for (const line of file.text.split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Za-z_][\w.]*)\s*[=:]\s*(.*?)\s*$/);
+      if (match) rows.set(match[1], [...(rows.get(match[1]) ?? []), { value: match[2], file: file.relative }]);
+    }
+  }
+  const result = new Map<string, { value: number; file: string }>();
+  for (const [key, values] of rows) {
+    if (new Set(values.map((row) => row.value)).size === 1 && /^\d+$/.test(values[0].value)) {
+      result.set(key, { value: Number.parseInt(values[0].value, 10), file: values[0].file });
+    }
+  }
+  return result;
 }
 
 /**
@@ -542,13 +639,13 @@ function applicationIdAssignments(file: ProjectFile): string[] {
 
 function androidApplicationIds(
   file: ProjectFile,
-  catalog: Map<string, { value: string; file: string }>,
+  catalogs: Map<string, CatalogVersions | null>,
   properties: Map<string, string>,
 ): string[] {
   const ids: string[] = [];
   for (const match of file.text.matchAll(APPLICATION_ID_LITERAL)) ids.push(match[1]);
   for (const match of file.text.matchAll(APPLICATION_ID_CATALOG)) {
-    const value = catalogLookup(catalog, match[1])?.value;
+    const value = catalogValue(catalogs, match[1], match[2])?.value;
     if (value) ids.push(value);
   }
   for (const match of file.text.matchAll(APPLICATION_ID_PROPERTY)) {
@@ -575,21 +672,35 @@ const LEANBACK_REQUIRED = /android\.software\.leanback[^>]*android:required\s*=\
 const PHONE_LAUNCHER = /android\.intent\.category\.LAUNCHER["']/;
 
 /**
- * Module directories whose manifests declare Wear OS, TV, Automotive OS, or XR. A module is TV-only when leanback
- * is required, or when it has a TV launcher (LEANBACK_LAUNCHER) and none of its manifests (main, flavors, build
- * types) has the phone launcher; a phone launcher next to the TV one is a phone app that also runs on TV.
+ * Module directories whose manifests declare Wear OS, TV, Automotive OS, or XR. A module is TV-only when its main
+ * manifest requires leanback (no phone can install any variant), or when it has a TV signal (leanback required in a
+ * flavor, or a LEANBACK_LAUNCHER) and no phone launcher reaches it: not in any of its own
+ * manifests (main or a product flavor — a phone flavor next to a TV flavor keeps the phone rule) and not in a library
+ * module's manifest (merged into the app). Debug-only manifests are ignored: a debug launcher never ships.
  */
-function specializedAndroidModules(manifests: ProjectFile[]): Set<string> {
+function specializedAndroidModules(manifests: ProjectFile[], appModules: string[]): Set<string> {
+  const shipping = manifests.filter((file) => !/(?:^|\/)src\/debug[^/]*\//.test(file.relative));
   const byModule = new Map<string, string[]>();
-  for (const file of manifests) {
+  // leanback required in the module's main manifest: no phone can install any variant, so it is TV-only.
+  const requiredInMain = new Set<string>();
+  for (const file of shipping) {
     const module = moduleDir(file.relative);
-    byModule.set(module, [...(byModule.get(module) ?? []), file.text.replace(/<!--[\s\S]*?-->/g, '')]);
+    const text = file.text.replace(/<!--[\s\S]*?-->/g, '');
+    byModule.set(module, [...(byModule.get(module) ?? []), text]);
+    if (/(?:^|\/)src\/main\/AndroidManifest\.xml$/.test(file.relative) && LEANBACK_REQUIRED.test(text)) requiredInMain.add(module);
   }
+  const libraryPhoneLauncher = [...byModule].some(([module, texts]) =>
+    !appModules.includes(module) && texts.some((text) => PHONE_LAUNCHER.test(text)));
   const result = new Set<string>();
   for (const [module, texts] of byModule) {
-    const tvOnly = texts.some((text) => LEANBACK_REQUIRED.test(text))
-      || (texts.some((text) => /LEANBACK_LAUNCHER/.test(text)) && !texts.some((text) => PHONE_LAUNCHER.test(text)));
-    if (tvOnly || texts.some((text) => SPECIALIZED_MANIFEST.test(text))) result.add(module);
+    if (texts.some((text) => SPECIALIZED_MANIFEST.test(text))) {
+      result.add(module);
+      continue;
+    }
+    if (!appModules.includes(module) && appModules.length > 0) continue;
+    const tvSignal = texts.some((text) => LEANBACK_REQUIRED.test(text) || /LEANBACK_LAUNCHER/.test(text));
+    const phoneLauncher = libraryPhoneLauncher || texts.some((text) => PHONE_LAUNCHER.test(text));
+    if ((tvSignal && !phoneLauncher) || requiredInMain.has(module)) result.add(module);
   }
   return result;
 }
@@ -762,7 +873,8 @@ async function detectProject(files: ProjectFile[], root: string) {
     .map((file) => ({ ...file, text: stripGradleComments(file.text) }));
   const pbxFiles = files.filter((file) => file.relative.endsWith('project.pbxproj'));
   const plistFiles = files.filter((file) => file.relative.endsWith('Info.plist'));
-  const allCatalogs = files.filter((file) => file.relative.endsWith('libs.versions.toml'));
+  const allCatalogs = files.filter((file) => path.posix.basename(file.relative) === 'libs.versions.toml');
+  const resolveCatalogs = await catalogResolver(files);
   const properties = gradleProperties(files);
   // An app module applies the Android application plugin or assigns `applicationId` in the DSL (any value, so a
   // convention-plugin module with `applicationId = AppConfig.applicationId` still counts; only the extracted ID
@@ -799,9 +911,8 @@ async function detectProject(files: ProjectFile[], root: string) {
   // Assignments whose value could not be resolved (a buildSrc constant, a Kotlin expression) are reported as such.
   const androidPackageExpressions: Array<{ file: string; expression: string }> = [];
   for (const file of shippedAppGradleFiles) {
-    const nearest = nearestCatalog(file, allCatalogs);
     const dsl = { ...file, text: gradleDslText(file.text) };
-    const ids = androidApplicationIds(dsl, nearest ? catalogVersions([nearest]) : new Map(), properties);
+    const ids = androidApplicationIds(dsl, resolveCatalogs(file), properties);
     androidPackageNames.push(...ids);
     if (ids.length === 0) {
       for (const expression of applicationIdAssignments(dsl)) androidPackageExpressions.push({ file: file.relative, expression });
@@ -859,12 +970,18 @@ async function detectProject(files: ProjectFile[], root: string) {
     iosBundleIds: unique(iosBundleIds),
     iosBundleIdExpressions,
     androidAppModules: unique(shippedAppGradleFiles.map((file) => moduleDir(file.relative))),
-    // An app project outside every sample tree (example/demo/test folders, nested Swift packages, nested repos).
-    hasShippedApp: [...androidAppGradleFiles, ...iosPbxFiles, ...unitySettingsFiles].some((file) => !file.sample)
-      || (expo.detected && files.some((file) => !file.sample && /(?:^|\/)app(?:\.config)?\.(?:json|js|cjs|mjs|ts)$/.test(file.relative))),
+    // An app project outside demo/ trees: then demo/ evidence (Xcode pins, FCM sources) describes a demo, not the app.
+    // iOS-specific for the Xcode check (an Android app elsewhere says nothing about which Xcode builds the demo's
+    // iOS app); any platform for FCM.
+    hasIosAppOutsideDemo: iosPbxFiles.some((file) => !file.demo)
+      || unityIosBundleIds.length > 0
+      || (expoTargetsIos && files.some((file) => !file.demo && /(?:^|\/)app(?:\.config)?\.(?:json|js|cjs|mjs|ts)$/.test(file.relative))),
+    hasAppOutsideDemo: [...androidAppGradleFiles, ...iosPbxFiles, ...unitySettingsFiles].some((file) => !file.demo)
+      || (expo.detected && files.some((file) => !file.demo && /(?:^|\/)app(?:\.config)?\.(?:json|js|cjs|mjs|ts)$/.test(file.relative))),
     // App modules left out as example/sample/demo/test apps because a shipped app exists.
     sampleAppGradleFiles: shippedOnly ? androidAppGradleFiles.filter((file) => file.sample) : [],
-    catalogFiles: allCatalogs,
+    resolveCatalogs,
+    gradleNumbers: numericGradleProperties(files),
     manifests,
     gradleFiles: [...androidGradleFiles, ...(shippedOnly ? allCatalogs.filter((file) => !file.sample) : allCatalogs)],
     targetSdkEvidence: [...unityTargetSdkEvidence, ...expo.targetSdkEvidence],
@@ -886,30 +1003,74 @@ function targetSdkFindings(
   gradleFiles: ProjectFile[],
   now: Date,
   supplementalEvidence: Array<{ file: string; value: number }> = [],
+  resolveCatalogs?: CatalogResolver,
+  gradleNumbers: Map<string, { value: number; file: string }> = new Map(),
 ): ReleaseDoctorFinding[] {
   const evidence: Array<{ file: string; value: number }> = [...supplementalEvidence];
   let hasUnresolvedExpression = false;
-  const catalogFiles = gradleFiles.filter((candidate) => candidate.relative.endsWith('libs.versions.toml'));
+  const catalogFiles = gradleFiles.filter((candidate) => candidate.relative.endsWith('.versions.toml'));
   const reactNativeCatalog = catalogFiles.find((candidate) => candidate.relative === REACT_NATIVE_CATALOG);
   const reactNativeValue = reactNativeCatalog ? catalogVersions([reactNativeCatalog], true).get('targetSdk') : undefined;
   const reactNativeTargetSdk = reactNativeValue && /^\d+$/.test(reactNativeValue.value)
     ? { value: Number.parseInt(reactNativeValue.value, 10), file: reactNativeValue.file }
     : undefined;
+  // Numbers a targetSdk expression can name: gradle.properties, plus literal extra properties set in the scanned
+  // scripts (`ext { x = 36 }`, `ext.x = 36`, `extra["x"] = 36`, `set("x", 36)`). A name with two different values
+  // stays unresolved.
+  const scripts = gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative));
+  const extras = new Map<string, Array<{ value: number; file: string }>>();
+  const addExtra = (key: string, value: string, file: string) =>
+    extras.set(key, [...(extras.get(key) ?? []), { value: Number.parseInt(value, 10), file }]);
+  for (const file of scripts) {
+    for (const match of file.text.matchAll(/\b(?:ext|extra)\.(\w+)\s*=\s*(\d+)\b/g)) addExtra(match[1], match[2], file.relative);
+    for (const match of file.text.matchAll(/\bextra\[\s*["'](\w+)["']\s*\]\s*=\s*(\d+)\b/g)) addExtra(match[1], match[2], file.relative);
+    for (const match of file.text.matchAll(/\bset\(\s*["'](\w+)["']\s*,\s*(\d+)\s*\)/g)) addExtra(match[1], match[2], file.relative);
+    for (const block of file.text.matchAll(/\b(?:ext|extra)\s*\{([^{}]*)\}/g)) {
+      for (const match of block[1].matchAll(/(?:^|[\s;])(\w+)\s*=\s*(\d+)\b/g)) addExtra(match[1], match[2], file.relative);
+    }
+  }
+  const named = new Map(gradleNumbers);
+  for (const [key, rows] of extras) {
+    if (new Set(rows.map((row) => row.value)).size !== 1) continue;
+    if (named.has(key) && named.get(key)!.value !== rows[0].value) named.delete(key);
+    else if (!named.has(key)) named.set(key, rows[0]);
+  }
+  // `project.properties.x`, `project.property("x")`, `findProperty("x")`, `rootProject.ext.x`, `extra["x"]`,
+  // `providers.gradleProperty("x")`, or a bare property name (`propTargetSdkVersion.toInteger()`).
+  const PROPERTY_TARGET_SDK = /\btargetSdk(?:Version)?\b\s*(?:=\s*)?\(?\s*(?:(?:rootProject|project)\.)?(?:(?:ext|extra|properties)\.|(?:property|findProperty|properties\.get)\(\s*["']|(?:ext|extra|properties)\[\s*["']|providers\.gradleProperty\(\s*["'])?([A-Za-z_]\w*)/g;
   // build.gradle(.kts) plus the scripts they `apply from:` (common.gradle and the like).
-  for (const file of gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative))) {
+  for (const file of scripts) {
     // `libs.versions.x` resolves against the module's own build's catalog, so two builds (or a --path build and the
     // repository root) that share a key cannot overwrite each other.
-    const nearest = nearestCatalog(file, catalogFiles);
-    const catalogs = new Map([...(nearest ? catalogVersions([nearest]) : new Map<string, { value: string; file: string }>())]
-      .filter(([, row]) => /^\d+$/.test(row.value))
-      .map(([key, row]) => [key, { value: Number.parseInt(row.value, 10), file: row.file }] as const));
+    const visible: Map<string, CatalogVersions | null> = resolveCatalogs
+      ? resolveCatalogs(file)
+      : (() => {
+        const nearest = nearestCatalog(file, catalogFiles);
+        return new Map(nearest ? [['libs', catalogVersions([nearest], true)]] : []);
+      })();
+    const numeric = (accessor: string, alias: string) => {
+      const row = catalogValue(visible, accessor, alias);
+      return row && /^\d+$/.test(row.value) ? { value: Number.parseInt(row.value, 10), file: row.file } : undefined;
+    };
     let resolvedIndirectly = false;
-    // `targetSdk 36`, `targetSdk = 36`, and Kotlin DSL extras (`extra["targetSdkVersion"] = 36`).
+    // `targetSdk 36`, `targetSdk = 36`, Kotlin DSL extras (`extra["targetSdkVersion"] = 36`), and AGP's
+    // `targetSdk { version = release(36) }`.
     for (const match of file.text.matchAll(/\btargetSdk(?:Version)?(?:["']\s*\])?\s*(?:=\s*)?(\d+)/g)) {
       evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
     }
-    for (const match of file.text.matchAll(/\btargetSdk(?:Version)?\s*(?:=\s*)?libs\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/g)) {
-      const resolved = catalogs.get(match[1]) ?? catalogs.get(match[1].replace(/\./g, '-'));
+    for (const match of file.text.matchAll(/\btargetSdk\s*\{\s*version\s*=\s*release\(\s*(\d+)\s*\)/g)) {
+      evidence.push({ file: file.relative, value: Number.parseInt(match[1], 10) });
+    }
+    for (const match of file.text.matchAll(PROPERTY_TARGET_SDK)) {
+      const resolved = named.get(match[1]);
+      if (resolved) {
+        evidence.push({ file: resolved.file, value: resolved.value });
+        resolvedIndirectly = true;
+      }
+    }
+    const CATALOG_TARGET_SDK = /\btargetSdk(?:Version)?\s*(?:=\s*)?([A-Za-z_]\w*)\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/g;
+    for (const match of file.text.matchAll(CATALOG_TARGET_SDK)) {
+      const resolved = numeric(match[1], match[2]);
       if (resolved) {
         evidence.push({ file: resolved.file, value: resolved.value });
         resolvedIndirectly = true;
@@ -920,10 +1081,8 @@ function targetSdkFindings(
       resolvedIndirectly = true;
     }
     if (/\btargetSdk(?:Version)?\b/.test(file.text) && !/\btargetSdk(?:Version)?\s*(?:=\s*)?\d+/.test(file.text)) {
-      const catalogExpression = /\btargetSdk(?:Version)?\s*(?:=\s*)?libs\.versions\.([A-Za-z0-9_.-]+?)(?=\.get\(\)|\s|$)/.exec(file.text);
-      const resolved = catalogExpression
-        ? catalogs.get(catalogExpression[1]) ?? catalogs.get(catalogExpression[1].replace(/\./g, '-'))
-        : undefined;
+      const catalogExpression = new RegExp(CATALOG_TARGET_SDK.source).exec(file.text);
+      const resolved = catalogExpression ? numeric(catalogExpression[1], catalogExpression[2]) : undefined;
       if (!resolved && !resolvedIndirectly) hasUnresolvedExpression = true;
     }
   }
@@ -1564,10 +1723,15 @@ async function appliedGradleScripts(
   const seen = new Set([...known, ...gradleFiles].map((file) => file.absolute));
   for (const file of gradleFiles.filter((candidate) => /\.gradle(?:\.kts)?$/.test(candidate.relative))) {
     const text = stripComments(file.text, { slash: true, hash: false });
-    for (const match of text.matchAll(/\bapply\s*\(?\s*from\s*[:=]\s*["']([^"']+\.gradle(?:\.kts)?)["']/g)) {
-      const reference = match[1];
+    const references = [
+      ...[...text.matchAll(/\bapply\s*\(?\s*from\s*[:=]\s*["']([^"']+\.gradle(?:\.kts)?)["']/g)].map((match) => match[1]),
+      // `apply(from = rootProject.file("x.gradle.kts"))`
+      ...[...text.matchAll(/\bapply\s*\(?\s*from\s*[:=]\s*rootProject\.file\(\s*["']([^"'$]+\.gradle(?:\.kts)?)["']\s*\)/g)]
+        .map((match) => `$rootDir/${match[1]}`),
+    ];
+    for (const reference of references) {
       if (/^[a-z]+:\/\//i.test(reference)) continue;
-      const rooted = reference.match(/^\$\{?(?:rootDir|rootProject\.projectDir)\}?\/(.+)$/);
+      const rooted = reference.match(/^\$\{?(?:rootDir|rootProject\.(?:projectDir|rootDir))\}?\/(.+)$/);
       if (!rooted && reference.includes('$')) continue;
       const candidates = rooted
         ? ancestorsUpTo(path.dirname(file.absolute), limit).map((directory) => path.join(directory, rooted[1]))
@@ -1619,7 +1783,10 @@ async function repositoryRootFiles(root: string, repo: string): Promise<ProjectF
       result.push({ absolute, relative: path.relative(root, absolute).replace(/\\/g, '/'), text, outside: true });
     }
   };
-  for (const name of ['.xcode-version', '.gitlab-ci.yml', 'codemagic.yaml', 'codemagic.yml', 'Jenkinsfile', 'gradle/libs.versions.toml']) {
+  for (const name of [
+    '.xcode-version', '.gitlab-ci.yml', 'codemagic.yaml', 'codemagic.yml', 'Jenkinsfile',
+    'gradle/libs.versions.toml', 'settings.gradle', 'settings.gradle.kts',
+  ]) {
     await add(path.join(repo, name));
   }
   const workflows = path.join(repo, '.github', 'workflows');
@@ -1831,7 +1998,7 @@ export async function scanReleaseDoctor(
     }
     // Wear OS / TV / Automotive / XR minimums differ from phones, so those modules are left out of the generic rule
     // — per module: a phone app next to its Wear OS module is still checked.
-    const specialized = specializedAndroidModules(detected.manifests);
+    const specialized = specializedAndroidModules(detected.manifests, detected.androidAppModules);
     const generalModules = detected.androidAppModules.filter((module) => !specialized.has(module));
     const specializedList = [...specialized].map((module) => (module === '.' ? '(root)' : module)).sort().join(', ');
     if (specialized.size > 0 && generalModules.length === 0) {
@@ -1853,7 +2020,7 @@ export async function scanReleaseDoctor(
         file.relative.endsWith('libs.versions.toml') || !specialized.has(moduleDir(file.relative)));
       const limit = repo && isWithin(repo, root) ? repo : root;
       const applied = await appliedGradleScripts(scoped, root, limit, files);
-      findings.push(...targetSdkFindings([...scoped, ...applied], now, detected.targetSdkEvidence));
+      findings.push(...targetSdkFindings([...scoped, ...applied], now, detected.targetSdkEvidence, detected.resolveCatalogs, detected.gradleNumbers));
       if (specialized.size > 0) {
         findings.push({
           code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
@@ -1875,8 +2042,7 @@ export async function scanReleaseDoctor(
     // modules would fail the general rule.
     const minimum = targetPolicy(now).minimum;
     const failingSamples = detected.sampleAppGradleFiles.flatMap((file) => {
-      const catalog = nearestCatalog(file, detected.catalogFiles);
-      const verdict = targetSdkFindings(catalog ? [file, catalog] : [file], now)[0];
+      const verdict = targetSdkFindings([file], now, [], detected.resolveCatalogs, detected.gradleNumbers)[0];
       return verdict?.code === 'TARGET_SDK_BELOW_MINIMUM' ? [`${moduleDir(file.relative)} (${verdict.title.match(/targetSdk (\d+)/)?.[1]})`] : [];
     });
     if (failingSamples.length > 0 && minimum !== null) {
@@ -1949,11 +2115,11 @@ export async function scanReleaseDoctor(
         });
       }
     }
-    // Pins in sample trees (demo/, nested Swift packages) count only when the app itself lives in one.
-    findings.push(...iosXcodeFindings(detected.hasShippedApp ? files.filter((file) => !file.sample) : files, now));
+    // Pins in demo/ count only when the iOS app itself lives there.
+    findings.push(...iosXcodeFindings(detected.hasIosAppOutsideDemo ? files.filter((file) => !file.demo) : files, now));
   }
 
-  findings.push(...await fcmFindings(files, detected.hasShippedApp ? fcmSources.filter((file) => !file.sample) : fcmSources, root, now));
+  findings.push(...await fcmFindings(files, detected.hasAppOutsideDemo ? fcmSources.filter((file) => !file.demo) : fcmSources, root, now));
 
   const counts = findings.reduce<Record<ReleaseDoctorSeverity, number>>(
     (result, finding) => ({ ...result, [finding.severity]: result[finding.severity] + 1 }),
