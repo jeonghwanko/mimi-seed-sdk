@@ -164,6 +164,10 @@ describe('restart 프로세스 판정', () => {
       ['npx', ['-y', '@yoonion/mimi-seed-mcp@^0.21']],
       ['cmd', ['/c', 'npx', '-y', '@yoonion/mimi-seed-mcp@beta']],
       ['cmd', ['/c', 'C:\\npm\\mimi-seed-mcp.cmd']],
+      ['npm', ['exec', '--yes', '@yoonion/mimi-seed-mcp@^0.21']],
+      ['bun', ['x', '@yoonion/mimi-seed-mcp@beta']],
+      ['pnpm', ['dlx', '@yoonion/mimi-seed-mcp@~0.21.0']],
+      ['C:\\Program Files\\nodejs\\NPX.CMD', ['-y', 'mimi-seed-mcp@next']],
     ] as const) {
       const markers = __testing.candidateMarkers({ command, args: [...args] });
       expect(markers.every((m) => __testing.looksLikeMimiSeed(m))).toBe(true);
@@ -173,6 +177,9 @@ describe('restart 프로세스 판정', () => {
 
   it('패키지 실행기가 아니면 `user@host` 같은 인자에서 @ 뒤를 떼지 않는다', () => {
     expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@build-host', 'mcp-server'] })).not.toContain('dev');
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@10.0.0.5', 'mcp-server'] })).not.toContain('dev');
+    // 인자 어딘가의 npx 는 실행기가 아니다 — 실행기는 command 자리(또는 cmd /c 바로 뒤)에 있어야 한다.
+    expect(__testing.candidateMarkers({ command: 'ssh', args: ['dev@build-host', 'npx', '-y', 'srv'] })).not.toContain('dev');
     expect(__testing.candidateMarkers({ command: 'npx', args: ['-y', 'some-server@sha256:abc'] })).not.toContain('some-server');
   });
 
