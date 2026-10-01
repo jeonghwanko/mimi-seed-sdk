@@ -5,7 +5,7 @@ import type { InstagramConfig } from '../instagram/config.js';
 import { withoutBackoff } from './helpers.js';
 
 const cfg: InstagramConfig = {
-  accessToken: 'EAAtoken',
+  accessToken: 'EAA_EXAMPLE',
   userId: '17841400000000000',
 };
 
@@ -61,7 +61,7 @@ describe('getAccount', () => {
   });
 
   it('Instagram Login token (IGAA) uses graph.instagram.com', async () => {
-    const igCfg = { accessToken: 'IGAA_test', userId: '17841999' };
+    const igCfg = { accessToken: 'IGAA_EXAMPLE', userId: '17841999' };
     fetchMock.mockResolvedValueOnce(jsonResp({ id: igCfg.userId, username: 'mimi' }));
     await api.getAccount(igCfg);
 
@@ -70,7 +70,7 @@ describe('getAccount', () => {
   });
 
   it('IGAA token requests minimal fields (no name/profile_picture_url)', async () => {
-    const igCfg = { accessToken: 'IGAA_test', userId: '17841999' };
+    const igCfg = { accessToken: 'IGAA_EXAMPLE', userId: '17841999' };
     fetchMock.mockResolvedValueOnce(jsonResp({ id: igCfg.userId, username: 'mimi' }));
     await api.getAccount(igCfg);
 

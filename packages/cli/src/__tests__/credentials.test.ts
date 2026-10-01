@@ -101,13 +101,13 @@ describe('detectAll', () => {
 
   it('Meta 토큰의 만료/임박 상태를 expiresAt 으로 감지한다', () => {
     writeCred('facebook.json', {
-      pageAccessToken: 'EAA_TEST',
+      pageAccessToken: 'EAA_EXAMPLE',
       pageId: 'page-1',
       pageName: 'Page',
       expiresAt: new Date(Date.now() - 60_000).toISOString(),
     });
     writeCred('instagram.json', {
-      accessToken: 'IGAA_TEST',
+      accessToken: 'IGAA_EXAMPLE',
       userId: 'ig-1',
       username: 'ig-user',
       expiresAt: new Date(Date.now() + 3 * 86_400_000).toISOString(),
@@ -134,7 +134,7 @@ describe('detectAll', () => {
     const profilesDir = path.join(home, '.mimi-seed', 'social-profiles');
     fs.mkdirSync(profilesDir, { recursive: true });
     fs.writeFileSync(path.join(profilesDir, 'weather.json'), JSON.stringify({
-      instagram: { accessToken: 'IGAA_TEST', userId: 'ig-1', username: 'weather' },
+      instagram: { accessToken: 'IGAA_EXAMPLE', userId: 'ig-1', username: 'weather' },
     }));
     fs.writeFileSync(path.join(profilesDir, 'community.json'), JSON.stringify({
       threads: { accessToken: 'TH_TEST', userId: 'th-1', username: 'community' },
@@ -146,7 +146,7 @@ describe('detectAll', () => {
   });
 
   it('프로젝트에 프로필 매핑이 있으면 기존 기본 토큰으로 폴백하지 않는다', () => {
-    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY', userId: 'legacy' });
+    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY_EXAMPLE', userId: 'legacy' });
     const project = path.join(home, 'project');
     fs.mkdirSync(project);
     fs.writeFileSync(path.join(project, '.mimi-seed.json'), JSON.stringify({
@@ -160,7 +160,7 @@ describe('detectAll', () => {
   });
 
   it('socialProfiles 컨테이너가 잘못되면 기존 기본 토큰을 연결로 보지 않는다', () => {
-    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY', userId: 'legacy' });
+    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY_EXAMPLE', userId: 'legacy' });
     const project = path.join(home, 'project');
     fs.mkdirSync(project);
     fs.writeFileSync(path.join(project, '.mimi-seed.json'), JSON.stringify({
@@ -234,12 +234,12 @@ describe('planSetup', () => {
 
   it('만료됐거나 7일 안에 만료되는 Meta 토큰은 자동으로 다시 포함한다', () => {
     writeCred('facebook.json', {
-      pageAccessToken: 'EAA_TEST',
+      pageAccessToken: 'EAA_EXAMPLE',
       pageId: 'page-1',
       expiresAt: new Date(Date.now() - 60_000).toISOString(),
     });
     writeCred('instagram.json', {
-      accessToken: 'IGAA_TEST',
+      accessToken: 'IGAA_EXAMPLE',
       userId: 'ig-1',
       expiresAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
     });

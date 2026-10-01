@@ -4,7 +4,7 @@ import type { CiConfig } from '../ci/config.js';
 
 const cfg: CiConfig = {
   provider: 'github',
-  token: 'ghp_test',
+  token: 'ghp_example',
   owner: 'octocat',
   repo: 'hello',
 };

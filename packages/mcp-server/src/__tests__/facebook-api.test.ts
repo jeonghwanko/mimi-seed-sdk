@@ -7,7 +7,7 @@ import * as api from '../facebook/api.js';
  *  - 토큰이 URL 로 새지 않는가 (Graph 는 access_token 을 쿼리로 받는다)
  */
 
-const cfg = { pageAccessToken: 'EAA-TEST-TOKEN', pageId: 'page-1' };
+const cfg = { pageAccessToken: 'EAA-TOKEN-EXAMPLE', pageId: 'page-1' };
 let fetchMock: ReturnType<typeof vi.fn>;
 
 const json = (body: unknown, status = 200) =>
@@ -36,7 +36,7 @@ describe('getPage', () => {
 
     const url = String(fetchMock.mock.calls[0][0]);
     expect(url).toContain('/page-1');
-    expect(url).toContain('access_token=EAA-TEST-TOKEN');
+    expect(url).toContain('access_token=EAA-TOKEN-EXAMPLE');
   });
 
   it('Graph 오류는 code 를 붙여 사람이 읽을 메시지로 바꾼다', async () => {
@@ -51,7 +51,7 @@ describe('getPage', () => {
     fetchMock.mockResolvedValueOnce(json({ error: { message: 'nope', code: 1 } }, 400));
 
     await expect(api.getPage(cfg)).rejects.toThrow(
-      expect.objectContaining({ message: expect.not.stringContaining('EAA-TEST-TOKEN') }) as Error,
+      expect.objectContaining({ message: expect.not.stringContaining('EAA-TOKEN-EXAMPLE') }) as Error,
     );
   });
 

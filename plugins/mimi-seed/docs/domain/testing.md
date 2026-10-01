@@ -119,7 +119,11 @@ Conventions worth copying when you add one:
   you build, not on a live response. `src/__tests__/helpers.ts` has `withClient` for booting an in-memory MCP
   server and calling a tool end to end.
 - **Fixtures are placeholders.** Never a real token, key, issuer id, SA email, or project id — this is a public
-  repo ([[auth-credentials]]).
+  repo ([[auth-credentials]]). Shape secret-like values so the plugin scanner (CI section above) reads them as
+  placeholders: `example-…` / `…-example` / `IGAA_EXAMPLE`, a `<bracketed>` placeholder, or a PEM body of
+  `secret-key-material` / one containing `redacted`. Any other quoted value of 8+ characters right after a key
+  named like token / secret / password / api key (`test-token`, `DO-NOT-LEAK`, a `(redacted)` marker) is a
+  **high** finding, even in a test file — put a marker you assert on in a constant instead.
 - **Test the trap, not the happy path.** Most of these files exist because a specific bug shipped once; their
   header comments say which. Keep that comment when you extend the file.
 

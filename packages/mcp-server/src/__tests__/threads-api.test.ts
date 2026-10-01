@@ -13,13 +13,13 @@ afterEach(() => {
 describe('Threads API', () => {
   it('long-lived 토큰을 공식 refresh endpoint로 갱신한다', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => json({
-      access_token: 'THQVJ_REFRESHED_TOKEN',
+      access_token: 'THQVJ_REFRESHED_EXAMPLE',
       expires_in: 5_184_000,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(refreshAccessToken('THQVJ_CURRENT_TOKEN')).resolves.toEqual({
-      accessToken: 'THQVJ_REFRESHED_TOKEN',
+    await expect(refreshAccessToken('THQVJ_CURRENT_EXAMPLE')).resolves.toEqual({
+      accessToken: 'THQVJ_REFRESHED_EXAMPLE',
       expiresInSeconds: 5_184_000,
     });
 
@@ -45,7 +45,7 @@ describe('Threads API', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(postCarousel(
-      { accessToken: 'THQVJ_TOKEN', userId: 'user-1' },
+      { accessToken: 'THQVJ_EXAMPLE', userId: 'user-1' },
       ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
       'caption',
     )).resolves.toEqual({
@@ -78,7 +78,7 @@ describe('Threads API', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => json(responses.shift()));
     vi.stubGlobal('fetch', fetchMock);
 
-    await postText({ accessToken: 'THQVJ_TOKEN', userId: 'stale-user-id' }, 'hello');
+    await postText({ accessToken: 'THQVJ_EXAMPLE', userId: 'stale-user-id' }, 'hello');
 
     const paths = fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname);
     expect(paths[0]).toBe('/v1.0/me/threads');
@@ -98,7 +98,7 @@ describe('Threads API', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(postVideo(
-      { accessToken: 'THQVJ_TOKEN', userId: 'user-1' },
+      { accessToken: 'THQVJ_EXAMPLE', userId: 'user-1' },
       'https://cdn.example.com/video.mp4',
       'video caption',
       '제품 기능을 소개하는 세로 영상',

@@ -4,7 +4,7 @@ import type { CiConfig } from '../ci/config.js';
 
 const cfg: CiConfig = {
   provider: 'gitlab',
-  token: 'glpat-test',
+  token: 'glpat-example',
   owner: 'my-group',
   repo: 'my-app',
 };
@@ -108,7 +108,7 @@ describe('gitlab.ts — triggerBuild', () => {
     );
     await gitlab.triggerBuild(cfg, 'main');
     expect(fetchMock.mock.calls[0][1].headers).toEqual({
-      'PRIVATE-TOKEN': 'glpat-test',
+      'PRIVATE-TOKEN': 'glpat-example',
       'Content-Type': 'application/json',
     });
   });

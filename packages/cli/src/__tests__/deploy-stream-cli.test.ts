@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../config.js", () => ({
-  getEffectiveConfig: vi.fn(async () => ({ webBase: "https://console.example.test", token: "test-token" })),
+  getEffectiveConfig: vi.fn(async () => ({ webBase: "https://console.example.test", token: "example-token" })),
 }));
 
 import { cmdDeploy } from "../deploy.js";

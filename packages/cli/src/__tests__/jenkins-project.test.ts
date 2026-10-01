@@ -6,7 +6,7 @@ import { resolveProjectJenkins, jenkinsJobPath, jenkinsBuildParameters } from '.
 
 describe('프로젝트 Jenkins 격리', () => {
   let root: string;
-  const cfg = { url: 'https://ci.example.com', username: 'test', token: 'test-token', jobAndroid: 'legacy' };
+  const cfg = { url: 'https://ci.example.com', username: 'test', token: 'example-token', jobAndroid: 'legacy' };
   beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-jenkins-test-')); });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
   const write = (dir: string, value: unknown) => fs.writeFileSync(path.join(dir, '.mimi-seed.json'), JSON.stringify(value));

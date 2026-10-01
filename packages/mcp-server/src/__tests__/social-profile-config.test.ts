@@ -30,14 +30,14 @@ function writeManifest(value: unknown): void {
 describe('social profile config', () => {
   it('하나의 프로필 파일에 Instagram과 Threads를 함께 보존한다', () => {
     const options = { profile: 'weather-app', homeDir, startDir: projectDir };
-    saveInstagramConfig({ accessToken: 'IGAA_TEST', userId: 'ig-1', username: 'weather' }, options);
-    saveThreadsConfig({ accessToken: 'TH_TEST', userId: 'th-1', username: 'weather' }, options);
+    saveInstagramConfig({ accessToken: 'IGAA_EXAMPLE', userId: 'ig-1', username: 'weather' }, options);
+    saveThreadsConfig({ accessToken: 'TH_EXAMPLE', userId: 'th-1', username: 'weather' }, options);
 
     const filePath = path.join(homeDir, '.mimi-seed', 'social-profiles', 'weather-app.json');
     const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
     expect(saved).toEqual({
-      instagram: { accessToken: 'IGAA_TEST', userId: 'ig-1', username: 'weather' },
-      threads: { accessToken: 'TH_TEST', userId: 'th-1', username: 'weather' },
+      instagram: { accessToken: 'IGAA_EXAMPLE', userId: 'ig-1', username: 'weather' },
+      threads: { accessToken: 'TH_EXAMPLE', userId: 'th-1', username: 'weather' },
     });
     expect(loadInstagramConfig(options)?.userId).toBe('ig-1');
     expect(loadThreadsConfig(options)?.userId).toBe('th-1');
@@ -47,8 +47,8 @@ describe('social profile config', () => {
   // 프로필 미지원. 이관 후에는 나머지 둘과 정확히 같게 동작해야 한다.
   it('Facebook 도 같은 프로필 파일에 나란히 들어간다', () => {
     const options = { profile: 'weather-app', homeDir, startDir: projectDir };
-    saveInstagramConfig({ accessToken: 'IGAA_TEST', userId: 'ig-1' }, options);
-    saveFacebookConfig({ pageAccessToken: 'EAA_TEST', pageId: 'fb-1', pageName: 'Weather' }, options);
+    saveInstagramConfig({ accessToken: 'IGAA_EXAMPLE', userId: 'ig-1' }, options);
+    saveFacebookConfig({ pageAccessToken: 'EAA_EXAMPLE', pageId: 'fb-1', pageName: 'Weather' }, options);
 
     const filePath = path.join(homeDir, '.mimi-seed', 'social-profiles', 'weather-app.json');
     const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
@@ -60,19 +60,19 @@ describe('social profile config', () => {
 
   it('Facebook 도 매핑이 없으면 기존 facebook.json 경로를 그대로 쓴다 (하위 호환)', () => {
     const options = { homeDir, startDir: projectDir };
-    saveFacebookConfig({ pageAccessToken: 'EAA_LEGACY', pageId: 'fb-legacy' }, options);
+    saveFacebookConfig({ pageAccessToken: 'EAA_LEGACY_EXAMPLE', pageId: 'fb-legacy' }, options);
 
     expect(resolveSocialConfigTarget('facebook', options).profile).toBeNull();
     expect(fs.existsSync(path.join(homeDir, '.mimi-seed', 'facebook.json'))).toBe(true);
-    expect(loadFacebookConfig(options)?.pageAccessToken).toBe('EAA_LEGACY');
+    expect(loadFacebookConfig(options)?.pageAccessToken).toBe('EAA_LEGACY_EXAMPLE');
   });
 
   it('프로젝트 매니페스트에서 플랫폼별로 서로 다른 프로필을 선택한다', () => {
     writeManifest({ socialProfiles: { instagram: 'ig-brand', threads: 'threads-brand' } });
     const options = { homeDir, startDir: projectDir };
 
-    saveInstagramConfig({ accessToken: 'IGAA_TEST', userId: 'ig-2' }, options);
-    saveThreadsConfig({ accessToken: 'TH_TEST', userId: 'th-2' }, options);
+    saveInstagramConfig({ accessToken: 'IGAA_EXAMPLE', userId: 'ig-2' }, options);
+    saveThreadsConfig({ accessToken: 'TH_EXAMPLE', userId: 'th-2' }, options);
 
     expect(resolveSocialConfigTarget('instagram', options).profile).toBe('ig-brand');
     expect(resolveSocialConfigTarget('threads', options).profile).toBe('threads-brand');
@@ -82,18 +82,18 @@ describe('social profile config', () => {
 
   it('매핑이 없으면 기존 단일 설정 파일을 계속 사용한다', () => {
     const options = { homeDir, startDir: projectDir };
-    saveInstagramConfig({ accessToken: 'IGAA_LEGACY', userId: 'legacy' }, options);
+    saveInstagramConfig({ accessToken: 'IGAA_LEGACY_EXAMPLE', userId: 'legacy' }, options);
 
     expect(resolveSocialConfigTarget('instagram', options).profile).toBeNull();
     expect(fs.existsSync(path.join(homeDir, '.mimi-seed', 'instagram.json'))).toBe(true);
-    expect(loadInstagramConfig(options)?.accessToken).toBe('IGAA_LEGACY');
+    expect(loadInstagramConfig(options)?.accessToken).toBe('IGAA_LEGACY_EXAMPLE');
   });
 
   it('매핑된 프로필이 비어 있으면 기존 기본 설정으로 폴백하지 않는다', () => {
     const legacyDir = path.join(homeDir, '.mimi-seed');
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, 'threads.json'), JSON.stringify({
-      accessToken: 'TH_LEGACY', userId: 'legacy',
+      accessToken: 'TH_LEGACY_EXAMPLE', userId: 'legacy',
     }));
     writeManifest({ socialProfiles: { threads: 'missing' } });
 
@@ -104,7 +104,7 @@ describe('social profile config', () => {
     const legacyDir = path.join(homeDir, '.mimi-seed');
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, 'instagram.json'), JSON.stringify({
-      accessToken: 'IGAA_LEGACY', userId: 'legacy',
+      accessToken: 'IGAA_LEGACY_EXAMPLE', userId: 'legacy',
     }));
     writeManifest({ socialProfiles: 'weather' });
 
@@ -126,7 +126,7 @@ describe('social profile config', () => {
     fs.writeFileSync(filePath, '{broken');
 
     expect(() => saveInstagramConfig(
-      { accessToken: 'IGAA_TEST', userId: 'ig-3' },
+      { accessToken: 'IGAA_EXAMPLE', userId: 'ig-3' },
       { profile: 'brand', homeDir, startDir: projectDir },
     )).toThrow(/덮어쓰지 않았습니다/);
     expect(fs.readFileSync(filePath, 'utf-8')).toBe('{broken');
