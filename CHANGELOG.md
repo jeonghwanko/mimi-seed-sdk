@@ -62,8 +62,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `when` alternative, `!`, a plain `else`, Elvis or a ternary, the application id, or a check on another project
   make it count for the app. A Kotlin `when` condition is read back to a line that clearly ends the previous branch,
   and anything that is not clearly a branch boundary (a comment-only or blank line, an infix operator) is part of
-  the condition. Closure parameters may be typed (`Project p ->`, `p: Project ->`), the settings must be made on the
-  checked project, and hooks on the Gradle object (`gradle.`, `project.gradle.`, `p.gradle.`, `getGradle()`, a
+  the condition. Closure parameters may be typed (`Project p ->`, `p: Project ->`), an explicit `p.` root in the
+  settings inside is compared with the checked project, and hooks on the Gradle object (`gradle.`, `project.gradle.`, `p.gradle.`, `getGradle()`, a
   variable bound to it) inside library scripts count as reaching other projects. Workspace globs are expanded
   breadth-first (bounded; reaching the bound without finding the package is unresolved), and a missing in-repo
   `file:` folder is unresolved. A plugin id that is
@@ -71,7 +71,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `listOf(…)`, a string such as a plugin description, or `libs.plugins….get().version` — does not make a build
   script an app module. Scanning through a symlinked path gives the same result as the real path. A local
   variable that is reassigned anywhere in the script is unresolved, and inside a Groovy method the name is read as
-  the project property, as Gradle does. The user guide's validation page lists the check's known limits. The JSON
+  the project property, as Gradle does. The "Known limits of the Target API check" section of the user guide's
+  Release Doctor validation page lists what the check does not model, including shapes that overstate risk and the
+  few that can hide a setting. The JSON
   report lists each setting as `targetSdkTokens`.
 - Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
   unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the

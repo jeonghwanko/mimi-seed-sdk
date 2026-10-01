@@ -58,8 +58,8 @@ Release Doctor는 빌드 파일을 읽을 뿐 Gradle을 실행하지 않는다. 
   저장소 안에서 폴더가 없는 `file:`·`link:`·`portal:` 의존성(초기화하지 않은 submodule)은 저장소 자신의 패키지인데
   읽을 수 없는 것이므로 확정하지 못함으로 보고하고, 없는 tarball이나 저장소 밖 대상은 레지스트리 패키지처럼 다룬다.
   워크스페이스 glob(`packages/*`, `apps/*/native`, `packages/**`)은 너비 우선으로 깊이 12, 디렉터리 2,000개까지
-  펼치며, 그 한도에 닿았는데 패키지를 찾지 못하면 서드파티가 아니라 확정하지 못함으로 보고한다.
-  저장소 밖 폴더를 node_modules/에 링크한 패키지(`yarn link`)도 같은 방식으로 읽으므로, 검사 대상 저장소 밖의 파일을
+  펼치며, 그 한도에 닿았는데 패키지를 찾지 못하면 서드파티가 아니라 확정하지 못함으로 보고한다. glob의 역슬래시
+  구분자와 `{a,b}` 중괄호 대안은 펼치지 않는다. 저장소 밖 폴더를 node_modules/에 링크한 패키지(`yarn link`)도 같은 방식으로 읽으므로, 검사 대상 저장소 밖의 파일을
   읽을 수 있다. test·fixture·sample·vendor 폴더 안의 같은 이름 `package.json`은 워크스페이스 glob이 선언하지 않는 한
   무시한다.
 - **npm 패키지와 같은 이름의 Gradle 프로젝트**(`project(':pkg')`)는 settings로 해석한다: 해석한 `projectDir` 매핑이
@@ -79,7 +79,10 @@ Release Doctor는 빌드 파일을 읽을 뿐 Gradle을 실행하지 않는다. 
   `if (…hasPlugin('com.android.library')) { … }`, `else if (…hasPlugin('com.android.library')) { … }`, Kotlin
   `when` 분기 `plugins.hasPlugin("com.android.library") -> …`. 확인 대상은 프로젝트 자신이어야 한다(수신자 없음,
   `plugins.`, `pluginManager.`, `project.`, `this.`, `it.`, 클로저 매개변수 — `p ->`, `Project p ->`, `def p ->`,
-  `p: Project ->` — 이며, 안쪽 설정도 같은 프로젝트에 해야 한다). 그 확인을 포함한 논리곱
+  `p: Project ->`). 확인을 이름 붙은 변수에 했을 때(`p.plugins.withId(…)`)는 안쪽 설정의 명시적 `p.` 루트만 그와
+  비교한다. 수식어 없는 설정(`android { … }`, `extensions.configure(…)`)과 `project`라는 이름의 매개변수는 비교하지
+  않으므로, 다른 프로젝트 변수에 대한 라이브러리 전용 가드가 둘러싼 프로젝트에 한 설정을 가릴 수 있다. 그 확인을
+  포함한 논리곱
   (`!a && plugins.hasPlugin('com.android.library')`)도 라이브러리 전용이다. 그 밖의 경우는 앱에도 적용되는 것으로
   센다: `||`·`or`·`xor`(줄 끝이나 줄 앞에 있어도), `when` 대안(`a, b ->`), `!`, 그냥 `else`, 삼항·Elvis `?:`, 변수로
   준 id, 애플리케이션 id, 다른 프로젝트의 확인(`rootProject.plugins…`, `lib.plugins…`). Kotlin `when` 조건은 `->`에서
@@ -91,8 +94,19 @@ Release Doctor는 빌드 파일을 읽을 뿐 Gradle을 실행하지 않는다. 
 - **다른 프로젝트 설정**은 흔한 형태(`subprojects`, `allprojects`, `project(':x')`, `afterEvaluate`,
   `plugins.withId`, Gradle 객체의 hook)만 인식한다. 다른 경로로 다른 프로젝트의 `android` 블록에 닿는 코드는
   모델링하지 않는다. 예를 들어 라이브러리 스크립트의 `project.configure(otherProjects) { … }`는 다른 프로젝트에
-  닿는 것으로 보지 않는다. 한 프로젝트 변수로 라이브러리를 확인하고 다른 변수를 설정하면 앱에 센다. 컬렉션에 담거나
-  헬퍼가 돌려주는 프로젝트처럼 더 간접적인 별칭은 따라가지 않는다.
+  닿는 것으로 보지 않는다. 한 프로젝트 변수로 라이브러리를 확인하고 다른 변수를 설정하면 앱에 센다. 더 간접적인
+  별칭은 따라가지 않는다: 컬렉션에 담거나 헬퍼가 돌려주는 프로젝트, `project(':app')`·`parent`·`childProjects`에
+  묶은 변수. Gradle 객체의 멤버 중 다른 프로젝트가 아닌 것에 묶은 변수(`val x = gradle.startParameter.taskNames`)도
+  Gradle 객체 별칭으로 보므로, `x.`가 targetSdk 설정을 둘러싼 조건에 나타나면 그 설정을 프로젝트 간 설정으로 보아
+  결과가 확정되지 않을 수 있다.
+- **컬렉션 반복으로 플러그인을 적용하는 형태**는 `{ apply plugin: it }` / `{ id -> apply plugin: id }`(와 Kotlin
+  `apply(plugin = it)`)만 감지한다. `project.apply plugin: it`, `pluginManager.apply(it)`, `plugins.apply(it)`,
+  `eachWithIndex`, 타입을 쓴 반복 매개변수 같은 다른 형태는 앱 플러그인 적용으로 감지하지 않으므로, 그 방식으로만
+  적용하고 `applicationId`가 없는 앱 모듈은 모바일 프로젝트 없음으로 보고될 수 있다.
+- **보수적 과다 보고.** 아래 형태는 위험을 숨기지 않고 부풀린다: 앱 플러그인을 부정형으로 함께 언급하는 라이브러리
+  가드(`lib && !app`, `lib && name != 'com.android.application'`), 조건의 괄호 안 `?:`·`else`·`or`·`and`, 이전 분기 본문이
+  다음 줄에 있거나 여러 줄 호출인 `when` 분기, 이름 붙은 수신자 확인에 안쪽 람다·별칭 루트(`.let { it… }`,
+  `def a = p.android`)가 섞인 경우. 이들은 앱에 적용되는 것으로 보아 기준 미달 값을 보고할 수 있다.
 - **저장소 밖에서 계산되는 값**은 확정하지 못한다: Flutter의 `flutter.targetSdkVersion`(Flutter SDK가 정함)과 CI만
   넘기는 속성(`-Px=…`, `ORG_GRADLE_PROJECT_x`).
 - **Unity Gradle 템플릿:** `**TARGETSDKVERSION**` 자리표시자는 ProjectSettings 값으로 채워지고, 템플릿에 직접 쓴

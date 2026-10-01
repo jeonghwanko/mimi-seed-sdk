@@ -61,9 +61,11 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   uninitialised submodule) is the repository's own, unreadable package, so the result is unresolved; a missing
   tarball or a target outside the repository is treated like a registry package. Workspace globs (`packages/*`,
   `apps/*/native`, `packages/**`) are expanded breadth-first, up to depth 12 and 2,000 directories; when that limit
-  is reached and the package was not found, the result is unresolved rather than third-party. A package linked into node_modules/ from a folder outside the repository (`yarn link`) is read the
-  same way, so files outside the scanned repository may be read. A `package.json` with the same name inside a
-  test, fixture, sample, or vendored folder is ignored unless a workspace glob declares it.
+  is reached and the package was not found, the result is unresolved rather than third-party. Backslash separators
+  and `{a,b}` brace alternatives in a glob are not expanded. A package linked into node_modules/ from a folder
+  outside the repository (`yarn link`) is read the same way, so files outside the scanned repository may be read. A
+  `package.json` with the same name inside a test, fixture, sample, or vendored folder is ignored unless a workspace
+  glob declares it.
 - **A Gradle project named like an npm package** (`project(':pkg')`) is resolved from the settings: a parsed
   `projectDir` mapping wins; a project the settings include by name, with no `projectDir` assignment, uses its
   default folder when that folder exists. A `projectDir` assignment the scanner cannot parse counts as a node_modules
@@ -84,7 +86,10 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   `else if (…hasPlugin('com.android.library')) { … }`, and a Kotlin `when` branch
   `plugins.hasPlugin("com.android.library") -> …`. The check must be on the project itself (no receiver, `plugins.`,
   `pluginManager.`, `project.`, `this.`, `it.`, or a closure parameter — `p ->`, `Project p ->`, `def p ->`,
-  `p: Project ->` — and the settings inside must be made on that same project). A conjunction that includes that
+  `p: Project ->`). When the check is made on a named variable (`p.plugins.withId(…)`), only an explicit `p.` root
+  in the settings inside is compared with it; unqualified settings (`android { … }`, `extensions.configure(…)`) and a
+  parameter named `project` are not checked, so a library-only guard on one project variable can hide a setting
+  made on the enclosing project. A conjunction that includes that
   check (`!a && plugins.hasPlugin('com.android.library')`) is library-only too. Anything else counts for the app:
   `||` / `or` / `xor` (also at a line end or start), a `when` alternative (`a, b ->`), `!`, a plain `else`, a
   ternary or Elvis `?:`, a variable id, the application id, or a check on another project
@@ -98,8 +103,21 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   `afterEvaluate`, `plugins.withId`, the Gradle object's hooks); other ways of reaching another project's `android`
   block are not modelled — for example `project.configure(otherProjects) { … }` from a library script is not treated
   as reaching another project. A library check made on one project variable while another variable is configured
-  counts for the app; more indirect aliasing (a project stored in a collection or returned by a helper) is not
-  followed.
+  counts for the app; more indirect aliasing is not followed: a project stored in a collection or returned by a
+  helper, a variable bound to `project(':app')`, `parent`, and `childProjects`. A variable bound to a member of the
+  Gradle object that is not another project (`val x = gradle.startParameter.taskNames`) is still treated as a
+  Gradle-object alias; if `x.` then appears in a condition around a targetSdk setting, that setting is treated as
+  cross-project and the result can become unresolved.
+- **Collection-loop plugin application** is detected only as `{ apply plugin: it }` / `{ id -> apply plugin: id }`
+  (and the Kotlin `apply(plugin = it)` equivalent). Other forms — `project.apply plugin: it`,
+  `pluginManager.apply(it)`, `plugins.apply(it)`, `eachWithIndex`, typed loop parameters — are not detected as
+  applying the app plugin, so an app module that applies it only that way and sets no `applicationId` may be
+  reported as no mobile project.
+- **Conservative over-reports.** These shapes overstate risk rather than hide it: a library guard that also names
+  the app plugin negatively (`lib && !app`, `lib && name != 'com.android.application'`); `?:`, `else`, `or` or `and`
+  inside parentheses of a condition; a `when` branch whose previous branch body is on the next line or is a
+  multi-line call; and a named-receiver check combined with an inner lambda or alias root (`.let { it… }`,
+  `def a = p.android`). They are treated as applying to the app and can report a below-minimum value.
 - **Values computed outside the repository** stay unresolved: Flutter's `flutter.targetSdkVersion` (from the Flutter
   SDK) and properties that only CI passes (`-Px=…`, `ORG_GRADLE_PROJECT_x`).
 - **Unity Gradle templates:** a `**TARGETSDKVERSION**` placeholder is filled from ProjectSettings; a literal value
