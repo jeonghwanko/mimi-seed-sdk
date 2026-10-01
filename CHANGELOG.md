@@ -38,7 +38,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   such as `android.defaultConfig.targetSdkVersion 33`, and buildSrc / build-logic convention scripts — must be
   recognised: one it does not model, or one it cannot attribute to an app module whose value is unresolved or below
   the minimum, makes the result unresolved and cites the file and line. Library, sample, and Wear OS/TV modules, and
-  scripts only they apply, are left out. The JSON report lists each setting as `targetSdkTokens`.
+  scripts only they apply, are left out (except where they configure another project, such as
+  `project(':app').afterEvaluate { … }`); a script an app module or its build root applies always counts, even from
+  a vendored or submodule folder. Convention builds are read whole, at any depth: buildSrc/, build-logic/ (also
+  nested, as in `gradle/build-logic/`), and every `includeBuild(…)` root, in Kotlin, Groovy, Java, and script form.
+  String-keyed sets (`setProperty('targetSdk', …)`, `['targetSdk'] = …`), `++` / `--`, and compound assignments are
+  recognised as settings it cannot evaluate; `lint { targetSdk … }` and `testOptions.targetSdk` are other properties
+  and no longer count as the app's. An `apply from:` it cannot follow (a URL, a computed path, a missing file, a
+  script in an uninstalled node_modules/ package) makes the module unresolved; `apply from:` is followed through
+  nested scripts and any file extension. A local variable that is reassigned anywhere in the script is unresolved,
+  and inside a Groovy method the name is read as the project property, as Gradle does. The JSON report lists each
+  setting as `targetSdkTokens`.
 - Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
   unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the
   check is incomplete and names those items. They are also listed in the JSON report as `coverage.unresolved`.
