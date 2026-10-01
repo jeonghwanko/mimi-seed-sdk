@@ -27,6 +27,8 @@ to an exact stable version. `latest` includes newly shipped policy rules; a week
 CLI only reevaluates the rules already in that version. Use your actual default branch name.
 
 The workflow runs without store keys, project dependency installation, source-code execution or telemetry.
+It runs `npx` with a throwaway prefix, so a `devEngines` declaration in your `package.json` cannot stop it with
+`EBADDEVENGINES`; do the same in a hand-written step ([troubleshooting](../troubleshooting.md#devengines)).
 It prints the local report to CI logs; review your repository's log visibility because reports contain paths
 and app identifiers. It does not upload raw JSON artifacts or write comments on pull requests.
 

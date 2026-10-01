@@ -32,4 +32,6 @@ jobs:
             echo 'Use latest or an exact stable version.' >&2
             exit 2
           fi
-          npx -y "mimi-seed@$CLI_VERSION" check --local --path "$PROJECT_PATH" --fail-on-blocker
+          # A throwaway prefix keeps npx from enforcing the checked-out project's package.json devEngines
+          # (EBADDEVENGINES before Release Doctor even starts).
+          npx -y --prefix "$(mktemp -d)" "mimi-seed@$CLI_VERSION" check --local --path "$PROJECT_PATH" --fail-on-blocker

@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -70,6 +73,26 @@ describe('cmdCheck Release Doctor entry', () => {
 
     expect(mocks.scanReleaseDoctor).toHaveBeenCalledWith(expected);
     expect(mocks.mcpCall).not.toHaveBeenCalled();
+  });
+
+  // npm enforces package.json devEngines on every npx run inside the project (EBADDEVENGINES), so the suggested
+  // CI command must not be one that crashes there.
+  it('devEngines를 선언한 프로젝트에는 일회용 prefix를 쓰는 CI 명령을 안내한다', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-devengines-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ devEngines: { runtime: { name: 'node', version: '^24.0.0' } } }));
+      vi.stubEnv('CI', '');
+      vi.stubEnv('MIMI_SEED_LANG', 'en');
+
+      await cmdCheck(['--local', '--path', dir]);
+
+      const output = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join('');
+      expect(output).toContain('npx -y --prefix "$(mktemp -d)" mimi-seed check --local --path . --fail-on-blocker');
+      expect(output).toContain('EBADDEVENGINES');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('로컬 검사 오류를 성공으로 삼키지 않는다', async () => {

@@ -40,6 +40,26 @@ matching result before retrying; otherwise you may create a duplicate.
 **Node version errors.**
 Node 20+ is required, for both the CLI and the MCP server. `.nvmrc` is the source of truth — `nvm use`.
 
+<a id="devengines"></a>
+
+**`npx mimi-seed …` stops with `npm error code EBADDEVENGINES` before printing anything.**
+Not a Mimi Seed error: the project you are in declares `devEngines` in its `package.json` (for example a Node
+`^24` runtime or `pnpm` as the package manager), and npm enforces it for every `npx` run inside that directory, so
+Mimi Seed never starts. Give `npx` a throwaway prefix, or run from outside the project and point at it with
+`--path`:
+
+```bash
+npx -y --prefix "$(mktemp -d)" mimi-seed@latest check --local --path .
+```
+
+```powershell
+$prefix = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+npx -y --prefix $prefix.FullName mimi-seed@latest check --local --path .
+```
+
+The same applies to a CI step that runs `npx` in the checkout; the reusable Release Doctor workflow already uses a
+throwaway prefix.
+
 **Running from a git checkout and the binary behaves like an old version.**
 `npm link` links `dist/`, not `src/`. Re-run `npm run build` after every source change. See
 [`from-source.md`](from-source.md).

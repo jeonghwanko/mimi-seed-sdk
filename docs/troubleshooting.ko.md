@@ -40,6 +40,24 @@ Claude Code 는 보통 다음 호출에서 다시 연결할 수 있고 `/mcp` �
 **Node 버전 에러.**
 Node 20+ 가 필요하다 (CLI·MCP 서버 공통). `.nvmrc` 가 SSOT — `nvm use`.
 
+<a id="devengines"></a>
+
+**`npx mimi-seed …` 가 아무것도 출력하기 전에 `npm error code EBADDEVENGINES` 로 멈춘다.**
+Mimi Seed 오류가 아니다. 지금 있는 프로젝트의 `package.json` 이 `devEngines`(예: Node `^24` 런타임, 패키지
+매니저 `pnpm`)를 선언했고, npm 이 그 디렉터리 안의 모든 `npx` 실행에 이를 강제해서 Mimi Seed 가 시작되지 않는다.
+`npx` 에 일회용 prefix 를 주거나, 프로젝트 밖에서 실행하고 `--path` 로 가리켜라.
+
+```bash
+npx -y --prefix "$(mktemp -d)" mimi-seed@latest check --local --path .
+```
+
+```powershell
+$prefix = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+npx -y --prefix $prefix.FullName mimi-seed@latest check --local --path .
+```
+
+체크아웃 안에서 `npx` 를 실행하는 CI 단계도 마찬가지다. 재사용 Release Doctor 워크플로는 이미 일회용 prefix 를 쓴다.
+
 **git 체크아웃에서 돌리는데 바이너리가 옛날 버전처럼 군다.**
 `npm link` 는 `src/` 가 아니라 `dist/` 를 링크한다. 소스를 고칠 때마다 `npm run build` 를 다시 돌려야 한다.
 [`from-source.ko.md`](from-source.ko.md) 참고.
