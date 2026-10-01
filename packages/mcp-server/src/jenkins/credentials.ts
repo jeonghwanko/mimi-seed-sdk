@@ -70,6 +70,7 @@ const TYPE_NAME_KINDS: Record<string, CredentialKind> = {
 const KIND_LABELS: Record<string, string> = {
   [KIND_STRING]: 'Secret text',
   [KIND_FILE]: 'Secret file',
+  // 따옴표는 일부러 — `usernamePassword: 'Username with password'` 꼴은 플러그인 스캐너가 비밀번호 리터럴로 오탐한다.
   'usernamePassword': 'Username with password',
   ssh: 'SSH Username with private key',
   certificate: 'Certificate',

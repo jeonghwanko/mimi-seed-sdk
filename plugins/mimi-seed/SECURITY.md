@@ -1,8 +1,8 @@
 # Security Policy
 
 Mimi Seed is a local CLI (`mimi-seed`) and a local stdio MCP server (`@yoonion/mimi-seed-mcp`), shipped together
-with Claude Code and Codex plugin bundles. They call Google, Apple, Meta, TikTok, GitHub/GitLab, and Jenkins APIs
-with credentials stored on your machine under `~/.mimi-seed/`.
+with Claude Code and Codex plugin bundles. They call Google, Apple, Meta, TikTok, GitHub/GitLab, Jenkins, Anthropic,
+and Naver (IndexNow) APIs with credentials stored on your machine under `~/.mimi-seed/`.
 
 ## Supported versions
 
@@ -15,12 +15,11 @@ not supported. If you are on an older version, upgrade before reporting — the 
 
 **Please do not open a public issue, pull request, or discussion for a security problem.**
 
-Report it privately through GitHub: open the repository's **Security** tab and choose
-**Report a vulnerability** (<https://github.com/jeonghwanko/mimi-seed-sdk/security/advisories/new>). If that
-form is unavailable to you, email the maintainer at the address already published in the
+Report it privately by email to the maintainer at the address published in the
 [README](https://github.com/jeonghwanko/mimi-seed-sdk#license) and
-[CONTRIBUTING](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/CONTRIBUTING.md#license) with "SECURITY"
-in the subject.
+[CONTRIBUTING](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/CONTRIBUTING.md#license), with "SECURITY"
+in the subject. If the repository's **Security** tab offers **Report a vulnerability**, you can use that private
+form instead.
 
 Please include:
 

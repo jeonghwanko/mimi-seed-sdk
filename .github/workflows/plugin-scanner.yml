@@ -11,9 +11,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: plugin-scanner-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -24,3 +29,4 @@ jobs:
           plugin_dir: "."
           min_score: 80
           fail_on_severity: high
+          pr_comment: off # no GITHUB_TOKEN is passed; results go to the step summary

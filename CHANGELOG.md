@@ -18,6 +18,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `SECURITY.md` — how to report a vulnerability privately, which versions get fixes, and what is in scope. It also
+  ships inside the Codex plugin bundle.
+
+### Tool changes
+
+- none
+
 ## [0.21.3] - 2026-10-01
 
 ### Fixed

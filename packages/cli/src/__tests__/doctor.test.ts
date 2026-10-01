@@ -120,7 +120,7 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
     const rejectedToken = () => {
       mocks.config.mockResolvedValue({
         token: "example-token",
-        prefix: "placehol",
+        prefix: "example-",
         endpoint: "https://console.example.test/api/mcp",
         webBase: "https://console.example.test",
         createdAt: "2026-01-01T00:00:00.000Z",
@@ -165,7 +165,7 @@ describe("doctor 종료 코드와 원격 토큰 조건", () => {
   it("서버에 닿지 않아도 doctor 가 죽지 않고 ✗ 한 줄로 남긴다", async () => {
     mocks.config.mockResolvedValue({
       token: "example-token",
-      prefix: "placehol",
+      prefix: "example-",
       endpoint: "https://console.example.test/api/mcp",
       webBase: "https://console.example.test",
       createdAt: "2026-01-01T00:00:00.000Z",
