@@ -79,7 +79,7 @@ export function requireJenkinsConfig(): JenkinsConfig {
       'Jenkins 설정이 없습니다.\n' +
       'jenkins_save_config 도구로 먼저 설정해주세요.\n' +
       '예시:\n' +
-      '  jenkins_save_config(url="https://jenkins.example.com", username="admin", token="<api-token>")',
+      '  jenkins_save_config(url="https://jenkins.example.com", username="admin", token=<Jenkins API token>)',
     );
   }
   return cfg;
