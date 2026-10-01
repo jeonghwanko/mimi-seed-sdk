@@ -79,10 +79,13 @@ describe('cmdCheck Release Doctor entry', () => {
   // CI command must not be one that crashes there.
   it('devEngines를 선언한 프로젝트에는 일회용 prefix를 쓰는 CI 명령을 안내한다', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-devengines-'));
+    // 안내하는 명령은 플랫폼의 셸 형식(Windows 는 PowerShell)을 따른다 — 러너 OS 와 무관하게 bash 형식을 검사한다.
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     try {
       fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ devEngines: { runtime: { name: 'node', version: '^24.0.0' } } }));
       vi.stubEnv('CI', '');
       vi.stubEnv('MIMI_SEED_LANG', 'en');
+      Object.defineProperty(process, 'platform', { ...platform, value: 'linux' });
 
       await cmdCheck(['--local', '--path', dir]);
 
@@ -90,6 +93,7 @@ describe('cmdCheck Release Doctor entry', () => {
       expect(output).toContain('npx -y --prefix "$(mktemp -d)" mimi-seed check --local --path . --fail-on-blocker');
       expect(output).toContain('EBADDEVENGINES');
     } finally {
+      Object.defineProperty(process, 'platform', platform);
       vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
     }

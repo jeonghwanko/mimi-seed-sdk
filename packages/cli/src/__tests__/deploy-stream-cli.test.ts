@@ -10,6 +10,8 @@ describe("deploy CLI stream outcome", () => {
   let output: string;
 
   beforeEach(() => {
+    // 이 테스트는 한국어 출력(배포 파이프라인 완료)을 검사한다 — 언어는 시스템 로케일이 아니라 여기서 고정한다.
+    vi.stubEnv("MIMI_SEED_LANG", "ko");
     output = "";
     vi.spyOn(process.stdout, "write").mockImplementation(chunk => {
       output += String(chunk);
@@ -18,6 +20,7 @@ describe("deploy CLI stream outcome", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
