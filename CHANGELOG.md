@@ -18,6 +18,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Security
+
+- `mimi-seed notes` and `mimi-seed doctor` no longer pass git refs through a shell. A repository tag name may
+  contain `$(…)`, `;`, or `|`, so running either command in a repository with a crafted tag (or passing such a
+  value to `--from` / `--to`) could run a command. A ref starting with `-` is also no longer read as a `git log`
+  option. On Windows, `mimi-seed restart` no longer builds a `cmd.exe` / PowerShell command line from the MCP
+  server's configured arguments.
+
+### Tool changes
+
+- none
+
 ## [0.21.2] - 2026-09-29
 
 ### Added

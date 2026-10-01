@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -219,12 +219,20 @@ function findPids(markers: string[]): number[] {
 function killByMarkers(markers: string[]): { killed: number } {
   const isWin = os.platform() === 'win32';
   if (isWin) {
-    // PowerShell로 CommandLine에 marker를 포함한 모든 PID 조회
-    const escaped = markers[0].replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    // PowerShell로 CommandLine에 marker를 포함한 모든 PID 조회.
+    // marker 는 MCP 설정의 args 에서 온다 — cmd.exe 를 거치지 않고(execFileSync), PowerShell
+    // 작은따옴표 리터럴로만 넘긴다(작은따옴표는 두 번 써서 이스케이프). -like 대신 .Contains() 라
+    // 와일드카드 문자도 글자 그대로다.
+    const literal = markers[0].replaceAll("'", "''");
     let pids: string[];
     try {
-      const out = execSync(
-        `powershell -NoProfile -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*${escaped}*' } | Select-Object -ExpandProperty ProcessId"`,
+      const out = execFileSync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          `Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${literal}') } | Select-Object -ExpandProperty ProcessId`,
+        ],
         { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] },
       ).trim();
       pids = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -234,7 +242,7 @@ function killByMarkers(markers: string[]): { killed: number } {
     let killed = 0;
     for (const pid of pids) {
       try {
-        execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+        execFileSync('taskkill', ['/F', '/PID', pid], { stdio: 'pipe' });
         log(kleur.dim(M().killedPid(pid)));
         killed++;
       } catch { /* ignore: process may have already exited */ }

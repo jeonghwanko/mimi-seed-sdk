@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 export interface GitCommit {
   hash: string;
@@ -9,7 +9,7 @@ export interface GitCommit {
 
 export function isGitRepo(cwd: string): boolean {
   try {
-    execSync("git rev-parse --git-dir", { cwd, stdio: "pipe" });
+    execFileSync("git", ["rev-parse", "--git-dir"], { cwd, stdio: "pipe" });
     return true;
   } catch {
     return false;
@@ -18,7 +18,7 @@ export function isGitRepo(cwd: string): boolean {
 
 export function getLatestTag(cwd: string): string | null {
   try {
-    return execSync("git describe --tags --abbrev=0", { cwd, stdio: "pipe" })
+    return execFileSync("git", ["describe", "--tags", "--abbrev=0"], { cwd, stdio: "pipe" })
       .toString()
       .trim();
   } catch {
@@ -33,11 +33,12 @@ export function getGitLog(
   const { from, to = "HEAD", limit = 30 } = opts;
   const range = from ? `${from}..${to}` : to;
   const format = "%H\x1f%s\x1f%ci\x1f%an";
-  const limitFlag = `--max-count=${limit}`;
 
+  // ref 는 --from/--to 인자나 레포의 태그 이름에서 온다. 태그 이름엔 `$(…)`·`;`·`|` 가 허용되므로
+  // 셸을 거치지 않고, `--end-of-options` 로 `-` 로 시작하는 ref 가 옵션으로 읽히는 것도 막는다.
   let out: string;
   try {
-    out = execSync(`git log ${limitFlag} --format="${format}" ${range}`, {
+    out = execFileSync("git", ["log", `--max-count=${limit}`, `--format=${format}`, "--end-of-options", range], {
       cwd,
       stdio: "pipe",
     }).toString();
