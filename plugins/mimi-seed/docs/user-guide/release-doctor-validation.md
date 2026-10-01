@@ -57,7 +57,11 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   script is noted the same way, not reported as unresolved. Packages the repository provides itself (yarn / pnpm /
   npm workspace packages, `file:` / `link:` dependencies pointing at a folder, a package linked into node_modules/)
   are not third-party: they are read from their folder, and an unfollowable reference in them makes the result
-  unresolved. A package linked into node_modules/ from a folder outside the repository (`yarn link`) is read the
+  unresolved. A `file:` / `link:` / `portal:` dependency whose folder is missing inside the repository (an
+  uninitialised submodule) is the repository's own, unreadable package, so the result is unresolved; a missing
+  tarball or a target outside the repository is treated like a registry package. Workspace globs (`packages/*`,
+  `apps/*/native`, `packages/**`) are expanded breadth-first, up to depth 12 and 2,000 directories; when that limit
+  is reached and the package was not found, the result is unresolved rather than third-party. A package linked into node_modules/ from a folder outside the repository (`yarn link`) is read the
   same way, so files outside the scanned repository may be read. A `package.json` with the same name inside a
   test, fixture, sample, or vendored folder is ignored unless a workspace glob declares it.
 - **A Gradle project named like an npm package** (`project(':pkg')`) is resolved from the settings: a parsed
@@ -78,18 +82,24 @@ often than they make it wrong. Where a limit can hide a setting, it says so.
   check for the library plugin, which is treated as library-only: `plugins.withId('com.android.library') { … }`
   (also with the receiver chain split over lines), `if (…hasPlugin('com.android.library')) { … }`,
   `else if (…hasPlugin('com.android.library')) { … }`, and a Kotlin `when` branch
-  `plugins.hasPlugin("com.android.library") -> …`. The whole condition is read, also when it spans lines, and the
-  check must be on the project itself (no receiver, `plugins.`, `project.`, `this.`, `it.`, or a closure parameter).
-  A conjunction that includes that check (`!a && plugins.hasPlugin('com.android.library')`) is library-only too.
-  Anything else — `||` (also at a line end or start), a `when` alternative (`a, b ->`), `!`, a plain `else`, a
-  ternary, a variable id, the application id, or a check on another project (`rootProject.plugins…`,
-  `lib.plugins…`) — counts for the app, and a setting inside a library-only block that reaches another project
-  (`project(':app')…`, `rootProject`, `gradle.…` / `project.gradle.…` / `getGradle()`, a bare `configure(…)`)
-  still counts.
+  `plugins.hasPlugin("com.android.library") -> …`. The check must be on the project itself (no receiver, `plugins.`,
+  `pluginManager.`, `project.`, `this.`, `it.`, or a closure parameter — `p ->`, `Project p ->`, `def p ->`,
+  `p: Project ->` — and the settings inside must be made on that same project). A conjunction that includes that
+  check (`!a && plugins.hasPlugin('com.android.library')`) is library-only too. Anything else counts for the app:
+  `||` / `or` / `xor` (also at a line end or start), a `when` alternative (`a, b ->`), `!`, a plain `else`, a
+  ternary or Elvis `?:`, a variable id, the application id, or a check on another project
+  (`rootProject.plugins…`, `lib.plugins…`). A Kotlin `when` condition is read back from the `->` to the line that
+  clearly ends the previous branch (a line containing `->` or ending in `}`, or the `when {` line with nothing after
+  the brace); a comment-only or blank line, an infix operator, or anything else that is not clearly a branch boundary
+  is read as part of the condition. A setting inside a library-only block that reaches another project
+  (`project(':app')…`, `rootProject`, `gradle.…` / `project.gradle.…` / `p.gradle.…` / `getGradle()` or a variable
+  bound to it, a bare `configure(…)`) still counts.
 - **Cross-project configuration** is recognised in its common shapes (`subprojects`, `allprojects`, `project(':x')`,
   `afterEvaluate`, `plugins.withId`, the Gradle object's hooks); other ways of reaching another project's `android`
   block are not modelled — for example `project.configure(otherProjects) { … }` from a library script is not treated
-  as reaching another project.
+  as reaching another project. A library check made on one project variable while another variable is configured
+  counts for the app; more indirect aliasing (a project stored in a collection or returned by a helper) is not
+  followed.
 - **Values computed outside the repository** stay unresolved: Flutter's `flutter.targetSdkVersion` (from the Flutter
   SDK) and properties that only CI passes (`-Px=…`, `ORG_GRADLE_PROJECT_x`).
 - **Unity Gradle templates:** a `**TARGETSDKVERSION**` placeholder is filled from ProjectSettings; a literal value
