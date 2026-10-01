@@ -5,18 +5,25 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getGitLog, getLatestTag, isGitRepo } from '../git.js';
 
+let root: string;
 let repo: string;
-// 개발자 전역 설정(commit.gpgsign, core.hooksPath …)이 픽스처 커밋을 깨지 않게 격리한다.
-const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+let env: NodeJS.ProcessEnv;
 const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe', env });
 const commit = (message: string) => git('-c', 'user.name=Example', '-c', 'user.email=dev@example.com', 'commit', '--allow-empty', '-q', '-m', message);
 
 beforeEach(() => {
-  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-git-test-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-git-test-'));
+  repo = path.join(root, 'repo');
+  fs.mkdirSync(repo);
+  // 개발자 전역 설정(commit.gpgsign, core.hooksPath …)이 픽스처 커밋을 깨지 않게 빈 설정 파일로 격리한다.
+  // os.devNull 은 Windows 에서 `\\.\nul` 이라 Git for Windows 가 설정 파일로 못 연다.
+  const globalConfig = path.join(root, 'gitconfig');
+  fs.writeFileSync(globalConfig, '');
+  env = { ...process.env, GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_NOSYSTEM: '1' };
   git('init', '-q');
   commit('feat: first');
 });
-afterEach(() => { fs.rmSync(repo, { recursive: true, force: true }); });
+afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
 describe('git helpers', () => {
   it('reads commits since the latest tag', () => {
