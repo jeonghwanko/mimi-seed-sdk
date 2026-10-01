@@ -28,7 +28,7 @@ import { detectHints } from "./detect.js";
 import { promptGitProviderSetup } from "./deploy.js";
 import { saveCiProviderConfig, verifyCiToken } from "./ci-providers.js";
 import { t } from "./i18n.js";
-import type { Lang } from "#core/lang.js";
+import { resolveLang, type Lang } from "#core/lang.js";
 import { isLangUnset, writeSettings } from "./settings.js";
 import { usageRun } from "./telemetry.js";
 
@@ -188,7 +188,7 @@ function printObtain(spec: CredSpec): void {
 }
 
 /**
- * 첫 실행이면 언어부터 묻는다 (기본 한국어).
+ * 첫 실행이면 언어부터 묻는다 (엔터 = 지금 보이는 언어: MIMI_SEED_LANG 또는 시스템 로캘).
  *
  * 언어를 먼저 정해야 이 뒤의 모든 출력 — 그리고 마법사가 spawn 하는 setup bin 들 — 이
  * 같은 언어로 나온다. 이미 정해져 있거나 비대화 모드면 묻지 않는다.
@@ -196,7 +196,8 @@ function printObtain(spec: CredSpec): void {
 async function ensureLangChosen(): Promise<void> {
   if (!isLangUnset()) return;
   const answer = await ask(t().lang.ask);
-  const lang: Lang = answer.trim() === "2" || answer.trim().toLowerCase() === "en" ? "en" : "ko";
+  const choice = answer.trim().toLowerCase();
+  const lang: Lang = choice === "1" || choice === "ko" ? "ko" : choice === "2" || choice === "en" ? "en" : resolveLang();
   writeSettings({ lang });
   process.env.MIMI_SEED_LANG = lang; // 이번 프로세스 + spawn 될 자식들에 즉시 반영
   log(kleur.green(t().lang.saved(lang)));

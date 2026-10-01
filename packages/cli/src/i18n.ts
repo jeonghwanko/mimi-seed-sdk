@@ -163,7 +163,7 @@ const en: Catalog = {
   },
 
   lang: {
-    ask: "  Choose a language  [1] 한국어  [2] English  (Enter = 한국어): ",
+    ask: "  Choose a language  [1] 한국어  [2] English  (Enter = English): ",
     saved: (l: Lang) =>
       `  ✅ Language: ${l === "ko" ? "한국어" : "English"}  (change later: mimi-seed lang ko)`,
     usage: `mimi-seed lang — CLI output language

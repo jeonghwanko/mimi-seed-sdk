@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveLang, DEFAULT_LANG } from '#core/lang.js';
+import { resolveLang, systemLang, DEFAULT_LANG } from '#core/lang.js';
 import { isLangUnset, readSettings, writeSettings } from '../settings.js';
 import { t } from '../i18n.js';
 import { CREDENTIALS, credLabel, credObtain } from '../credentials.js';
@@ -12,6 +12,10 @@ let home: string;
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-lang-'));
   vi.stubEnv('MIMI_SEED_LANG', '');
+  // 기본값은 시스템 로캘을 따르므로, 로캘을 고정해 실행 환경과 무관하게 만든다.
+  vi.stubEnv('LC_ALL', '');
+  vi.stubEnv('LC_MESSAGES', '');
+  vi.stubEnv('LANG', 'ko_KR.UTF-8');
 });
 
 afterEach(() => {
@@ -20,8 +24,31 @@ afterEach(() => {
 });
 
 describe('언어 설정', () => {
-  it('기본값은 한국어', () => {
-    expect(DEFAULT_LANG).toBe('ko');
+  it('설정이 없으면 시스템 로캘을 따른다 (한국어 로캘 → ko)', () => {
+    expect(resolveLang(home)).toBe('ko');
+  });
+
+  // 설정 없이 처음 `npx mimi-seed check --local` 을 돌린 영어권 사용자가 한국어 보고서를 받으면 안 된다.
+  it('한국어가 아닌 로캘이나 C/POSIX 로캘이면 영어', () => {
+    vi.stubEnv('LANG', 'en_US.UTF-8');
+    expect(resolveLang(home)).toBe('en');
+    vi.stubEnv('LANG', 'de_DE.UTF-8');
+    expect(resolveLang(home)).toBe('en');
+    vi.stubEnv('LANG', 'C.UTF-8');
+    expect(resolveLang(home)).toBe('en');
+    expect(DEFAULT_LANG).toBe('en');
+  });
+
+  it('로캘 변수는 POSIX 우선순위(LC_ALL > LC_MESSAGES > LANG)를 따른다', () => {
+    expect(systemLang({ LANG: 'en_US.UTF-8', LC_MESSAGES: 'ko_KR.UTF-8' })).toBe('ko');
+    expect(systemLang({ LANG: 'ko_KR.UTF-8', LC_ALL: 'en_GB.UTF-8' })).toBe('en');
+    expect(systemLang({ LANG: 'ko_KR.UTF-8', LC_ALL: 'C' })).toBe('en');
+    expect(systemLang({ LANG: 'ko' })).toBe('ko');
+  });
+
+  it('settings.json 의 선택이 시스템 로캘을 이긴다', () => {
+    vi.stubEnv('LANG', 'en_US.UTF-8');
+    writeSettings({ lang: 'ko' }, home);
     expect(resolveLang(home)).toBe('ko');
   });
 
@@ -39,7 +66,7 @@ describe('언어 설정', () => {
     expect(resolveLang(home)).toBe('en');
   });
 
-  it('알 수 없는 값은 무시하고 기본값으로', () => {
+  it('알 수 없는 값은 무시하고 시스템 로캘로', () => {
     vi.stubEnv('MIMI_SEED_LANG', 'jp');
     expect(resolveLang(home)).toBe('ko');
   });

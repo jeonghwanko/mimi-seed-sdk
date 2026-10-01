@@ -171,7 +171,7 @@ npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 �
 
 첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버되고, 같은 마법사가 필요할 때 App Store Connect · Play 서비스 계정 · Jenkins · GitHub/GitLab CI · Facebook / Instagram / Threads까지 연결해줍니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
 
-`setup` 은 첫 실행이면 언어를 먼저 묻고(기본 한국어, English 선택 가능), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
+`setup` 은 첫 실행이면 언어를 먼저 묻고(엔터 = 시스템 로캘: 한국어 로캘이면 한국어, 그 외 English), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
 
 #### App Store Connect: 한 번 연결하고 안전하게 갱신하기
 
@@ -516,7 +516,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | `PEXELS_API_KEY` | `video_search_stock_assets`의 라이선스 스톡 영상 검색 (선택) |
 | `OPENAI_API_KEY` | `video_generate_image`의 장면 이미지 생성 (선택) |
 | `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 `PATH`에 없을 때 지정하는 선택적 절대경로 |
-| `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선 |
+| `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선. 둘 다 없으면 한국어 시스템 로캘은 한국어, 그 외 로캘은 영어 |
 | `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | 로컬 MCP 전용: 노출할 도구 영역만 고른다 (`playstore,appstore` 같은 도메인 키 쉼표 구분, 또는 그룹 `store` · `google` · `social` · `media` · `build` · `all`). 미지정 = 전체. `auth`·`checks` 는 항상 켜지고, 모르는 키는 경고 후 무시. 도구 lazy-load 가 없는 클라이언트에서 도구 목록을 줄일 때 쓴다 ([에이전트 가이드](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 자체 Google OAuth 클라이언트 사용. 미지정 시 로그인 때 웹 콘솔에서 받아온다 — 오프라인·폐쇄망·자체호스팅이면 지정할 것 ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
 
