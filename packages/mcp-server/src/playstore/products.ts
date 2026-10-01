@@ -170,7 +170,7 @@ export async function updateSubscriptionListings(
     productId,
     created,
     updated,
-    listings: (res.data?.listings ?? merged) as StoredListing[],
+    listings: res.data?.listings ?? merged,
   };
 }
 
