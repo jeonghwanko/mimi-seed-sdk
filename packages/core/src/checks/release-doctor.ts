@@ -430,15 +430,19 @@ const REACT_NATIVE_CATALOG = 'node_modules/react-native/gradle/libs.versions.tom
 
 /** Shape of an Android package name / applicationId (two or more Java-identifier segments). */
 const ANDROID_APPLICATION_ID = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
-// `applicationId` as a DSL assignment, not inside a string ("$applicationId", "applicationId", ...) or a template.
-const APPLICATION_ID_ASSIGNMENT = String.raw`(?<![\w$"'{])applicationId(?:\s*=\s*|[ \t]+)`;
+// `applicationId` as a DSL assignment: not inside a string ("$applicationId", "applicationId", ...) or a template,
+// and not a local Kotlin/Groovy variable that happens to be named so (`val applicationId = …`).
+const APPLICATION_ID_ASSIGNMENT = String.raw`(?<![\w$"'{])(?<!\b(?:val|var|def|const)\s+)applicationId(?:\s*=\s*|[ \t]+)`;
 const APPLICATION_ID_LITERAL = new RegExp(`${APPLICATION_ID_ASSIGNMENT}["']([^"'\\n]+)["']`, 'g');
 const APPLICATION_ID_CATALOG = new RegExp(`${APPLICATION_ID_ASSIGNMENT}libs\\.versions\\.([A-Za-z0-9_.-]+?)\\.get\\(\\)`, 'g');
 // `applicationId APPLICATION_ID` / `applicationId = project.APPLICATION_ID`: a gradle.properties key.
 const APPLICATION_ID_PROPERTY = new RegExp(`${APPLICATION_ID_ASSIGNMENT}(?:project\\.)?([A-Za-z_]\\w*)[ \\t]*(?=$|[;)}])`, 'gm');
 const APPLICATION_ID_ANY = new RegExp(`${APPLICATION_ID_ASSIGNMENT}\\S`);
 const NAMESPACE_LITERAL = /(?<![\w$"'{.])namespace(?:\s*=\s*|[ \t]+)["']([^"'\n]+)["']/;
-const ANDROID_APP_PLUGIN_ID = /\bcom\.android\.application\b|\blibs\.plugins\.android\.application\b/;
+// `com.android.application`, catalog aliases (`libs.plugins.android.application`, KMP's
+// `libs.plugins.androidApplication`), and buildSrc constants (`id(BuildPlugins.androidApplication)`,
+// `id(Plugins.ANDROID_APPLICATION)`).
+const ANDROID_APP_PLUGIN_ID = /\bcom\.android\.application\b|\blibs\.plugins\.android[.-]?application\b|\b(?:id|alias)\s*\(?\s*[\w.]*\bandroid[._]?application\b/i;
 /** Applies the Android application plugin — a root `plugins { … apply false }` declaration only makes it available. */
 function appliesAndroidAppPlugin(text: string): boolean {
   return text.split(/\r?\n/).some((line) => ANDROID_APP_PLUGIN_ID.test(line) && !/\bapply\s*\(?\s*false\b/.test(line));
@@ -484,6 +488,11 @@ function gradleProperties(files: ProjectFile[]): Map<string, string> {
   return new Map([...values].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]]));
 }
 
+/** `applicationId = <expr>` assignments in an app module, as written (for an unresolved-ID report). */
+function applicationIdAssignments(file: ProjectFile): string[] {
+  return [...file.text.matchAll(new RegExp(`${APPLICATION_ID_ASSIGNMENT}[^\\n;]+`, 'g'))].map((match) => match[0].trim());
+}
+
 function androidApplicationIds(
   file: ProjectFile,
   catalog: Map<string, { value: string; file: string }>,
@@ -514,15 +523,22 @@ function moduleDir(relative: string): string {
   return source >= 0 ? relative.slice(0, source) : path.posix.dirname(relative);
 }
 
-const SPECIALIZED_MANIFEST = /android\.hardware\.type\.(?:watch|automotive)|android\.(?:software|hardware)\.xr|LEANBACK_LAUNCHER/i;
+const SPECIALIZED_MANIFEST = /android\.hardware\.type\.(?:watch|automotive)|android\.(?:software|hardware)\.xr/i;
 const LEANBACK_REQUIRED = /android\.software\.leanback[^>]*android:required\s*=\s*["']true["']/i;
+const LEANBACK_OPTIONAL = /android\.software\.leanback[^>]*android:required\s*=\s*["']false["']/i;
+const PHONE_LAUNCHER = /android\.intent\.category\.LAUNCHER["']/;
 
-/** Module directories whose manifest declares Wear OS, TV, Automotive OS, or XR. */
+/**
+ * Module directories whose manifest declares Wear OS, TV, Automotive OS, or XR. A TV launcher entry next to the
+ * phone launcher (leanback not required) is a phone app that also runs on TV, so it keeps the phone rule.
+ */
 function specializedAndroidModules(manifests: ProjectFile[]): Set<string> {
   const result = new Set<string>();
   for (const file of manifests) {
     const manifest = file.text.replace(/<!--[\s\S]*?-->/g, '');
-    if (SPECIALIZED_MANIFEST.test(manifest) || LEANBACK_REQUIRED.test(manifest)) result.add(moduleDir(file.relative));
+    const tvOnly = LEANBACK_REQUIRED.test(manifest)
+      || (/LEANBACK_LAUNCHER/.test(manifest) && !PHONE_LAUNCHER.test(manifest) && !LEANBACK_OPTIONAL.test(manifest));
+    if (SPECIALIZED_MANIFEST.test(manifest) || tvOnly) result.add(moduleDir(file.relative));
   }
   return result;
 }
@@ -536,11 +552,13 @@ function preferShipped<T extends ProjectFile>(candidates: T[]): T[] {
 // --- iOS bundle identifier -----------------------------------------------------------------------------------------
 
 const IOS_TEST_BUNDLE_ID = /(?:^|\.)(?:Tests?|UITests?|RunnerTests)$/i;
-const IOS_TEST_BUNDLE_SUFFIX = /Tests?$/; // `...WikipediaUITests`; case-sensitive so `...contests` is kept
+// `…WikipediaUITests`, `…RunnerTests`: plural and case-sensitive, so `….SpeedTest` and `….contests` are kept.
+const IOS_TEST_BUNDLE_SUFFIX = /Tests$/;
 const IOS_BUNDLE_ID = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 const RELEASE_CONFIGURATION = /release|app\s*store|prod/i;
 // Build configurations that are never archived for the App Store (Debug, Flutter's Profile, test configurations).
-const DEVELOPMENT_CONFIGURATION = /debug|profile|test/i;
+// `TestFlight` / `Beta-TestFlight` configurations ship, so `test` counts only when it is not `TestFlight`.
+const DEVELOPMENT_CONFIGURATION = /debug|profile|test(?!flight)/i;
 // Xcode product types that ship under their own bundle ID in an App Store record: apps, App Clips, watch apps, and
 // app/ExtensionKit/watch extensions.
 const APP_PRODUCT_TYPE = /\.(?:application|app-extension|watchkit2-extension|extensionkit-extension|tv-app-extension)(?:\.[\w-]+)*$/;
@@ -694,10 +712,11 @@ async function detectProject(files: ProjectFile[], root: string) {
   const shippedCatalogs = preferShipped(allCatalogs);
   const catalog = catalogVersions(shippedCatalogs);
   const properties = gradleProperties(files);
-  // An app module applies the Android application plugin or sets a literal, well-formed applicationId. The bare
-  // word `applicationId` (a string, a template, a variable) is not enough.
+  // An app module applies the Android application plugin or assigns `applicationId` in the DSL (any value, so a
+  // convention-plugin module with `applicationId = AppConfig.applicationId` still counts; only the extracted ID
+  // must be well-formed). The word inside a string, a template, or a local variable name does not count.
   const androidAppGradleFiles = gradleFiles.filter((file) => appliesAndroidAppPlugin(file.text)
-    || [...file.text.matchAll(APPLICATION_ID_LITERAL)].some((match) => ANDROID_APPLICATION_ID.test(match[1])));
+    || APPLICATION_ID_ANY.test(file.text));
   const androidAppManifestFiles = files.filter((file) =>
     /(?:^|\/)android\/app\/src\/main\/AndroidManifest\.xml$/.test(file.relative));
   const iosPbxFiles = pbxFiles.filter((file) =>
@@ -725,7 +744,15 @@ async function detectProject(files: ProjectFile[], root: string) {
   // only app in scope (a library repository).
   const shippedAppGradleFiles = preferShipped(androidAppGradleFiles);
   const androidPackageNames = [...expo.androidPackageNames, ...unityAndroidPackageNames];
-  for (const file of shippedAppGradleFiles) androidPackageNames.push(...androidApplicationIds(file, catalog, properties));
+  // Assignments whose value could not be resolved (a buildSrc constant, a Kotlin expression) are reported as such.
+  const androidPackageExpressions: Array<{ file: string; expression: string }> = [];
+  for (const file of shippedAppGradleFiles) {
+    const ids = androidApplicationIds(file, catalog, properties);
+    androidPackageNames.push(...ids);
+    if (ids.length === 0) {
+      for (const expression of applicationIdAssignments(file)) androidPackageExpressions.push({ file: file.relative, expression });
+    }
+  }
 
   const iosBundleIds = [...expo.iosBundleIds, ...unityIosBundleIds];
   const iosBundleIdExpressions: Array<{ file: string; expression: string }> = [];
@@ -774,9 +801,13 @@ async function detectProject(files: ProjectFile[], root: string) {
     android,
     ios,
     androidPackageNames: unique(androidPackageNames),
+    androidPackageExpressions,
     iosBundleIds: unique(iosBundleIds),
     iosBundleIdExpressions,
     androidAppModules: unique(shippedAppGradleFiles.map((file) => moduleDir(file.relative))),
+    // App modules left out as example/sample/demo/test apps because a shipped app exists.
+    sampleAppGradleFiles: shippedOnly ? androidAppGradleFiles.filter((file) => file.sample) : [],
+    catalogFiles: allCatalogs,
     manifests,
     gradleFiles: [...androidGradleFiles, ...(shippedOnly ? allCatalogs.filter((file) => !file.sample) : allCatalogs)],
     targetSdkEvidence: [...unityTargetSdkEvidence, ...expo.targetSdkEvidence],
@@ -928,7 +959,7 @@ interface XcodeEvidence {
   /** Xcode major version, when the evidence names one. */
   major?: number;
   beta: boolean;
-  /** From the repository root, outside the scanned --path: it may build a different app, so never a blocker alone. */
+  /** From the repository root, outside the scanned --path: it may build a different app, so it never decides. */
   outside?: boolean;
 }
 
@@ -1097,7 +1128,29 @@ function iosXcodeFindings(files: ProjectFile[], now: Date): ReleaseDoctorFinding
   if (!policy.current) return [];
 
   const { minimumXcode, sdk, effectiveDate, sourceUrl } = policy.current;
-  const evidence = collectXcodeEvidence(files);
+  const allEvidence = collectXcodeEvidence(files);
+  // The verdict comes from evidence inside the scanned path. CI files read from the repository root (outside a
+  // --path) may build another app, so they can neither make nor cancel a verdict; when they are all there is, they
+  // are only cited for the user to check.
+  const evidence = allEvidence.filter((row) => !row.outside);
+  const outside = allEvidence.filter((row) => row.outside);
+  if (evidence.length === 0 && outside.length > 0) {
+    const listed = describePins(outside);
+    return [{
+      code: 'IOS_XCODE_UNRESOLVED',
+      severity: 'info',
+      title: 'The Xcode version used for iOS release builds could not be resolved locally',
+      detail: `No Xcode pin was found inside the scanned path. CI files at the repository root name: ${listed}. They may build a different app, so Release Doctor does not judge from them. ${IOS_BETA_TOOLS_NOTE.en}`,
+      action: `Confirm the job that archives this app uses Xcode ${minimumXcode} or later with the ${sdk} SDK (run \`xcodebuild -version\` on the build machine).`,
+      file: outside[0].file,
+      sourceUrl,
+      ko: {
+        title: 'iOS 릴리스 빌드의 Xcode 버전을 로컬에서 확정하지 못함',
+        detail: `검사 경로 안에서는 Xcode 고정값을 찾지 못했습니다. 저장소 루트의 CI 파일에 있는 값: ${listed}. 다른 앱을 빌드하는 job일 수 있어 이것만으로 판정하지 않습니다. ${IOS_BETA_TOOLS_NOTE.ko}`,
+        action: `이 앱을 archive하는 job이 Xcode ${minimumXcode} 이상과 ${sdk} SDK를 쓰는지 빌드 머신에서 \`xcodebuild -version\`으로 확인하세요.`,
+      },
+    }];
+  }
   const resolved = evidence.filter((row): row is XcodeEvidence & { major: number } => row.major !== undefined);
 
   if (resolved.length === 0) {
@@ -1131,7 +1184,7 @@ function iosXcodeFindings(files: ProjectFile[], now: Date): ReleaseDoctorFinding
   // A definite blocker needs every piece of Xcode evidence to be a resolved pin below the minimum. A newer pin, or an
   // unpinned/auto-selected build (EAS without ios.image, an unpinned macOS runner), may be the one that uploads;
   // mixed evidence usually means a compatibility job, an unused variable, or a secondary lane.
-  if (below.length > 0 && meeting.length === 0 && unresolved.length === 0 && below.some((row) => !row.outside)) {
+  if (below.length > 0 && meeting.length === 0 && unresolved.length === 0) {
     return [{
       code: 'IOS_XCODE_BELOW_MINIMUM',
       severity: 'blocker',
@@ -1674,15 +1727,22 @@ export async function scanReleaseDoctor(
 
   if (detected.android) {
     if (detected.androidPackageNames.length === 0) {
+      const expressions = unique(detected.androidPackageExpressions.map((row) => `${row.expression} (${row.file})`));
+      const listed = expressions.length > 3 ? `${expressions.slice(0, 3).join(', ')}, +${expressions.length - 3}` : expressions.join(', ');
       findings.push({
         code: 'ANDROID_PACKAGE_UNRESOLVED',
         severity: 'warning',
         title: 'Android application ID could not be resolved',
-        detail: 'The Android project was detected, but no literal applicationId or Expo android.package was found.',
+        detail: listed
+          ? `The app module sets applicationId through an expression Release Doctor cannot evaluate statically: ${listed}. The Target API and Billing checks still ran.`
+          : 'The Android project was detected, but no literal applicationId or Expo android.package was found.',
         action: 'Confirm the release variant applicationId before connecting Google Play.',
+        file: detected.androidPackageExpressions[0]?.file,
         ko: {
           title: 'Android application ID를 확정하지 못함',
-          detail: 'Android 프로젝트는 감지했지만 applicationId 또는 Expo android.package의 문자열 값을 찾지 못했습니다.',
+          detail: listed
+            ? `앱 모듈이 정적으로 계산할 수 없는 표현식으로 applicationId를 지정합니다: ${listed}. Target API와 Billing 검사는 그대로 실행했습니다.`
+            : 'Android 프로젝트는 감지했지만 applicationId 또는 Expo android.package의 문자열 값을 찾지 못했습니다.',
           action: 'Google Play 연결 전에 릴리스 variant의 applicationId를 확인하세요.',
         },
       });
@@ -1752,6 +1812,37 @@ export async function scanReleaseDoctor(
           },
         });
       }
+    }
+
+    // A real app kept in a demo/ or sample/ folder would otherwise be dropped silently: say which excluded app
+    // modules would fail the general rule.
+    const minimum = targetPolicy(now).minimum;
+    const failingSamples = detected.sampleAppGradleFiles.flatMap((file) => {
+      // The nearest version catalog above the module (`<build>/gradle/libs.versions.toml`).
+      const scope = (catalog: ProjectFile) => catalog.relative.replace(/(?:^|\/)(?:gradle\/)?libs\.versions\.toml$/, '');
+      const catalogs = detected.catalogFiles
+        .filter((catalog) => !catalog.outside && (scope(catalog) === '' || file.relative.startsWith(`${scope(catalog)}/`)))
+        .sort((left, right) => scope(right).length - scope(left).length)
+        .slice(0, 1);
+      const verdict = targetSdkFindings([file, ...catalogs], now)[0];
+      return verdict?.code === 'TARGET_SDK_BELOW_MINIMUM' ? [`${moduleDir(file.relative)} (${verdict.title.match(/targetSdk (\d+)/)?.[1]})`] : [];
+    });
+    if (failingSamples.length > 0 && minimum !== null) {
+      const listed = failingSamples.length > 3 ? `${failingSamples.slice(0, 3).join(', ')}, +${failingSamples.length - 3}` : failingSamples.join(', ');
+      findings.push({
+        code: 'TARGET_SDK_SAMPLE_APPS_NOT_CHECKED',
+        severity: 'info',
+        title: 'App modules in example, sample, demo, or test folders were not judged',
+        detail: `These app modules sit in example/sample/demo/test folders, so they were treated as sample apps and left out of the Target API verdict, but their targetSdk is below ${minimum}: ${listed}.`,
+        action: `If one of them is published to Google Play, raise its targetSdk to ${minimum} or newer, or scan it on its own with --path.`,
+        file: detected.sampleAppGradleFiles[0]?.relative,
+        sourceUrl: TARGET_SDK_SOURCE,
+        ko: {
+          title: 'example·sample·demo·test 폴더의 앱 모듈은 판정하지 않음',
+          detail: `다음 앱 모듈은 example/sample/demo/test 폴더에 있어 샘플 앱으로 보고 Target API 판정에서 제외했지만 targetSdk가 ${minimum} 미만입니다: ${listed}.`,
+          action: `이 중 Google Play에 배포하는 앱이 있다면 targetSdk를 ${minimum} 이상으로 올리거나 --path로 그 앱만 따로 검사하세요.`,
+        },
+      });
     }
 
     const billing = await checkBillingCompliance(root, now);

@@ -905,6 +905,59 @@ describe('Release Doctor local scan', () => {
       expect(codes(report)).toContain('TARGET_SDK_OK');
     });
 
+    // Review regression: a convention-plugin app module dropped out of `platforms`, so targetSdk and Billing never ran.
+    describe('convention plugin·buildSrc 상수로 선언한 앱 모듈', () => {
+      const conventionApp = (plugin: string) => ({
+        'app/build.gradle.kts': [
+          'plugins {',
+          `  ${plugin}`,
+          '}',
+          'android {',
+          '  defaultConfig {',
+          '    applicationId = AppConfig.applicationId',
+          '    targetSdk = 33',
+          '  }',
+          '}',
+          'dependencies { implementation("com.android.billingclient:billing:6.0.1") }',
+        ].join('\n'),
+      });
+
+      it('앱으로 감지해 Target API·Billing 블로커를 내고, 해석하지 못한 ID는 표현식과 함께 보고한다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          ...conventionApp('id(BuildPlugins.androidApplication)'),
+          'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;\n',
+          '.xcode-version': '26.0\n',
+        }), at);
+        const unresolved = report.findings.find((row) => row.code === 'ANDROID_PACKAGE_UNRESOLVED');
+
+        expect(report.platforms).toEqual(['android', 'ios']);
+        expect(report.counts.blocker).toBe(2);
+        expect(codes(report)).toEqual(expect.arrayContaining(['TARGET_SDK_BELOW_MINIMUM', 'BILLING_BLOCKER']));
+        expect(unresolved?.detail).toContain('applicationId = AppConfig.applicationId (app/build.gradle.kts)');
+        expect(renderReleaseDoctor(report, 'en')).not.toContain('No submission blocker was found');
+      });
+
+      it.each([
+        ['plugins 블록 없이 applicationId 할당만', ''],
+        ['KMP catalog alias', 'alias(libs.plugins.androidApplication)'],
+        ['buildSrc 대문자 상수', 'id(Plugins.ANDROID_APPLICATION)'],
+      ])('%s 있는 Android 전용 저장소도 NO_MOBILE_PROJECT가 아니다', async (_name, plugin) => {
+        const report = await scanReleaseDoctor(await fixture(conventionApp(plugin)), at);
+
+        expect(report.platforms).toEqual(['android']);
+        expect(codes(report)).not.toContain('NO_MOBILE_PROJECT');
+        expect(codes(report)).toContain('TARGET_SDK_BELOW_MINIMUM');
+      });
+
+      it('라이브러리 모듈의 지역 변수 `val applicationId`는 앱 모듈로 세지 않는다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'shared/build.gradle.kts': 'plugins { id("com.android.library") }\nval applicationId = "com.example.shared"\nandroid { defaultConfig { targetSdk = 33 } }',
+        }), at);
+
+        expect(report.platforms).toEqual([]);
+      });
+    });
+
     it('applicationId가 gradle.properties 키를 가리키면 그 값을 쓴다 (Rocket.Chat)', async () => {
       const root = await fixture({
         'android/app/build.gradle': 'apply plugin: "com.android.application"\nandroid { defaultConfig {\n  applicationId APPLICATION_ID\n  targetSdkVersion 36\n} }',
@@ -939,6 +992,25 @@ describe('Release Doctor local scan', () => {
         expect(report.counts.warning).toBe(0);
       });
 
+      it('휴대전화 LAUNCHER와 TV LEANBACK_LAUNCHER를 함께 가진 모듈(leanback 선택)은 휴대전화 기준을 받는다', async () => {
+        const report = await scanReleaseDoctor(await fixture({
+          'app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.video"; targetSdk 35 } }',
+          'app/src/main/AndroidManifest.xml': [
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+            '  <uses-feature android:name="android.software.leanback" android:required="false" />',
+            '  <application><activity android:name=".Main"><intent-filter>',
+            '    <action android:name="android.intent.action.MAIN" />',
+            '    <category android:name="android.intent.category.LAUNCHER" />',
+            '    <category android:name="android.intent.category.LEANBACK_LAUNCHER" />',
+            '  </intent-filter></activity></application>',
+            '</manifest>',
+          ].join('\n'),
+        }), at);
+
+        expect(codes(report)).toContain('TARGET_SDK_BELOW_MINIMUM');
+        expect(codes(report)).not.toContain('TARGET_SDK_SPECIALIZED_APP_REVIEW');
+      });
+
       it('기준 미달인 휴대전화 앱은 Wear 모듈이 있어도 블로커다', async () => {
         const report = await scanReleaseDoctor(await fixture(wearRepo(35)), at);
 
@@ -969,6 +1041,12 @@ describe('Release Doctor local scan', () => {
       }));
       expect(codes(report)).not.toContain('MULTIPLE_ANDROID_APPLICATION_IDS');
       expect(codes(report)).not.toContain('MULTIPLE_IOS_BUNDLE_IDS');
+      // A real app kept in demo/ must not vanish silently.
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'TARGET_SDK_SAMPLE_APPS_NOT_CHECKED',
+        severity: 'info',
+        detail: expect.stringMatching(/packages\/backend\/example\/android\/app \(33\).*packages\/widgets\/demo\/android\/app \(30\)/),
+      }));
     });
 
     describe('$(VAR) bundle identifier (Element X, Tasks, Immich)', () => {
@@ -1021,6 +1099,18 @@ describe('Release Doctor local scan', () => {
         expect(codes(report)).not.toContain('IOS_BUNDLE_ID_UNRESOLVED');
         expect(codes(report)).not.toContain('MULTIPLE_IOS_BUNDLE_IDS');
       });
+    });
+
+    it('단수 Test로 끝나는 실제 앱 ID와 TestFlight 구성의 ID는 버리지 않는다', async () => {
+      const report = await scanReleaseDoctor(await fixture({
+        'ios/Speed.xcodeproj/project.pbxproj': pbxProject([
+          { name: 'SpeedTest', productType: app, configs: { Debug: 'com.example.SpeedTest.debug', Release: 'com.example.SpeedTest', TestFlight: 'com.example.SpeedTest.beta' } },
+          { name: 'SpeedTestUITests', productType: 'com.apple.product-type.bundle.ui-testing', configs: { Release: 'com.example.SpeedTestUITests' } },
+        ]),
+      }), at);
+
+      expect(report.identifiers.iosBundleIds).toEqual(['com.example.SpeedTest', 'com.example.SpeedTest.beta']);
+      expect(codes(report)).not.toContain('IOS_BUNDLE_ID_UNRESOLVED');
     });
 
     describe('MULTIPLE_IOS_BUNDLE_IDS', () => {
@@ -1078,32 +1168,40 @@ describe('Release Doctor local scan', () => {
         'mobile/ios/Runner.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.photos;\n',
       };
 
-      it('루트 워크플로의 Xcode 핀을 근거로 쓴다', async () => {
-        const root = await fixture({
-          ...git,
-          ...mobile,
-          '.github/workflows/build-mobile.yml': 'jobs:\n  ios:\n    runs-on: macos-26\n    steps:\n      - run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer\n',
-        });
+      const rootWorkflow = (pin: string) => ({
+        '.github/workflows/root.yml': `jobs:\n  mac:\n    runs-on: macos-15\n    steps:\n      - uses: maxim-lobanov/setup-xcode@v1\n        with:\n          xcode-version: ${pin}\n`,
+      });
+
+      it.each(['26.2', '16.4'])('경로 안에 근거가 없으면 루트 핀(%s)은 판정 없이 확인 필요로만 인용한다', async (pin) => {
+        const root = await fixture({ ...git, ...mobile, ...rootWorkflow(pin) });
+
+        const report = await scanReleaseDoctor(path.join(root, 'mobile'), at);
+        const xcode = report.findings.filter((row) => /^IOS_XCODE_/.test(row.code));
+
+        expect(xcode).toEqual([expect.objectContaining({
+          code: 'IOS_XCODE_UNRESOLVED',
+          severity: 'info',
+          file: '../.github/workflows/root.yml',
+          detail: expect.stringContaining(`xcode-version: ${pin}`),
+        })]);
+        expect(report.coverage.unresolved).toContain('IOS_XCODE_UNRESOLVED');
+        expect(report.counts.blocker).toBe(0);
+      });
+
+      // Review regression: a root job for another app (or an unpinned macOS runner) cancelled the app's own blocker.
+      it.each([
+        ['다른 앱의 Xcode 26 핀', rootWorkflow('26.2')],
+        ['핀 없는 macOS runner', { '.github/workflows/root.yml': 'jobs:\n  mac:\n    runs-on: macos-latest\n' }],
+      ])('경로 안의 기준 미달 핀은 루트의 %s 때문에 블로커에서 내려가지 않는다', async (_name, files) => {
+        const root = await fixture({ ...git, ...mobile, 'mobile/.xcode-version': '15.4\n', ...files });
 
         const report = await scanReleaseDoctor(path.join(root, 'mobile'), at);
 
         expect(report.findings).toContainEqual(expect.objectContaining({
-          code: 'IOS_XCODE_OK',
-          file: '../.github/workflows/build-mobile.yml',
+          code: 'IOS_XCODE_BELOW_MINIMUM',
+          severity: 'blocker',
+          file: '.xcode-version',
         }));
-      });
-
-      it('경로 밖 핀만 기준 미달이면 다른 앱의 job일 수 있으므로 블로커가 아닌 경고다', async () => {
-        const root = await fixture({
-          ...git,
-          ...mobile,
-          '.github/workflows/desktop.yml': 'jobs:\n  mac:\n    steps:\n      - uses: maxim-lobanov/setup-xcode@v1\n        with:\n          xcode-version: 16.4\n',
-        });
-
-        const report = await scanReleaseDoctor(path.join(root, 'mobile'), at);
-
-        expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_MIXED_PINS', severity: 'warning' }));
-        expect(report.counts.blocker).toBe(0);
       });
     });
 

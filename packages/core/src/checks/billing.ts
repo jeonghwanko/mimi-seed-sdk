@@ -258,6 +258,11 @@ async function nearestNodePackage(packageDir: string, root: string): Promise<str
   return null;
 }
 
+// Gradle (Groovy/Kotlin) source without line comments and block comments.
+function stripGradleComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'])\/\/.*$/gm, '$1');
+}
+
 function displayPath(root: string, file: string): string {
   return path.relative(root, file).replace(/\\/g, '/');
 }
@@ -273,7 +278,7 @@ async function reactNativeIapEvidence(
   manifestFile: string,
   manifestText: string,
   resolveTransitive: BillingTransitiveResolver | undefined,
-  override: ReactNativeIapBillingOverride | undefined,
+  overrides: ReactNativeIapBillingOverride[],
 ): Promise<BillingEvidence | null> {
   let manifest: Record<string, unknown>;
   try {
@@ -290,6 +295,10 @@ async function reactNativeIapEvidence(
   if (!declaredVersion) return null;
 
   const relativeManifest = displayPath(root, manifestFile);
+  // This app's own root build script (inside the package that declares react-native-iap).
+  const override = overrides
+    .filter((candidate) => isWithin(path.dirname(manifestFile), path.join(root, candidate.file)))
+    .sort((left, right) => left.file.length - right.file.length)[0];
   const unresolved = (expression: string, wrapperVersion = declaredVersion): BillingEvidence => ({
     file: relativeManifest,
     module: 'com.android.billingclient:billing',
@@ -330,10 +339,20 @@ async function reactNativeIapEvidence(
       const locked = await lockedPackageVersion('react-native-iap', packageDir, directory, declaredVersion);
       if (!locked) continue;
       const origin = displayPath(root, path.join(directory, locked.lockfile));
+      if (locked.aliasOf) {
+        // `"react-native-iap": "npm:@fork/…"`: the version is the fork's, so the upstream table does not apply.
+        return unresolved(
+          `react-native-iap is an alias of ${locked.aliasOf}${locked.version ? ` ${locked.version}` : ''} (${origin}); the react-native-iap -> Play Billing table does not apply to a fork, so install dependencies so its Gradle file can be read`,
+          locked.version || declaredVersion,
+        );
+      }
       return fromTable(locked.version, origin) ?? unresolved(
         `react-native-iap ${locked.version} from ${origin} is not in the embedded react-native-iap -> Play Billing table; install dependencies so its Gradle file can be read`,
         locked.version,
       );
+    }
+    if (declaredVersion.startsWith('npm:')) {
+      return unresolved(`react-native-iap is declared as an alias (${declaredVersion}) and is neither installed nor pinned in a lockfile; transitive Billing version is unresolved`);
     }
     return fromTable(declaredVersion, 'declared') ?? unresolved(
       `react-native-iap ${declaredVersion} is declared but neither installed nor pinned in a lockfile; transitive Billing version is unresolved`,
@@ -341,14 +360,20 @@ async function reactNativeIapEvidence(
   }
 
   let installedVersion = declaredVersion;
+  // An `npm:` alias installs a fork under this name; its Gradle files are read as usual, but the upstream
+  // react-native-iap table must not be applied to the fork's version.
+  let aliased = declaredVersion.startsWith('npm:');
   try {
     const installedManifest = JSON.parse(await fs.readFile(path.join(installedDir, 'package.json'), 'utf8')) as {
       version?: unknown;
+      name?: unknown;
     };
     if (typeof installedManifest.version === 'string') installedVersion = installedManifest.version;
+    if (typeof installedManifest.name === 'string') aliased = installedManifest.name !== 'react-native-iap';
   } catch {
     // The declaration still provides useful evidence when package metadata is unavailable.
   }
+  const fromInstalledTable = (version: string): BillingEvidence | null => (aliased ? null : fromTable(version, 'installed'));
   const installedWrapper = { name: 'react-native-iap', version: installedVersion };
 
   const directCandidates = [
@@ -416,7 +441,7 @@ async function reactNativeIapEvidence(
     // Older releases may not use OpenIAP; fall through to the verified table, then to an unresolved, safe result.
   }
   if (!openIapVersion || !/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(openIapVersion)) {
-    return fromTable(installedVersion, 'installed')
+    return fromInstalledTable(installedVersion)
       ?? unresolved(`react-native-iap ${installedVersion} detected; transitive Billing version is unresolved`, installedVersion);
   }
 
@@ -433,7 +458,7 @@ async function reactNativeIapEvidence(
         wrapper: installedWrapper,
       };
     }
-    return fromTable(installedVersion, 'installed') ?? unresolved(
+    return fromInstalledTable(installedVersion) ?? unresolved(
       `react-native-iap ${installedVersion} -> ${coordinate}; transitive lookup unavailable in repository-only mode`,
       installedVersion,
     );
@@ -534,15 +559,20 @@ export async function checkBillingCompliance(
     .map(([, variables]) => variables.get(key))
     .find((value) => value !== undefined);
 
-  // react-native-iap 12.5.1–13.x read `rootProject.ext.playBillingSdkVersion` before their own default.
-  let iapOverride: ReactNativeIapBillingOverride | undefined;
+  // react-native-iap 12.5.1–13.x read `rootProject.ext.playBillingSdkVersion` before their own default, so only a
+  // Gradle root build script (one next to settings.gradle) counts, and commented-out lines do not.
+  // (`RNIap_playBillingSdkVersion` in the app's root gradle.properties does not reach the library: Gradle lets the
+  // library project's own android/gradle.properties override the root project's values.)
+  const iapOverrides: ReactNativeIapBillingOverride[] = [];
   for (const [file, text] of texts) {
     if (!/build\.gradle(?:\.kts)?$/.test(file)) continue;
-    const version = text.match(/\bplayBillingSdkVersion\s*=\s*["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']/)?.[1];
-    if (version) {
-      iapOverride = { file: displayPath(root, file), version };
-      break;
-    }
+    const dir = path.dirname(file);
+    const isRootScript = (await Promise.all(['settings.gradle', 'settings.gradle.kts']
+      .map((name) => fs.stat(path.join(dir, name)).then(() => true, () => false)))).some(Boolean);
+    if (!isRootScript) continue;
+    const version = stripGradleComments(text)
+      .match(/\bplayBillingSdkVersion\s*=\s*["']([0-9]+(?:\.[0-9A-Za-z_-]+){0,3})["']/)?.[1];
+    if (version) iapOverrides.push({ file: displayPath(root, file), version });
   }
 
   const evidence: BillingEvidence[] = [];
@@ -553,7 +583,7 @@ export async function checkBillingCompliance(
       file,
       text,
       options.resolveTransitive,
-      iapOverride,
+      iapOverrides,
     );
     if (transitive && !evidence.some((row) => row.expression === transitive.expression)) evidence.push(transitive);
   }

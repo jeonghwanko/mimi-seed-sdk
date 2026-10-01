@@ -301,6 +301,7 @@ describe('Google Play Billing compliance', () => {
     it('앱의 ext.playBillingSdkVersion은 12.x 기본값을 대체한다', async () => {
       const root = await fixture({
         'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '12.16.2' } }),
+        'android/settings.gradle': 'include ":app"',
         'android/build.gradle': 'buildscript { ext { playBillingSdkVersion = "8.0.0" } }',
       });
 
@@ -312,6 +313,79 @@ describe('Google Play Billing compliance', () => {
         version: '8.0.0',
         source: 'variable',
       }));
+    });
+
+    // Review regression: the override was taken from the first build.gradle anywhere, comments included.
+    it.each([
+      ['주석 처리된 override', {
+        'android/settings.gradle': 'include ":app"',
+        'android/build.gradle': 'buildscript { ext {\n  // playBillingSdkVersion = "8.0.0"\n  /* playBillingSdkVersion = "9.0.0" */\n} }',
+      }],
+      ['다른 앱의 루트 빌드 스크립트', {
+        'other-app/android/settings.gradle': 'include ":app"',
+        'other-app/android/build.gradle': 'buildscript { ext { playBillingSdkVersion = "8.0.0" } }',
+      }],
+      ['settings.gradle 옆이 아닌 모듈 스크립트', {
+        'android/app/build.gradle': 'ext { playBillingSdkVersion = "8.0.0" }',
+      }],
+    ])('%s는 react-native-iap 기본값을 대체하지 않는다', async (_name, files) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ workspaces: ['mobile', 'other-app'] }),
+        'mobile/package.json': JSON.stringify({ dependencies: { 'react-native-iap': '12.16.2' } }),
+        ...Object.fromEntries(Object.entries(files).map(([file, text]) => [file.startsWith('other-app/') ? file : `mobile/${file}`, text])),
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('blocker');
+      expect(result.detectedVersions).toEqual(['7.0.0']);
+    });
+
+    it.each([
+      ['pnpm v5 (importers 없음, inline 버전)', [
+        'lockfileVersion: 5.4', '', 'specifiers:', '  react-native-iap: ^12.16.0', '', 'dependencies:',
+        '  react-native-iap: 12.16.2_react-native@0.72.0', '', 'packages:', '', '  /react-native-iap/12.16.2_react-native@0.72.0:', '    dev: false', '',
+      ]],
+      ['pnpm v6 (importers 없음, 중첩 버전)', [
+        "lockfileVersion: '6.0'", '', 'dependencies:', '  react-native-iap:', '    specifier: ^12.16.0',
+        '    version: 12.16.2(react-native@0.72.0)', '', 'packages:', '',
+      ]],
+    ])('%s 단일 프로젝트 lockfile을 읽는다', async (_name, lines) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': '^12.16.0' } }),
+        'pnpm-lock.yaml': lines.join('\n'),
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('blocker');
+      expect(result.detectedVersions).toEqual(['7.0.0']);
+    });
+
+    // Review regression: an `npm:` alias installs a fork under the react-native-iap name; its version is the fork's.
+    it.each([
+      ['package-lock.json', 'npm:@example-fork/react-native-iap@^1.2.0', {
+        'package-lock.json': JSON.stringify({
+          lockfileVersion: 3,
+          packages: { '': {}, 'node_modules/react-native-iap': { name: '@example-fork/react-native-iap', version: '12.15.0' } },
+        }),
+      }],
+      ['yarn berry', 'npm:@example-fork/react-native-iap@^1.2.0', {
+        'yarn.lock': '"react-native-iap@npm:@example-fork/react-native-iap@^1.2.0":\n  version: 12.15.0\n  resolution: "@example-fork/react-native-iap@npm:12.15.0"\n',
+      }],
+      ['pnpm', 'npm:@example-fork/react-native-iap@^1.2.0', {
+        'pnpm-lock.yaml': "lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      react-native-iap:\n        specifier: npm:@example-fork/react-native-iap@^1.2.0\n        version: '@example-fork/react-native-iap@12.15.0'\n",
+      }],
+    ])('%s의 npm: alias는 upstream 표로 판정하지 않는다', async (_name, declared, lock) => {
+      const root = await fixture({
+        'package.json': JSON.stringify({ dependencies: { 'react-native-iap': declared } }),
+        ...lock,
+      });
+
+      const result = await checkBillingCompliance(root, new Date('2026-10-01T00:00:00Z'));
+
+      expect(result.status).toBe('unresolved');
+      expect(result.summary).toContain('alias of @example-fork/react-native-iap');
     });
 
     it('설치된 12.x는 패키지의 gradle.properties 기본값을 읽는다 (이전에는 unresolved)', async () => {

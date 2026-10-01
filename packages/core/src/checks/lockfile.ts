@@ -65,6 +65,69 @@ export interface LockedVersion {
   version: string;
   /** The lockfile's base name, for evidence text. */
   lockfile: 'package-lock.json' | 'pnpm-lock.yaml' | 'yarn.lock';
+  /**
+   * The package actually installed under the dependency's name when it differs — an `npm:` alias such as
+   * `"react-native-iap": "npm:@fork/react-native-iap@^12"`. The version is then that package's, not `name`'s.
+   */
+  aliasOf?: string;
+}
+
+/** `npm:@scope/pkg@^1.2.3` -> `@scope/pkg`. */
+function aliasTarget(spec: string): string | undefined {
+  return spec.match(/^npm:((?:@[^/@]+\/)?[^@]+)(?:@|$)/)?.[1];
+}
+
+const SEMVER_PREFIX = /^(\d+\.\d+\.\d+[^\s_('"]*)/;
+
+/**
+ * pnpm-lock.yaml: the importer block for the package (v6+ workspaces, and v5 workspaces), or the top level for a
+ * single-project lockfile without `importers:` (v5 and v6). Entries are either `name: 1.2.3_peer@x` (v5 inline) or a
+ * nested `specifier:` / `version: 1.2.3(peer@x)` pair (v6+).
+ */
+function pnpmLockedVersion(text: string, name: string, fromLock: string): { version?: string; alias?: string } | undefined {
+  const lines = text.split(/\r?\n/);
+  const importers = lines.findIndex((line) => /^importers:\s*$/.test(line));
+  let start: number;
+  let end: number;
+  let indent: number;
+  if (importers >= 0) {
+    const importer = lines.findIndex((line, index) => index > importers
+      && new RegExp(`^  ['"]?${escapeRegExp(fromLock || '.')}['"]?:\\s*$`).test(line));
+    if (importer < 0) return undefined;
+    start = importer + 1;
+    end = lines.findIndex((line, index) => index > importer && /^ {0,2}\S/.test(line));
+    if (end < 0) end = lines.length;
+    indent = 4;
+  } else {
+    if (fromLock) return undefined; // a single-project lockfile only describes its own directory
+    start = 0;
+    end = lines.length;
+    indent = 0;
+  }
+  const group = new RegExp(`^ {${indent}}(?:dependencies|devDependencies|optionalDependencies):\\s*$`);
+  const entry = new RegExp(`^ {${indent + 2}}['"]?${escapeRegExp(name)}['"]?:\\s*(.*?)\\s*$`);
+  let inGroup = false;
+  for (let index = start; index < end; index++) {
+    const line = lines[index];
+    if (!line.trim()) continue;
+    const lineIndent = line.match(/^ */)![0].length;
+    if (lineIndent <= indent) inGroup = group.test(line);
+    if (!inGroup) continue;
+    const match = entry.exec(line);
+    if (!match) continue;
+    const values = match[1]
+      ? [match[1]]
+      : lines.slice(index + 1, index + 4).map((next) => next.match(/^\s+version:\s*(.*?)\s*$/)?.[1]).filter((value): value is string => Boolean(value));
+    for (const raw of values) {
+      const value = raw.replace(/^['"]|['"]$/g, '');
+      const version = value.match(SEMVER_PREFIX)?.[1];
+      if (version) return { version };
+      // pnpm writes an aliased dependency's version as `/@fork/pkg/1.2.3`, `@fork/pkg@1.2.3`, or `npm:@fork/pkg@1.2.3`.
+      const alias = value.match(/^(?:npm:|\/)?((?:@[^/@]+\/)?[^/@\s]+)[/@]\d/)?.[1];
+      if (alias) return { alias };
+    }
+  }
+  return undefined;
 }
 
 /** The version a lockfile in `lockDir` resolved for dependency `name` (declared as `declared`) of the package in `packageDir`. */
@@ -75,39 +138,39 @@ export async function lockedPackageVersion(
   declared: string,
 ): Promise<LockedVersion | undefined> {
   const fromLock = path.relative(lockDir, packageDir).replace(/\\/g, '/');
+  const declaredAlias = aliasTarget(declared);
   const npmLock = await readText(path.join(lockDir, 'package-lock.json'));
   if (npmLock) {
     try {
       const lock = JSON.parse(npmLock) as {
-        packages?: Record<string, { version?: unknown }>;
+        packages?: Record<string, { version?: unknown; name?: unknown }>;
         dependencies?: Record<string, { version?: unknown }>;
       };
       const keys = [`${fromLock ? `${fromLock}/` : ''}node_modules/${name}`, `node_modules/${name}`];
       for (const key of keys) {
-        const version = lock.packages?.[key]?.version;
-        if (typeof version === 'string') return { version, lockfile: 'package-lock.json' };
+        const entry = lock.packages?.[key];
+        if (typeof entry?.version !== 'string') continue;
+        // An aliased install records the real package's name next to its version.
+        const installed = typeof entry.name === 'string' && entry.name !== name ? entry.name : declaredAlias;
+        return { version: entry.version, lockfile: 'package-lock.json', ...(installed ? { aliasOf: installed } : {}) };
       }
       const legacy = lock.dependencies?.[name]?.version;
-      if (typeof legacy === 'string') return { version: legacy, lockfile: 'package-lock.json' };
+      if (typeof legacy === 'string') {
+        const legacyAlias = aliasTarget(legacy) ?? declaredAlias;
+        const version = legacy.replace(/^npm:(?:@[^/@]+\/)?[^@]+@/, '');
+        return { version, lockfile: 'package-lock.json', ...(legacyAlias ? { aliasOf: legacyAlias } : {}) };
+      }
     } catch {
       // Malformed lockfile: fall through to the next source.
     }
   }
   const pnpmLock = await readText(path.join(lockDir, 'pnpm-lock.yaml'));
   if (pnpmLock) {
-    const lines = pnpmLock.split(/\r?\n/);
-    const importers = lines.findIndex((line) => /^importers:\s*$/.test(line));
-    const importer = importers >= 0
-      ? lines.findIndex((line, index) => index > importers && line === `  ${fromLock || '.'}:`)
-      : -1;
-    const entry = new RegExp(`^\\s+['"]?${escapeRegExp(name)}['"]?:\\s*$`);
-    for (let index = importer + 1; importer >= 0 && index < lines.length && /^(?:\s{3,}|\s*$)/.test(lines[index]); index++) {
-      if (!entry.test(lines[index])) continue;
-      for (const next of lines.slice(index + 1, index + 4)) {
-        const version = next.match(/^\s+version:\s*['"]?(\d+\.\d+\.\d+[^\s('"]*)/)?.[1];
-        if (version) return { version, lockfile: 'pnpm-lock.yaml' };
-      }
+    const locked = pnpmLockedVersion(pnpmLock, name, fromLock);
+    if (locked?.version) {
+      return { version: locked.version, lockfile: 'pnpm-lock.yaml', ...(declaredAlias ? { aliasOf: declaredAlias } : {}) };
     }
+    if (locked?.alias) return { version: '', lockfile: 'pnpm-lock.yaml', aliasOf: locked.alias };
   }
   const yarnLock = await readText(path.join(lockDir, 'yarn.lock'));
   if (yarnLock) {
@@ -117,7 +180,13 @@ export async function lockedPackageVersion(
       const [first] = block.split(/\r?\n/, 1);
       if (!header.test(first)) continue;
       const version = block.match(/^\s+version:?\s+"?(\d+\.\d+\.\d+[^\s"]*)/m)?.[1];
-      if (version) return { version, lockfile: 'yarn.lock' };
+      if (!version) continue;
+      // Berry: `resolution: "@fork/pkg@npm:1.2.3"`; v1: `resolved "https://registry…/@fork/pkg/-/pkg-1.2.3.tgz"`.
+      const berry = block.match(/^\s+resolution:\s+"?((?:@[^/@"]+\/)?[^@"]+)@/m)?.[1];
+      const classic = block.match(/^\s+resolved\s+"?https?:\/\/[^"\s]*?\/((?:@[^/]+\/)?[^/]+)\/-\//m)?.[1];
+      const installed = [berry, classic].find((candidate) => candidate && decodeURIComponent(candidate) !== name);
+      const aliasOf = installed ? decodeURIComponent(installed) : declaredAlias;
+      return { version, lockfile: 'yarn.lock', ...(aliasOf ? { aliasOf } : {}) };
     }
   }
   return undefined;
