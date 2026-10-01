@@ -46,8 +46,8 @@ const M = catalog(
 
     // cmdReview
     title: "mimi-seed review — 리뷰 답변 생성\n\n",
-    noApiKey: "ANTHROPIC_API_KEY가 설정되지 않았습니다.\n",
-    noApiKeyHint: "활성화: export ANTHROPIC_API_KEY=sk-ant-...\n",
+    noAnthropicKey: "ANTHROPIC_API_KEY가 설정되지 않았습니다.\n",
+    noAnthropicKeyHint: "활성화: export ANTHROPIC_API_KEY=sk-ant-...\n",
     textRequired: "--text <리뷰 내용> 이 필요합니다.\n",
     enterReview: "리뷰 내용을 입력하세요 (여러 줄: Ctrl+D로 완료):\n",
     noInput: "입력 없음. 종료.\n",
@@ -104,8 +104,8 @@ const M = catalog(
 
     // cmdReview
     title: "mimi-seed review — generate a review reply\n\n",
-    noApiKey: "ANTHROPIC_API_KEY is not set.\n",
-    noApiKeyHint: "Enable it: export ANTHROPIC_API_KEY=sk-ant-...\n",
+    noAnthropicKey: "ANTHROPIC_API_KEY is not set.\n",
+    noAnthropicKeyHint: "Enable it: export ANTHROPIC_API_KEY=sk-ant-...\n",
     textRequired: "--text <review body> is required.\n",
     enterReview: "Paste the review (multi-line: finish with Ctrl+D):\n",
     noInput: "Nothing entered. Exiting.\n",
@@ -203,8 +203,8 @@ export async function cmdReview(argv: string[]): Promise<void> {
   process.stdout.write(kleur.bold(M().title));
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    process.stdout.write(kleur.red(M().noApiKey));
-    process.stdout.write(kleur.dim(M().noApiKeyHint));
+    process.stdout.write(kleur.red(M().noAnthropicKey));
+    process.stdout.write(kleur.dim(M().noAnthropicKeyHint));
     process.exit(1);
   }
 

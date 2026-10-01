@@ -70,7 +70,7 @@ const TYPE_NAME_KINDS: Record<string, CredentialKind> = {
 const KIND_LABELS: Record<string, string> = {
   [KIND_STRING]: 'Secret text',
   [KIND_FILE]: 'Secret file',
-  usernamePassword: 'Username with password',
+  'usernamePassword': 'Username with password',
   ssh: 'SSH Username with private key',
   certificate: 'Certificate',
   githubApp: 'GitHub App',

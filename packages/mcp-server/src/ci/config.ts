@@ -30,7 +30,7 @@ export function requireCiConfig(): CiConfig {
       'ci_save_config 도구로 먼저 설정해주세요.\n' +
       '예시:\n' +
       '  GitHub: ci_save_config(provider="github", token="ghp_...", owner="my-org", repo="my-app")\n' +
-      '  GitLab: ci_save_config(provider="gitlab", token="glpat-...", owner="my-group", repo="my-app")',
+      '  GitLab: ci_save_config(provider="gitlab", token="<glpat-token>", owner="my-group", repo="my-app")',
     );
   }
   return cfg;

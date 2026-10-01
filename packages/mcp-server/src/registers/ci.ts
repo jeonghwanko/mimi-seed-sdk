@@ -13,7 +13,7 @@ export function registerCiTools(server: ToolRegistrar) {
       '저장 위치: ~/.mimi-seed/ci.json (mode 0600).',
       'GitHub: provider="github", token="ghp_..." (repo+workflow 스코프 필요)',
       'GitHub Enterprise: host="https://github.example.com" 추가',
-      'GitLab.com: provider="gitlab", token="glpat-..."',
+      'GitLab.com: provider="gitlab", token="<glpat-token>"',
       'Self-hosted GitLab: host="https://gitlab.example.com" 추가',
     ].join(' '),
     {
