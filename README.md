@@ -171,7 +171,7 @@ npx mimi-seed setup   # accounts: one guided wizard for stores · CI · social
 
 You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery; the same wizard also connects App Store Connect, a Play service account, Jenkins, GitHub/GitLab CI, and Facebook / Instagram / Threads whenever you need them → [What do you actually need?](docs/credentials.md#what-you-need)
 
-On first run `setup` asks for your language (Korean by default, English available), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Reconnect the three Meta platforms any time with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
+On first run `setup` asks for your language (Enter keeps your system locale: Korean for a Korean locale, otherwise English), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Reconnect the three Meta platforms any time with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
 
 #### App Store Connect: connect once, update safely
 
@@ -519,7 +519,7 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/t
 | `PEXELS_API_KEY` | Licensed stock-video search for `video_search_stock_assets` (optional) |
 | `OPENAI_API_KEY` | Generated scene images for `video_generate_image` (optional) |
 | `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | Optional absolute executable paths when FFmpeg/ffprobe are not on `PATH` |
-| `MIMI_SEED_LANG` | Force CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json` |
+| `MIMI_SEED_LANG` | Force CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json`; with neither set, a Korean system locale gets Korean and any other locale English |
 | `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | Local MCP only: expose just these tool domains (comma-separated domain keys such as `playstore,appstore`, or groups `store` · `google` · `social` · `media` · `build` · `all`). Unset = every domain. `auth` and `checks` are always on; unknown keys are ignored with a warning. Keeps tool lists small in clients without lazy tool loading ([agent guide](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Bring your own Google OAuth client. Otherwise it is fetched from the web console at login — set these if you're offline, air-gapped, or self-hosting ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
 

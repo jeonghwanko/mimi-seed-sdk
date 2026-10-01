@@ -161,7 +161,7 @@ mimi-seed setup          # 링크했다면 (3b)
 npm run dev -- setup     # 또는 packages/cli 안에서
 ```
 
-첫 실행이면 **언어**를 먼저 묻고(기본 한국어, `[2]` 를 누르면 English), 그다음 모든 자격증명을 순회하며 각
+첫 실행이면 **언어**를 먼저 묻고(`[1]` 한국어, `[2]` English, 엔터 = 시스템 로캘), 그다음 모든 자격증명을 순회하며 각
 토큰을 어디서 받는지 알려준다 ([`credentials.ko.md`](credentials.ko.md)).
 
 나중에 바꾸려면 `mimi-seed lang en` / `mimi-seed lang ko`, 한 번만 강제하려면 `MIMI_SEED_LANG=en`.

@@ -164,8 +164,8 @@ mimi-seed setup          # linked (3b)
 npm run dev -- setup     # or, from packages/cli
 ```
 
-On its first run the wizard asks for your **language** (Korean by default; `[2]` for English), then walks every
-credential and tells you where to get each token ([`credentials.md`](credentials.md)).
+On its first run the wizard asks for your **language** (`[1]` Korean, `[2]` English; Enter keeps your system
+locale), then walks every credential and tells you where to get each token ([`credentials.md`](credentials.md)).
 
 Change it later with `mimi-seed lang en` / `mimi-seed lang ko`, or force it per-command with
 `MIMI_SEED_LANG=en`. The setting lives in `~/.mimi-seed/settings.json` and is passed down to the setup

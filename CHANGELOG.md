@@ -23,6 +23,104 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `SECURITY.md` — how to report a vulnerability privately, which versions get fixes, and what is in scope. It also
   ships inside the Codex plugin bundle.
 
+### Changed
+
+- CLI and setup-bin output now follow the system locale when neither `MIMI_SEED_LANG` nor a saved `mimi-seed lang`
+  choice exists: a Korean locale (`LC_ALL` / `LC_MESSAGES` / `LANG`, or the OS locale on Windows) gets Korean,
+  anything else English. It used to be Korean for everyone. The first-run `setup` prompt's Enter default follows
+  the same rule.
+- Release Doctor judges the Android targetSdk per app module and says "meets the minimum" only when every app
+  module's value was resolved from evidence it fully understands. A module it cannot evaluate (a Gradle property or
+  convention plugin it cannot read, a repository script it cannot follow, an unrecognised way of setting
+  `targetSdk`) makes the result unresolved and cites the file and line; a value below the minimum is still a
+  blocker. It now reads version catalogs the way Gradle resolves them, `buildSrc` / `build-logic` / included-build
+  convention plugins (Kotlin, Groovy, Java), applied scripts, workspace packages, and Gradle properties. Scripts of
+  JavaScript packages (`node_modules/`, React Native autolinking, Sentry, Expo) are read when found and otherwise
+  listed in a new info item, `TARGET_SDK_THIRD_PARTY_SCRIPTS_NOT_READ`. The JSON report gains `targetSdkModules` and
+  `targetSdkTokens`. `findProperty("x") ?: N` defaults are no longer taken as the module's value. Library, sample,
+  and Wear OS / TV modules are left out unless they configure another project. The check stays deliberately
+  conservative; what it does not model — including the few shapes that can hide a setting — is listed in "Known
+  limits of the Target API check" in the user guide's Release Doctor validation page.
+- Release Doctor no longer prints "No submission blocker was found" when a check could not reach a verdict (an
+  unresolved targetSdk, Billing, or Xcode version, a stale policy table, a Wear OS/TV module); the summary says the
+  check is incomplete and names those items. They are also listed in the JSON report as `coverage.unresolved`.
+- Release Doctor labels undecided info items `NEEDS CHECK` (Korean `확인 필요`, where `확인` read as "confirmed");
+  other info items are `INFO` (`정보`).
+- Release Doctor Billing findings show their evidence (file and resolved expression, including why a version is
+  unresolved), a passing Billing check no longer suggests an upgrade, and the Korean action matches the English one.
+
+### Fixed
+
+- Release Doctor missed a Play Billing blocker for React Native apps using `react-native-iap` when the package was
+  not installed (a fresh clone or CI): the version pinned in `yarn.lock` / `package-lock.json` / `pnpm-lock.yaml`
+  (also at the repository root when `--path` points into a workspace) is now mapped to the Billing version that
+  release bundles, verified against every stable `react-native-iap` release through 16.7.2 — e.g. 12.15–13.x →
+  Billing 7, a blocker since 2026-08-31. An installed 12.5–13.x and an app's `ext.playBillingSdkVersion` override are
+  read too (only from the app's own root build script, comments ignored; Groovy `ext` and Kotlin `extra[…]` /
+  `extra.set(…)` forms; an override Release Doctor cannot evaluate makes the result unresolved instead of using the
+  default; local variables and `subprojects { … }` extras are not overrides). react-native-iap installed under another
+  name (`"iap": "npm:react-native-iap@…"`, including pnpm v9 lockfiles) is recognised, and a fork installed under
+  another name is reported as unresolved. pnpm v5/v6 single-project lockfiles are
+  read; newer or unknown releases, and `npm:` aliases that install a fork under the react-native-iap name, stay
+  unresolved.
+- A Wear OS, TV, Automotive, or XR module no longer switches off the Target API check for the whole repository; the
+  phone app is still checked, and the specialized module is reported for a category-specific check. A module that has
+  the phone launcher (in its main or a flavor manifest, or in a library module merged into it) keeps the phone rule; a
+  module with only the TV launcher, or whose main manifest requires leanback (unless a flavor removes or relaxes that
+  with `tools:node="remove"` / `tools:replace`), is a TV app. Debug-only manifests are ignored.
+- Android application IDs: strings, templates, comments, local variables, and extra properties
+  (`ext.applicationId`, `ext { applicationId = … }`) that mention `applicationId` are no longer reported as IDs (or
+  as extra app modules); `applicationId` read from the version catalog or `gradle.properties`,
+  and the `namespace` fallback, are resolved. An app module declared through a convention plugin or a buildSrc
+  constant (`id(BuildPlugins.androidApplication)`, `libs.plugins.androidApplication`) or only by an
+  `applicationId = <expression>` assignment is still detected and checked; an ID Release Doctor cannot evaluate is
+  reported as unresolved with the expression.
+- targetSdk set in a script pulled in with `apply from:` (e.g. `common.gradle`), in a Kotlin DSL root script
+  (`extra["targetSdkVersion"] = 36`), or in Expo's `expo-build-properties` plugin is now read instead of reported as
+  unresolved, as are targetSdk values named through Gradle properties or extras (`gradle.properties`,
+  `project.property("x")`, `rootProject.ext.x`, `set("x", 36)`, `val x: String by project`, a single local such as
+  `def x = 36` or `val x = libs.versions.x.get().toInt()`) and AGP's `targetSdk { version = release(36) }`, plus
+  values a build root sets for every module in `subprojects { … }` / `allprojects { … }`. A property counts only from
+  the module's own build (gradle.properties on the path from its settings directory, not other modules, included
+  builds, or demo trees, unless the module itself lives there); a name that CI overrides (`-Px=`,
+  `ORG_GRADLE_PROJECT_x`), that has competing declarations, is assigned from an expression, or that two sources
+  disagree on stays unresolved rather than guessed. Version catalogs resolve the way Gradle does: from the
+  module's own build's settings (`versionCatalogs { create(…) { from(files(…)) } }`, any accessor such as
+  `androidx.versions.*`, `$rootDir` paths, and literal `version("x", "33")` overrides in any call shape) plus the default
+  `gradle/libs.versions.toml`, so a nested build and the repository root (or two builds sharing a key) no longer
+  overwrite each other's values; a `version` call it cannot parse leaves that catalog unresolved
+  (`library(…).version(…)` is not one). A `subprojects` / `allprojects` value always counts next to the module's own
+  (the lowest wins), a local variable counts only when declared before its use in an enclosing block, an extra
+  property is looked up only in the module's own project hierarchy, `ext.targetSdkVersion = …` is a property
+  definition rather than the module's targetSdk, and a name a settings script sets for every project
+  (`gradle.beforeProject { … }`) stays unresolved. Calls with nested parentheses
+  (`targetSdkVersion(libs.versions.targetSdk.get().toInt())`, `Integer.parseInt(…)`) are read in full. Every way of
+  applying the application plugin counts (`apply { plugin(…) }`, `pluginManager.apply(…)`, a multi-line `id(…)`);
+  a build script that only mentions it (`hasPlugin(…)`, `withId(…)`, `listOf(…)`, `apply false`) is not an app
+  module. Comments are
+  removed with a string-aware reader (including Groovy slashy strings),
+  so a glob such as `pickFirst '**/*.so'` or a URL no longer hides the code after it.
+- Example, sample, demo, and test apps (and component packages' sample apps) no longer supply the identifiers,
+  targetSdk verdict, or cited file when the repository has a real app, so a monorepo's example app no longer causes
+  `MULTIPLE_*` warnings or a blocker that cites the wrong file. Excluded app modules whose targetSdk is below the
+  minimum are listed in an info item, so a real app kept in a `demo/` folder is not dropped silently; when the only
+  app lives in `demo/`, its Xcode pins (when the iOS app is there) and FCM sources are still checked.
+- A Billing blocker in a repository with several apps names only the versions below the minimum and cites the
+  failing app's file.
+- iOS bundle IDs written as `$(VAR)` / `${VAR}` are resolved from `.xcconfig` files and XcodeGen `project.yml`
+  settings; when they cannot be resolved, Release Doctor reports them as unresolved instead of borrowing a nested
+  sample project's ID. Framework, test-bundle, and Debug/Profile/Test-only IDs are left out (`TestFlight`
+  configurations are kept).
+- `MULTIPLE_IOS_BUNDLE_IDS` no longer fires for one app plus its extensions, widgets, and watch app, and
+  `…UITests` IDs are filtered.
+- With `--path` inside a repository, the root Gradle version catalog is read, and when the path itself has no Xcode
+  evidence the repository root's CI pins are cited as a `NEEDS CHECK` item (they may build another app, so they
+  never decide the verdict or cancel one found inside the path). Composite actions
+  (`.github/actions/**/action.yml`) count as Xcode pin sources, and Xcode Cloud `ci_scripts/` are reported as such.
+- The reusable Release Doctor workflow, and the CI command `check --local` suggests for projects that declare
+  `devEngines` (in PowerShell form on Windows), run `npx` with a throwaway prefix; inside such a project npm stopped
+  `npx` with `EBADDEVENGINES` before Release Doctor started. The pilot guide and troubleshooting document the workaround.
+
 ### Tool changes
 
 - none

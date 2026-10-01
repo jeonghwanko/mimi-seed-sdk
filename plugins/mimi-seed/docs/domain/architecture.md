@@ -183,9 +183,9 @@ never `npm install`ed, and has no build of its own.
 
 | `#core/…` module | What both packages share |
 |---|---|
-| `checks/{billing,release-doctor,release-doctor-render}.ts` | Release Doctor — the MCP bin/tools and `mimi-seed check --local` run the same scanner in-process |
+| `checks/{billing,release-doctor,release-doctor-render,lockfile,gradle-text}.ts` | Release Doctor — the MCP bin/tools and `mimi-seed check --local` run the same scanner in-process (`lockfile.ts`: npm/pnpm/Yarn lockfile and repository-root lookups; `gradle-text.ts`: string-aware Gradle comment removal) |
 | `project-manifest.ts` | the `.mimi-seed.json` schema + reader (wording of validation errors is passed in by the caller) |
-| `lang.ts` | the `MIMI_SEED_LANG` > `settings.json` > `ko` rule, so the wizard and the setup bins it spawns agree |
+| `lang.ts` | the `MIMI_SEED_LANG` > `settings.json` > system locale (`ko*` → `ko`, else `en`) rule, so the wizard and the setup bins it spawns agree |
 | `atomic-write.ts` | temp + rename credential writes, incl. the Windows rename-retry schedule |
 | `ai.ts` | the Claude model id and the AI generators' language-independent contract (classifier keywords, tone / sentiment keys, `max_tokens`) |
 | `http-errors.ts` | the fetch wrappers' token-stripping endpoint label and timeout detection |

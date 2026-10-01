@@ -5,7 +5,8 @@ const COPY = {
     title: 'Mimi Seed Release Doctor — 로그인 없는 출시 점검',
     platforms: '감지 플랫폼',
     summary: (blockers: number, warnings: number) => `결과: 블로커 ${blockers} · 경고 ${warnings}`,
-    labels: { blocker: '블로커', warning: '경고', info: '확인' },
+    // `확인` alone reads as "confirmed"; an undecided check must say it still needs checking.
+    labels: { blocker: '블로커', warning: '경고', info: '정보', unresolved: '확인 필요' },
     evidence: '근거',
     action: '조치',
     source: '출처',
@@ -17,19 +18,23 @@ const COPY = {
       '심사 제출과 단계적 출시 상태',
     ],
     ready: '로컬 검사에서 제출 차단 요인을 찾지 못했습니다.',
+    incomplete: (count: number, codes: string) =>
+      `블로커는 찾지 못했지만 로컬 검사가 끝나지 않았습니다: ${count}개 항목을 확정하지 못했습니다(${codes}). 위의 [확인 필요]·[경고] 항목을 직접 확인하기 전에는 제출 가능하다고 보지 마세요.`,
     partial: '이 결과는 저장소의 결정적 증거만 검사합니다. 스토어 상태는 연결 후 별도로 확인합니다.',
   },
   en: {
     title: 'Mimi Seed Release Doctor — no-login release check',
     platforms: 'Platforms',
     summary: (blockers: number, warnings: number) => `Result: ${blockers} blockers · ${warnings} warnings`,
-    labels: { blocker: 'BLOCKER', warning: 'WARNING', info: 'INFO' },
+    labels: { blocker: 'BLOCKER', warning: 'WARNING', info: 'INFO', unresolved: 'NEEDS CHECK' },
     evidence: 'Evidence',
     action: 'Action',
     source: 'Source',
     connected: 'Checked after connecting stores',
     connectedChecks: undefined,
     ready: 'No submission blocker was found by the local checks.',
+    incomplete: (count: number, codes: string) =>
+      `No blocker was found, but the local check is incomplete: ${count} item(s) could not be resolved (${codes}). Do not treat this as clear until you have checked the NEEDS CHECK and WARNING items above.`,
     partial: 'This report checks deterministic repository evidence only. Store state is checked separately after connection.',
   },
 } as const;
@@ -38,10 +43,14 @@ function renderFinding(
   finding: ReleaseDoctorFinding,
   copy: typeof COPY.ko | typeof COPY.en,
   lang: 'ko' | 'en',
+  unresolved: ReadonlySet<string>,
 ): string[] {
   const localized = lang === 'ko' ? finding.ko : undefined;
+  const label = finding.severity === 'info' && unresolved.has(finding.code)
+    ? copy.labels.unresolved
+    : copy.labels[finding.severity];
   const lines = [
-    `[${copy.labels[finding.severity]}] ${localized?.title ?? finding.title}`,
+    `[${label}] ${localized?.title ?? finding.title}`,
     `  ${localized?.detail ?? finding.detail}`,
   ];
   if (finding.file) lines.push(`  ${copy.evidence}: ${finding.file}`);
@@ -53,6 +62,8 @@ function renderFinding(
 
 export function renderReleaseDoctor(report: ReleaseDoctorReport, lang: 'ko' | 'en'): string {
   const copy = COPY[lang];
+  // Reports from older versions (and mocks) may not carry `coverage.unresolved`.
+  const unresolved = new Set(report.coverage.unresolved ?? []);
   const lines = [
     '',
     copy.title,
@@ -61,8 +72,12 @@ export function renderReleaseDoctor(report: ReleaseDoctorReport, lang: 'ko' | 'e
     copy.summary(report.counts.blocker, report.counts.warning),
     '',
   ];
-  for (const finding of report.findings) lines.push(...renderFinding(finding, copy, lang), '');
-  if (report.counts.blocker === 0) lines.push(`✓ ${copy.ready}`, '');
+  for (const finding of report.findings) lines.push(...renderFinding(finding, copy, lang, unresolved), '');
+  if (report.counts.blocker === 0) {
+    lines.push(unresolved.size > 0
+      ? `! ${copy.incomplete(unresolved.size, [...unresolved].join(', '))}`
+      : `✓ ${copy.ready}`, '');
+  }
   const connectedChecks = copy.connectedChecks ?? report.coverage.requiresStoreConnection;
   lines.push(copy.partial, '', `${copy.connected}:`, ...connectedChecks.map((item) => `  - ${item}`), '');
   return lines.join('\n');

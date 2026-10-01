@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +13,7 @@ vi.mock('../config.js', () => ({ getEffectiveConfig: mocks.getEffectiveConfig })
 vi.mock('#core/checks/release-doctor.js', () => ({ scanReleaseDoctor: mocks.scanReleaseDoctor }));
 vi.mock('../mcp-client.js', () => ({ mcpCall: mocks.mcpCall }));
 
-import { cmdCheck, parseCheckArgs } from '../check.js';
+import { cmdCheck, devEnginesCheckCommand, parseCheckArgs } from '../check.js';
 
 describe('cmdCheck Release Doctor entry', () => {
   beforeEach(() => {
@@ -70,6 +73,39 @@ describe('cmdCheck Release Doctor entry', () => {
 
     expect(mocks.scanReleaseDoctor).toHaveBeenCalledWith(expected);
     expect(mocks.mcpCall).not.toHaveBeenCalled();
+  });
+
+  // npm enforces package.json devEngines on every npx run inside the project (EBADDEVENGINES), so the suggested
+  // CI command must not be one that crashes there.
+  it('devEngines를 선언한 프로젝트에는 일회용 prefix를 쓰는 CI 명령을 안내한다', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-devengines-'));
+    // 안내하는 명령은 플랫폼의 셸 형식(Windows 는 PowerShell)을 따른다 — 러너 OS 와 무관하게 bash 형식을 검사한다.
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ devEngines: { runtime: { name: 'node', version: '^24.0.0' } } }));
+      vi.stubEnv('CI', '');
+      vi.stubEnv('MIMI_SEED_LANG', 'en');
+      Object.defineProperty(process, 'platform', { ...platform, value: 'linux' });
+
+      await cmdCheck(['--local', '--path', dir]);
+
+      const output = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join('');
+      expect(output).toContain('npx -y --prefix "$(mktemp -d)" mimi-seed check --local --path . --fail-on-blocker');
+      expect(output).toContain('EBADDEVENGINES');
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('Windows에서는 bash 문법 대신 PowerShell 형식의 일회용 prefix 명령을 안내한다', () => {
+    const windows = devEnginesCheckCommand('win32');
+
+    expect(windows).not.toContain('mktemp');
+    expect(windows).toContain('New-Item -ItemType Directory');
+    expect(windows).toContain('npx -y --prefix $p.FullName mimi-seed check --local --path . --fail-on-blocker');
+    expect(devEnginesCheckCommand('linux')).toContain('--prefix "$(mktemp -d)"');
   });
 
   it('로컬 검사 오류를 성공으로 삼키지 않는다', async () => {
