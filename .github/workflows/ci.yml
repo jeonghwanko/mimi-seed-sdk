@@ -30,11 +30,11 @@ jobs:
     name: repo guards (agent-guide · codex plugin · versions)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       # 루트 package.json 은 의존성이 없고 scripts/*.mjs 는 node 빌트인만 쓴다 → install 불필요.
       # .nvmrc(하한선)로 돌려 스크립트 자체도 최저 지원 버전에서 검증한다.
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .nvmrc
 
@@ -64,9 +64,9 @@ jobs:
         shell: bash
         working-directory: packages/${{ matrix.package }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -114,7 +114,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0   # 태그 커밋이 origin/main 조상인지 확인하려면 전체 이력이 필요
 
@@ -135,7 +135,7 @@ jobs:
           node scripts/version.mjs --check
 
       # 빌드는 테스트한 상용 버전(22)에서 — 산출물이 테스트된 것과 같은 런타임으로 만들어진다.
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
@@ -154,7 +154,7 @@ jobs:
       # npm trusted publisher: jeonghwanko/mimi-seed-sdk, workflow ci.yml.
       # Node 24 bundles npm 11 with OIDC authentication support. Test runtimes stay unchanged.
       - name: Set up trusted publishing runtime
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
 

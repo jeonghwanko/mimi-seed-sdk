@@ -101,6 +101,14 @@ In `packages/mcp-server` a hand-written `any` is also an error (`no-explicit-any
 mcp-server's `prepublishOnly` in the middle of a release. The publish **trigger** lives only in the `publish`
 job's `if:` (plus `on:`); the script itself does not know why it was called.
 
+`.github/workflows/plugin-scanner.yml` runs the HOL `plugin-scanner` (the gate the awesome-ai-plugins listing
+applies) on every PR and `main` push: score ≥ 80 and no **high**/**critical** finding. It scans the whole checkout,
+tests included, so it is what fails when a fixture looks like a real secret (see the conventions below), a
+workflow `uses:` an action by tag instead of a full commit SHA, or `SECURITY.md` / a lockfile goes missing.
+Reproduce it on a clean export (`git archive HEAD`), not the working tree — `node_modules` and local worktrees
+inflate the findings: `uvx plugin-scanner lint . --format text`. Every action is SHA-pinned with a `# vX.Y.Z`
+comment; `.github/dependabot.yml` keeps those pins and both packages' npm dependencies current.
+
 ## Behavior tests (the rest)
 
 `playstore-release.test.ts` checks full rollout replacement even when a target draft already exists,
