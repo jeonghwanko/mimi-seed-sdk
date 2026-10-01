@@ -29,22 +29,25 @@ export function saveConfig(cfg: GoogleAdsConfig): void {
   writeCredentialJson(CONFIG_PATH, normalized);
 }
 
+/** 손으로 적은 ID 는 문자열이거나 따옴표 없는 정수다. 그 밖(빈 값 · 객체 · 소수)은 설정이 아니다. */
+function readCustomerId(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return normalizeCustomerId(value.trim());
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return normalizeCustomerId(value);
+  return null;
+}
+
 export function loadConfig(): GoogleAdsConfig | null {
   if (!fs.existsSync(CONFIG_PATH)) return null;
   try {
-    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Omit<GoogleAdsConfig, 'customerId' | 'loginCustomerId'> & {
-      customerId: string | number;
-      loginCustomerId?: string | number;
-    };
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Record<string, unknown>;
     // 읽기 시점에도 정규화 — 하이픈 포함 값이 손으로 적히거나 구버전이 쓴 경우에도
     // URL/login-customer-id 헤더가 항상 숫자만 포함하도록 보장 (write 경로 의존 제거).
-    return {
-      ...cfg,
-      customerId: normalizeCustomerId(cfg.customerId),
-      loginCustomerId: cfg.loginCustomerId
-        ? normalizeCustomerId(cfg.loginCustomerId)
-        : undefined,
-    };
+    const customerId = readCustomerId(cfg.customerId);
+    if (typeof cfg.developerToken !== 'string' || !cfg.developerToken || !customerId) return null;
+    const loginCustomerId = cfg.loginCustomerId === undefined || cfg.loginCustomerId === ''
+      ? undefined
+      : readCustomerId(cfg.loginCustomerId) ?? undefined;
+    return { ...cfg, developerToken: cfg.developerToken, customerId, loginCustomerId };
   } catch {
     return null;
   }

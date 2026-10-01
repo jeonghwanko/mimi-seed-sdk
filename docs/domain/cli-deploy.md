@@ -25,7 +25,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `review` | `review.ts` | AI review-reply draft → optional Play post |
 | `deploy` | `deploy.ts` | full pipeline: CI build → check → notes → apply |
 | `mcp` | `mcp-config.ts` | print / write Claude Code & Codex MCP registration |
-| `restart` | `mcp-restart.ts` | terminate a registered local stdio process, then print client-specific recovery. It falls back to the package marker for Codex plugin-only installs. The config may come from a repo's `.mcp.json`, so a marker must be specific (no runner names, `dist`, or bare `index.js`; scripts match by full path), matching is per argv element — never a command-line substring — and more than 10 matches kill nothing. Claude Code may reconnect on the next call; a closed Codex transport requires a new thread/client reload because the CLI cannot reattach the current thread |
+| `restart` | `mcp-restart.ts` | terminate a registered local stdio process, then print client-specific recovery. It falls back to the package marker for Codex plugin-only installs. The config may come from a repo's `.mcp.json`, so a marker must be specific (no runner names, `dist`, or bare `index.js`; scripts match by path), only the user's own runtime (node/python/bun/deno) and wrapper (npm/npx/sh/cmd) processes are candidates, matching is per argv element — never a command-line substring — and more than 10 matching server processes kill nothing. Claude Code may reconnect on the next call; a closed Codex transport requires a new thread/client reload because the CLI cannot reattach the current thread |
 | `logout` | `index.ts` (`cmdLogout`) | delete local `config.json` |
 | `--version` / `-v` / `version` | `index.ts` (`main`) | print the CLI's `package.json` version and exit 0 |
 

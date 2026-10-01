@@ -8,8 +8,12 @@ describe('notes 인자', () => {
     expect(__testing.parseArgs(['--from', 'v1.0.0', '--limit', '5'])).toMatchObject({ from: 'v1.0.0', limit: 5 });
   });
 
-  it.each([['abc'], ['0'], ['-3'], ['2.5']])('--limit %s 는 오류', (value) => {
+  it.each([['abc'], ['0'], ['-3'], ['2.5'], ['10001'], ['99999999999999999999']])('--limit %s 는 오류', (value) => {
     expect(__testing.parseArgs(['--limit', value])).toHaveProperty('error');
+  });
+
+  it('값 없는 --limit 도 오류', () => {
+    expect(__testing.parseArgs(['--limit'])).toHaveProperty('error');
   });
 
   it("'-' 로 시작하는 --from / --to 는 오류", () => {

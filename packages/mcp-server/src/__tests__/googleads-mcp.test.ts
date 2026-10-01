@@ -79,6 +79,17 @@ describe('googleads/config — 저장·읽기', () => {
     expect(loadConfig()).toEqual({ developerToken: DEV_TOKEN, customerId: '1234567890', loginCustomerId: '1112223333' });
   });
 
+  it.each([
+    [{ developerToken: 'example-token' }],
+    [{ customerId: '1234567890' }],
+    [{ developerToken: 'example-token', customerId: '' }],
+    [{ developerToken: 'example-token', customerId: { id: 1 } }],
+    [{ developerToken: 'example-token', customerId: 12.5 }],
+  ])('필수 값이 없거나 이상하면 설정 없음으로 본다: %j', (value) => {
+    writeRawConfig(value);
+    expect(loadConfig()).toBeNull();
+  });
+
   it('저장은 정규화하고 빈 loginCustomerId 는 남기지 않는다', () => {
     saveConfig({ developerToken: DEV_TOKEN, customerId: '123-456-7890', loginCustomerId: '' });
     const stored = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as Record<string, unknown>;

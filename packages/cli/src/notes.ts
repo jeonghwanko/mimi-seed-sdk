@@ -36,7 +36,7 @@ const M = catalog(
     range: (from: string, to: string) => `범위: ${from} → ${to}\n`,
     recentCommits: (limit: number) => `최근 ${limit}개 커밋\n`,
     noCommits: "커밋을 찾을 수 없습니다.\n",
-    invalidLimit: (value: string) => `--limit 은 1 이상의 정수여야 합니다: ${value}\n`,
+    invalidLimit: (value: string) => `--limit 은 1~10000 사이의 정수여야 합니다: ${value || "(값 없음)"}\n`,
     invalidRef: (ref: string) => `'-' 로 시작하는 ref 는 쓸 수 없습니다 (git 옵션으로 읽힘): ${ref}\n`,
     analyzing: (n: number) => `커밋 ${n}개 분석 중...\n\n`,
     generating: "🤖 Claude AI로 생성 중...\n",
@@ -81,7 +81,7 @@ const M = catalog(
     range: (from: string, to: string) => `Range: ${from} → ${to}\n`,
     recentCommits: (limit: number) => `Last ${limit} commit(s)\n`,
     noCommits: "No commits found.\n",
-    invalidLimit: (value: string) => `--limit must be a positive integer: ${value}\n`,
+    invalidLimit: (value: string) => `--limit must be an integer from 1 to 10000: ${value || "(missing)"}\n`,
     invalidRef: (ref: string) => `A ref cannot start with '-' (git would read it as an option): ${ref}\n`,
     analyzing: (n: number) => `Analyzing ${n} commit(s)...\n\n`,
     generating: "🤖 Generating with Claude AI...\n",
@@ -114,6 +114,9 @@ interface NotesArgs {
   limit: number;
 }
 
+/** `git log --max-count` 상한 — 릴리즈 노트 한 번에 이보다 많은 커밋은 의미가 없고, 큰 수는 git 이 거부한다. */
+const MAX_LIMIT = 10000;
+
 /** 인자 해석. 잘못된 `--limit` · `-` 로 시작하는 ref 는 "커밋 없음" 으로 조용히 넘기지 않고 오류로 돌려준다. */
 function parseArgs(argv: string[]): NotesArgs | { error: string } {
   const args: NotesArgs = { to: "HEAD", locales: ["ko", "en-US"], apply: false, noInteractive: false, limit: 30 };
@@ -123,9 +126,9 @@ function parseArgs(argv: string[]): NotesArgs | { error: string } {
     if (argv[i] === "--locale" && argv[i + 1]) args.locales = argv[++i].split(",").map((l) => l.trim());
     if (argv[i] === "--apply") args.apply = true;
     if (argv[i] === "--no-interactive") args.noInteractive = true;
-    if (argv[i] === "--limit" && argv[i + 1]) {
-      const raw = argv[++i];
-      if (!/^\d+$/.test(raw) || Number(raw) < 1) return { error: M().invalidLimit(raw) };
+    if (argv[i] === "--limit") {
+      const raw = argv[++i] ?? "";
+      if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > MAX_LIMIT) return { error: M().invalidLimit(raw) };
       args.limit = Number(raw);
     }
   }

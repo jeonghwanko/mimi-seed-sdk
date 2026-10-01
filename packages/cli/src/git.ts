@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { absoluteWindowsPathDirs } from "./lib/windows-path.js";
 
 export interface GitCommit {
   hash: string;
@@ -19,9 +20,7 @@ export function gitBinary(
   exists: (file: string) => boolean = fs.existsSync,
 ): string | null {
   if (platform !== "win32") return "git";
-  for (const entry of (env.PATH ?? env.Path ?? "").split(";")) {
-    const dir = entry.trim().replace(/^"(.*)"$/, "$1");
-    if (!dir || !path.win32.isAbsolute(dir)) continue;
+  for (const dir of absoluteWindowsPathDirs(env)) {
     const candidate = path.win32.join(dir, "git.exe");
     if (exists(candidate)) return candidate;
   }

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getGitLog, getLatestTag, gitBinary, isGitRepo } from '../git.js';
+import { absoluteWindowsPathDirs } from '../lib/windows-path.js';
 
 let root: string;
 let repo: string;
@@ -70,5 +71,12 @@ describe('gitBinary', () => {
     const exists = (file: string) => installed.has(file);
     expect(gitBinary({ PATH: '.;repo;"C:\\Program Files\\Git\\cmd"' }, 'win32', exists)).toBe('C:\\Program Files\\Git\\cmd\\git.exe');
     expect(gitBinary({ PATH: '.;repo' }, 'win32', exists)).toBeNull();
+  });
+});
+
+describe('absoluteWindowsPathDirs', () => {
+  it('keeps only absolute entries and does not split inside quotes', () => {
+    const PATH = '.;relative\\bin;%SystemRoot%\\system32;\\rooted-no-drive;"C:\\Tools;x\\bin";C:\\Git\\cmd;\\\\server\\share\\bin;;';
+    expect(absoluteWindowsPathDirs({ Path: PATH })).toEqual(['C:\\Tools;x\\bin', 'C:\\Git\\cmd', '\\\\server\\share\\bin']);
   });
 });

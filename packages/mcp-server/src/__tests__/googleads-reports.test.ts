@@ -200,6 +200,7 @@ describe('googleAdsError — 진단 보존과 비밀 제거', () => {
     expect(message).toContain('Request contains an invalid argument.');
     expect(message).toContain(': bad id');
     expect(message).toContain('requestId=example-request-id');
+    expect(message).not.toMatch(/\n(?=\n|$)/); // null 항목이 빈 줄을 남기지 않는다
   });
 
   it('search 오류는 세부 코드·필드 위반·requestId 를 남기고 현재 자격증명을 지운다', async () => {

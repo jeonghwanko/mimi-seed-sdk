@@ -14,6 +14,7 @@ import { catalog, t } from "./i18n.js";
 import { resolveLang } from "#core/lang.js";
 // tsup 이 빌드 시점에 JSON 을 번들에 인라인한다 — 배포된 dist 도 런타임에 package.json 을 찾지 않는다.
 import { version as CLI_VERSION } from "../package.json";
+import { absoluteWindowsPathDirs } from "./lib/windows-path.js";
 
 export const MCP_PKG = "@yoonion/mimi-seed-mcp";
 
@@ -51,12 +52,12 @@ export type McpBin = (typeof MCP_BINS)[number];
 function resolveOnPath(bin: string, honorForceNpx = true): string | null {
   if (honorForceNpx && process.env.MIMI_SEED_FORCE_NPX) return null;
   if (process.platform === 'win32') {
-    const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path');
-    const directories = (pathKey ? process.env[pathKey] ?? '' : '').split(path.delimiter).filter(Boolean);
+    // 절대경로 항목만 — `.` 이나 상대경로를 따르면 현재 폴더(레포)에 놓인 같은 이름의 shim 을 고른다.
+    const directories = absoluteWindowsPathDirs();
     const names = bin.toLowerCase().endsWith('.cmd') ? [bin] : [`${bin}.cmd`, bin];
     for (const directory of directories) {
       for (const name of names) {
-        const candidate = path.join(directory.replace(/^"|"$/g, ''), name);
+        const candidate = path.join(directory, name);
         if (existsSync(candidate)) return candidate;
       }
     }

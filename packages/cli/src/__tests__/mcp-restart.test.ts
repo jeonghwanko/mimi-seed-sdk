@@ -45,46 +45,103 @@ describe('MCP 재연결 안내', () => {
 
 // 설정은 레포가 커밋한 .mcp.json 에서 올 수 있다 — 식별자가 흔한 값이면 무관한 프로세스를 대량으로 죽인다.
 describe('restart 식별자 — 흔한 값은 쓰지 않는다', () => {
-  it.each([[[' ']], [['/c', 'e']], [['\\']], [['node']], [['-y', 'dist/index.js']], [[42]], [['']]])(
+  it.each([[[' ']], [['/c', 'e']], [['\\']], [['node']], [['-y', 'index.js']], [[42]], [['']], [['.bin']]])(
     'args %j 로는 식별자를 만들지 않는다',
     (args) => {
       expect(__testing.candidateMarkers({ command: 'npx', args })).toEqual([]);
     },
   );
 
-  it('패키지는 패키지명·bin 이름을, 스크립트는 전체 경로만 쓴다', () => {
+  it('패키지는 패키지명 · bin 이름, 절대경로 스크립트는 그 경로만 쓴다', () => {
     expect(__testing.candidateMarkers({ args: ['-y', '@yoonion/mimi-seed-mcp@latest'] }))
       .toEqual(['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp']);
     expect(__testing.candidateMarkers({ args: ['/home/dev/mimi-seed-sdk/packages/mcp-server/dist/index.js'] }))
       .toEqual(['/home/dev/mimi-seed-sdk/packages/mcp-server/dist/index.js']);
+  });
+
+  it('상대경로 스크립트는 원문과 현재 폴더 기준 절대경로를 함께 쓴다', () => {
+    expect(__testing.candidateMarkers({ command: 'npx', args: ['tsx', 'src/index.ts'] }, '/home/dev/proj'))
+      .toEqual(['src/index.ts', '/home/dev/proj/src/index.ts']);
+  });
+
+  it('args 없이 링크된 bin 을 command 로 등록해도 식별자를 얻는다', () => {
+    expect(__testing.candidateMarkers({ command: 'mimi-seed-mcp', args: [] })).toEqual(['mimi-seed-mcp']);
+    expect(__testing.candidateMarkers({ command: 'C:\\npm\\mimi-seed-mcp.cmd' })).toEqual(['mimi-seed-mcp']);
+    expect(__testing.candidateMarkers({ command: 'node', args: [] })).toEqual([]);
   });
 });
 
 describe('restart 프로세스 판정', () => {
   const pkg = ['@yoonion/mimi-seed-mcp@latest', 'mimi-seed-mcp@latest', 'mimi-seed-mcp'];
   const win = __testing.splitWindowsCommandLine;
+  const plan = (processes: Array<{ pid: number; argv: string[]; line?: string; uid?: number }>, markers = pkg) =>
+    __testing.planKill(processes, markers, 1000).pids;
 
-  it('npx 가 띄운 node 서버를 패키지 경로 조각으로 찾는다 (POSIX · Windows)', () => {
-    expect(__testing.matchesMarkers(['node', '/home/dev/.npm/_npx/abc/node_modules/@yoonion/mimi-seed-mcp/dist/index.js'], pkg)).toBe(true);
-    expect(__testing.matchesMarkers(win('"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js'), pkg)).toBe(true);
-    expect(__testing.matchesMarkers(['/usr/local/bin/mimi-seed-mcp'], pkg)).toBe(true);
+  it('기본 npx 설정의 래퍼와 서버를 모두 찾는다 (POSIX)', () => {
+    expect(plan([
+      { pid: 11, argv: ['npm', 'exec', '@yoonion/mimi-seed-mcp@latest'] },
+      { pid: 12, argv: ['sh', '-c', 'mimi-seed-mcp'] },
+      { pid: 13, argv: ['node', '/home/dev/.npm/_npx/abc/node_modules/.bin/mimi-seed-mcp'] },
+      { pid: 14, argv: ['node', '/usr/local/lib/node_modules/@yoonion/mimi-seed-mcp/dist/index.js'] },
+    ])).toEqual([11, 12, 13, 14]);
   });
 
-  it('부분 문자열만 겹치는 무관한 프로세스는 고르지 않는다', () => {
-    expect(__testing.matchesMarkers(['node', '/home/dev/other-mcp/dist/index.js'], pkg)).toBe(false);
-    expect(__testing.matchesMarkers(['node', '/home/dev/mimi-seed/dist/index.js', 'restart'], pkg)).toBe(false);
-    expect(__testing.matchesMarkers(win('C:\\Windows\\Explorer.EXE'), pkg)).toBe(false);
+  it('Windows npx · .cmd 셈이 띄운 node 서버를 찾는다', () => {
+    expect(plan([
+      { pid: 21, argv: win('C:\\Windows\\system32\\cmd.exe /c npx -y @yoonion/mimi-seed-mcp@latest') },
+      { pid: 22, argv: win('"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\dev\\AppData\\Local\\npm-cache\\_npx\\abc\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js') },
+      { pid: 23, argv: win('"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@yoonion\\mimi-seed-mcp\\dist\\index.js"') },
+    ], ['mimi-seed-mcp'])).toEqual([21, 22, 23]);
   });
 
-  it('스크립트 식별자는 전체 경로가 같을 때만 (구분자 · 대소문자 무시)', () => {
-    const script = ['C:/srv/mimi/dist/index.js'];
-    expect(__testing.matchesMarkers(win('node C:\\SRV\\mimi\\dist\\index.js --stdio'), script)).toBe(true);
-    expect(__testing.matchesMarkers(win('node C:\\srv\\other\\dist\\index.js'), script)).toBe(false);
+  it('식별자와 이름만 겹치는 무관한 프로세스는 고르지 않는다', () => {
+    expect(plan([
+      { pid: 31, argv: ['vim', '/home/u/code/mimi-seed-mcp/src/index.ts'] },
+      { pid: 32, argv: ['node', '/home/u/code/mimi-seed-mcp/node_modules/.bin/vitest', '--watch'] },
+      { pid: 33, argv: ['tail', '-f', '/var/log/mimi-seed-mcp/x.log'] },
+      { pid: 34, argv: ['node', '/home/dev/other-mcp/dist/index.js'] },
+      { pid: 35, argv: ['node', '/home/dev/mimi-seed/dist/index.js', 'restart'] },
+    ])).toEqual([]);
+  });
+
+  it('런타임 · 래퍼가 아닌 프로그램은 식별자로 지목돼도 죽이지 않는다', () => {
+    expect(plan([
+      { pid: 41, argv: ['/lib/systemd/systemd', '--user'] },
+      { pid: 42, argv: win('C:\\Windows\\Explorer.EXE') },
+      { pid: 43, argv: ['tmux', 'new', '-s', 'systemd'] },
+    ], ['systemd', 'Explorer'])).toEqual([]);
+  });
+
+  it('다른 사용자의 프로세스와 자기 자신은 빼고, 서버(런타임)가 너무 많으면 하나도 죽이지 않는다', () => {
+    const server = (pid: number, uid = 1000) => ({ pid, uid, argv: ['node', '/x/node_modules/@yoonion/mimi-seed-mcp/dist/index.js'] });
+    expect(plan([server(101), server(102, 0), server(process.pid)])).toEqual([101]);
+    // 세션마다 래퍼 3 + 서버 1 — 래퍼는 상한에 세지 않는다.
+    const session = (n: number) => [
+      { pid: n, argv: ['npm', 'exec', '@yoonion/mimi-seed-mcp@latest'] },
+      { pid: n + 1, argv: ['sh', '-c', 'mimi-seed-mcp'] },
+      { pid: n + 2, argv: ['cmd', '/c', 'npx', '-y', '@yoonion/mimi-seed-mcp@latest'] },
+      server(n + 3),
+    ];
+    expect(plan([1000, 2000, 3000, 4000].flatMap(session))).toHaveLength(16);
+    const tooMany = Array.from({ length: __testing.MAX_SERVERS + 1 }, (_, i) => server(5000 + i));
+    expect(__testing.planKill(tooMany, pkg, 1000)).toEqual({ pids: [], refused: __testing.MAX_SERVERS + 1 });
+    expect(__testing.planKill([server(101)], [], 1000)).toEqual({ pids: [], refused: 0 });
+  });
+
+  it('스크립트 식별자는 경로가 같을 때만 (구분자 · 대소문자 무시, POSIX 공백 경로 포함)', () => {
+    expect(plan([{ pid: 51, argv: win('node C:\\SRV\\mimi\\dist\\index.js --stdio') }], ['C:/srv/mimi/dist/index.js'])).toEqual([51]);
+    expect(plan([{ pid: 52, argv: win('node C:\\srv\\other\\dist\\index.js') }], ['C:/srv/mimi/dist/index.js'])).toEqual([]);
+    const line = 'node /home/dev/My Projects/mimi/dist/index.js --stdio';
+    expect(plan([{ pid: 53, line, argv: line.split(/\s+/) }], ['/home/dev/My Projects/mimi/dist/index.js'])).toEqual([53]);
+    expect(plan([{ pid: 54, argv: ['node', 'src/index.ts'] }], ['src/index.ts', '/home/dev/proj/src/index.ts'])).toEqual([54]);
   });
 
   it('Windows 명령줄을 CommandLineToArgvW 규칙으로 나눈다', () => {
     expect(win('"C:\\Program Files\\nodejs\\node.exe" "C:\\a b\\x.js"  --stdio')).toEqual(['C:\\Program Files\\nodejs\\node.exe', 'C:\\a b\\x.js', '--stdio']);
-    expect(win('a\\\\\\"b "c\\\\" d')).toEqual(['a\\"b', 'c\\', 'd']);
+    expect(win('"C:\\x\\node.exe"x.js y')).toEqual(['C:\\x\\node.exe', 'x.js', 'y']);
+    expect(win('"C:\\Program Files\\nodejs\\" x.js')).toEqual(['C:\\Program Files\\nodejs\\', 'x.js']);
+    expect(win('p a\\\\\\"b "c\\\\" d')).toEqual(['p', 'a\\"b', 'c\\', 'd']);
+    expect(win('p "a""b"')).toEqual(['p', 'a"b']);
     expect(win('x ""')).toEqual(['x', '']);
   });
 
@@ -92,14 +149,6 @@ describe('restart 프로세스 판정', () => {
     expect(__testing.parseWindowsProcesses('{"ProcessId":7,"CommandLine":"node a.js"}')).toEqual([{ pid: 7, argv: ['node', 'a.js'] }]);
     expect(__testing.parseWindowsProcesses('[{"ProcessId":4,"CommandLine":null},{"ProcessId":8,"CommandLine":"x"}]')).toEqual([{ pid: 8, argv: ['x'] }]);
     expect(__testing.parseWindowsProcesses('not json')).toEqual([]);
-  });
-
-  it('자기 자신은 빼고, 너무 많이 맞으면 하나도 죽이지 않는다', () => {
-    const server = (pid: number) => ({ pid, argv: ['node', '/x/node_modules/@yoonion/mimi-seed-mcp/dist/index.js'] });
-    expect(__testing.planKill([server(101), server(process.pid)], pkg)).toEqual({ pids: [101], refused: 0 });
-    const many = Array.from({ length: 11 }, (_, i) => server(1000 + i));
-    expect(__testing.planKill(many, pkg)).toEqual({ pids: [], refused: 11 });
-    expect(__testing.planKill([server(101)], [])).toEqual({ pids: [], refused: 0 });
   });
 });
 

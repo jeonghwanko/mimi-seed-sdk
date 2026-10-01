@@ -44,7 +44,7 @@ const M = catalog(
       '  직전 호출이 업로드·게시 같은 쓰기였다면 결과가 불명일 수 있습니다. 대상 서비스에서 실제 반영 여부를 확인한 뒤 재시도하세요.',
     killed: (server: string, n: number) => `✓ ${server} 종료됨 (${n}개 프로세스)`,
     tooMany: (n: number) =>
-      `식별자와 맞는 프로세스가 ${n}개라 아무것도 종료하지 않았습니다 — 서버 하나로 보기엔 너무 많습니다. MCP 설정의 args 를 확인하세요.`,
+      `식별자와 맞는 서버 프로세스가 ${n}개라 아무것도 종료하지 않았습니다 — 너무 많습니다. MCP 설정의 args 를 확인하세요.`,
   },
   {
     killedPid: (pid: string) => `  PID ${pid} killed`,
@@ -79,7 +79,7 @@ const M = catalog(
       '  If the previous call was a write such as an upload or publish, its outcome may be unknown. Check the target service before retrying.',
     killed: (server: string, n: number) => `✓ ${server} killed (${n} process(es))`,
     tooMany: (n: number) =>
-      `${n} processes match the marker, so nothing was killed — too many for one server. Check the args in the MCP config.`,
+      `${n} server processes match the marker, so nothing was killed — too many. Check the args in the MCP config.`,
   },
 );
 
@@ -163,10 +163,20 @@ function collectServers(): { servers: ServerMap; sources: string[] } {
 const GENERIC_MARKERS = new Set([
   'node', 'nodejs', 'npx', 'npm', 'pnpm', 'pnpx', 'yarn', 'bun', 'bunx', 'deno', 'tsx', 'ts-node',
   'python', 'python3', 'uv', 'uvx', 'pip', 'cmd', 'sh', 'bash', 'zsh', 'powershell', 'pwsh',
-  'node_modules', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
+  'node_modules', '.bin', '.npm', '_npx', 'dist', 'src', 'lib', 'bin', 'build', 'out', 'app', 'server', 'mcp',
   'index.js', 'index.ts', 'index.mjs', 'index.cjs', 'main.js', 'main.ts', 'server.js', 'server.ts', 'cli.js',
 ]);
 const SCRIPT_RE = /\.(?:[cm]?js|ts)$/i;
+const WIN_EXE_RE = /\.(?:exe|cmd|bat)$/i;
+const VERSION_RE = /@(?:latest|next|\d[\w.+-]*)$/;
+
+/**
+ * MCP 서버를 띄우는 런타임과 그 래퍼. 종료 대상은 이 프로그램이 실행한 프로세스로 한정한다 — 그래야 설정이
+ * `systemd` · `explorer` 같은 이름을 식별자로 내밀어도 그 프로세스 자체는 걸리지 않는다.
+ * RUNTIMES 는 실제 서버 프로세스라 상한(MAX_SERVERS)을 셀 때 쓴다.
+ */
+const RUNTIMES = new Set(['node', 'nodejs', 'bun', 'deno', 'python', 'python3', 'py', 'uv', 'uvx']);
+const WRAPPERS = new Set(['npm', 'npx', 'pnpm', 'pnpx', 'yarn', 'bunx', 'tsx', 'ts-node', 'sh', 'bash', 'zsh', 'dash', 'cmd']);
 
 /** `/` 와 `\` 를 모두 구분자로 본 마지막 경로 조각 — Windows 명령줄도 같은 규칙으로 비교한다. */
 function baseName(value: string): string {
@@ -174,16 +184,20 @@ function baseName(value: string): string {
 }
 
 const normalizePath = (value: string) => value.replace(/\\/g, '/').toLowerCase();
+/** 실행 파일 이름: 경로 · 확장자(.exe/.cmd) · 마이너 버전(`python3.12`)을 뗀 소문자. */
+const programName = (argv0: string) => baseName(argv0).toLowerCase().replace(WIN_EXE_RE, '').replace(/^(python3)\.\d+$/, '$1');
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const isAbsoluteScript = (value: string) => path.posix.isAbsolute(value) || path.win32.isAbsolute(value);
 
 /**
- * 식별자가 될 수 있는 값: 4자 이상, 영문자 포함, 흔한 이름이 아님. 스크립트는 전체 경로로 비교하므로
- * 절대경로면 파일 이름이 `index.js` 여도 된다 — 상대경로(`dist/index.js`)는 다른 서버와 겹친다.
+ * 식별자가 될 수 있는 값: 4자 이상, 영문자 포함, 흔한 이름이 아님. 스크립트는 경로로 비교하므로 절대경로나
+ * 디렉터리가 붙은 상대경로면 파일 이름이 `index.js` 여도 된다 — 파일 이름만으로는 다른 서버와 겹친다.
  */
 function isSpecificMarker(value: string): boolean {
   const v = value.trim();
   if (v.length < 4 || !/[a-z]/i.test(v)) return false;
-  if (SCRIPT_RE.test(v) && (path.posix.isAbsolute(v) || path.win32.isAbsolute(v))) return true;
-  return !GENERIC_MARKERS.has(baseName(v).toLowerCase());
+  if (SCRIPT_RE.test(v) && (isAbsoluteScript(v) || /[\\/]/.test(v))) return true;
+  return !GENERIC_MARKERS.has(baseName(v).toLowerCase().replace(WIN_EXE_RE, ''));
 }
 
 function findProcessMarker(cfg: Record<string, unknown>): string | null {
@@ -195,8 +209,12 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
   const pkgArg = args.find((a) => (a.includes('@') || a.includes('-')) && !a.startsWith('-') && isSpecificMarker(a));
   if (pkgArg) return pkgArg;
   // 3순위: 마지막 의미 있는 arg
-  const meaningful = args.filter((a) => !a.startsWith('-') && a !== '/c' && isSpecificMarker(a));
-  return meaningful.at(-1) ?? null;
+  const meaningful = args.filter((a) => !a.startsWith('-') && a.toLowerCase() !== '/c' && isSpecificMarker(a));
+  if (meaningful.length) return meaningful.at(-1) ?? null;
+  // 4순위: 링크된 bin 을 command 로 직접 등록한 경우 (`command: "mimi-seed-mcp"`, args 없음)
+  const command = typeof cfg.command === 'string' ? baseName(cfg.command).replace(WIN_EXE_RE, '') : '';
+  const program = command.toLowerCase();
+  return command && !RUNTIMES.has(program) && !WRAPPERS.has(program) && isSpecificMarker(command) ? command : null;
 }
 
 /**
@@ -204,15 +222,15 @@ function findProcessMarker(cfg: Record<string, unknown>): string | null {
  *
  * `npx -y @yoonion/mimi-seed-mcp` 라도, 전역 설치나 `npm link` 가 있으면 npx 는 링크된
  * bin 을 그대로 exec 한다 — 그 순간 cmdline 에서 패키지명이 사라지고 `mimi-seed-mcp` 만
- * 남는다. 그래서 bin 이름(패키지명의 마지막 세그먼트)도 후보에 넣는다. 스크립트 경로는 전체
- * 경로만 쓴다 — 파일 이름(`index.js`)만으로는 다른 서버와 구분되지 않는다.
+ * 남는다. 그래서 bin 이름(패키지명의 마지막 세그먼트)도 후보에 넣는다. 스크립트는 경로만 쓴다 —
+ * 상대경로면 MCP 클라이언트가 그대로 넘긴 원문과, 지금 폴더 기준 절대경로를 함께 쓴다.
  */
-function candidateMarkers(cfg: Record<string, unknown>): string[] {
+function candidateMarkers(cfg: Record<string, unknown>, cwd: string = process.cwd()): string[] {
   const primary = findProcessMarker(cfg);
   if (!primary) return [];
-  if (SCRIPT_RE.test(primary)) return [primary];
-  const base = primary.split('/').pop();
-  const executableBase = base?.replace(/@(?:latest|\d+(?:\.\d+){1,3}(?:[-+][\w.-]+)?)$/, '');
+  if (SCRIPT_RE.test(primary)) return isAbsoluteScript(primary) ? [primary] : [primary, path.resolve(cwd, primary)];
+  const base = primary.split('/').pop()?.replace(WIN_EXE_RE, '');
+  const executableBase = base?.replace(VERSION_RE, '');
   return [...new Set([primary, base, executableBase])].filter(
     (value): value is string => typeof value === 'string' && isSpecificMarker(value),
   );
@@ -221,30 +239,50 @@ function candidateMarkers(cfg: Record<string, unknown>): string[] {
 /**
  * argv 가 식별자 중 하나와 맞는가. 명령줄 부분일치는 쓰지 않는다 — `pkill -f <marker>` 식으로 하면
  * 자기 자신을 실행한 셸까지, 흔한 문자열이면 무관한 프로세스까지 걸린다. 맞는 경우는:
- *   - 스크립트 식별자: argv 원소의 전체 경로가 같다 (구분자 · 대소문자 무시)
- *   - 패키지/bin 식별자: 실행 파일 이름이 그 bin 이거나, argv 원소(또는 그 파일 이름)가 정확히 같거나,
- *     argv 원소의 연속된 경로 조각이 그 패키지명이다 (`…/node_modules/@scope/pkg/dist/index.js`)
+ *   - 스크립트 식별자: argv 원소의 전체 경로가 같다 (구분자 · 대소문자 무시). POSIX `ps` 는 공백으로만
+ *     나눠 주므로, 공백이 든 경로는 원래 명령줄(line)에서 앞뒤 공백까지 맞춰 찾는다.
+ *   - 패키지/bin 식별자: argv 원소가 정확히 같거나, 그 파일 이름(버전 · 확장자 제외)이 bin 이름이거나,
+ *     그 경로가 `node_modules/<패키지>/` 아래다. 아무 폴더 이름과 겹치는 것(`~/code/mimi-seed-mcp/…`)은 아니다.
  */
-function matchesMarkers(argv: string[], markers: string[]): boolean {
-  const exeBase = baseName(argv[0] ?? '').replace(/\.(?:exe|cmd|bat)$/i, '');
+function matchesMarkers(argv: string[], markers: string[], line?: string): boolean {
   const rest = argv.slice(1);
   return markers.some((marker) => {
-    if (SCRIPT_RE.test(marker)) return rest.some((a) => normalizePath(a) === normalizePath(marker));
-    const segment = `/${normalizePath(marker.replace(/@(?:latest|\d[\w.+-]*)$/, ''))}/`;
-    return exeBase === marker
-      || rest.includes(marker)
-      || rest.some((a) => baseName(a) === marker)
-      || rest.some((a) => `/${normalizePath(a)}/`.includes(segment));
+    if (SCRIPT_RE.test(marker)) {
+      const wanted = normalizePath(marker);
+      return rest.some((a) => normalizePath(a) === wanted)
+        || (line !== undefined && ` ${normalizePath(line)} `.includes(` ${wanted} `));
+    }
+    const name = normalizePath(marker.replace(VERSION_RE, '').replace(WIN_EXE_RE, ''));
+    const underNodeModules = name.includes('/')
+      ? (p: string) => p.includes(`/node_modules/${name}/`)
+      : (p: string) => new RegExp(`/node_modules/(?:@[^/]+/)?${escapeRegExp(name)}/`).test(p);
+    return rest.some((a) => {
+      if (a === marker) return true;
+      const p = normalizePath(a);
+      return baseName(p).replace(WIN_EXE_RE, '').replace(VERSION_RE, '') === name || underNodeModules(`/${p}/`);
+    });
   });
 }
 
-/** Windows 명령줄을 argv 로 나눈다 (CommandLineToArgvW 의 따옴표 · 역슬래시 규칙). */
+/**
+ * Windows 명령줄을 argv 로 나눈다 (CommandLineToArgvW 규칙). 첫 원소(프로그램)는 따옴표 안을 그대로 쓰고
+ * 역슬래시를 해석하지 않는다. 나머지는 2N 개 역슬래시 + `"` → N 개 + 따옴표 토글, 따옴표 안의 `""` → `"`.
+ */
 function splitWindowsCommandLine(line: string): string[] {
-  const argv: string[] = [];
+  let i = 0;
+  let program = '';
+  if (line[0] === '"') {
+    const close = line.indexOf('"', 1);
+    program = close === -1 ? line.slice(1) : line.slice(1, close);
+    i = close === -1 ? line.length : close + 1;
+  } else {
+    while (i < line.length && line[i] !== ' ' && line[i] !== '\t') program += line[i++];
+  }
+  const argv = [program];
   let current = '';
   let inQuotes = false;
   let hasToken = false;
-  for (let i = 0; i < line.length; i++) {
+  for (; i < line.length; i++) {
     const c = line[i];
     if (c === '\\') {
       let n = 0;
@@ -260,7 +298,8 @@ function splitWindowsCommandLine(line: string): string[] {
       }
       hasToken = true;
     } else if (c === '"') {
-      inQuotes = !inQuotes;
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
       hasToken = true;
     } else if ((c === ' ' || c === '\t') && !inQuotes) {
       if (hasToken) argv.push(current);
@@ -275,23 +314,26 @@ function splitWindowsCommandLine(line: string): string[] {
   return argv;
 }
 
-type ProcessEntry = { pid: number; argv: string[] };
+type ProcessEntry = { pid: number; argv: string[]; line?: string; uid?: number };
 
-/** 한 번에 죽일 수 있는 프로세스 상한. 서버 하나는 래퍼 + node 정도라, 이보다 많으면 식별자를 의심한다. */
-const MAX_KILL = 10;
+/**
+ * 한 번에 재시작할 수 있는 서버 수 상한. 세션마다 래퍼(npm exec · sh -c · cmd)와 런타임(node)이 함께 걸리므로
+ * 런타임 프로세스만 센다 — 열린 세션 여러 개는 괜찮고, 그보다 많으면 식별자를 의심한다.
+ */
+const MAX_SERVERS = 10;
 
-/** POSIX: `ps` 로 PID + argv 목록. */
+/** POSIX: `ps` 로 PID · 소유자 · argv 목록 (원래 명령줄도 남긴다 — 공백 든 경로 비교용). */
 function listPosixProcesses(): ProcessEntry[] {
   let out: string;
   try {
-    out = execSync('ps -eo pid=,args=', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    out = execSync('ps -eo pid=,uid=,args=', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
   } catch {
     return [];
   }
   const list: ProcessEntry[] = [];
-  for (const line of out.split('\n')) {
-    const m = /^\s*(\d+)\s+(.*)$/.exec(line);
-    if (m) list.push({ pid: Number(m[1]), argv: m[2].split(/\s+/).filter(Boolean) });
+  for (const row of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
+    if (m) list.push({ pid: Number(m[1]), uid: Number(m[2]), line: m[3], argv: m[3].split(/\s+/).filter(Boolean) });
   }
   return list;
 }
@@ -338,16 +380,25 @@ function listWindowsProcesses(): ProcessEntry[] {
   }
 }
 
-/** 식별자와 맞는 PID — 자기 자신과 부모(이 명령을 실행한 셸)는 뺀다. */
-function findPids(processes: ProcessEntry[], markers: string[]): number[] {
+/**
+ * 죽일 PID 목록, 또는 상한을 넘어 거부한 서버 수. 대상은 자기 자신 · 부모(이 명령을 실행한 셸)를 뺀,
+ * 같은 사용자 소유(POSIX)의 런타임/래퍼 프로세스 중 식별자와 맞는 것뿐이다.
+ */
+function planKill(
+  processes: ProcessEntry[],
+  markers: string[],
+  uid: number | undefined = process.getuid?.(),
+): { pids: number[]; refused: number } {
+  if (markers.length === 0) return { pids: [], refused: 0 };
   const skip = new Set<number>([process.pid, process.ppid]);
-  return processes.filter((p) => !skip.has(p.pid) && matchesMarkers(p.argv, markers)).map((p) => p.pid);
-}
-
-/** 죽일 PID 목록, 또는 상한을 넘어 거부한 개수. */
-function planKill(processes: ProcessEntry[], markers: string[]): { pids: number[]; refused: number } {
-  const pids = markers.length ? findPids(processes, markers) : [];
-  return pids.length > MAX_KILL ? { pids: [], refused: pids.length } : { pids, refused: 0 };
+  const matched = processes.filter((p) => {
+    if (skip.has(p.pid)) return false;
+    if (uid !== undefined && p.uid !== undefined && p.uid !== uid) return false;
+    const program = programName(p.argv[0] ?? '');
+    return (RUNTIMES.has(program) || WRAPPERS.has(program)) && matchesMarkers(p.argv, markers, p.line);
+  });
+  const servers = matched.filter((p) => RUNTIMES.has(programName(p.argv[0] ?? ''))).length;
+  return servers > MAX_SERVERS ? { pids: [], refused: servers } : { pids: matched.map((p) => p.pid), refused: 0 };
 }
 
 function killByMarkers(markers: string[]): { killed: number; refused: number } {
@@ -424,5 +475,5 @@ export async function cmdRestart(args: string[]): Promise<void> {
 
 export const __testing = {
   detectMcpClient, recoveryMessages, resolveServerConfig,
-  candidateMarkers, matchesMarkers, splitWindowsCommandLine, parseWindowsProcesses, planKill, WINDOWS_PROCESS_QUERY,
+  candidateMarkers, matchesMarkers, splitWindowsCommandLine, parseWindowsProcesses, planKill, WINDOWS_PROCESS_QUERY, MAX_SERVERS,
 };
