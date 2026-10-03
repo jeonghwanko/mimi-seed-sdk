@@ -58,8 +58,10 @@ describe('googleapis 호출 — 요청 전에 막힌다', { timeout: 60_000 }, (
     expect(request).not.toHaveBeenCalled();
 
     await deleteAndroidApp(auth, 'my-project', '1:123:android:abc');
-    expect(new URL(request.mock.calls[0][0].url).pathname)
-      .toBe('/v1beta1/projects/my-project/androidApps/1:123:android:abc:remove');
+    // googleapis 버전에 따라 ':' 는 그대로거나 %3A 로 확장된다. 세그먼트를 나눈 뒤
+    // 디코딩해 ID 와 경로 구조를 함께 확인한다 (인코딩된 '/' 로 구조가 바뀌면 실패).
+    expect(new URL(request.mock.calls[0][0].url).pathname.split('/').map(decodeURIComponent))
+      .toEqual(['', 'v1beta1', 'projects', 'my-project', 'androidApps', '1:123:android:abc:remove']);
   });
 
   it('iam createServiceAccountKey: 경로를 거슬러 오르는 이메일', async () => {
@@ -101,8 +103,8 @@ describe('googleapis 호출 — 요청 전에 막힌다', { timeout: 60_000 }, (
   it.each(['123456789012', 'my-project', 'example.com:my-project'])('bigquery 프로젝트 ID %j 허용', async (projectId) => {
     const { auth, request } = fakeAuth();
     await listTables(auth, projectId, 'analytics_123456789');
-    expect(new URL(request.mock.calls[0][0].url).pathname)
-      .toBe(`/bigquery/v2/projects/${projectId}/datasets/analytics_123456789/tables`);
+    expect(new URL(request.mock.calls[0][0].url).pathname.split('/').map(decodeURIComponent))
+      .toEqual(['', 'bigquery', 'v2', 'projects', projectId, 'datasets', 'analytics_123456789', 'tables']);
   });
 
   it.each(['My-Project', 'proj/x', '../p', 'example.com:../p', '123/456', '12 34'])('bigquery 프로젝트 ID %j 거부', async (projectId) => {
