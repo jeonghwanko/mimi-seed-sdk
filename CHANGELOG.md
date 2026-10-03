@@ -18,6 +18,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.5] - 2026-10-04
+
+### Fixed
+
+- Google resource-ID regression tests now compare decoded path segments, accepting both literal and
+  percent-encoded colons in Firebase app IDs and BigQuery project IDs while preserving path structure
+  and traversal rejection checks.
+
+### Tool changes
+
+- None.
+
 ## [0.21.4] - 2026-10-02
 
 ### Added
