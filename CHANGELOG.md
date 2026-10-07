@@ -18,6 +18,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Google Drive domain** — create folders, upload files, replace a file's contents in place (same file ID and
+  share link; Drive keeps the old version), rename / move, trash, list, and inspect. Uploads verify the MD5 after
+  transfer and refuse a same-name file in the target folder unless asked to create another.
+  Auth: a Drive service account (`mimi-seed auth drive`, or the key JSON body in `MIMI_SEED_DRIVE_SA_JSON` for CI
+  and cloud sandboxes) for existing folders and shared drives; otherwise Google OAuth with the new `drive` domain
+  (`drive.file` scope — files mimi-seed created only). Every call supports shared drives.
+
+### Tool changes
+
+- Added: `drive_auth_status`, `drive_list_files`, `drive_get_file`, `drive_create_folder`, `drive_upload_file`,
+  `drive_update_file_content`, `drive_update_file_metadata`, `drive_trash_file`.
+
 ## [0.21.5] - 2026-10-04
 
 ### Fixed

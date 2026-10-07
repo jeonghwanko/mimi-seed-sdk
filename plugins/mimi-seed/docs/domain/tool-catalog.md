@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**247 tools across 23 domains** — per-domain counts below.
+**255 tools across 24 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -40,6 +40,7 @@
 | Facebook | `registers/facebook.ts` | 6 |
 | Google Cloud IAM | `registers/iam.ts` | 5 |
 | BigQuery | `registers/bigquery.ts` | 5 |
+| Google Drive | `registers/drive.ts` | 8 |
 | GCP Billing | `registers/billing.ts` | 4 |
 | Threads | `registers/threads.ts` | 7 |
 | TikTok Business | `registers/tiktok.ts` | 7 |
@@ -50,7 +51,7 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **23 modules** | **247** |
+| **Total** | **24 modules** | **255** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -214,6 +215,16 @@
 - **D**
   `tiktok_business_publish_video` (owned Business Account에 공개 게시 — 명시 확인 필수, 원자적 중복 예약, POST 결과 불명 시 자동 재시도 금지)
 <!-- generated:catalog-domain:tiktok:end -->
+
+<!-- generated:catalog-domain:drive:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
+## Google Drive — `registers/drive.ts` (8) · impl `drive/*.ts`
+
+- Read: `drive_auth_status` · `drive_list_files` · `drive_get_file`
+- **W** `drive_create_folder` (같은 이름 폴더가 있으면 그것을 돌려줌) · `drive_upload_file` (같은 이름이 있으면 기본 거부 — 업로드 후 MD5 대조) ·
+  `drive_update_file_metadata`
+- **D** `drive_update_file_content` (같은 fileId·링크 유지, 이전 버전은 Drive 버전 기록에) ·
+  `drive_trash_file` (휴지통 이동 — 30일 안에 복구 가능)
+<!-- generated:catalog-domain:drive:end -->
 
 ## Quirks worth knowing (tool name ≠ register file)
 

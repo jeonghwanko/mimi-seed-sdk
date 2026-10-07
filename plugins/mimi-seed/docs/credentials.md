@@ -32,6 +32,7 @@ Most people need two or three of these. Find your goal, connect only what it lis
 | Anything on the **App Store** (metadata, TestFlight, review) | [App Store Connect](#app-store-connect) |
 | Trigger builds | [GitHub / GitLab](#ci-github-gitlab) *or* [Jenkins](#jenkins) |
 | Query Crashlytics / analytics exports | [Google OAuth](#google-oauth), or [BigQuery SA](#bigquery) if OAuth keeps getting blocked |
+| Upload / replace files in **Google Drive** | [Drive service account](#drive) for existing or shared folders; [Google OAuth](#google-oauth) for folders mimi-seed creates |
 | Report on ad campaigns | [Google Ads](#google-ads) |
 | Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI-written release notes / review replies | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(optional — it degrades gracefully)* |
@@ -47,7 +48,7 @@ and BigQuery all ride on the same OAuth token. Start there.
 
 ## Google OAuth
 
-**Unlocks:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`
+**Unlocks:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`, `drive_*` (requested with `--domains drive`; only files and folders mimi-seed creates)
 
 YouTube Analytics reports use the separate `youtube_analytics` grant. Channel, video-list, and comment reads can use that grant or the existing publishing `youtube` grant; video management writes and comment replies use `youtube`.
 
@@ -162,6 +163,34 @@ The setup CLI offers a live connection test and, if it fails, prints the exact `
 roles.
 
 **Verify:** ask for `bigquery_auth_status`.
+
+---
+
+<a id="drive"></a>
+
+## Google Drive
+
+**Unlocks:** `drive_*` — create folders, upload files, replace file contents in place, rename / move, trash.
+
+**Two ways in — pick by where the files go:**
+
+- **Folders mimi-seed creates** → your Google OAuth token is enough. Add the grant with
+  `mimi-seed-auth --domains drive` (non-sensitive `drive.file` scope — it can only see files and folders this app
+  created).
+- **An existing folder or a shared drive** (a team folder, CI, cloud containers) → a Drive service account.
+
+**Get the service account:**
+
+1. Google Cloud Console → **APIs & Services** → enable the **Google Drive API**
+2. **IAM & Admin** → **Service Accounts** → **Keys** → *Add key* → **JSON**
+3. Share the target folder (or shared drive) with the service-account email as **Editor** **yourself**.
+   Service accounts have no storage quota of their own — upload into a shared drive or a folder shared with them.
+4. `mimi-seed auth drive` → give it the JSON path (non-interactive: `--file <json> --folder <folderId>`)
+
+Where a file can't live (CI, cloud sandboxes), put the key JSON **body** in the `MIMI_SEED_DRIVE_SA_JSON`
+environment variable instead — it wins over the saved file. Keep it in your platform's secret store.
+
+**Verify:** ask for `drive_auth_status`.
 
 ---
 
