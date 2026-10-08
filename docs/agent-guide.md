@@ -73,6 +73,7 @@ row for the job; batching two rows in one `select:` call is fine.
 | Remote Config usage + experiments | `select:firebase_get_remote_config_overview,gcp_get_billing_info` |
 | Analytics wiring (Firebase ↔ GA4 ↔ BigQuery) | `select:firebase_link_analytics,firebase_get_analytics_details,ga4_list_account_summaries,ga4_list_properties,ga4_create_property,ga4_list_data_streams,ga4_create_data_stream,ga4_plan_bigquery_link,ga4_create_bigquery_link,ga4_run_report` |
 | BigQuery | `select:bigquery_auth_status,bigquery_list_datasets,bigquery_list_tables,bigquery_get_table_schema,bigquery_run_query` |
+| Google Drive (영상·산출물 업로드·교체·정리) | `select:drive_auth_status,drive_list_files,drive_create_folder,drive_upload_file,drive_update_file_content,drive_get_file,drive_update_file_metadata,drive_trash_file` |
 | GCP billing (Blaze 여부 · 비용 범위 · 예산) | `select:gcp_get_billing_info,gcp_list_billing_projects,gcp_list_budgets,gcp_create_budget` |
 | Real revenue (스토어 정산 원장 — sandbox·테스터가 섞이지 않는 유일한 창구) | `select:appstore_get_sales_report,appstore_get_finance_report,playstore_list_financial_reports,playstore_get_financial_report` |
 | App Store weekly growth insight | `select:appstore_get_weekly_insight,appstore_get_sales_report` |

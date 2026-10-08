@@ -122,6 +122,8 @@ function sample(schema: JsonSchema, key: string): unknown {
 /** 파괴적 분기로 들어가게 하는 값 — 기본값이 안전한 분기면 가드를 시험하지 못한다. */
 const OVERRIDES: Record<string, Record<string, unknown>> = {
   playstore_submit_release: { status: 'completed' },
+  drive_update_file_content: { fileId: 'fileId_0123456789', filePath: '/tmp/mimi-seed-drive-test.bin' },
+  drive_trash_file: { fileId: 'fileId_0123456789' },
   playstore_promote_release: { status: 'completed' },
   appstore_phased_release: { action: 'complete' },
   appstore_set_beta_group_build: { action: 'add' },

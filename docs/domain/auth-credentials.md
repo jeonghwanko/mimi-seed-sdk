@@ -24,6 +24,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `play-service-accounts/<packageName>.json` | **Per-package** Play service account — wins over the default | `mimi-seed-playstore-auth` / `playstore_register_service_account` |
 | `play-service-account.json` | Default / legacy Play service account — fallback when no per-package match | same |
 | `bigquery-service-account.json` | BigQuery SA — exempt from Workspace reauth (`invalid_rapt`); OAuth is the fallback | `mimi-seed-bigquery-auth` |
+| `drive-service-account.json` | Drive SA — works in existing folders / shared drives shared with it (full `drive` scope, bounded by sharing). `MIMI_SEED_DRIVE_SA_JSON` (key JSON body) wins over the file; OAuth `drive.file` is the fallback and only sees files mimi-seed created | `mimi-seed-drive-auth` (`auth/drive-setup-cli.ts`) |
 | `jenkins.json`, `ci.json` | Jenkins / GitHub-GitLab CI connection config | `jenkins_save_config` / `ci_save_config` |
 | `jenkins-build-requests/<sha256>/receipt.json` | **Not a credential** — `jenkins_trigger_build`'s at-most-once dispatch record: the directory (0700) is the atomic `request_id` reservation, keyed by a hash of Jenkins URL + user + `request_id`; the receipt (`0600`) holds only an HMAC fingerprint of the payload, state, reservation time, queue id, and HTTP status — never parameters or the token. Never deleted automatically once a POST may have been sent ([[pitfalls]] §5). `jenkins-build-requests/.key` (`0600`) is the random per-install HMAC key, created on first use | `jenkins/builds.ts` |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page or account access tokens for social post tools (written `0600`) | each domain's `*_save_config` |
@@ -78,7 +79,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 
 The Google OAuth login no longer forces the full scope list. The SSOT for the **auth-domain → scope**
 mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `admob`, `playstore`,
-`googleads`, `gsc`, `ga4`, `youtube`, `youtube_analytics`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
+`googleads`, `gsc`, `ga4`, `youtube`, `youtube_analytics`, `drive`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
 
 - `mimi-seed-auth --domains ga4,googleads` (CLI) and `mimi_seed_auth_start(domains=[…])` (MCP) request only
   the selected domains' scopes; omitting the option requests everything (old behavior).
@@ -115,6 +116,7 @@ npx -y @yoonion/mimi-seed-mcp mimi-seed-auth            # Google OAuth → token
 npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth   # ASC API key → appstore.json
 npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth  # Play service account
 npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth   # BigQuery auth
+npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth      # Google Drive service account
 npx -y @yoonion/mimi-seed-mcp mimi-seed-social-auth     # Facebook / Instagram / Threads
 npx -y @yoonion/mimi-seed-mcp mimi-seed-tiktok-business-auth # TikTok Business Organic API
 ```
