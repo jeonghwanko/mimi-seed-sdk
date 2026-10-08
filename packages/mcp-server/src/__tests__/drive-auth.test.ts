@@ -46,7 +46,7 @@ describe('Drive 서비스 계정 키', () => {
   it('홈 아래 0600 으로 저장하고 다시 읽는다', () => {
     expect(DRIVE_SA_PATH.startsWith(home.dir)).toBe(true);
     saveDriveServiceAccountJson(key(FILE_SA));
-    expect(statSync(DRIVE_SA_PATH).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(statSync(DRIVE_SA_PATH).mode & 0o777).toBe(0o600);
     expect(getDriveServiceAccount({})).toMatchObject({
       source: 'service-account',
       key: { client_email: FILE_SA },
