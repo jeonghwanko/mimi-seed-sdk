@@ -26,6 +26,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Auth: a Drive service account (`mimi-seed auth drive`, or the key JSON body in `MIMI_SEED_DRIVE_SA_JSON` for CI
   and cloud sandboxes) for existing folders and shared drives; otherwise Google OAuth with the new `drive` domain
   (`drive.file` scope — files mimi-seed created only). Every call supports shared drives.
+- `youtube_upload_video` accepts `defaultLanguage` (title/description language) and `defaultAudioLanguage` (spoken
+  language) as separate fields. YouTube Studio upload defaults do not apply to API uploads, so these are now set
+  explicitly. A video without speech leaves the audio language unset.
+- Upload and `youtube_get_video_status` results include the category and both language fields as YouTube returned
+  them (`null` when not reported), plus `commentModerationVerification: "requires_youtube_studio"` — the Data API
+  cannot set or read the per-video comment filter.
+
+### Fixed
+
+- Editing a video's title, description, or tags no longer clears its spoken-language setting.
 
 ### Tool changes
 
