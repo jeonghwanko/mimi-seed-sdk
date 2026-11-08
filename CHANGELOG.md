@@ -18,6 +18,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.7] - 2026-11-08
+
+### Changed
+
+- Dependency updates for both packages: `@anthropic-ai/sdk` 0.137.0, and for the MCP server
+  `@modelcontextprotocol/sdk` 1.32.2, `@onesub/providers` 0.5.0, and `jose` 6.2.15.
+
+### Security
+
+- The MCP server's lockfile pulls patched versions of transitive dependencies flagged by `npm audit`:
+  `proxy-addr` (critical), `body-parser` (high), `hono` and `@hono/node-server`, `fast-uri`, `ip-address`, and `qs`.
+  They arrive through `@modelcontextprotocol/sdk`'s HTTP transport, which Mimi Seed does not use (it runs over
+  stdio), but installs no longer report them. `zod` still has an open advisory that needs the 3 → 4 major upgrade.
+
+### Tool changes
+
+- None.
+
 ## [0.21.6] - 2026-11-08
 
 ### Changed
