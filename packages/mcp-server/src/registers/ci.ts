@@ -63,7 +63,7 @@ export function registerCiTools(server: ToolRegistrar) {
     {
       ref: z.string().default('main').describe('브랜치 또는 태그 (기본: main)'),
       workflow: z.string().optional().describe('GitHub 전용: 워크플로 파일명 또는 ID (예: deploy.yml)'),
-      inputs: z.record(z.string()).optional().describe('워크플로 입력값 (GitHub inputs / GitLab variables)'),
+      inputs: z.record(z.string(), z.string()).optional().describe('워크플로 입력값 (GitHub inputs / GitLab variables)'),
     },
     async ({ ref, workflow, inputs }) => {
       const cfg = requireCiConfig();

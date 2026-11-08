@@ -28,12 +28,13 @@
 | Video production | Anthropic storyboard + YouTube Data API + Pexels API + OpenAI Image API + local FFmpeg/ffprobe | `@anthropic-ai/sdk` + `fetch` + `child_process` |
 
 Dependency ranges live in `mcp-server/package.json` (the SSOT — read it rather than trusting a number here):
-today `googleapis ~178.0`, `@modelcontextprotocol/sdk ^1.30`, `jose ^6`, `@onesub/providers ^0.4`,
-`zod ^3.24`, `@anthropic-ai/sdk ^0.128`. Note the `gaxios` **override** (`7.1.5`) in the same file — it exists to
+today `googleapis ~178.0`, `@modelcontextprotocol/sdk ^1.30`, `jose ^6`, `@onesub/providers ^0.5`,
+`zod ^4`, `@anthropic-ai/sdk ^0.137`. Note the `gaxios` **override** (`7.1.5`) in the same file — it exists to
 drop a deprecated transitive `glob`; don't remove it casually. `googleapis` is held at `~178.0` because 178.1+
-declares `engines.node >=22` while the floor is 20. `zod` stays on 3: zod 4 is accepted by the MCP SDK but
-changes the JSON Schema it emits for almost every tool's `inputSchema` (property order, `$schema`), which would
-alter `tools/list` for every client.
+declares `engines.node >=22` while the floor is 20. With zod 4 the MCP SDK renders `inputSchema` through zod's
+own JSON Schema output (input mode), so object schemas carry no `additionalProperties: false` — unknown
+arguments are still stripped at parse time, as before — and repeated sub-schemas are inlined rather than `$ref`'d.
+A zod major bump therefore changes `tools/list` for every client: diff its output before and after.
 
 ## YouTube upload settings
 
