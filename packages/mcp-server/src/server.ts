@@ -22,6 +22,7 @@ import { registerAndroidTools } from './registers/android.js';
 import { registerVideoTools } from './registers/video.js';
 import { registerYouTubeTools } from './registers/youtube.js';
 import { registerTikTokBusinessTools } from './registers/tiktok.js';
+import { registerDriveTools } from './registers/drive.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 import { readToolManifest } from './lib/package-root.js';
@@ -73,6 +74,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   registerVideoTools(registrar);
   registerYouTubeTools(registrar);
   registerTikTokBusinessTools(registrar);
+  registerDriveTools(registrar);
   registerPrompts(server);
   registerResources(server, { manifest, toolsets });
 

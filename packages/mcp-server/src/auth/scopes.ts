@@ -90,6 +90,15 @@ export const AUTH_DOMAINS = {
     ],
     summary: 'youtube_get_channel·youtube_list_videos·youtube_get_analytics_report — 채널·영상·성과 읽기',
   },
+  drive: {
+    label: 'Google Drive (drive.file)',
+    // drive.file 은 비민감 스코프다 — 이 앱이 만들었거나 사용자가 이 앱으로 연 파일만 다룬다.
+    // 기존 폴더·공유 드라이브 전체를 다루려면 Drive 서비스 계정(mimi-seed-drive-auth)을 쓴다.
+    // 전체 drive 스코프는 제한(restricted) 스코프라 OAuth 앱 보안 심사가 필요해 여기 넣지 않는다.
+    scopes: ['https://www.googleapis.com/auth/drive.file'],
+    summary:
+      'drive_* — mimi-seed 가 만든 파일·폴더 업로드·갱신·정리 (기존 폴더·공유 드라이브는 Drive 서비스 계정)',
+  },
 } as const satisfies Record<string, AuthDomainDef>;
 
 export type AuthDomainId = keyof typeof AUTH_DOMAINS;
@@ -98,6 +107,9 @@ export type AuthDomainId = keyof typeof AUTH_DOMAINS;
 export const DOMAIN_IDS = Object.keys(AUTH_DOMAINS) as [AuthDomainId, ...AuthDomainId[]];
 
 export const CLOUD_PLATFORM_SCOPE = AUTH_DOMAINS.gcp.scopes[0];
+
+/** Drive OAuth 경로가 pre-flight 하는 스코프. 도메인 정의에서 파생한다(리터럴 중복 금지). */
+export const DRIVE_FILE_SCOPE = AUTH_DOMAINS.drive.scopes[0];
 
 /**
  * Play Developer Reporting API(Android vitals 통계) 전용 스코프. androidpublisher 와

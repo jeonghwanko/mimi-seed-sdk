@@ -74,6 +74,10 @@ export const domains = {
     en: 'BigQuery',
     highlights: ['bigquery_run_query', 'bigquery_list_datasets', 'bigquery_get_table_schema'],
   },
+  drive: {
+    en: 'Google Drive',
+    highlights: ['drive_upload_file', 'drive_update_file_content', 'drive_create_folder', 'drive_list_files'],
+  },
   billing: {
     en: 'GCP Billing',
     highlights: ['gcp_get_billing_info', 'gcp_list_billing_projects', 'gcp_list_budgets', 'gcp_create_budget'],
@@ -165,6 +169,7 @@ export const catalog = {
     },
     youtube: { impl: 'youtube/*.ts' },
     tiktok: { impl: 'tiktok-business/*.ts' },
+    drive: { impl: 'drive/*.ts' },
   },
 
   /** 묶음 표: 행 = [도메인, 라벨 뒤에 붙는 설명(선택)]. 표 안에서는 W/D 마커가 도구마다 붙는다. */
@@ -235,6 +240,10 @@ export const catalog = {
     gcp_list_billing_projects: '공용 결제계정 판별',
     gcp_create_budget: '알림만 — 지출 차단 아님',
     bigquery_run_query: 'read-only — a single `SELECT` enforced by a dry run; can incur cost',
+    drive_create_folder: '같은 이름 폴더가 있으면 그것을 돌려줌',
+    drive_upload_file: '같은 이름이 있으면 기본 거부 — 업로드 후 MD5 대조',
+    drive_update_file_content: '같은 fileId·링크 유지, 이전 버전은 Drive 버전 기록에',
+    drive_trash_file: '휴지통 이동 — 30일 안에 복구 가능',
     ga4_create_bigquery_link: 'confirm 필요, 기존 링크는 no-op',
     googleads_save_config: 'local config',
     facebook_post_photo: 'public',
@@ -473,6 +482,11 @@ export const batches = [
     goal: 'BigQuery',
     tools: ['bigquery_auth_status', 'bigquery_list_datasets', 'bigquery_list_tables', 'bigquery_get_table_schema', 'bigquery_run_query'],
     fallbackFor: ['bigquery'],
+  },
+  {
+    goal: 'Google Drive (영상·산출물 업로드·교체·정리)',
+    tools: ['drive_auth_status', 'drive_list_files', 'drive_create_folder', 'drive_upload_file', 'drive_update_file_content'],
+    fallbackFor: ['drive'],
   },
   {
     goal: 'GCP billing (Blaze 여부 · 비용 범위 · 예산)',

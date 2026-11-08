@@ -32,6 +32,7 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
         'https://www.googleapis.com/auth/youtube.force-ssl',
         'https://www.googleapis.com/auth/youtube.readonly',
         'https://www.googleapis.com/auth/yt-analytics.readonly',
+        'https://www.googleapis.com/auth/drive.file',
       ].sort(),
     );
   });

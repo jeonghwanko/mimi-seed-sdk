@@ -128,7 +128,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## 제공 도구 (150+ 개 · 23개 영역)
+## 제공 도구 (150+ 개 · 24개 영역)
 <!-- generated:readme-tools-heading:end -->
 
 <!-- generated:readme-tools-table:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -147,6 +147,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Facebook | 6 | `facebook_post_photo` / `facebook_post_multi_photo` / `facebook_list_pages` |
 | Google Cloud IAM | 5 | `iam_create_service_account` / `iam_create_key` / `iam_add_iam_policy_binding` |
 | BigQuery | 5 | `bigquery_run_query` / `bigquery_list_datasets` / `bigquery_get_table_schema` |
+| Google Drive | 8 | `drive_upload_file` / `drive_update_file_content` / `drive_create_folder` / `drive_list_files` |
 | GCP Billing | 4 | `gcp_get_billing_info` / `gcp_list_billing_projects` / `gcp_list_budgets` / `gcp_create_budget` |
 | Threads | 7 | `threads_post` / `threads_post_video` / `threads_post_carousel` / `threads_refresh_token` |
 | TikTok Business | 7 | `tiktok_business_plan_video_post` / `tiktok_business_publish_video` / `tiktok_business_get_publish_status` |

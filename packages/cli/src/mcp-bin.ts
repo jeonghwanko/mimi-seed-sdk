@@ -31,6 +31,7 @@ export const MCP_BINS = [
   "mimi-seed-appstore-auth",
   "mimi-seed-playstore-auth",
   "mimi-seed-bigquery-auth",
+  "mimi-seed-drive-auth",
   "mimi-seed-jenkins-auth",
   "mimi-seed-googleads-auth",
   "mimi-seed-social-auth",

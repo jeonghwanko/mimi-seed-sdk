@@ -36,6 +36,7 @@ export type CredId =
   | "appstore"
   | "playstore"
   | "bigquery"
+  | "drive"
   | "jenkins"
   | "github"
   | "gitlab"
@@ -401,6 +402,46 @@ export const CREDENTIALS: readonly CredSpec[] = [
       en: "optional — falls back to OAuth",
     },
     detect: (home) => ({ present: anyFileStarting(home, "bigquery") }),
+  },
+  {
+    id: "drive",
+    label: {
+      ko: "Google Drive 서비스 계정",
+      en: "Google Drive service account",
+    },
+    requirement: "optional",
+    group: "core",
+    file: "~/.mimi-seed/drive-service-account.json",
+    fallbackOn: ["oauth"],
+    fix: "mimi-seed auth drive",
+    setup: { kind: "mcp-bin", bin: "mimi-seed-drive-auth" },
+    obtain: {
+      ko: [
+        "OAuth(drive.file)는 mimi-seed 가 만든 파일·폴더만 다룬다. 이미 있는 폴더나 공유 드라이브에 올리려면 서비스 계정이 필요하다.",
+        "GCP Console → APIs & Services → Google Drive API 사용 설정",
+        "IAM & Admin → 서비스 계정 → 키 → 새 키 만들기 → JSON",
+        "대상 폴더(또는 공유 드라이브)를 서비스 계정 이메일과 편집자로 **직접** 공유해야 한다.",
+        "서비스 계정에는 자기 저장 용량이 없으니 공유 드라이브나 공유받은 폴더에 올린다.",
+        "파일을 둘 수 없는 환경(CI·클라우드)이면 키 JSON 본문을 MIMI_SEED_DRIVE_SA_JSON 환경 변수에 넣는다.",
+      ],
+      en: [
+        "OAuth (drive.file) only covers files and folders mimi-seed created. Uploading into an existing folder or shared drive needs a service account.",
+        "GCP Console → APIs & Services → enable the Google Drive API",
+        "IAM & Admin → Service Accounts → Keys → Add key → Create new key → JSON",
+        "You must share the target folder (or shared drive) with the service-account email as Editor **yourself**.",
+        "Service accounts have no storage quota of their own — upload into a shared drive or a shared folder.",
+        "Where a file can't live (CI, cloud), put the key JSON body in the MIMI_SEED_DRIVE_SA_JSON environment variable.",
+      ],
+    },
+    docsAnchor: "drive",
+    note: {
+      ko: "선택 — mimi-seed 가 만든 폴더만 쓰면 OAuth 폴백 가능",
+      en: "optional — falls back to OAuth for folders mimi-seed created",
+    },
+    detect: (home) => {
+      if (process.env.MIMI_SEED_DRIVE_SA_JSON?.trim()) return { present: true, detail: "MIMI_SEED_DRIVE_SA_JSON (env)" };
+      return { present: hasFile(home, "drive-service-account.json") };
+    },
   },
   {
     id: "github",

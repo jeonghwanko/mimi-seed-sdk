@@ -32,6 +32,7 @@ mimi-seed setup
 | **App Store** 관련 전부 (메타데이터·TestFlight·심사) | [App Store Connect](#app-store-connect) |
 | 빌드 트리거 | [GitHub / GitLab](#ci-github-gitlab) *또는* [Jenkins](#jenkins) |
 | Crashlytics / 애널리틱스 export 조회 | [Google OAuth](#google-oauth), OAuth 가 자꾸 막히면 [BigQuery SA](#bigquery) |
+| **Google Drive** 에 파일 올리기·교체 | 기존·공유 폴더는 [Drive 서비스 계정](#drive), mimi-seed 가 만드는 폴더는 [Google OAuth](#google-oauth) |
 | 광고 캠페인 리포트 | [Google Ads](#google-ads) |
 | 출시 공지 게시 | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI 릴리스 노트 / 리뷰 답변 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(선택 — 없어도 동작한다)* |
@@ -47,7 +48,7 @@ Cloud IAM · BigQuery 가 모두 같은 OAuth 토큰을 탄다. 여기서 시작
 
 ## Google OAuth
 
-**열리는 것:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`
+**열리는 것:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`, `drive_*` (`--domains drive` 로 요청; mimi-seed 가 만든 파일·폴더만)
 
 YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한다. 채널·영상 목록·댓글 조회는 이 권한이나 기존 게시용 `youtube` 권한으로 할 수 있고, 영상 관리 쓰기와 댓글 답글은 `youtube` 권한을 사용한다.
 
@@ -160,6 +161,33 @@ Google **Workspace 재인증 정책**(`invalid_rapt`)이 OAuth 토큰을 계속 
 설정 CLI 가 실제 연결 테스트를 제안하고, 실패하면 역할을 부여하는 `gcloud` 명령을 그대로 출력해준다.
 
 **확인:** `bigquery_auth_status`.
+
+---
+
+<a id="drive"></a>
+
+## Google Drive
+
+**열리는 것:** `drive_*` — 폴더 만들기, 파일 업로드, 같은 파일 내용 교체, 이름 변경·이동, 휴지통.
+
+**들어가는 길이 둘 — 파일을 어디에 둘지로 고른다:**
+
+- **mimi-seed 가 만든 폴더** → Google OAuth 토큰으로 충분하다. `mimi-seed-auth --domains drive` 로 권한을 추가한다
+  (비민감 `drive.file` 스코프 — 이 앱이 만든 파일·폴더만 보인다).
+- **이미 있는 폴더나 공유 드라이브** (팀 폴더, CI, 클라우드 컨테이너) → Drive 서비스 계정.
+
+**서비스 계정 발급받기:**
+
+1. Google Cloud Console → **API 및 서비스** → **Google Drive API** 사용 설정
+2. **IAM 및 관리자** → **서비스 계정** → **키** → *키 추가* → **JSON**
+3. 대상 폴더(또는 공유 드라이브)를 서비스 계정 이메일과 **편집자**로 **직접** 공유한다.
+   서비스 계정에는 자기 저장 용량이 없다 — 공유 드라이브나 공유받은 폴더에 올린다.
+4. `mimi-seed auth drive` → JSON 경로 입력 (비대화형: `--file <json> --folder <폴더ID>`)
+
+파일을 둘 수 없는 환경(CI, 클라우드 샌드박스)이면 키 JSON **본문**을 `MIMI_SEED_DRIVE_SA_JSON` 환경 변수에 넣는다 —
+저장한 파일보다 우선한다. 플랫폼의 비밀 저장소에 둔다.
+
+**확인:** `drive_auth_status`.
 
 ---
 

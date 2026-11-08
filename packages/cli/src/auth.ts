@@ -29,6 +29,7 @@ ${kleur.bold("플랫폼별 자격증명:")}
   ${kleur.cyan("mimi-seed auth appstore")}   App Store Connect API 키 (appstore.json)
   ${kleur.cyan("mimi-seed auth playstore")}  Play 서비스 계정 JSON 등록
   ${kleur.cyan("mimi-seed auth bigquery")}   BigQuery 서비스 계정 (Crashlytics export 등)
+  ${kleur.cyan("mimi-seed auth drive")}      Google Drive 서비스 계정 (공유 폴더·공유 드라이브 업로드)
 
 ${kleur.bold("빌드 / 마케팅:")}
   ${kleur.cyan("mimi-seed auth meta")}       Facebook · Instagram · Threads 한 번에
@@ -69,6 +70,7 @@ ${kleur.bold("Per-platform credentials:")}
   ${kleur.cyan("mimi-seed auth appstore")}   App Store Connect API key (appstore.json)
   ${kleur.cyan("mimi-seed auth playstore")}  register a Play service-account JSON
   ${kleur.cyan("mimi-seed auth bigquery")}   BigQuery service account (Crashlytics export, etc.)
+  ${kleur.cyan("mimi-seed auth drive")}      Google Drive service account (uploads to shared folders / drives)
 
 ${kleur.bold("Build / marketing:")}
   ${kleur.cyan("mimi-seed auth meta")}       Facebook · Instagram · Threads in one flow
@@ -149,6 +151,7 @@ export async function cmdAuth(args: string[]): Promise<void> {
   if (sub === "appstore") return void exitWith(await runMcpBin("mimi-seed-appstore-auth", rest));
   if (sub === "playstore") return void exitWith(await runMcpBin("mimi-seed-playstore-auth", rest));
   if (sub === "bigquery") return void exitWith(await runMcpBin("mimi-seed-bigquery-auth", rest));
+  if (sub === "drive") return void exitWith(await runMcpBin("mimi-seed-drive-auth", rest));
   if (sub === "jenkins") return void exitWith(await runMcpBin("mimi-seed-jenkins-auth", rest));
   if (sub === "googleads") return void exitWith(await runMcpBin("mimi-seed-googleads-auth", rest));
   if (sub === "meta") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["all", ...rest]));

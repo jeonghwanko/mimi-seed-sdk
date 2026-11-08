@@ -45,6 +45,7 @@ function sub(name: string): Record<string, unknown> {
 }
 
 export type { youtube_v3 } from 'googleapis/build/src/apis/youtube/index.js';
+export type { drive_v3 } from 'googleapis/build/src/apis/drive/index.js';
 export type { youtubeAnalytics_v2 } from 'googleapis/build/src/apis/youtubeAnalytics/index.js';
 
 /**
@@ -73,6 +74,9 @@ export const google = {
   },
   get androidpublisher(): typeof import('googleapis/build/src/apis/androidpublisher/index.js').androidpublisher {
     return sub('androidpublisher').androidpublisher as typeof import('googleapis/build/src/apis/androidpublisher/index.js').androidpublisher;
+  },
+  get drive(): typeof import('googleapis/build/src/apis/drive/index.js').drive {
+    return sub('drive').drive as typeof import('googleapis/build/src/apis/drive/index.js').drive;
   },
   get bigquery(): typeof import('googleapis/build/src/apis/bigquery/index.js').bigquery {
     return sub('bigquery').bigquery as typeof import('googleapis/build/src/apis/bigquery/index.js').bigquery;

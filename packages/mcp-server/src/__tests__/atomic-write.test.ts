@@ -96,6 +96,7 @@ describe('자격증명 writer 가드', () => {
     'android/keystore-store.ts',
     'appstore/auth.ts',
     'auth/bigquery-auth.ts',
+    'auth/drive-auth.ts',
     'auth/google-auth.ts',
     'auth/playstore-auth.ts',
     'ci/config.ts',

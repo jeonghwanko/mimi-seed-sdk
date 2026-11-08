@@ -20,6 +20,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Google Drive domain** — create folders, upload files, replace a file's contents in place (same file ID and
+  share link; Drive keeps the old version), rename / move, trash, list, and inspect. Uploads verify the MD5 after
+  transfer and refuse a same-name file in the target folder unless asked to create another.
+  Auth: a Drive service account (`mimi-seed auth drive`, or the key JSON body in `MIMI_SEED_DRIVE_SA_JSON` for CI
+  and cloud sandboxes) for existing folders and shared drives; otherwise Google OAuth with the new `drive` domain
+  (`drive.file` scope — files mimi-seed created only). Every call supports shared drives.
 - `youtube_upload_video` accepts `defaultLanguage` (title/description language) and `defaultAudioLanguage` (spoken
   language) as separate fields. YouTube Studio upload defaults do not apply to API uploads, so these are now set
   explicitly. A video without speech leaves the audio language unset.
@@ -33,7 +39,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Tool changes
 
-- None.
+- Added: `drive_auth_status`, `drive_list_files`, `drive_get_file`, `drive_create_folder`, `drive_upload_file`,
+  `drive_update_file_content`, `drive_update_file_metadata`, `drive_trash_file`.
 
 ## [0.21.8] - 2026-11-08
 
