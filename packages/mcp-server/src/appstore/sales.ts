@@ -212,10 +212,17 @@ const SALES_FETCH_CONCURRENCY = 4;
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
+  let failed = false;
   const worker = async () => {
-    while (next < items.length) {
+    // 하나가 실패하면 결과 전체가 버려지므로 새 요청을 더 시작하지 않는다.
+    while (!failed && next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i]);
+      try {
+        out[i] = await fn(items[i]);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));

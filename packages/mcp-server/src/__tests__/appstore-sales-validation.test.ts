@@ -51,3 +51,27 @@ describe('App Store 매출 일자별 조회 병렬화', () => {
     vi.doUnmock('../appstore/auth.js');
   });
 });
+
+describe('App Store 매출 병렬 조회 실패 처리', () => {
+  it('한 날짜가 실패하면 남은 날짜를 더 요청하지 않는다', async () => {
+    vi.resetModules();
+    vi.doMock('../appstore/auth.js', async (original) => ({
+      ...(await original<typeof import('../appstore/auth.js')>()),
+      getReportsAuthHeaders: async () => ({ headers: { Authorization: 'Bearer t' }, source: 'default' }),
+    }));
+    const { getSalesReport: run } = await import('../appstore/sales.js');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const date = new URL(String(input)).searchParams.get('filter[reportDate]')!;
+      await new Promise((r) => setTimeout(r, 5));
+      if (date === '2026-01-01') return new Response('boom', { status: 400 });
+      return new Response('', { status: 200 });
+    });
+
+    await expect(run({ vendorNumber: '123', startDate: '2026-01-01', endDate: '2026-02-28' })).rejects.toThrow();
+    await new Promise((r) => setTimeout(r, 50));
+    // 첫 실패 시점에 이미 출발한 동시 요청(최대 4개) 정도만 허용된다.
+    expect(fetchSpy.mock.calls.length).toBeLessThanOrEqual(8);
+    fetchSpy.mockRestore();
+    vi.doUnmock('../appstore/auth.js');
+  });
+});

@@ -26,7 +26,7 @@ const SKIP_DIRS = new Set([
   '.claude',
 ]);
 
-// Bounded source scan for the FCM markers above (see readFcmSources).
+// Bounded source scan for the FCM markers (FCM_HINT in ./fcm.ts; see readFcmSources).
 const SOURCE_EXTENSIONS = new Set([
   '.js', '.cjs', '.mjs', '.jsx', '.ts', '.cts', '.mts', '.tsx',
   '.py', '.go', '.java', '.kt', '.php', '.rb', '.cs', '.dart', '.swift', '.sh',
