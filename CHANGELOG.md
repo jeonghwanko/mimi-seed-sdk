@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.8] - 2026-11-08
+
 ### Changed
 
 - The MCP server now validates tool input with zod 4. Tool names and parameters are unchanged, but the JSON
