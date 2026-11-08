@@ -19,6 +19,8 @@ export interface UploadYouTubeVideoInput {
   description?: string;
   tags?: string[];
   categoryId?: string;
+  defaultLanguage?: string;
+  defaultAudioLanguage?: string;
   privacyStatus?: YouTubePrivacyStatus;
   madeForKids?: boolean;
   containsSyntheticMedia?: boolean;
@@ -94,6 +96,10 @@ function safeStatus(video: youtube_v3.Schema$Video) {
     title: video.snippet?.title ?? null,
     channelId: video.snippet?.channelId ?? null,
     channelTitle: video.snippet?.channelTitle ?? null,
+    categoryId: video.snippet?.categoryId ?? null,
+    defaultLanguage: video.snippet?.defaultLanguage ?? null,
+    defaultAudioLanguage: video.snippet?.defaultAudioLanguage ?? null,
+    commentModerationVerification: 'requires_youtube_studio' as const,
     privacyStatus: video.status?.privacyStatus ?? null,
     publishAt: video.status?.publishAt ?? null,
     uploadStatus: video.status?.uploadStatus ?? null,
@@ -151,6 +157,8 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
           description: input.description ?? '',
           tags: input.tags ?? [],
           categoryId: input.categoryId ?? '24',
+          ...(input.defaultLanguage ? { defaultLanguage: input.defaultLanguage } : {}),
+          ...(input.defaultAudioLanguage ? { defaultAudioLanguage: input.defaultAudioLanguage } : {}),
         },
         status: {
           privacyStatus,

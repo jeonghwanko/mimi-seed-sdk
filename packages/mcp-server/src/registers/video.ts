@@ -40,6 +40,7 @@ export function registerVideoTools(server: ToolRegistrar) {
       '로컬 영상 파일을 선택한 Google 로그인 프로필의 채널에 업로드합니다. expectedChannelId를 실제 인증 채널과 대조한 후 전송합니다.',
       '기본 공개 상태는 private이며 public/unlisted는 같은 턴의 명시 승인 후 confirmVisible=true가 필요합니다.',
       '업로드 후 youtube_get_video_status로 처리 완료 여부와 실제 공개 상태를 확인하세요.',
+      'Studio 업로드 기본값은 API 업로드에 적용되지 않습니다. 카테고리·제목/설명 언어·실제 음성 언어를 지정하세요. 댓글 검토 필터는 API로 설정하거나 확인할 수 없어 Studio 검증이 필요합니다.',
       '요청이 타임아웃되면 업로드가 뒤늦게 완료될 수 있으므로 YouTube Studio를 먼저 확인하고 중복 재시도하지 마세요.',
       'YouTube OAuth 권한이 없으면 mimi_seed_auth_start(domains=["youtube"])로 증분 연결하세요.',
     ].join(' '),
@@ -51,6 +52,8 @@ export function registerVideoTools(server: ToolRegistrar) {
       description: z.string().max(5_000).optional().describe('영상 설명과 음원 출처/라이선스 표기'),
       tags: z.array(z.string().min(1).max(500)).max(100).optional(),
       categoryId: z.string().regex(/^\d+$/).default('24').describe('YouTube 카테고리 ID'),
+      defaultLanguage: z.string().min(2).max(35).optional().describe('제목·설명의 BCP-47 언어 코드 (예: ko, en). 음성 언어와 별개입니다.'),
+      defaultAudioLanguage: z.string().min(2).max(35).optional().describe('실제 음성의 BCP-47 언어 코드 (예: ko, en). 무대사는 생략하고 비공개 업로드 후 Studio에서 동영상 언어를 해당 사항 없음으로 저장·확인하세요. 제목으로 추정하지 않습니다.'),
       privacyStatus: z.enum(['private', 'unlisted', 'public']).default('private'),
       madeForKids: z.boolean().default(false),
       containsSyntheticMedia: z.boolean().optional().describe('현실적으로 보이는 AI 생성·변형 콘텐츠 여부를 YouTube에 고지'),
@@ -66,7 +69,7 @@ export function registerVideoTools(server: ToolRegistrar) {
 
   server.tool(
     'youtube_get_video_status',
-    '내 YouTube 영상의 업로드 처리 상태와 현재 공개 상태를 조회합니다.',
+    '내 YouTube 영상의 처리·공개 상태와 실제 반환된 카테고리·제목/설명 언어·음성 언어를 조회합니다. null은 미확인이며 무대사 판정이 아닙니다. 댓글 검토 필터는 Studio에서 별도로 확인해야 합니다.',
     {
       profile: z.string().regex(GOOGLE_PROFILE_ID).optional().describe('영상 소유 채널의 Google 로그인 프로필'),
       videoId: z.string().min(1).max(64).describe('YouTube video ID'),

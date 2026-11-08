@@ -35,6 +35,20 @@ declares `engines.node >=22` while the floor is 20. `zod` stays on 3: zod 4 is a
 changes the JSON Schema it emits for almost every tool's `inputSchema` (property order, `$schema`), which would
 alter `tools/list` for every client.
 
+## YouTube upload settings
+
+`src/video/youtube-publish.ts` sends explicit language metadata and returns the provider's saved category and
+language fields. `src/youtube/tools.ts` preserves both language fields when editing a title, description, or tags.
+For parameter definitions see `src/registers/video.ts`.
+
+[Studio upload defaults](https://support.google.com/youtube/answer/2660027) do not apply to API uploads.
+The [video resource](https://developers.google.com/youtube/v3/docs/videos) distinguishes title/description
+language from audio language, but does not expose per-video comment moderation preferences. Upload/status
+results therefore require Studio verification of that preference; they never claim the filter is applied.
+Missing audio language does not prove a no-speech selection. The publication workflow in
+`skills/video-create-publish/SKILL.md` handles no-speech and comment settings through Studio while private,
+before publication or scheduling. This workflow is not a server-side lock on visibility changes.
+
 ## Auth gate before a call — `src/helpers.ts`
 
 Tools resolve credentials through shared gates, not ad hoc file reads:

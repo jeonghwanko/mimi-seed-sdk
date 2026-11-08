@@ -87,7 +87,7 @@ describe('YouTube Analytics', () => {
 
 const currentVideo = () => ({ id: 'video-1', snippet: {
   channelId, title: 'Old title', description: 'Old description', categoryId: '24', tags: ['one', 'two words'],
-  defaultLanguage: 'en', thumbnails: { high: { url: 'https://example.test/thumbnail' } },
+  defaultLanguage: 'en', defaultAudioLanguage: 'ko', thumbnails: { high: { url: 'https://example.test/thumbnail' } },
 }, status: { privacyStatus: 'private', uploadStatus: 'processed', embeddable: false,
   license: 'creativeCommon', publicStatsViewable: false, selfDeclaredMadeForKids: true,
   containsSyntheticMedia: true } });
@@ -104,7 +104,7 @@ describe('YouTube management writes', () => {
     expect(result.status).toBe('updated');
     expect(videosUpdate).toHaveBeenCalledWith({ part: ['snippet'], requestBody: {
       id: 'video-1', snippet: { title: 'New title', description: 'Old description', categoryId: '24',
-        tags: ['one', 'two words'], defaultLanguage: 'en' },
+        tags: ['one', 'two words'], defaultLanguage: 'en', defaultAudioLanguage: 'ko' },
     } });
   });
 
