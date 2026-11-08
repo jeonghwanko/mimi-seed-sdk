@@ -1,0 +1,29 @@
+name: Changelog
+
+# 사용자에게 보이는 코드를 바꾼 PR 이 CHANGELOG.md `[Unreleased]` 를 빠뜨리면 실패한다.
+# 판정은 scripts/changelog-check.mjs. ci.yml 과 분리한 이유: 라벨(skip-changelog)·제목 수정에도
+# 다시 판정해야 하는데, 그 이벤트로 ci.yml 의 전체 테스트 매트릭스까지 돌릴 필요는 없다.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    name: changelog entry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0   # base...HEAD diff 에 merge-base 가 필요
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+
+      # PR 제목·라벨은 스크립트가 GITHUB_EVENT_PATH 에서 읽는다 — 셸에 보간하지 않는다.
+      - run: node scripts/changelog-check.mjs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}

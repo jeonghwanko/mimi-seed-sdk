@@ -70,7 +70,10 @@ npm run build && npm test
    manifest is the single source of truth (see [`docs/domain/pitfalls.md`](docs/domain/pitfalls.md) §8).
    The full step list is [`docs/domain/recipes.md`](docs/domain/recipes.md) §1.
 6. User-visible change? Add a bullet to `[Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) (tool additions,
-   renames, and removals go under its `Tool changes` heading).
+   renames, and removals go under its `Tool changes` heading). The `Changelog` PR check fails when shipped source
+   (`packages/*/src` outside tests), `skills/`, or `tool-manifest.json` changes without it. If nothing changes for
+   users, use a `test:` / `refactor:` / `chore:` / `docs:` / `ci:` / `build:` / `style:` PR title or add the
+   `skip-changelog` label.
 7. Changed anything under `docs/`, `skills/`, `.codex-plugin/`, `.mcp.json`, `LICENSE`, `SECURITY.md`, or
    `.codexignore`? Run
    `npm run plugin:sync` and commit the regenerated `plugins/mimi-seed/` — root `npm test` rejects drift.
