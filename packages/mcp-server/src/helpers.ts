@@ -1,4 +1,4 @@
-import { getAuthenticatedClient, ensureFreshAccessToken, getStoredTokens } from './auth/google-auth.js';
+import { getAuthenticatedClient, ensureFreshAccessToken } from './auth/google-auth.js';
 import { domainsForScope, isPreTrackingScope } from './auth/scopes.js';
 import { getServiceAccountClient, getServiceAccountJson } from './auth/playstore-auth.js';
 import { getAppStoreCredentials } from './appstore/auth.js';
@@ -33,9 +33,8 @@ function formatAuthError(p: AuthErrorPayload, profile?: string): string {
  *
  * OAuth 토큰에만 적용된다 — SA JWT 는 자체 scopes 로 토큰을 받으므로 이 검사 대상이 아니다.
  */
-function assertStoredScope(requiredScope?: string, profile?: string): void {
+function assertStoredScope(requiredScope: string | undefined, scopeStr: string | undefined, profile?: string): void {
   if (!requiredScope) return;
-  const scopeStr = getStoredTokens(profile)?.scope;
   const missing =
     scopeStr === undefined
       ? !isPreTrackingScope(requiredScope)
@@ -80,7 +79,9 @@ export async function requireAuth(requiredScope?: string, profile?: string) {
       }),
     );
   }
-  assertStoredScope(requiredScope, profile);
+  // 방금 갱신(또는 fresh 확인)한 토큰의 scope 로 검사한다 — 디스크를 다시 읽으면 그 사이
+  // 다른 프로세스의 재로그인과 섞여 한 호출 안에서 서로 다른 토큰을 볼 수 있다.
+  assertStoredScope(requiredScope, result.tokens.scope, profile);
   return client;
 }
 
@@ -114,17 +115,20 @@ export const APPSTORE_AUTH_HINT = [
  * 별도 서비스 계정 JSON 을 받지 않아도 대부분의 Play 작업이 가능하다.
  * (서비스 계정은 서버/헤드리스 — onesub 영수증 검증 등 — 용도로 계속 우선 적용.)
  */
-export function requirePlayStoreAuth(packageName?: string, requiredScope?: string) {
+export async function requirePlayStoreAuth(packageName?: string, requiredScope?: string) {
   const sa = getServiceAccountClient(packageName);
   if (sa) return sa;
+  // OAuth 폴백도 requireAuth 와 같이 사전 갱신한다 — 안 그러면 refresh_token 이 폐기됐을 때
+  // 재로그인 안내 대신 googleapis 의 raw invalid_grant 가 그대로 노출된다.
+  const result = await ensureFreshAccessToken();
+  if (result.status === 'unauthenticated') throw new Error(PLAY_AUTH_HINT);
+  if (result.status === 'expired_refresh_failed') throw new Error(formatAuthError(result.error));
   const oauth = getAuthenticatedClient();
-  if (oauth) {
-    // OAuth 폴백일 때만 스코프 pre-flight — SA JWT 는 자체 scopes 로 토큰을 받으므로
-    // (getServiceAccountClient 가 reporting 스코프를 이미 싣는다) 해당 없음.
-    assertStoredScope(requiredScope);
-    return oauth;
-  }
-  throw new Error(PLAY_AUTH_HINT);
+  if (!oauth) throw new Error(PLAY_AUTH_HINT);
+  // OAuth 폴백일 때만 스코프 pre-flight — SA JWT 는 자체 scopes 로 토큰을 받으므로
+  // (getServiceAccountClient 가 reporting 스코프를 이미 싣는다) 해당 없음.
+  assertStoredScope(requiredScope, result.tokens.scope);
+  return oauth;
 }
 
 export function requireServiceAccountJson(packageName?: string): string {

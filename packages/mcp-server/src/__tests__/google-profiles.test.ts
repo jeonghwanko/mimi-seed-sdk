@@ -158,6 +158,18 @@ describe('Google account/channel profiles', () => {
     expect(auth.getStoredTokens('channel-a')?.access_token).toBe('example-access');
   });
 
+  it('동시에 들어온 갱신 요청은 refresh 를 한 번만 수행하고 결과를 공유한다', async () => {
+    h.tokenResponse = { ...h.tokenResponse, expiry_date: 1 };
+    await login('channel-a', channelA);
+    h.refresh.mockResolvedValue({ credentials: { access_token: 'fresh-a', expiry_date: Date.now() + 3600000 } });
+    const results = await Promise.all([1, 2, 3].map(() => auth.ensureFreshAccessToken(undefined, 'channel-a')));
+    expect(h.refresh).toHaveBeenCalledTimes(1);
+    expect(results.map((r) => r.status)).toEqual(['refreshed', 'refreshed', 'refreshed']);
+    // 완료 후에는 공유가 풀려 다음 호출은 새로 판단한다 (이제 fresh).
+    expect((await auth.ensureFreshAccessToken(undefined, 'channel-a')).status).toBe('fresh');
+    expect(h.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('검증된 채널의 클라이언트로 업로드하고 결과에 채널을 반환한다', async () => {
     const { validateVideo } = await import('../video/render.js');
     vi.mocked(validateVideo).mockResolvedValue({ streams: [{ codec_type: 'video', width: 1080, height: 1920 }],

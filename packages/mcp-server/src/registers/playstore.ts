@@ -51,7 +51,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     'Google Play 앱 세부정보 조회 — 개발자 연락처(이메일·전화·웹사이트)·기본 언어 등 (edits.details). 수정은 playstore_update_details.',
     { packageName: androidPackageName.describe('패키지명 (예: com.example.app)') },
     async ({ packageName }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const details = await playstore.getAppDetails(auth, packageName);
       return jsonResult(details);
     },
@@ -68,7 +68,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       defaultLanguage: z.string().optional().describe('기본 언어 코드 (예: ko-KR, en-US)'),
     },
     async ({ packageName, contactEmail, contactPhone, contactWebsite, defaultLanguage }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updateAppDetails(auth, packageName, {
         contactEmail, contactPhone, contactWebsite, defaultLanguage,
       });
@@ -84,7 +84,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       language: z.string().default('ko-KR').describe('언어 코드 (기본: ko-KR)'),
     },
     async ({ packageName, language }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const listing = await playstore.getListing(auth, packageName, language);
       return jsonResult(listing);
     },
@@ -101,7 +101,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       fullDescription: z.string().optional().describe('전체 설명 (4000자 이내)'),
     },
     async ({ packageName, language, title, shortDescription, fullDescription }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updateListing(auth, packageName, language, {
         title, shortDescription, fullDescription,
       });
@@ -114,7 +114,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     'Google Play 릴리스 트랙 현황 (프로덕션/베타/알파/내부)',
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const tracks = await playstore.listTracks(auth, packageName);
       return jsonResult(tracks);
     },
@@ -164,7 +164,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     async (args) => {
       // 통계는 Play Developer Reporting API 를 쓰므로 OAuth 폴백 시 reporting 스코프를
       // 요구한다. 미보유면 generic 403 대신 "--domains playstore 재로그인" 안내가 나간다.
-      const auth = requirePlayStoreAuth(args.packageName, PLAY_DEVELOPER_REPORTING_SCOPE);
+      const auth = await requirePlayStoreAuth(args.packageName, PLAY_DEVELOPER_REPORTING_SCOPE);
       const result = await playstore.getStatistics(auth, args.packageName, args);
       return jsonResult(result);
     },
@@ -179,7 +179,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       imageType: z.enum(['featureGraphic', 'icon', 'phoneScreenshots', 'promoGraphic', 'sevenInchScreenshots', 'tenInchScreenshots', 'tvBanner', 'tvScreenshots', 'wearScreenshots']).describe('이미지 타입'),
     },
     async ({ packageName, language, imageType }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const images = await playstore.listImages(auth, packageName, language, imageType);
       return jsonResult(images);
     },
@@ -195,7 +195,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       filePath: z.string().describe('업로드할 이미지 절대 경로'),
     },
     async ({ packageName, language, imageType, filePath }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.uploadImage(auth, packageName, language, imageType, filePath);
       return textResult(`✅ 업로드 완료\n${JSON.stringify(result, null, 2)}`);
     },
@@ -210,7 +210,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       imageType: z.enum(['featureGraphic', 'icon', 'phoneScreenshots', 'promoGraphic', 'sevenInchScreenshots', 'tenInchScreenshots', 'tvBanner', 'tvScreenshots', 'wearScreenshots']),
     },
     async ({ packageName, language, imageType }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.deleteAllImages(auth, packageName, language, imageType);
       return textResult(`✅ 전체 삭제\n${JSON.stringify(result, null, 2)}`);
     },
@@ -226,7 +226,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       filePaths: z.array(z.string()).describe('업로드할 이미지 절대 경로 배열 (순서 = 노출 순서)'),
     },
     async ({ packageName, language, imageType, filePaths }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.replaceImages(auth, packageName, language, imageType, filePaths);
       return textResult(`✅ ${result.count}장 교체 완료\n${JSON.stringify(result, null, 2)}`);
     },
@@ -260,7 +260,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       if (!validation.ok) {
         return errorResult(`❌ 릴리스 노트 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
       }
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
 
       // versionCode 가 있으면(빈 문자열 포함 — 자동 선택하지 않고 병합 전처럼 'versionCode 를 찾을 수 없어' 로 실패) 그 릴리스.
       // 응답 모양은 병합 전 playstore_update_release_notes 그대로다 — 파싱하는 호출자가 있다.
@@ -301,7 +301,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     'Google Play 리뷰 목록 조회. developerComment 가 null 이면 미답변, 답변이 있으면 본문과 수정 시각을 반환한다 (답변은 리뷰당 하나 — playstore_reply_review 는 기존 답변을 교체한다).',
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const { reviews, truncated } = await playstore.listReviewsWithStatus(auth, packageName);
       const result = jsonResult(reviews);
       // 목록이 잘렸을 때만 안내 줄을 덧붙인다 — 전부 가져왔으면 응답은 예전과 같은 JSON 하나다.
@@ -319,7 +319,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       replyText: z.string().describe('답변 내용'),
     },
     async ({ packageName, reviewId, replyText }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.replyToReview(auth, packageName, reviewId, replyText);
       return textResult(`답변 완료:\n${JSON.stringify(result, null, 2)}`);
     },
@@ -330,7 +330,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     'Google Play 인앱 상품 목록',
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       return jsonResult(truncatedList(await playstore.listInAppProducts(auth, packageName)));
     },
   );
@@ -340,7 +340,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     'Google Play 구독 상품 목록',
     { packageName: androidPackageName.describe('패키지명') },
     async ({ packageName }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       return jsonResult(truncatedList(await playstore.listSubscriptions(auth, packageName)));
     },
   );
@@ -542,7 +542,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       language: z.string().optional().describe('점검할 리스팅 언어 (기본: ko-KR)'),
     },
     async ({ packageName, versionCode, track, language }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const text = await buildPlayStoreReleasePlan({
         auth,
         packageName,
@@ -570,7 +570,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       status: z.enum(['draft', 'inProgress', 'completed', 'halted']).optional().describe('새 status (기본: completed)'),
     },
     async ({ packageName, track, versionCode, status }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.submitRelease(auth, packageName, track, versionCode, status);
       return textResult(`✅ ${packageName} ${track} v${versionCode}: ${result.previousStatus} → ${result.newStatus}\n\n${JSON.stringify(result, null, 2)}`);
     },
@@ -603,7 +603,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       })).optional().describe('대상 트랙용 릴리스 노트 (미지정 + copyReleaseNotes=true면 source 그대로)'),
     },
     async ({ packageName, fromTrack, toTrack, versionCode, status, userFraction, releaseName, copyReleaseNotes, releaseNotes }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.promoteRelease(auth, packageName, fromTrack, toTrack, versionCode, {
         status,
         userFraction,
@@ -644,7 +644,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       })).min(1).describe('갱신할 언어별 리스팅'),
     },
     async ({ packageName, productId, listings }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updateOneTimeProductListings(auth, packageName, productId, listings);
       return textResult([
         `✓ ${productId} 리스팅 갱신`,
@@ -671,7 +671,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       })).min(1).describe('갱신할 언어별 리스팅'),
     },
     async ({ packageName, productId, listings }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updateSubscriptionListings(auth, packageName, productId, listings);
       return textResult([
         `✓ ${productId} 구독 리스팅 갱신`,
@@ -694,7 +694,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       action: z.enum(['activate', 'deactivate']).describe('활성화 / 비활성화'),
     },
     async ({ packageName, productId, purchaseOptionId, action }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updatePurchaseOptionState(
         auth, packageName, productId, purchaseOptionId, action,
       );
@@ -813,7 +813,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     async ({ packageName, csvPath, csv, confirm }) => {
       const content = readDataSafetyCsv({ csv, csvPath });
       if (!confirm) return textResult(dataSafetyDryRunLines(packageName, content));
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const r = await playstore.uploadDataSafety(auth, packageName, content);
       return textResult(dataSafetyUploadedLines(r));
     },
@@ -833,7 +833,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       versionCode: z.string().optional().describe('특정 버전 코드로 필터'),
     },
     async ({ packageName, versionCode }) => {
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const rows = await playstore.listRecoveryActions(auth, packageName, versionCode);
       if (rows.length === 0) return textResult('복구 액션 없음.');
       return textResult(recoveryActionsText(rows));
@@ -871,7 +871,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
         sdkLevels,
       };
       if (!confirm) return textResult(recoveryCreateDryRunLines(packageName, targeting));
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const r = await playstore.createRecoveryAction(auth, packageName, targeting);
       return textResult(recoveryCreatedLines(r));
     },
@@ -893,7 +893,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       if (!confirm) {
         return textResult(`🛑 dry-run — 복구 액션 ${appRecoveryId} 를 배포할 참이다. 대상 사용자에게 원격 업데이트가 나간다. confirm: true 로 다시 호출.`);
       }
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const r = await playstore.deployRecoveryAction(auth, packageName, appRecoveryId);
       return textResult(`✅ 복구 액션 배포 — ${r.appRecoveryId}`);
     },
@@ -915,7 +915,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
       if (!confirm) {
         return textResult(`🛑 dry-run — 복구 액션 ${appRecoveryId} 를 취소할 참이다. 이미 적용된 기기는 되돌아가지 않는다. confirm: true 로 다시 호출.`);
       }
-      const auth = requirePlayStoreAuth(packageName);
+      const auth = await requirePlayStoreAuth(packageName);
       const r = await playstore.cancelRecoveryAction(auth, packageName, appRecoveryId);
       return textResult(`✅ 복구 액션 취소 — ${r.appRecoveryId}`);
     },

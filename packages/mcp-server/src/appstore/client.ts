@@ -1,5 +1,5 @@
-import { getAuthHeaders, getAppStoreCredentials, generateToken } from './auth.js';
-import { friendlyAppStoreError } from './errors.js';
+import { getAppStoreCredentials, generateToken } from './auth.js';
+import { authHeadersOrThrow, apiRequest, V1_BASE, type UntypedAscJson } from './http.js';
 import { fetchWithTimeout } from '../lib/http.js';
 
 /**
@@ -7,33 +7,11 @@ import { fetchWithTimeout } from '../lib/http.js';
  * https://developer.apple.com/documentation/appstoreconnectapi
  */
 
-const BASE = 'https://api.appstoreconnect.apple.com/v1';
+const BASE = V1_BASE;
 
 export async function apiGet(path: string, params?: Record<string, string>) {
-  const headers = await getAuthHeaders();
-  if (!headers) throw new Error(
-    [
-      '❌ App Store Connect 인증이 필요해.',
-      '',
-      '터미널에서 실행:',
-      '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-      '',
-      'API Key가 필요해:',
-      '  App Store Connect > Users and Access > Integrations > Keys',
-    ].join('\n')
-  );
-
-  const url = new URL(`${BASE}${path}`);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  }
-
-  const res = await fetchWithTimeout(url.toString(), { headers });
-  if (!res.ok) {
-    const body = await res.text();
-    throw friendlyAppStoreError(res.status, body);
-  }
-  return res.json();
+  const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+  return apiRequest<UntypedAscJson>(BASE, `${path}${query}`, await authHeadersOrThrow(), { method: 'GET' });
 }
 
 export interface AppStoreVerifyResult {
@@ -105,51 +83,18 @@ export async function verifyAppStoreCredentials(
 }
 
 export async function apiPatch(path: string, body: unknown) {
-  const headers = await getAuthHeaders();
-  if (!headers) throw new Error(
-    [
-      '❌ App Store Connect 인증이 필요해.',
-      '',
-      '터미널에서 실행:',
-      '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-    ].join('\n')
-  );
-
-  const res = await fetchWithTimeout(`${BASE}${path}`, {
+  return apiRequest<UntypedAscJson>(BASE, path, await authHeadersOrThrow(), {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw friendlyAppStoreError(res.status, text);
-  }
-  // 204 No Content 가능
-  const text = await res.text();
-  return text ? JSON.parse(text) : { ok: true };
 }
 
+/** 201 Created — 본문에 created entity. 일부 엔드포인트는 204 (→ { ok: true }). */
 export async function apiPost(path: string, body: unknown) {
-  const headers = await getAuthHeaders();
-  if (!headers) throw new Error(
-    [
-      '❌ App Store Connect 인증이 필요해.',
-      '',
-      '터미널에서 실행:',
-      '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-    ].join('\n')
-  );
-
-  const res = await fetchWithTimeout(`${BASE}${path}`, {
+  return apiRequest<UntypedAscJson>(BASE, path, await authHeadersOrThrow(), {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw friendlyAppStoreError(res.status, text);
-  }
-  // 201 Created — 본문에 created entity. 일부 엔드포인트는 204
-  const text = await res.text();
-  return text ? JSON.parse(text) : { ok: true };
 }
