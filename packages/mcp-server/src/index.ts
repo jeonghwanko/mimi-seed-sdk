@@ -27,6 +27,14 @@ const SUBCOMMANDS: Record<string, () => Promise<unknown>> = {
   'mimi-seed-release-doctor': () => import('./checks/release-doctor-cli.js'),
 };
 
+const USAGE = [
+  'Subcommands:',
+  ...Object.keys(SUBCOMMANDS).map((k) => `  npx -y @yoonion/mimi-seed-mcp ${k}`),
+  '',
+  'Or run the MCP server (no args) — normally started by an MCP client such as Claude Code or Codex:',
+  '  npx -y @yoonion/mimi-seed-mcp',
+].join('\n');
+
 async function main() {
   const sub = process.argv[2];
   if (sub && SUBCOMMANDS[sub]) {
@@ -35,19 +43,26 @@ async function main() {
     await SUBCOMMANDS[sub]();
     return;
   }
+  // 플래그는 서버 기동으로 흘려보내면 stdin 대기로 멈춘 것처럼 보인다 — 바로 답하고 끝낸다.
+  if (sub === '--version' || sub === '-v') {
+    console.log(version);
+    return;
+  }
+  if (sub === '--help' || sub === '-h') {
+    console.log(`mimi-seed-mcp ${version}\n\n${USAGE}`);
+    return;
+  }
   if (sub && !sub.startsWith('-')) {
-    console.error(
-      [
-        `❌ Unknown subcommand: ${sub}`,
-        '',
-        'Available:',
-        ...Object.keys(SUBCOMMANDS).map((k) => `  npx -y @yoonion/mimi-seed-mcp ${k}`),
-        '',
-        'Or run the MCP server (no args):',
-        '  npx -y @yoonion/mimi-seed-mcp',
-      ].join('\n'),
-    );
+    console.error(`❌ Unknown subcommand: ${sub}\n\n${USAGE}`);
     process.exit(2);
+  }
+
+  // 사람이 터미널에서 직접 띄운 경우에만 안내한다. stdout 은 MCP 프로토콜 전용이라 stderr 로.
+  if (process.stdin.isTTY) {
+    console.error(
+      `mimi-seed-mcp ${version}: MCP server running on stdio, waiting for an MCP client. ` +
+        'It is not interactive — press Ctrl+C to exit. Run with --help for subcommands.',
+    );
   }
 
   const server = buildServer(version);
