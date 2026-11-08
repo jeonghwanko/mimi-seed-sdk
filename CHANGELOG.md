@@ -18,6 +18,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.21.6] - 2026-11-08
+
+### Changed
+
+- App Store sales reports over a date range fetch daily reports four at a time instead of one by one, so long
+  ranges finish much faster. Results are still merged in date order.
+- App Store Connect requests reuse a signed JWT per API key until five minutes before it expires instead of
+  signing a new one for every request. Replacing or re-registering a key invalidates the cached token.
+
+### Fixed
+
+- Parallel tool calls on the same Google profile no longer each refresh the OAuth access token; they share a
+  single refresh.
+- Play Store tools that fall back to OAuth refresh the token before use, so an expired session reports a
+  re-authentication hint instead of a raw `invalid_grant` error. Scope checks now use the freshly refreshed token
+  rather than a stale copy re-read from disk.
+- When one day of an App Store sales report range fails, no further daily requests are started.
+
+### Tool changes
+
+- None.
+
 ## [0.21.5] - 2026-10-04
 
 ### Fixed
