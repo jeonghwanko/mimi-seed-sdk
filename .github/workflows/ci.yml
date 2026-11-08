@@ -39,7 +39,7 @@ jobs:
           node-version-file: .nvmrc
 
       - run: npm run plugin:check
-      - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs
+      - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs scripts/changelog-check.test.mjs
 
   # 테스트 전용 — 이 잡은 절대 publish 하지 않는다 (publish 잡이 따로 있다).
   build-test:

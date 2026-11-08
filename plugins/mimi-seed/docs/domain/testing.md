@@ -101,6 +101,13 @@ In `packages/mcp-server` a hand-written `any` is also an error (`no-explicit-any
 mcp-server's `prepublishOnly` in the middle of a release. The publish **trigger** lives only in the `publish`
 job's `if:` (plus `on:`); the script itself does not know why it was called.
 
+`.github/workflows/changelog.yml` runs on pull requests only (including title edits and label changes) and fails
+when shipped source (`packages/{cli,mcp-server,core}/src` outside tests), `skills/`, or
+`packages/mcp-server/tool-manifest.json` changes without `CHANGELOG.md`. The rule lives in
+`scripts/changelog-check.mjs` (unit-tested in `repo-guards`). Exempt: a behaviour-neutral conventional PR title
+(`test` / `refactor` / `chore` / `docs` / `ci` / `build` / `style`, without `!`), Dependabot, or the `skip-changelog`
+label. It checks that the file changed, not that the entry is under `[Unreleased]` or worded well.
+
 `.github/workflows/plugin-scanner.yml` runs the HOL `plugin-scanner` (the gate the awesome-ai-plugins listing
 applies) on every PR and `main` push: score ≥ 80 and no **high**/**critical** finding. It scans the whole checkout,
 tests included, so it is what fails when a fixture looks like a real secret (see the conventions below), a
