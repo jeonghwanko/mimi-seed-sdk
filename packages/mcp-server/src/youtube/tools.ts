@@ -52,11 +52,13 @@ export async function updateYouTubeVideoMetadata(auth: OAuth2Client, input: Upda
   const snippet: youtube_v3.Schema$VideoSnippet = {
     title, description, categoryId: old.categoryId, tags,
     ...(old.defaultLanguage ? { defaultLanguage: old.defaultLanguage } : {}),
+    ...(old.defaultAudioLanguage ? { defaultAudioLanguage: old.defaultAudioLanguage } : {}),
   };
   const preview = {
     videoId: input.videoId, channel, before: {
       title: old.title, description: old.description ?? '', tags: old.tags ?? [],
       categoryId: old.categoryId, defaultLanguage: old.defaultLanguage ?? null,
+      defaultAudioLanguage: old.defaultAudioLanguage ?? null,
     }, after: snippet,
   };
   if (input.confirm !== true) return { status: 'preview' as const, ...preview };
