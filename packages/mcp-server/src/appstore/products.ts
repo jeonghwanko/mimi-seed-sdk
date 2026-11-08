@@ -1,9 +1,8 @@
 // App Store Connect — 인앱 구매(IAP v2)·자동 갱신 구독 생성.
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
-import { getAuthHeaders } from './auth.js';
+import { apiRequest, authHeadersOrThrow, V2_BASE, type UntypedAscJson } from './http.js';
 import { apiGet, apiPost } from './client.js';
-import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 // ─── 인앱 구매 (IAP) 생성 ───
@@ -12,24 +11,12 @@ import { encodePathSegment } from '../lib/url-path.js';
 // 가격은 territory별 pricePoint ID 기반 — IAP를 만든 뒤 GET /pricePoints로 조회해 매칭.
 // 자동 제출(submission)은 권장 가이드라인 (스크린샷·리뷰 노트 등)이 충족돼야 통과.
 
-const IAP_V2_BASE = 'https://api.appstoreconnect.apple.com/v2';
-
 async function apiPostV2(path: string, body: unknown) {
-  const headers = await getAuthHeaders();
-  if (!headers) {
-    throw new Error('App Store Connect 인증 필요 — npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
-  }
-  const res = await fetchWithTimeout(`${IAP_V2_BASE}${path}`, {
+  return apiRequest<UntypedAscJson>(V2_BASE, path, await authHeadersOrThrow(), {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`App Store v2 ${res.status}: ${text}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : { ok: true };
 }
 
 export type AppleIapType =

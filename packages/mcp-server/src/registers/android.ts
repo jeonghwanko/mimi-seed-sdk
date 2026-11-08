@@ -56,7 +56,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
 
       if (saJson || getServiceAccountJson()) {
         try {
-          const auth = requirePlayStoreAuth(package_name);
+          const auth = await requirePlayStoreAuth(package_name);
           await getAppDetails(auth, package_name);
           appStatus = 'existing';
         } catch (e) {

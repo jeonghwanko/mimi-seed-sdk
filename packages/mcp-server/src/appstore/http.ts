@@ -5,6 +5,13 @@ import { fetchWithTimeout } from '../lib/http.js';
 export const V1_BASE = 'https://api.appstoreconnect.apple.com/v1';
 export const V2_BASE = 'https://api.appstoreconnect.apple.com/v2';
 
+/**
+ * 타입 없는 ASC 응답 — apiGet/apiPost/apiPatch 가 예전부터 `res.json()`(any)을 그대로 돌려줬고
+ * 호출부가 그 형태에 기대고 있다. 새 코드는 apiRequest<T> 에 구체 타입을 넘길 것.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type UntypedAscJson = any;
+
 export type AppStoreProductType = 'subscription' | 'consumable' | 'non_consumable';
 
 export async function authHeadersOrThrow(): Promise<Record<string, string>> {

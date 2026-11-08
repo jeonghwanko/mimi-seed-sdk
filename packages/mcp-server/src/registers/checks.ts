@@ -160,7 +160,7 @@ export function registerChecksTools(server: ToolRegistrar) {
       let playStoreSection: unknown = null;
       if (packageName) {
         try {
-          const auth = requirePlayStoreAuth(packageName);
+          const auth = await requirePlayStoreAuth(packageName);
           const tracks = await playstore.listTracks(auth, packageName);
           // 트랙별로 version 이 매칭되는 release 찾기.
           //   match 기준: release.name === version (보통 "1.4.9" 또는 "1.4.9 (373)")

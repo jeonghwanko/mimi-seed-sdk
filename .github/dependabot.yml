@@ -4,7 +4,7 @@
 # The repo is not an npm workspace: each package has its own lockfile, so each gets its own entry.
 # The root package.json has no dependencies, so it needs none.
 #
-# Major versions are ignored everywhere: a major bump (zod 4, vitest 5, actions/checkout v7, @types/node past the
+# Major versions are ignored everywhere: a major bump (vitest 5, actions/checkout v7, @types/node past the
 # Node floor in .nvmrc) is planned work with its own PR, not a weekly chore.
 version: 2
 updates:
