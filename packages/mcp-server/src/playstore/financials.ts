@@ -274,7 +274,7 @@ function summarize(rows: Array<Record<string, string>>) {
 
     // 수수료·세금 행은 상품 매출이 아니다 — 상품별 집계에 섞으면 판매량이 부풀려진다.
     if (/^charge$/i.test(type) || /^charged$/i.test(type)) {
-      const key = `${productId || title} ${currency}`;
+      const key = `${productId || title}\u0000${currency}`;
       const entry = byProductMap.get(key) ?? { productId, title, currency, count: 0, amount: 0 };
       entry.count += 1;
       entry.amount += amount;

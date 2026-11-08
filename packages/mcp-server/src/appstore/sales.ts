@@ -206,6 +206,21 @@ export function eachDate(startDate: string, endDate: string, maxDays: number): s
 
 /** DAILY 는 하루에 리포트 하나라, 범위 조회는 날짜별 호출을 합치는 수밖에 없다. */
 const MAX_DAILY_RANGE = 62;
+const SALES_FETCH_CONCURRENCY = 4;
+
+/** 순서를 보존하며 최대 `limit` 개씩 동시에 실행한다. 하나라도 실패하면 그 에러로 reject. */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
 
 export async function getSalesReport(
   options: {
@@ -231,8 +246,10 @@ export async function getSalesReport(
   const datesWithoutData: string[] = [];
   const rows: ReportRow[] = [];
 
-  for (const reportDate of reportDates) {
-    const result = await fetchReport(
+  // 일자별 리포트는 서로 독립이라 동시에 받는다. 상한은 ASC 레이트 리밋(시간당 ~3600)에 비해
+  // 충분히 낮게 두고, 결과는 날짜 순서를 유지해 합친다. 429 는 fetchWithTimeout 이 재시도한다.
+  const results = await mapWithConcurrency(reportDates, SALES_FETCH_CONCURRENCY, (reportDate) =>
+    fetchReport(
       '/salesReports',
       {
         'filter[frequency]': frequency,
@@ -242,14 +259,17 @@ export async function getSalesReport(
         'filter[reportDate]': reportDate,
         'filter[version]': options.version ?? '1_0',
       },
-    );
+    ),
+  );
 
+  results.forEach((result, i) => {
+    const reportDate = reportDates[i];
     if (result.notFound || result.rows.length === 0) datesWithoutData.push(reportDate);
     else {
       datesWithData.push(reportDate);
       rows.push(...result.rows);
     }
-  }
+  });
 
   const lines = rows.map(toSalesLine);
   const proceedsByCurrency: Record<string, number> = {};

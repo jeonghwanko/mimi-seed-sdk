@@ -108,7 +108,7 @@ function normalizePrivateKey(raw: string): string {
   return [header, ...chunks, footer, ''].join('\n');
 }
 
-export async function generateToken(creds: AppStoreCredentials): Promise<string> {
+export async function generateToken(creds: AppStoreKey): Promise<string> {
   const { SignJWT, importPKCS8 } = await import('jose');
   const normalizedKey = normalizePrivateKey(creds.privateKey);
   let key;
@@ -131,11 +131,38 @@ export async function generateToken(creds: AppStoreCredentials): Promise<string>
     .sign(key);
 }
 
+/** 토큰 수명(20분) 중 이만큼 남으면 새로 서명한다 — 긴 업로드 도중 만료되지 않게. */
+const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+const TOKEN_LIFETIME_MS = 19 * 60 * 1000; // iat 를 60초 당겨 서명하므로 실제 잔여는 19분
+
+/**
+ * 키별 JWT 캐시. 예전엔 요청마다 PKCS8 import + ES256 서명을 다시 했다 (매출 DAILY 조회는 최대 62회 연속).
+ * 캐시 키에 privateKey 자체를 포함해 키 교체·재등록 시 자동으로 무효화된다.
+ */
+const tokenCache = new Map<string, { token: Promise<string>; expiresAt: number }>();
+
+function cachedToken(key: AppStoreKey): Promise<string> {
+  const cacheKey = `${key.issuerId}\u0000${key.keyId}\u0000${key.privateKey}`;
+  const hit = tokenCache.get(cacheKey);
+  if (hit && hit.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN_MS) return hit.token;
+  const token = generateToken(key);
+  tokenCache.set(cacheKey, { token, expiresAt: Date.now() + TOKEN_LIFETIME_MS });
+  // 서명 실패는 캐시하지 않는다 — 다음 호출이 다시 시도해 원인 메시지를 받게.
+  token.catch(() => {
+    if (tokenCache.get(cacheKey)?.token === token) tokenCache.delete(cacheKey);
+  });
+  return token;
+}
+
+/** 테스트용 — 캐시 초기화. */
+export function clearAppStoreTokenCache(): void {
+  tokenCache.clear();
+}
+
 export async function getAuthHeaders(): Promise<Record<string, string> | null> {
   const creds = getAppStoreCredentials();
   if (!creds) return null;
-  const token = await generateToken(creds);
-  return { Authorization: `Bearer ${token}` };
+  return { Authorization: `Bearer ${await cachedToken(creds)}` };
 }
 
 /**
@@ -151,12 +178,12 @@ export async function getReportsAuthHeaders(): Promise<
   if (!creds) return null;
   if (creds.reportsKey) {
     return {
-      headers: { Authorization: `Bearer ${await generateToken(creds.reportsKey)}` },
+      headers: { Authorization: `Bearer ${await cachedToken(creds.reportsKey)}` },
       source: 'reportsKey',
     };
   }
   return {
-    headers: { Authorization: `Bearer ${await generateToken(creds)}` },
+    headers: { Authorization: `Bearer ${await cachedToken(creds)}` },
     source: 'default',
   };
 }

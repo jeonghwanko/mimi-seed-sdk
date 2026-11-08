@@ -444,7 +444,20 @@ export type RefreshStatus =
  * 통상 lifetime 이 1h 이므로, 5분 마진으로 매 도구 호출 시 만료 임박 시 사전 갱신해
  * "토큰 만료 → 도구 fail → 재호출" 의 단절 마찰 제거. 5분 마진은 평균 도구 작업 시간을 흡수.
  */
-export async function ensureFreshAccessToken(marginMs = 300_000, profile?: string): Promise<RefreshStatus> {
+// 같은 프로세스에서 병렬 툴 호출이 동시에 만료 임박을 보면 각자 refresh 하고 tokens.json 을
+// 경쟁적으로 덮어썼다. 진행 중인 갱신을 프로필별로 공유해 refresh 를 1회로 합친다.
+const inflightRefresh = new Map<string, Promise<RefreshStatus>>();
+
+export function ensureFreshAccessToken(marginMs = 300_000, profile?: string): Promise<RefreshStatus> {
+  const key = `${profile ?? ''}\u0000${marginMs}`;
+  const running = inflightRefresh.get(key);
+  if (running) return running;
+  const promise = ensureFreshAccessTokenOnce(marginMs, profile).finally(() => inflightRefresh.delete(key));
+  inflightRefresh.set(key, promise);
+  return promise;
+}
+
+async function ensureFreshAccessTokenOnce(marginMs: number, profile?: string): Promise<RefreshStatus> {
   const tokens = getStoredTokens(profile);
   if (!tokens) {
     return {
