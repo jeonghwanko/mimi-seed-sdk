@@ -32,7 +32,7 @@ export const projectSchema = z.object({
 }).superRefine((project, ctx) => {
   const total = project.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   if (Math.abs(total - project.settings.targetDurationSec) > 0.11) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: '장면 길이 합계가 targetDurationSec와 다릅니다.' });
+    ctx.addIssue({ code: 'custom', message: '장면 길이 합계가 targetDurationSec와 다릅니다.' });
   }
 });
 
@@ -52,7 +52,7 @@ export const assetSchema = z.object({
   prompt: z.string().max(100_000).optional(),
 }).superRefine((asset, ctx) => {
   if (asset.sourceType === 'reference-only' && asset.allowedForRendering) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'reference-only 자산은 렌더링을 허용할 수 없습니다.' });
+    ctx.addIssue({ code: 'custom', message: 'reference-only 자산은 렌더링을 허용할 수 없습니다.' });
   }
 });
 
@@ -96,7 +96,7 @@ export const timelineSchema = z.object({
 }).superRefine((timeline, ctx) => {
   const calculated = timeline.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   if (Math.abs(calculated - timeline.totalDurationSec) > 0.01) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'totalDurationSec가 장면 길이 합계와 다릅니다.' });
+    ctx.addIssue({ code: 'custom', message: 'totalDurationSec가 장면 길이 합계와 다릅니다.' });
   }
 });
 
