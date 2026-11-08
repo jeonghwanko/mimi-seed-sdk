@@ -35,6 +35,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- `mimi-seed-mcp --version` / `-v` and `--help` / `-h` now print and exit. They used to start the stdio server,
+  which waits silently for a client and looked like a hang. Started by hand in a terminal, the server now says on
+  stderr that it is waiting for an MCP client and how to exit; clients see no change.
 - Editing a video's title, description, or tags no longer clears its spoken-language setting.
 
 ### Tool changes
