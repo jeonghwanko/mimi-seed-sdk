@@ -24,8 +24,8 @@ If you just want to *use* Mimi Seed, don't do any of this. Install from npm or t
 
 ## 1. Prerequisites
 
-- **Node 20+.** `.nvmrc` is the source of truth — run `nvm use` in the repo root. Building and testing from
-  source needs **20.19 or newer** on the 20.x line (eslint and vitest require it).
+- **Node 22+.** `.nvmrc` is the source of truth — run `nvm use` in the repo root. Building and testing from
+  source needs **22.13 or newer** on the 22.x line (eslint requires it).
 - Git.
 - A JDK (for `keytool`) **only** if you'll touch Android signing.
 

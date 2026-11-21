@@ -157,7 +157,7 @@ describe('온보딩 문서 ↔ 코드', () => {
       expect(floor, `${pkg} 의 engines.node(${engines}) 가 .nvmrc(${nvmrc}) 와 다름`).toBe(nvmrc);
     }
 
-    // 산문에 적힌 "Node 20+" 표기도 같은 값이어야 한다.
+    // 산문에 적힌 "Node 22+" 표기도 같은 값이어야 한다.
     for (const f of ['README.md', 'README.ko.md', 'CONTRIBUTING.md', 'docs/from-source.md', 'docs/from-source.ko.md']) {
       for (const m of read(f).matchAll(/Node[.\s]*(?:\.js)?\s*(\d+)\+/g)) {
         expect(m[1], `${f} 의 "Node ${m[1]}+" 가 .nvmrc(${nvmrc}) 와 다름`).toBe(nvmrc);

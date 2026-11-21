@@ -12,8 +12,8 @@
 ```
 mimi-seed-sdk/
 ├─ packages/
-│  ├─ cli/          → npm "mimi-seed"            (build: tsup,  node >=18)
-│  ├─ mcp-server/   → npm "@yoonion/mimi-seed-mcp" (build: tsc, node >=20)
+│  ├─ cli/          → npm "mimi-seed"            (build: tsup,  node >=22)
+│  ├─ mcp-server/   → npm "@yoonion/mimi-seed-mcp" (build: tsc, node >=22)
 │  └─ core/         → never published — shared SOURCE compiled into both (see "Shared source" below)
 ├─ skills/          → Claude Code / Codex skills   ([[skills-plugins]])
 ├─ .claude-plugin/ .codex-plugin/ .mcp.json          (plugin + MCP registration SSOT)
@@ -27,7 +27,7 @@ mimi-seed-sdk/
 | npm name | `mimi-seed` | `@yoonion/mimi-seed-mcp` |
 | version | both follow the **root** `package.json` (`npm run version:set`) — never written down here | ← same |
 | build | **tsup** (esbuild bundle, **no type-check** — run `npm run typecheck`) | **tsc** (plain `dist/`) |
-| node | `.nvmrc` is the floor for both (currently 20); `engines.node` mirrors it | ← same |
+| node | `.nvmrc` is the floor for both (currently 22); `engines.node` mirrors it | ← same |
 | role | local/CI orchestration + remote-MCP onboarding | the 150+-tool stdio MCP that hits Google/Apple APIs |
 | key deps | `@anthropic-ai/sdk` (optional), `kleur`, `open` | `@modelcontextprotocol/sdk`, `@googleapis/*` (16 APIs), `jose`, `@onesub/providers`, `zod`, `@anthropic-ai/sdk` (optional) |
 

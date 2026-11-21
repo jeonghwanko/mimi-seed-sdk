@@ -13,7 +13,7 @@ description: mimi-seed-sdk 를 소스(git clone)에서 설치한다 — 두 패�
 ## 0. 사전 확인
 
 ```bash
-node -v          # .nvmrc 기준 20 이상이어야 함
+node -v          # .nvmrc 기준 22 이상이어야 함
 ```
 
 리포 루트인지 확인한다 (`packages/cli` 와 `packages/mcp-server` 가 보여야 함). 아니면 사용자에게

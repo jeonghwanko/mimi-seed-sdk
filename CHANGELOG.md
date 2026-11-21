@@ -20,6 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- **Breaking:** The Node floor is now 22 (`.nvmrc` and `engines.node` in the root, CLI, and MCP packages).
+  Node 20 is no longer supported. Building and testing from source needs 22.13 or newer on the 22.x line
+  (eslint). CI tests Node 22 and 24.
+
 - The MCP server no longer installs the `googleapis` meta-package (300+ API clients). It depends only on the
   16 `@googleapis/*` packages it actually calls, still loaded on first use through `googleapis-lite`. Pins stay
   on the last versions that support Node 20 (`googleapis-common` ^8). Tool behavior is unchanged.

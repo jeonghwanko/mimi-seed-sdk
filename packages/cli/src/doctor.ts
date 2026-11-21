@@ -226,8 +226,8 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
   r.section("environment", m.secEnv);
   const nodeVer = process.version;
   const [, major] = nodeVer.match(/v(\d+)/) ?? [];
-  // Node 하한은 20 — CLI 와 MCP 서버가 같다 (.nvmrc 가 SSOT).
-  if (Number(major) >= 20) {
+  // Node 하한은 22 — CLI 와 MCP 서버가 같다 (.nvmrc 가 SSOT).
+  if (Number(major) >= 22) {
     r.ok("Node.js", nodeVer);
   } else {
     r.fail("Node.js", m.nodeTooOld(nodeVer));

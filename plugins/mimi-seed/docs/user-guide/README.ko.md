@@ -37,7 +37,7 @@
 | 표면 | 적합한 일 | 제한 |
 |---|---|---|
 | Remote MCP | 앱 목록, 준비도, 블로커, 공유 진단 | 대부분의 스토어·클라우드 쓰기는 Local MCP 필요 |
-| Local MCP | Play/App Store, Firebase, AdMob, IAM, 분석, 소셜 게시 | 로컬 자격증명과 Node 20+ 필요 |
+| Local MCP | Play/App Store, Firebase, AdMob, IAM, 분석, 소셜 게시 | 로컬 자격증명과 Node 22+ 필요 |
 | `mimi-seed` CLI | 초기화, 계정 마법사, CI 빌드, 준비도, 전체 배포 | 일부 세부 작업은 Claude/Codex의 MCP 도구로 수행 |
 
 Remote와 Local은 경쟁 관계가 아니다. 팀 상태와 프로젝트 등록은 Remote로, 공급자 API에 직접 쓰는 작업은

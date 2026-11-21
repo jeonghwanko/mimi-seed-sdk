@@ -50,15 +50,15 @@ jobs:
       fail-fast: false
       matrix:
         package: [cli, mcp-server]
-        # 하한선(.nvmrc = engines.node = 20)과 상용 버전 양쪽. 20 을 빼면
-        # "engines 는 >=20 인데 아무도 20 에서 돌려본 적 없음" 상태가 된다.
-        node: [20, 22]
+        # 하한선(.nvmrc = engines.node = 22)과 상용 버전 양쪽. 22 를 빼면
+        # "engines 는 >=22 인데 아무도 22 에서 돌려본 적 없음" 상태가 된다.
+        node: [22, 24]
         os: [ubuntu-latest]
         # Windows 는 상용 버전 하나만. 사용자 상당수가 Windows 이고(PATH·.cmd shim·경로
         # 구분자·CRLF), 그 경로는 리눅스 러너에서 절대 실행되지 않는다.
         include:
-          - { package: cli, node: 22, os: windows-latest }
-          - { package: mcp-server, node: 22, os: windows-latest }
+          - { package: cli, node: 24, os: windows-latest }
+          - { package: mcp-server, node: 24, os: windows-latest }
     defaults:
       run:
         shell: bash
@@ -134,7 +134,7 @@ jobs:
           fi
           node scripts/version.mjs --check
 
-      # 빌드는 테스트한 상용 버전(22)에서 — 산출물이 테스트된 것과 같은 런타임으로 만들어진다.
+      # 빌드는 하한선(22, 테스트 매트릭스에 포함)에서 — 산출물이 테스트된 런타임으로 만들어진다.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22

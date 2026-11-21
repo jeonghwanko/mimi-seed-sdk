@@ -30,8 +30,8 @@ source here — don't move it back into the web repo.
 
 ## Development setup
 
-Requires **Node 20+** (`.nvmrc` is the source of truth; CI runs on 22). The dev toolchain (eslint, vitest) needs
-**20.19 or newer** within the 20.x line — the published packages still run on any Node 20.
+Requires **Node 22+** (`.nvmrc` is the source of truth; CI runs on 22 and 24). The dev toolchain (eslint) needs
+**22.13 or newer** within the 22.x line — the published packages still run on any Node 22.
 
 ```bash
 npm run setup     # installs + builds both packages, npm links them, registers the MCP server
@@ -109,7 +109,7 @@ to say which CLI matched which server; `version-sync.test.ts` now fails if they 
 One consequence of a single version: bumping it republishes **both** packages, even the one you didn't
 touch. That's the trade for never having to reason about cross-package compatibility.
 
-On the tag push CI, once every test leg (Linux node 20/22, Windows node 22) and the repo guards are green, runs a single
+On the tag push CI, once every test leg (Linux node 22/24, Windows node 24) and the repo guards are green, runs a single
 `publish` job that handles **mcp-server first, then cli** — if the mcp-server publish fails, cli is not
 published. For each package whose `package.json` version is not yet on npm it:
 - publishes to npm with **provenance** (signed via GitHub OIDC), and
@@ -118,7 +118,7 @@ published. For each package whose `package.json` version is not yet on npm it:
 If the version already exists it's skipped (idempotent), so re-pushing a tag after a partial failure
 only publishes what is missing. Publishing uses npm trusted publishing (OIDC), without an `NPM_TOKEN` secret.
 Both npm packages must trust GitHub repository `jeonghwanko/mimi-seed-sdk`, workflow `ci.yml`.
-CI keeps Node 20/22 for tests and switches to Node 24 (npm 11) for publishing.
+CI keeps Node 22/24 for tests and switches to Node 24 (npm 11) for publishing.
 See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
 **Versioning:** bump the **patch** number only unless a maintainer decides otherwise.
