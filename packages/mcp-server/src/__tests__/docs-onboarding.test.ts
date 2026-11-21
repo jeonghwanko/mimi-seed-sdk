@@ -140,7 +140,7 @@ describe('온보딩 문서 ↔ 코드', () => {
   });
 
   // ③ 이미 4갈래로 드리프트한 적 있는 사실 — 테스트만이 통일을 유지시킨다.
-  it('Node 하한이 .nvmrc / 두 package.json / 문서에서 일치한다', () => {
+  it('Node 하한이 .nvmrc / package.json / lockfile / 문서에서 일치한다', () => {
     const nvmrc = read('.nvmrc').trim();
     expect(nvmrc).toMatch(/^\d+$/);
 
@@ -153,6 +153,9 @@ describe('온보딩 문서 ↔ 코드', () => {
     ]) {
       const engines = (JSON.parse(read(pkg)) as { engines?: { node?: string } }).engines?.node;
       expect(engines, `${pkg} 에 engines.node 없음`).toBeTruthy();
+      const lockfile = pkg.replace(/package\.json$/, 'package-lock.json');
+      const locked = JSON.parse(read(lockfile)) as { packages: Record<string, { engines?: { node?: string } }> };
+      expect(locked.packages['']?.engines?.node, lockfile).toBe(engines);
       const floor = engines!.match(/(\d+)/)?.[1];
       expect(floor, `${pkg} 의 engines.node(${engines}) 가 .nvmrc(${nvmrc}) 와 다름`).toBe(nvmrc);
     }

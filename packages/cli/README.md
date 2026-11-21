@@ -21,8 +21,8 @@ default. See `mimi-seed telemetry --help` and the [privacy notice](https://mimi-
 npm install mimi-seed --omit=optional
 ```
 
-That slimmer install is about 0.9 MB. To use the AI features afterwards, install `@anthropic-ai/sdk` separately
-and set `ANTHROPIC_API_KEY`.
+That slimmer install is about 0.9 MB. To use the AI features afterwards, run `npm install --include=optional` in the same
+project and set `ANTHROPIC_API_KEY`.
 
 ## Next steps
 
