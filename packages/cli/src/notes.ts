@@ -1,11 +1,11 @@
 import { createInterface } from "node:readline/promises";
-import Anthropic from "@anthropic-ai/sdk";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
 import { AI_MODEL, RELEASE_NOTES_MAX_TOKENS, RELEASE_NOTE_TONES, type ReleaseNoteTone } from "#core/ai.js";
+import { loadAnthropic } from "./lib/anthropic.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 // LLM 프롬프트도 여기 있다 — 사람이 읽는 결과물(릴리즈 노트)의 언어를 정하기 때문.
@@ -164,7 +164,7 @@ export function buildReleaseNotesPrompt(commitsText: string, locales: string[]):
 }
 
 async function generateWithClaude(commitsText: string, locales: string[]): Promise<ReleaseNotesResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = await loadAnthropic(process.env.ANTHROPIC_API_KEY!);
 
   const response = await client.messages.create({
     model: AI_MODEL,

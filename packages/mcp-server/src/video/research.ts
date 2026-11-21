@@ -77,7 +77,7 @@ export async function synthesizeResearch(input: SynthesizeResearchInput): Promis
   }
 
   const data = JSON.stringify({ youtube, pexels, observations }).slice(0, 120_000);
-  const client = requireApiKey();
+  const client = await requireApiKey();
   const response = await client.messages.create({
     model: AI_MODEL,
     max_tokens: 3500,

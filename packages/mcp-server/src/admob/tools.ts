@@ -1,6 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
-import type { admob_v1, admob_v1beta } from 'googleapis/build/src/apis/admob/index.js';
+import type { admob_v1, admob_v1beta } from '@googleapis/admob';
 import { resourceName } from '../lib/resource-id.js';
 
 /**

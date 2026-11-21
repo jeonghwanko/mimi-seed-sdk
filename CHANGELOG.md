@@ -18,6 +18,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The MCP server no longer installs the `googleapis` meta-package (300+ API clients). It depends only on the
+  16 `@googleapis/*` packages it actually calls, still loaded on first use through `googleapis-lite`. Pins stay
+  on the last versions that support Node 20 (`googleapis-common` ^8). Tool behavior is unchanged.
+- The CLI and the MCP server load `@anthropic-ai/sdk` only when generating release notes, review replies, or
+  video storyboards. `mimi-seed --version`, `mimi-seed check --local`, and MCP startup no longer load it.
+  The SDK is now an optional dependency: default `npm install` still includes it, but
+  `npm install --omit=optional` is enough for non-AI commands (`check`, `--version`, MCP tools that do not
+  call Anthropic). Install `@anthropic-ai/sdk` separately to use the AI features.
+
+### Tool changes
+
+- None.
+
 ## [0.22.0] - 2026-11-08
 
 ### Added
