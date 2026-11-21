@@ -502,6 +502,17 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init`으로 프로젝트 연결 |
 | [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — Google OAuth 기반 150+ 도구 직접 실행 |
 
+로컬 MCP 패키지는 `googleapis` 메타 패키지 대신, 실제로 호출하는 16개의 `@googleapis/*` 클라이언트만 의존하며 처음 쓸 때 로드합니다. `@anthropic-ai/sdk` 는 두 패키지 모두 선택적 의존성이고, AI 릴리즈 노트·리뷰 답글·영상 스토리보드를 생성할 때만 로드됩니다. 기본 `npm install` 에는 SDK가 포함됩니다.
+
+AI가 필요 없는 설치(`mimi-seed check`, `--version`, Anthropic을 호출하지 않는 MCP 도구)를 더 얇게 하려면:
+
+```bash
+npm install mimi-seed --omit=optional
+npm install @yoonion/mimi-seed-mcp --omit=optional
+```
+
+측정한 프로덕션 설치 크기(배포 tarball을 `npm install --omit=dev`로 설치): CLI는 기본 약 28 MB, `--omit=optional` 이면 약 0.9 MB. MCP는 기본 약 100 MB, `--omit=optional` 이면 약 72 MB (Google 클라이언트는 그대로 남습니다). 얇게 설치한 뒤 AI 기능을 쓰려면 `@anthropic-ai/sdk` 를 따로 설치하고 `ANTHROPIC_API_KEY` 를 설정하세요.
+
 웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
 ---
