@@ -24,6 +24,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Node 20 is no longer supported. Building and testing from source needs 22.13 or newer on the 22.x line
   (eslint). CI tests Node 22 and 24.
 
+- The CLI and the MCP server now depend on `@anthropic-ai/sdk` 1.x (API version 2026-10-21).
+  `loadAnthropic` uses the named `Anthropic` export. Call sites already omitted `temperature`,
+  `top_p`, and `top_k`, which the new API rejects.
+
 - The MCP server no longer installs the `googleapis` meta-package (300+ API clients). It depends only on the
   16 `@googleapis/*` packages it actually calls, still loaded on first use through `googleapis-lite`. Pins stay
   on the last versions that support Node 20 (`googleapis-common` ^8). Tool behavior is unchanged.

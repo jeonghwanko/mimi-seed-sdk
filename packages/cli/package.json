@@ -59,6 +59,6 @@
     "access": "public"
   },
   "optionalDependencies": {
-    "@anthropic-ai/sdk": "^0.137.0"
+    "@anthropic-ai/sdk": "^1.12.0"
   }
 }
