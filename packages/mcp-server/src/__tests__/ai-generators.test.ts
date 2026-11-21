@@ -29,9 +29,9 @@ afterEach(() => {
 });
 
 describe('requireApiKey', () => {
-  it('키가 없으면 설정 방법을 알려주고 멈춘다', () => {
+  it('키가 없으면 설정 방법을 알려주고 멈춘다', async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    expect(() => requireApiKey()).toThrow(/ANTHROPIC_API_KEY/);
+    await expect(requireApiKey()).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 });
 

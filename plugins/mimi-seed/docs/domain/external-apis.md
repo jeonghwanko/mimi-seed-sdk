@@ -11,16 +11,16 @@
 
 | Domain | Talks to | Client |
 |---|---|---|
-| Firebase | Firebase Management API | `googleapis` |
-| AdMob | AdMob API | `googleapis` |
-| Google Play | Android Publisher API (releases, listings, images, products) | `googleapis` + `@onesub/providers` for IAP/subscriptions |
-| IAM | Cloud IAM (service accounts, keys, policy bindings) | `googleapis` |
-| BigQuery | BigQuery API | `googleapis` |
-| GA4 | GA4 Admin v1beta (속성/스트림), Admin v1alpha (BigQueryLink) + Data v1beta APIs | `googleapis` |
-| Search Console | Search Console API | `googleapis` |
+| Firebase | Firebase Management API | `@googleapis/firebase` (via `googleapis-lite`) |
+| AdMob | AdMob API | `@googleapis/admob` (via `googleapis-lite`) |
+| Google Play | Android Publisher API (releases, listings, images, products) | `@googleapis/androidpublisher` (via `googleapis-lite`) + `@onesub/providers` for IAP/subscriptions |
+| IAM | Cloud IAM (service accounts, keys, policy bindings) | `@googleapis/iam` (via `googleapis-lite`) |
+| BigQuery | BigQuery API | `@googleapis/bigquery` (via `googleapis-lite`) |
+| GA4 | GA4 Admin v1beta (속성/스트림), Admin v1alpha (BigQueryLink) + Data v1beta APIs | `@googleapis/analyticsadmin` + `@googleapis/analyticsdata` (via `googleapis-lite`) |
+| Search Console | Search Console API | `@googleapis/searchconsole` (via `googleapis-lite`) |
 | Naver Search Advisor | **No public Search Advisor API** — only the IndexNow endpoint (`searchadvisor.naver.com/indexnow`, key-file auth) plus plain GETs of the target site (page, `robots.txt`) as the Yeti crawler. Sitemap/RSS submission and reports stay console-only | `fetchWithTimeout`; no `~/.mimi-seed/` credential |
 | Google Ads | Google Ads reporting | `googleapis` / REST per `googleads_save_config` |
-| YouTube | YouTube Data API v3 (channel/video reads, upload, metadata, thumbnails, scheduling, privacy, comments/replies) + YouTube Analytics API v2 (reports) | `googleapis` + local file streams |
+| YouTube | YouTube Data API v3 (channel/video reads, upload, metadata, thumbnails, scheduling, privacy, comments/replies) + YouTube Analytics API v2 (reports) | `@googleapis/youtube` + `@googleapis/youtubeanalytics` (via `googleapis-lite`) + local file streams |
 | App Store Connect | ASC REST API | `fetch` + **`jose`** JWT (ES256, minted per request) |
 | Facebook / Instagram / Threads | Meta Graph APIs | `fetch`; shared expiry/error recovery in `lib/meta-auth.ts` |
 | TikTok Business | API for Business v1.3 Organic API (`/tt_user/*`, `/business/*`) | `fetchWithTimeout`; short-term token refresh + POST unknown-outcome audit |
@@ -28,10 +28,11 @@
 | Video production | Anthropic storyboard + YouTube Data API + Pexels API + OpenAI Image API + local FFmpeg/ffprobe | `@anthropic-ai/sdk` + `fetch` + `child_process` |
 
 Dependency ranges live in `mcp-server/package.json` (the SSOT — read it rather than trusting a number here):
-today `googleapis ~178.0`, `@modelcontextprotocol/sdk ^1.30`, `jose ^6`, `@onesub/providers ^0.5`,
+today the Google clients are individual `@googleapis/*` packages (see that file), `@modelcontextprotocol/sdk ^1.30`, `jose ^6`, `@onesub/providers ^0.5`,
 `zod ^4`, `@anthropic-ai/sdk ^0.137`. Note the `gaxios` **override** (`7.1.5`) in the same file — it exists to
-drop a deprecated transitive `glob`; don't remove it casually. `googleapis` is held at `~178.0` because 178.1+
-declares `engines.node >=22` while the floor is 20. With zod 4 the MCP SDK renders `inputSchema` through zod's
+drop a deprecated transitive `glob`; don't remove it casually. The `@googleapis/*` pins are the last versions
+that still declare `engines.node >=12` and depend on `googleapis-common` ^8 (the `googleapis ~178` generation);
+later majors declare `engines.node >=22` while the floor is 20. With zod 4 the MCP SDK renders `inputSchema` through zod's
 own JSON Schema output (input mode), so object schemas carry no `additionalProperties: false` — unknown
 arguments are still stripped at parse time, as before — and repeated sub-schemas are inlined rather than `$ref`'d.
 A zod major bump therefore changes `tools/list` for every client: diff its output before and after.

@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 
 /**
  * Claude 모델 id — ai/*, video/* 가 모두 이 이름으로 쓴다. 값은 CLI 와 공유하는 packages/core 의
@@ -15,7 +15,34 @@ export const LOCALE_NAMES: Record<string, string> = {
   'pt': '포르투갈어', 'pt-BR': '포르투갈어 (브라질)',
 };
 
-export function requireApiKey(): Anthropic {
+function isMissingAnthropicSdk(error: unknown): boolean {
+  const err = error as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
+  const haystack = [err.code, err.message, err.cause?.code, err.cause?.message]
+    .filter(Boolean)
+    .join(' ');
+  return haystack.includes('ERR_MODULE_NOT_FOUND') && haystack.includes('@anthropic-ai/sdk');
+}
+
+async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').default> {
+  try {
+    const mod = await import('@anthropic-ai/sdk');
+    return mod.default;
+  } catch (error) {
+    if (isMissingAnthropicSdk(error)) {
+      throw new Error(
+        [
+          '❌ @anthropic-ai/sdk 가 설치되어 있지 않습니다.',
+          '릴리즈 노트·리뷰 답글·영상 스토리보드 등 AI 기능을 쓰려면 설치하세요:',
+          '  npm install @anthropic-ai/sdk',
+        ].join('\n'),
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+}
+
+export async function requireApiKey(): Promise<Anthropic> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     throw new Error(
@@ -30,7 +57,8 @@ export function requireApiKey(): Anthropic {
       ].join('\n'),
     );
   }
-  return new Anthropic({ apiKey: key });
+  const AnthropicSdk = await loadAnthropic();
+  return new AnthropicSdk({ apiKey: key });
 }
 
 export function parseJsonResponse<T>(text: string): T {

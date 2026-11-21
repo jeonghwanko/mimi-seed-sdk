@@ -37,10 +37,11 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
-      # Held at ~178.0 on purpose: 178.1+ declares engines.node >=22 while our floor is Node 20 (.nvmrc), and its
-      # request-path encoding differs (`:` → `%3A`), which the resource-id guard tests pin. Raise it by hand together
-      # with the Node floor — see docs/domain/external-apis.md.
-      - dependency-name: googleapis
+      # Held at the last @googleapis/* versions that still declare engines.node >=12 and use
+      # googleapis-common ^8 (the googleapis ~178 generation). Later majors declare engines.node >=22
+      # while our floor is Node 20 (.nvmrc). Raise them by hand together with the Node floor —
+      # see docs/domain/external-apis.md.
+      - dependency-name: "@googleapis/*"
         update-types: [version-update:semver-minor, version-update:semver-major]
     commit-message:
       prefix: chore(deps)

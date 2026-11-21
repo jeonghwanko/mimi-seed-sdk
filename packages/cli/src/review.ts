@@ -1,5 +1,4 @@
 import { createInterface } from "node:readline/promises";
-import Anthropic from "@anthropic-ai/sdk";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
@@ -11,6 +10,7 @@ import {
   type ReviewSentiment,
   type ReviewTone,
 } from "#core/ai.js";
+import { loadAnthropic } from "./lib/anthropic.js";
 
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 // 톤/감정 **키**(friendly, bug_report, ...)는 --tone 값이자 detectReviewSentiment 의 반환값이라 번역하지 않는다
@@ -165,7 +165,7 @@ async function promptUser(question: string): Promise<string> {
 }
 
 async function generateReply(opts: ReviewArgs & { text: string }): Promise<string> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = await loadAnthropic(process.env.ANTHROPIC_API_KEY!);
   const m = M();
   const toneGuides: Record<string, string> = m.toneGuides;
   const sentimentPrompts: Record<string, string> = m.sentimentPrompts;
