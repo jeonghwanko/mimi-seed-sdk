@@ -30,8 +30,8 @@ source here — don't move it back into the web repo.
 
 ## Development setup
 
-Requires **Node 22+** (`.nvmrc` is the source of truth; CI runs on 22 and 24). The dev toolchain (eslint) needs
-**22.13 or newer** within the 22.x line — the published packages still run on any Node 22.
+Requires **Node 22+** (`.nvmrc` is the source of truth; CI runs on 22 and 24). The dev toolchain (eslint, tsup 9) needs
+**22.18 or newer** within the 22.x line — the published packages still run on any Node 22.
 
 ```bash
 npm run setup     # installs + builds both packages, npm links them, registers the MCP server
