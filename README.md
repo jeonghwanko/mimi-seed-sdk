@@ -505,6 +505,17 @@ Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg
 | [`mimi-seed`](packages/cli) | CLI — `npx mimi-seed init` to connect your project |
 | [`@yoonion/mimi-seed-mcp`](packages/mcp-server) | Local MCP — 150+ tools via Google OAuth |
 
+The MCP package depends on the 16 `@googleapis/*` clients it actually calls, loaded on first use — not the `googleapis` meta-package. `@anthropic-ai/sdk` is an optional dependency of both packages and is loaded only for AI release notes, review replies, and video storyboards. A default `npm install` still includes the SDK.
+
+For a slimmer non-AI install (`mimi-seed check`, `--version`, and MCP tools that do not call Anthropic):
+
+```bash
+npm install mimi-seed --omit=optional
+npm install @yoonion/mimi-seed-mcp --omit=optional
+```
+
+Measured production install sizes (`npm install --omit=dev` of the packed tarball): CLI about 28 MB default, about 0.9 MB with `--omit=optional`; MCP about 100 MB default, about 72 MB with `--omit=optional` (the Google clients remain). To use the AI features after a slim install, add `@anthropic-ai/sdk` and set `ANTHROPIC_API_KEY`.
+
 Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
 ---
