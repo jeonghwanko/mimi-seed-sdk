@@ -16,7 +16,7 @@ export function isMissingAnthropicSdk(error: unknown): boolean {
   return error instanceof Error
     && 'code' in error
     && error.code === 'ERR_MODULE_NOT_FOUND'
-    && error.message.startsWith("Cannot find package '@anthropic-ai/sdk' imported from ");
+    && error.message.startsWith("Cannot find package '@anthropic-ai/sdk' ");
 }
 
 /** 리뷰 답변 톤 — CLI `--tone` 값이자 MCP `generate_review_reply` 의 tone 인자. 번역하지 않는다. */
