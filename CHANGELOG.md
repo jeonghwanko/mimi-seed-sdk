@@ -18,12 +18,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-22
+
 ### Changed
 
-- **Breaking:** The Node floor is now 22 (`.nvmrc` and `engines.node` in the root, CLI, and MCP packages).
-  Node 20 is no longer supported. Building and testing from source needs 22.18 or newer on the 22.x line
-  (tsup 9; eslint needs 22.13+). CI tests Node 22 and 24. The next published version must be a minor
-  (`0.23.0`), not a patch, because dropping Node 20 is a breaking change.
+- **Breaking change.** The CLI and local MCP server now require Node.js 22 or newer. Upgrade Node.js
+  before installing this release. On the Node 22 line, building and testing from source requires
+  Node.js 22.18 or newer.
 
 - The CLI and the MCP server now depend on `@anthropic-ai/sdk` 1.x (API version 2026-10-21).
   `loadAnthropic` uses the named `Anthropic` export. Call sites already omitted `temperature`,
