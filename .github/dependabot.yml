@@ -37,12 +37,6 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
-      # Held at the last @googleapis/* versions that still declare engines.node >=12 and use
-      # googleapis-common ^8 (the googleapis ~178 generation). Later majors declare engines.node >=22
-      # while our floor is Node 20 (.nvmrc). Raise them by hand together with the Node floor —
-      # see docs/domain/external-apis.md.
-      - dependency-name: "@googleapis/*"
-        update-types: [version-update:semver-minor, version-update:semver-major]
     commit-message:
       prefix: chore(deps)
 

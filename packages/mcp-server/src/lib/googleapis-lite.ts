@@ -7,9 +7,8 @@
  * `type: module` 도 `exports` 맵도 없는 순수 CJS 라 `createRequire` 로 동기 로드가
  * 되고, `google.admob(...)` 같은 기존 호출부를 async 로 바꿀 필요가 없다.
  *
- * 최신 `@googleapis/*` 는 `engines.node >=22` 다. Node 하한은 `.nvmrc`(20) 이므로
- * `googleapis-common` ^8 (googleapis ~178 과 같은 세대) 을 쓰는 마지막 버전으로
- * 고정한다. 올리려면 Node 하한과 함께 손수 올린다 — docs/domain/external-apis.md.
+ * `@googleapis/*` 는 최신 세대(`googleapis-common` ^9, `engines.node >=22`)를 쓰며,
+ * 하한(`.nvmrc` = 22)과 맞다. 범위는 `^` 이라 minor/patch 는 Dependabot 이 올릴 수 있다.
  *
  * 타입은 `typeof import('@googleapis/...')` 로 얻는다. 타입 위치의 import 는
  * 런타임에 완전히 지워지므로 기동 비용이 0 이다. 절대 값 import 로 바꾸지 말 것

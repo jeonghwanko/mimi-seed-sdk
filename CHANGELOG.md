@@ -29,8 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `top_p`, and `top_k`, which the new API rejects.
 
 - The MCP server no longer installs the `googleapis` meta-package (300+ API clients). It depends only on the
-  16 `@googleapis/*` packages it actually calls, still loaded on first use through `googleapis-lite`. Pins stay
-  on the last versions that support Node 20 (`googleapis-common` ^8). Tool behavior is unchanged.
+  16 `@googleapis/*` packages it actually calls, still loaded on first use through `googleapis-lite`.
+  Those clients are now the current Node 22 generation (`googleapis-common` ^9, `^` ranges) rather than
+  the Node 20 pins. Tool behavior is unchanged.
 - The CLI and the MCP server load `@anthropic-ai/sdk` only when generating release notes, review replies, or
   video storyboards. `mimi-seed --version`, `mimi-seed check --local`, and MCP startup no longer load it.
   The SDK is now an optional dependency: default `npm install` still includes it, but
