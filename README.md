@@ -514,7 +514,7 @@ npm install mimi-seed --omit=optional
 npm install @yoonion/mimi-seed-mcp --omit=optional
 ```
 
-Measured production install sizes (`npm install --omit=dev` of the packed tarball): CLI about 28 MB default, about 0.9 MB with `--omit=optional`; MCP about 100 MB default, about 72 MB with `--omit=optional` (the Google clients remain). To use the AI features after a slim install, add `@anthropic-ai/sdk` and set `ANTHROPIC_API_KEY`.
+Measured production install sizes (`npm install --omit=dev` of the packed tarball): CLI about 33 MB default, about 0.9 MB with `--omit=optional`; MCP about 99 MB default, about 68 MB with `--omit=optional` (the Google clients remain). To use the AI features after a slim install, add `@anthropic-ai/sdk` and set `ANTHROPIC_API_KEY`.
 
 Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 

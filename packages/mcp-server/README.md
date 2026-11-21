@@ -19,8 +19,8 @@ metadata, screenshot and uploaded-build checks. Local results do not guarantee s
 Use `npx mimi-seed setup` to connect only the accounts you need, then open a fresh client session.
 This package depends on the 16 `@googleapis/*` clients it actually calls, loaded on first use — not the
 `googleapis` meta-package. `@anthropic-ai/sdk` is optional and is loaded only for AI release notes, review
-replies, and video storyboards. A default `npm install` still includes the SDK (about 100 MB).
-`npm install @yoonion/mimi-seed-mcp --omit=optional` is enough for non-AI tools (about 72 MB; the Google
+replies, and video storyboards. A default `npm install` still includes the SDK (about 99 MB).
+`npm install @yoonion/mimi-seed-mcp --omit=optional` is enough for non-AI tools (about 68 MB; the Google
 clients remain). Install the SDK separately to use the AI features, and set `ANTHROPIC_API_KEY`.
 
 Licensed under PolyForm Noncommercial; commercial use requires a separate license.
@@ -33,8 +33,8 @@ Licensed under PolyForm Noncommercial; commercial use requires a separate licens
 
 `googleapis` 메타 패키지 대신 실제로 호출하는 16개의 `@googleapis/*` 클라이언트만 의존하며 처음 쓸 때 로드합니다.
 `@anthropic-ai/sdk` 는 선택적 의존성이고, AI 릴리즈 노트·리뷰 답글·영상 스토리보드를 생성할 때만 로드됩니다.
-기본 `npm install` 에는 SDK가 포함됩니다(약 100 MB). AI가 필요 없으면
-`npm install @yoonion/mimi-seed-mcp --omit=optional` 로 설치할 수 있습니다(약 72 MB, Google 클라이언트는 남습니다).
+기본 `npm install` 에는 SDK가 포함됩니다(약 99 MB). AI가 필요 없으면
+`npm install @yoonion/mimi-seed-mcp --omit=optional` 로 설치할 수 있습니다(약 68 MB, Google 클라이언트는 남습니다).
 얇게 설치한 뒤 AI 기능을 쓰려면 `@anthropic-ai/sdk` 를 따로 설치하고 `ANTHROPIC_API_KEY` 를 설정하세요.
 
 ## 계정 없이 출시 점검

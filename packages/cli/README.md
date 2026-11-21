@@ -15,7 +15,7 @@ The checker is bundled; it does not install the full MCP server. Optional usage 
 default. See `mimi-seed telemetry --help` and the [privacy notice](https://mimi-seed.pryzm.gg/privacy/sdk-usage).
 
 `@anthropic-ai/sdk` is an optional dependency, loaded only for AI release notes and review replies. A default
-`npm install` still includes it (about 28 MB). `check` and `--version` work without it:
+`npm install` still includes it (about 33 MB). `check` and `--version` work without it:
 
 ```bash
 npm install mimi-seed --omit=optional
