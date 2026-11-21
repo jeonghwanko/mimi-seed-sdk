@@ -27,7 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   video storyboards. `mimi-seed --version`, `mimi-seed check --local`, and MCP startup no longer load it.
   The SDK is now an optional dependency: default `npm install` still includes it, but
   `npm install --omit=optional` is enough for non-AI commands (`check`, `--version`, MCP tools that do not
-  call Anthropic). Install `@anthropic-ai/sdk` separately to use the AI features.
+  call Anthropic). Run `npm install --include=optional` in the same project to restore the SDK.
 
 ### Tool changes
 

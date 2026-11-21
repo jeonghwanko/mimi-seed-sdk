@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import { isMissingAnthropicSdk } from '#core/ai.js';
 
 /**
  * Claude 모델 id — ai/*, video/* 가 모두 이 이름으로 쓴다. 값은 CLI 와 공유하는 packages/core 의
@@ -15,14 +16,6 @@ export const LOCALE_NAMES: Record<string, string> = {
   'pt': '포르투갈어', 'pt-BR': '포르투갈어 (브라질)',
 };
 
-function isMissingAnthropicSdk(error: unknown): boolean {
-  const err = error as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
-  const haystack = [err.code, err.message, err.cause?.code, err.cause?.message]
-    .filter(Boolean)
-    .join(' ');
-  return haystack.includes('ERR_MODULE_NOT_FOUND') && haystack.includes('@anthropic-ai/sdk');
-}
-
 async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').default> {
   try {
     const mod = await import('@anthropic-ai/sdk');
@@ -32,8 +25,7 @@ async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').defau
       throw new Error(
         [
           '❌ @anthropic-ai/sdk 가 설치되어 있지 않습니다.',
-          '릴리즈 노트·리뷰 답글·영상 스토리보드 등 AI 기능을 쓰려면 설치하세요:',
-          '  npm install @anthropic-ai/sdk',
+          '같은 npm 프로젝트나 전역 경로에서 @yoonion/mimi-seed-mcp 를 --include=optional 로 다시 설치하세요.',
         ].join('\n'),
         { cause: error },
       );

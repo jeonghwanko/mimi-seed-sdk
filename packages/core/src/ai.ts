@@ -11,6 +11,14 @@
 /** Claude 모델 id 의 SSOT. 모델 교체는 이 한 줄이다 (다른 곳의 리터럴은 ai-model.test.ts 가 막는다). */
 export const AI_MODEL = 'claude-haiku-4-5-20251001';
 
+/** Match the missing optional SDK itself, preserving errors from inside an installed SDK. */
+export function isMissingAnthropicSdk(error: unknown): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && error.code === 'ERR_MODULE_NOT_FOUND'
+    && error.message.startsWith("Cannot find package '@anthropic-ai/sdk' imported from ");
+}
+
 /** 리뷰 답변 톤 — CLI `--tone` 값이자 MCP `generate_review_reply` 의 tone 인자. 번역하지 않는다. */
 export const REVIEW_TONES = ['friendly', 'professional', 'empathetic', 'brief'] as const;
 export type ReviewTone = (typeof REVIEW_TONES)[number];

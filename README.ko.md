@@ -511,7 +511,9 @@ npm install mimi-seed --omit=optional
 npm install @yoonion/mimi-seed-mcp --omit=optional
 ```
 
-측정한 프로덕션 설치 크기(배포 tarball을 `npm install --omit=dev`로 설치): CLI는 기본 약 28 MB, `--omit=optional` 이면 약 0.9 MB. MCP는 기본 약 100 MB, `--omit=optional` 이면 약 72 MB (Google 클라이언트는 그대로 남습니다). 얇게 설치한 뒤 AI 기능을 쓰려면 `@anthropic-ai/sdk` 를 따로 설치하고 `ANTHROPIC_API_KEY` 를 설정하세요.
+측정한 프로덕션 설치 크기(배포 tarball을 `npm install --omit=dev`로 설치): CLI는 기본 약 28 MB, `--omit=optional` 이면 약 0.9 MB. MCP는 기본 약 100 MB, `--omit=optional` 이면 약 72 MB (Google 클라이언트는 그대로 남습니다).
+
+얇게 설치한 뒤 AI 기능을 쓰려면 같은 프로젝트에서 `npm install --include=optional` 을 실행하고 `ANTHROPIC_API_KEY` 를 설정하세요.
 
 웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
 
