@@ -79,7 +79,7 @@ Three steps: **1 Install → 2 Connect → 3 Verify**. This page is the short ve
 [Mimi Seed User Guide](docs/user-guide/README.md).
 
 > **Three things that trip every first install:**
-> 1. The local MCP server requires **Node 20+**.
+> 1. The local MCP server requires **Node 22+**.
 > 2. Open a **new session** after installing an MCP server or plugin (and after package updates) — tools only appear in fresh sessions.
 > 3. In Claude Code the 150+ tool schemas load lazily; if a first call fails with `InputValidationError`, tell Claude: *"load the mimi-seed tools with ToolSearch first"* ([agent guide](docs/agent-guide.md)).
 >
@@ -95,7 +95,7 @@ Pick by what you want to do (they can also be installed side by side):
 | **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Remote MCP** ↓ |
 | **Hack on it** — run unpublished code from a git checkout | `git clone … && npm run setup` → [Run from source](docs/from-source.md) |
 
-**Local MCP — recommended** (store-write automation · Google OAuth · runs on your machine, Node 20+)
+**Local MCP — recommended** (store-write automation · Google OAuth · runs on your machine, Node 22+)
 
 Claude Code — **plugin install (recommended)**: bundles the MCP server **plus the skills** that auto-handle deferred tool loading (trap #3) and auth recovery. One fresh session after install is still needed (trap #2):
 
@@ -514,7 +514,7 @@ npm install mimi-seed --omit=optional
 npm install @yoonion/mimi-seed-mcp --omit=optional
 ```
 
-Measured production install sizes (`npm install --omit=dev` of the packed tarball): CLI about 28 MB default, about 0.9 MB with `--omit=optional`; MCP about 100 MB default, about 72 MB with `--omit=optional` (the Google clients remain).
+Measured production install sizes (`npm install --omit=dev` of the packed tarball): CLI about 33 MB default, about 0.9 MB with `--omit=optional`; MCP about 99 MB default, about 68 MB with `--omit=optional` (the Google clients remain).
 
 To enable AI after a slim install, run `npm install --include=optional` in the same project and set `ANTHROPIC_API_KEY`.
 

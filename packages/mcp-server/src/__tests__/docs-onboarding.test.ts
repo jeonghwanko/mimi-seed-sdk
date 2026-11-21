@@ -140,7 +140,7 @@ describe('온보딩 문서 ↔ 코드', () => {
   });
 
   // ③ 이미 4갈래로 드리프트한 적 있는 사실 — 테스트만이 통일을 유지시킨다.
-  it('Node 하한이 .nvmrc / 두 package.json / 문서에서 일치한다', () => {
+  it('Node 하한이 .nvmrc / package.json / lockfile / 문서에서 일치한다', () => {
     const nvmrc = read('.nvmrc').trim();
     expect(nvmrc).toMatch(/^\d+$/);
 
@@ -153,16 +153,41 @@ describe('온보딩 문서 ↔ 코드', () => {
     ]) {
       const engines = (JSON.parse(read(pkg)) as { engines?: { node?: string } }).engines?.node;
       expect(engines, `${pkg} 에 engines.node 없음`).toBeTruthy();
+      const lockfile = pkg.replace(/package\.json$/, 'package-lock.json');
+      const locked = JSON.parse(read(lockfile)) as { packages: Record<string, { engines?: { node?: string } }> };
+      expect(locked.packages['']?.engines?.node, lockfile).toBe(engines);
       const floor = engines!.match(/(\d+)/)?.[1];
       expect(floor, `${pkg} 의 engines.node(${engines}) 가 .nvmrc(${nvmrc}) 와 다름`).toBe(nvmrc);
     }
 
-    // 산문에 적힌 "Node 20+" 표기도 같은 값이어야 한다.
-    for (const f of ['README.md', 'README.ko.md', 'CONTRIBUTING.md', 'docs/from-source.md', 'docs/from-source.ko.md']) {
+    // 산문에 적힌 "Node 22+" 표기도 같은 값이어야 한다.
+    for (const f of [
+      'README.md',
+      'README.ko.md',
+      'CONTRIBUTING.md',
+      'docs/from-source.md',
+      'docs/from-source.ko.md',
+      'docs/troubleshooting.md',
+      'docs/troubleshooting.ko.md',
+      'docs/user-guide/README.md',
+      'docs/user-guide/README.ko.md',
+      'packages/cli/README.md',
+      'packages/mcp-server/README.md',
+      'packages/cli/src/init.ts',
+    ]) {
       for (const m of read(f).matchAll(/Node[.\s]*(?:\.js)?\s*(\d+)\+/g)) {
         expect(m[1], `${f} 의 "Node ${m[1]}+" 가 .nvmrc(${nvmrc}) 와 다름`).toBe(nvmrc);
       }
     }
+
+    // 런타임 검사(doctor)와 사용자에게 보이는 문구는 문서보다 드리프트가 치명적이다.
+    const doctor = read('packages/cli/src/doctor.ts');
+    expect(doctor, 'doctor.ts 가 .nvmrc 하한을 비교하지 않음').toMatch(
+      new RegExp(String.raw`Number\(major\)\s*>=\s*${nvmrc}`),
+    );
+    const i18n = read('packages/cli/src/i18n.ts');
+    expect(i18n, 'i18n ko nodeTooOld 가 .nvmrc 와 다름').toContain(`v${nvmrc} 이상`);
+    expect(i18n, 'i18n en nodeTooOld 가 .nvmrc 와 다름').toContain(`v${nvmrc}+ required`);
   });
 
   // ④ 사용자 문서는 서로 촘촘히 링크한다 — 깨진 링크가 1순위 부패 지점.

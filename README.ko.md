@@ -79,7 +79,7 @@ Instance ID, 14.5 미만 `firebase-admin`의 토픽 호출)입니다. 정책 관
 [Mimi Seed 사용자 가이드](docs/user-guide/README.ko.md)를 따라가세요.
 
 > **첫 설치에서 누구나 걸리는 세 가지:**
-> 1. Local MCP 서버는 **Node 20+** 가 필요합니다.
+> 1. Local MCP 서버는 **Node 22+** 가 필요합니다.
 > 2. MCP 또는 플러그인 설치 후(패키지 업데이트 후에도) **새 세션**을 열어야 도구가 보입니다.
 > 3. Claude Code에서 150+ 도구 스키마는 지연 로드됩니다 — 첫 호출이 `InputValidationError`로 실패하면 Claude에게 *"ToolSearch로 mimi-seed 도구 먼저 로드해"* 라고 말하세요 ([에이전트 가이드](docs/agent-guide.md)).
 >
@@ -95,7 +95,7 @@ Instance ID, 14.5 미만 `firebase-admin`의 토픽 호출)입니다. 정책 관
 | **상태·준비도** + App Store IAP 심사 노트/스크린샷 — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **Remote MCP** ↓ |
 | **코드를 고치거나** 배포 전 코드를 git 체크아웃에서 돌리기 | `git clone … && npm run setup` → [소스에서 실행](docs/from-source.ko.md) |
 
-**Local MCP — 권장** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 20+)
+**Local MCP — 권장** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 22+)
 
 Claude Code — **플러그인 설치 (권장)**: MCP 서버에 더해 지연 로딩(함정 3번)·인증 복구를 자동 처리하는 **스킬 번들**이 함께 설치됩니다. 설치 후 새 세션 1회는 여전히 필요합니다(함정 2번):
 
@@ -511,7 +511,7 @@ npm install mimi-seed --omit=optional
 npm install @yoonion/mimi-seed-mcp --omit=optional
 ```
 
-측정한 프로덕션 설치 크기(배포 tarball을 `npm install --omit=dev`로 설치): CLI는 기본 약 28 MB, `--omit=optional` 이면 약 0.9 MB. MCP는 기본 약 100 MB, `--omit=optional` 이면 약 72 MB (Google 클라이언트는 그대로 남습니다).
+측정한 프로덕션 설치 크기(배포 tarball을 `npm install --omit=dev`로 설치): CLI는 기본 약 33 MB, `--omit=optional` 이면 약 0.9 MB. MCP는 기본 약 99 MB, `--omit=optional` 이면 약 68 MB (Google 클라이언트는 그대로 남습니다).
 
 얇게 설치한 뒤 AI 기능을 쓰려면 같은 프로젝트에서 `npm install --include=optional` 을 실행하고 `ANTHROPIC_API_KEY` 를 설정하세요.
 

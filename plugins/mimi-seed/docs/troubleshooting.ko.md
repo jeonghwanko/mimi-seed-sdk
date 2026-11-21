@@ -38,7 +38,7 @@ Claude Code 는 보통 다음 호출에서 다시 연결할 수 있고 `/mcp` �
 서비스에서 실제 반영 여부를 먼저 확인하라.
 
 **Node 버전 에러.**
-Node 20+ 가 필요하다 (CLI·MCP 서버 공통). `.nvmrc` 가 SSOT — `nvm use`.
+Node 22+ 가 필요하다 (CLI·MCP 서버 공통). `.nvmrc` 가 SSOT — `nvm use`.
 
 <a id="devengines"></a>
 

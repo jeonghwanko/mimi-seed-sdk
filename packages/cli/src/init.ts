@@ -48,7 +48,7 @@ const M = catalog(
 
     localTitle: "── 로컬 MCP 추가 설정 (--local) ──",
     localIntro:
-      "원격 MCP(PAT, 읽기·진단)는 위에서 끝. 로컬 MCP는 Google OAuth로 스토어 쓰기 도구 전체를 직접 실행합니다 (Node 20+).",
+      "원격 MCP(PAT, 읽기·진단)는 위에서 끝. 로컬 MCP는 Google OAuth로 스토어 쓰기 도구 전체를 직접 실행합니다 (Node 22+).",
     localStep1: "1) Google 로그인 (Firebase / AdMob / Play / Ads):",
     localStep2: "2) 로컬 MCP 서버 등록 (원격 'mimi-seed' 와 별개):",
     localCodexHint:
@@ -85,7 +85,7 @@ const M = catalog(
 
     localTitle: "── Extra local MCP setup (--local) ──",
     localIntro:
-      "The remote MCP (PAT, read + diagnostics) is done above. The local MCP runs every store write tool directly via Google OAuth (Node 20+).",
+      "The remote MCP (PAT, read + diagnostics) is done above. The local MCP runs every store write tool directly via Google OAuth (Node 22+).",
     localStep1: "1) Sign in with Google (Firebase / AdMob / Play / Ads):",
     localStep2: "2) Register the local MCP server (separate from the remote 'mimi-seed'):",
     localCodexHint:

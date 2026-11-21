@@ -119,7 +119,7 @@ const ko = {
     credentialMismatch: (field: string, expected: string, actual?: string) =>
       `${field} 불일치 — 요구값 ${expected}, 현재값 ${actual ?? "없음"}`,
     credsHint: "  전부 연결하기: mimi-seed setup   ·   OAuth 신선도: mimi-seed auth status\n",
-    nodeTooOld: (v: string) => `${v} — v20 이상 필요 (.nvmrc 참고)`,
+    nodeTooOld: (v: string) => `${v} — v22 이상 필요 (.nvmrc 참고)`,
     gitRepo: "Git 저장소",
     gitTag: (t: string) => `최신 태그: ${t}`,
     gitCommits: (n: number) => `커밋 ${n}개`,
@@ -243,7 +243,7 @@ MIMI_SEED_LANG takes precedence when set.`,
       `${field} mismatch — expected ${expected}, current ${actual ?? "missing"}`,
     credsHint:
       "  Connect everything: mimi-seed setup   ·   OAuth freshness: mimi-seed auth status\n",
-    nodeTooOld: (v: string) => `${v} — v20+ required (see .nvmrc)`,
+    nodeTooOld: (v: string) => `${v} — v22+ required (see .nvmrc)`,
     gitRepo: "Git repository",
     gitTag: (t: string) => `latest tag: ${t}`,
     gitCommits: (n: number) => `${n} commit(s)`,

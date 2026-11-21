@@ -1,4 +1,4 @@
-import type Anthropic from '@anthropic-ai/sdk';
+import type { Anthropic } from '@anthropic-ai/sdk';
 import { isMissingAnthropicSdk } from '#core/ai.js';
 
 /**
@@ -16,10 +16,10 @@ export const LOCALE_NAMES: Record<string, string> = {
   'pt': '포르투갈어', 'pt-BR': '포르투갈어 (브라질)',
 };
 
-async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').default> {
+async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').Anthropic> {
   try {
-    const mod = await import('@anthropic-ai/sdk');
-    return mod.default;
+    const { Anthropic: AnthropicSdk } = await import('@anthropic-ai/sdk');
+    return AnthropicSdk;
   } catch (error) {
     if (isMissingAnthropicSdk(error)) {
       throw new Error(

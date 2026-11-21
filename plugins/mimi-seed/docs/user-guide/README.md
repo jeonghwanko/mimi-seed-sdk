@@ -37,7 +37,7 @@ launch**. Start with the outcome you want instead of memorizing tool names.
 | Surface | Best for | Limitation |
 |---|---|---|
 | Remote MCP | App inventory, readiness, blockers, shared diagnostics | Most store and cloud writes require Local MCP |
-| Local MCP | Play/App Store, Firebase, AdMob, IAM, analytics, social posting | Requires local credentials and Node 20+ |
+| Local MCP | Play/App Store, Firebase, AdMob, IAM, analytics, social posting | Requires local credentials and Node 22+ |
 | `mimi-seed` CLI | Init, guided account setup, CI builds, readiness, full deploy | Some detailed work is exposed as MCP tools in Claude/Codex |
 
 Remote and Local are complementary. A complete setup commonly uses Remote for team/project state and Local for
