@@ -38,7 +38,7 @@ If it closes during an upload, publish, or other write, the outcome is **unknown
 matching result before retrying; otherwise you may create a duplicate.
 
 **Node version errors.**
-Node 20+ is required, for both the CLI and the MCP server. `.nvmrc` is the source of truth — `nvm use`.
+Node 22+ is required, for both the CLI and the MCP server. `.nvmrc` is the source of truth — `nvm use`.
 
 <a id="devengines"></a>
 

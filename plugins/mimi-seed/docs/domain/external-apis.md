@@ -28,11 +28,9 @@
 | Video production | Anthropic storyboard + YouTube Data API + Pexels API + OpenAI Image API + local FFmpeg/ffprobe | `@anthropic-ai/sdk` + `fetch` + `child_process` |
 
 Dependency ranges live in `mcp-server/package.json` (the SSOT — read it rather than trusting a number here):
-today the Google clients are individual `@googleapis/*` packages (see that file), `@modelcontextprotocol/sdk ^1.30`, `jose ^6`, `@onesub/providers ^0.5`,
-`zod ^4`, `@anthropic-ai/sdk ^0.137`. Note the `gaxios` **override** (`7.1.5`) in the same file — it exists to
-drop a deprecated transitive `glob`; don't remove it casually. The `@googleapis/*` pins are the last versions
-that still declare `engines.node >=12` and depend on `googleapis-common` ^8 (the `googleapis ~178` generation);
-later majors declare `engines.node >=22` while the floor is 20. With zod 4 the MCP SDK renders `inputSchema` through zod's
+today the Google clients are individual `@googleapis/*` packages (see that file; `googleapis-common` ^9, Node 22+), `@modelcontextprotocol/sdk ^1.30`, `jose ^6`, `@onesub/providers ^0.5`,
+`zod ^4`, `@anthropic-ai/sdk ^1`. Note the `gaxios` **override** (`7.1.5`) in the same file — it exists to
+drop a deprecated transitive `glob`; don't remove it casually. With zod 4 the MCP SDK renders `inputSchema` through zod's
 own JSON Schema output (input mode), so object schemas carry no `additionalProperties: false` — unknown
 arguments are still stripped at parse time, as before — and repeated sub-schemas are inlined rather than `$ref`'d.
 A zod major bump therefore changes `tools/list` for every client: diff its output before and after.

@@ -8,11 +8,12 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ create: vi.fn() }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class {
+vi.mock('@anthropic-ai/sdk', () => {
+  class Anthropic {
     messages = { create: mocks.create };
-  },
-}));
+  }
+  return { Anthropic, default: Anthropic };
+});
 
 import { generateReviewReply, formatReviewReply } from '../ai/review.js';
 import { generateReleaseNotesFromCommits, formatGeneratedNotes } from '../ai/notes.js';

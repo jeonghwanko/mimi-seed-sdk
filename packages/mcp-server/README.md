@@ -2,7 +2,7 @@
 
 Connected app-release operations for Claude Code, Codex and other MCP clients.
 
-Start with a lightweight, account-free check in your app repository (Node 20+):
+Start with a lightweight, account-free check in your app repository (Node 22+):
 
 ```bash
 npx -y mimi-seed@latest check --local

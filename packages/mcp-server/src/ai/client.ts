@@ -1,4 +1,4 @@
-import type Anthropic from '@anthropic-ai/sdk';
+import type { Anthropic } from '@anthropic-ai/sdk';
 
 /**
  * Claude 모델 id — ai/*, video/* 가 모두 이 이름으로 쓴다. 값은 CLI 와 공유하는 packages/core 의
@@ -23,10 +23,10 @@ function isMissingAnthropicSdk(error: unknown): boolean {
   return haystack.includes('ERR_MODULE_NOT_FOUND') && haystack.includes('@anthropic-ai/sdk');
 }
 
-async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').default> {
+async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').Anthropic> {
   try {
-    const mod = await import('@anthropic-ai/sdk');
-    return mod.default;
+    const { Anthropic: AnthropicSdk } = await import('@anthropic-ai/sdk');
+    return AnthropicSdk;
   } catch (error) {
     if (isMissingAnthropicSdk(error)) {
       throw new Error(
