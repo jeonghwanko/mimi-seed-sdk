@@ -84,7 +84,7 @@ export async function planStory(input: PlanStoryInput): Promise<VideoProject> {
     throw new Error(`이미 영상 프로젝트가 있습니다: ${projectPath}\noverwrite=true로 명시해야 덮어씁니다.`);
   }
 
-  const client = requireApiKey();
+  const client = await requireApiKey();
   const response = await client.messages.create({
     model: AI_MODEL,
     max_tokens: 3000,

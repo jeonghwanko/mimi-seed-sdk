@@ -31,7 +31,7 @@ export async function generateReviewReply(opts: {
   language?: string;
   developerName?: string;
 }): Promise<ReviewReplyResult> {
-  const client = requireApiKey();
+  const client = await requireApiKey();
   const { reviewText, rating, appName = '앱', tone = 'friendly', language = 'ko', developerName } = opts;
 
   const sentiment = detectReviewSentiment(reviewText);

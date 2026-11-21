@@ -38,7 +38,7 @@ export async function generateReleaseNotesFromCommits(
   commits: CommitEntry[],
   opts: { appName?: string; tones?: string[]; locales?: string[]; maxTokens?: number } = {},
 ): Promise<GeneratedReleaseNotes> {
-  const client = requireApiKey();
+  const client = await requireApiKey();
   const { appName = '앱', tones = [...RELEASE_NOTE_TONES], locales = [], maxTokens = RELEASE_NOTES_MAX_TOKENS } = opts;
 
   const commitsText = commitsToText(commits.slice(0, 50));

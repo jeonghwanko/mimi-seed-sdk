@@ -14,6 +14,16 @@ Unresolved evidence remains a warning. A local pass does not guarantee store app
 The checker is bundled; it does not install the full MCP server. Optional usage measurement is off by
 default. See `mimi-seed telemetry --help` and the [privacy notice](https://mimi-seed.pryzm.gg/privacy/sdk-usage).
 
+`@anthropic-ai/sdk` is an optional dependency, loaded only for AI release notes and review replies. A default
+`npm install` still includes it (about 28 MB). `check` and `--version` work without it:
+
+```bash
+npm install mimi-seed --omit=optional
+```
+
+That slimmer install is about 0.9 MB. To use the AI features afterwards, run `npm install --include=optional` in the same
+project and set `ANTHROPIC_API_KEY`.
+
 ## Next steps
 
 - Connect store checks: `npx mimi-seed init`, then `npx mimi-seed setup`.

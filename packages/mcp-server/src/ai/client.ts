@@ -1,4 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { isMissingAnthropicSdk } from '#core/ai.js';
 
 /**
  * Claude 모델 id — ai/*, video/* 가 모두 이 이름으로 쓴다. 값은 CLI 와 공유하는 packages/core 의
@@ -15,7 +16,25 @@ export const LOCALE_NAMES: Record<string, string> = {
   'pt': '포르투갈어', 'pt-BR': '포르투갈어 (브라질)',
 };
 
-export function requireApiKey(): Anthropic {
+async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').default> {
+  try {
+    const mod = await import('@anthropic-ai/sdk');
+    return mod.default;
+  } catch (error) {
+    if (isMissingAnthropicSdk(error)) {
+      throw new Error(
+        [
+          '❌ @anthropic-ai/sdk 가 설치되어 있지 않습니다.',
+          '같은 npm 프로젝트나 전역 경로에서 @yoonion/mimi-seed-mcp 를 --include=optional 로 다시 설치하세요.',
+        ].join('\n'),
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+}
+
+export async function requireApiKey(): Promise<Anthropic> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     throw new Error(
@@ -30,7 +49,8 @@ export function requireApiKey(): Anthropic {
       ].join('\n'),
     );
   }
-  return new Anthropic({ apiKey: key });
+  const AnthropicSdk = await loadAnthropic();
+  return new AnthropicSdk({ apiKey: key });
 }
 
 export function parseJsonResponse<T>(text: string): T {

@@ -2,7 +2,7 @@
 // playstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import type { OAuth2Client, JWT } from 'google-auth-library';
-import type { androidpublisher_v3 } from 'googleapis/build/src/apis/androidpublisher/index.js';
+import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher } from './edits.js';
 
 // ─── 리뷰 조회 ───
