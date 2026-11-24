@@ -10,8 +10,8 @@ import type { ToolManifest } from './package-root.js';
  * - `MIMI_SEED_TOOLSETS`         쉼표 구분. manifest 도메인 키(`playstore`) 또는 manifest
  *                                 `toolsets` 의 그룹 키(`store`), 그리고 내장 키워드 `all`.
  * - `MIMI_SEED_TOOLSETS_EXCLUDE` 같은 문법. include 결과에서 뺀다.
- * - manifest `alwaysOn`(auth · checks)은 어떤 설정이든 켜져 있다 — 상태 진단과 로그인이
- *   없으면 나머지 도메인을 쓸 수 없다.
+ * - manifest `alwaysOn`(auth · checks)은 도메인 필터에서 항상 켜진다.
+ * - `MIMI_SEED_TOOLS` 는 도메인 필터를 통과한 도구 중 실행기가 명시한 이름만 등록한다.
  * - 도구 단위 판정: 도구는 자기 도메인 + manifest `alsoInToolsets` 의 도메인들에 속한다. 그중 하나라도
  *   include 되면 켜지고, 하나라도 exclude 되면 꺼진다 (alwaysOn 소속이면 항상 켜짐). 예: video.ts 가 등록하는
  *   `youtube_upload_video` 는 `youtube` 로도 켜지고, android.ts 의 `jenkins_upload_playstore_sa` 는 `jenkins` 로도 켜진다.
@@ -20,6 +20,7 @@ import type { ToolManifest } from './package-root.js';
  */
 export const TOOLSETS_ENV = 'MIMI_SEED_TOOLSETS';
 export const TOOLSETS_EXCLUDE_ENV = 'MIMI_SEED_TOOLSETS_EXCLUDE';
+export const TOOL_NAMES_ENV = 'MIMI_SEED_TOOLS';
 
 export interface ToolsetSelection {
   /** 켜진 도메인 키 집합 (alwaysOn 포함). 도메인 밖 도구의 소속(alsoInToolsets)은 isToolEnabled 가 본다. */
@@ -31,6 +32,7 @@ export interface ToolsetSelection {
   /** 사용자가 준 원문 (정규화된 키 목록). */
   include: string[];
   exclude: string[];
+  toolNames?: string[];
   /** 무시한 키 등 사용자에게 보여줄 경고. */
   warnings: string[];
 }
@@ -92,20 +94,37 @@ export function resolveToolsets(
   for (const [domain, entry] of Object.entries(manifest.domains)) {
     for (const tool of entry.tools) membership.set(tool, [domain, ...(manifest.alsoInToolsets?.[tool] ?? [])]);
   }
-  const isToolEnabled = (name: string): boolean => {
+  const isInSelectedToolsets = (name: string): boolean => {
     const domains = membership.get(name) ?? [];
     if (domains.some((d) => always.has(d))) return true;
     if (domains.some((d) => excluded.has(d))) return false;
     return domains.some((d) => included.has(d));
   };
+  const requestedTools = env[TOOL_NAMES_ENV];
+  const names = requestedTools === undefined ? undefined : new Set(parseList(requestedTools));
+  if (names) {
+    if (names.size === 0) throw new Error(`${TOOL_NAMES_ENV} is empty. Supply tool names or unset it.`);
+    for (const name of names) {
+      if (!membership.has(name) || !isInSelectedToolsets(name)) {
+        throw new Error(`${TOOL_NAMES_ENV}: unavailable tool "${name}". Check the catalog and toolset settings.`);
+      }
+    }
+    const selectedDomains = new Set([...names].flatMap((name) => membership.get(name) ?? []));
+    for (const domain of enabled) {
+      if (!selectedDomains.has(domain)) enabled.delete(domain);
+    }
+  }
+  const isToolEnabled = (name: string) => (!names || names.has(name)) && isInSelectedToolsets(name);
 
   return {
     enabled,
     isToolEnabled,
     // exclude 된 도메인이 있으면 다른 도메인 소속 도구(alsoInToolsets)도 빠질 수 있어 'all' 이 아니다.
-    all: allDomains.every((d) => enabled.has(d)) && [...excluded].every((d) => always.has(d)),
+    all: (!names || names.size === membership.size) &&
+      allDomains.every((d) => enabled.has(d)) && [...excluded].every((d) => always.has(d)),
     include,
     exclude,
+    ...(names && { toolNames: [...names] }),
     warnings,
   };
 }
@@ -118,6 +137,7 @@ export function knownKeys(manifest: ToolManifest): string[] {
 /** mimi_seed_status 한 줄 요약. */
 export function describeToolsets(selection: ToolsetSelection, manifest: ToolManifest): string {
   if (selection.all) return `all (${Object.keys(manifest.domains).length} domains)`;
+  if (selection.toolNames) return `${TOOL_NAMES_ENV} (${selection.toolNames.length} tools)`;
   const on = Object.keys(manifest.domains).filter((d) => selection.enabled.has(d));
   return `${on.join(', ')} — ${TOOLSETS_ENV}/${TOOLSETS_EXCLUDE_ENV} 로 제한됨`;
 }

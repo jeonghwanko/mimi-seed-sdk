@@ -39,6 +39,7 @@ export const MCP_BINS = [
   "mimi-seed-firebase",
   "mimi-seed-admob",
   "mimi-seed-ga4",
+  "mimi-seed-tools",
 ] as const;
 
 export type McpBin = (typeof MCP_BINS)[number];

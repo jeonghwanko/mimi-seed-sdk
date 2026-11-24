@@ -103,6 +103,11 @@ ${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 
   --workflow <file>            GitHub workflow 파일 (예: deploy.yml)
   --ref <branch|tag>           CI 소스 (기본: main, Jenkins는 브랜치만)
   setup-jenkins / setup-github / setup-gitlab   CI 설정 대화형 등록`,
+      tools: `${kleur.bold("mimi-seed tools")} — 사용할 서비스 고르기
+
+  mimi-seed tools                   서비스 목록 표시 및 대화형 다중 선택
+  mimi-seed tools --select ga4,bigquery    선택한 서비스와 도구 이름을 JSON으로 출력
+`,
       mcp: `${kleur.bold("mimi-seed mcp")} — Claude/Codex MCP 연결
 
 서브명령:
@@ -123,6 +128,7 @@ ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed firebase")}    Firebase 앱 생성·config 다운로드·GA4 링크
   ${kleur.cyan("mimi-seed admob")}       AdMob 계정·앱·광고단위 조회 및 생성
   ${kleur.cyan("mimi-seed ga4")}         GA4 property·data stream 생성·조회
+  ${kleur.cyan("mimi-seed tools")}       서비스 목록 표시 및 다중 선택
   ${kleur.cyan("mimi-seed doctor")}      환경 진단 (토큰·Git·프로젝트·CI 체크)
   ${kleur.cyan("mimi-seed check")}       출시 전 Readiness 점검
   ${kleur.cyan("mimi-seed telemetry")}   선택적 사용량 측정 설정
@@ -239,6 +245,11 @@ Options:
   --workflow <file>            GitHub workflow file (e.g. deploy.yml)
   --ref <branch|tag>           CI source (default: main; Jenkins: branches only)
   setup-jenkins / setup-github / setup-gitlab   interactive CI setup`,
+      tools: `${kleur.bold("mimi-seed tools")} — choose services for your task
+
+  mimi-seed tools                   show the menu and choose multiple services interactively
+  mimi-seed tools --select ga4,bigquery    print the selected services and tool names as JSON
+`,
       mcp: `${kleur.bold("mimi-seed mcp")} — Claude/Codex MCP connection
 
 Subcommands:
@@ -259,6 +270,7 @@ ${kleur.bold("Commands:")}
   ${kleur.cyan("mimi-seed firebase")}    create Firebase apps, download configs, link GA4
   ${kleur.cyan("mimi-seed admob")}       list and create AdMob accounts, apps, ad units
   ${kleur.cyan("mimi-seed ga4")}         create and list GA4 properties and data streams
+  ${kleur.cyan("mimi-seed tools")}       list and select multiple services
   ${kleur.cyan("mimi-seed doctor")}      environment check (token · Git · project · CI)
   ${kleur.cyan("mimi-seed check")}       pre-release readiness check
   ${kleur.cyan("mimi-seed telemetry")}   optional usage measurement settings

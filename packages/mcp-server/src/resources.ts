@@ -1,8 +1,10 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { resolveLang } from '#core/lang.js';
 import { ensureFreshAccessToken } from './auth/google-auth.js';
 import { readPackageRootText, readToolManifest, type ToolManifest } from './lib/package-root.js';
 import { buildToolIndex } from './lib/tool-registrar.js';
-import { resolveToolsets, TOOLSETS_ENV, TOOLSETS_EXCLUDE_ENV, type ToolsetSelection } from './lib/toolsets.js';
+import { resolveToolsets, TOOL_NAMES_ENV, TOOLSETS_ENV, TOOLSETS_EXCLUDE_ENV, type ToolsetSelection } from './lib/toolsets.js';
+import { buildToolMenu, formatToolMenu, selectToolMenu, TOOL_MENU_URI, TOOL_SELECTION_URI, type MenuLanguage } from './lib/tool-menu.js';
 
 // assets/agent-guide.md = docs/agent-guide.md 의 배포용 사본 (npm 배포본에는 docs/ 가 없다).
 // 갱신은 `npm run plugin:sync`, 드리프트는 prompts-resources.test.ts 가 잡는다.
@@ -62,8 +64,8 @@ export function buildToolCatalog(manifest: ToolManifest, selection: ToolsetSelec
       include: selection.include,
       exclude: selection.exclude,
       note: selection.all
-        ? `모든 도메인이 켜져 있습니다. ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} 로 줄일 수 있습니다.`
-        : `${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} 로 제한된 서버입니다 — 여기 없는 도구는 이 서버에 등록되지 않았습니다 (전체 ${manifest.total}개).`,
+        ? `모든 도메인이 켜져 있습니다. ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} 로 줄일 수 있습니다.`
+        : `선택된 도구를 보여줍니다 (전체 ${manifest.total}개). ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} 설정을 반영합니다.`,
     },
     legend: {
       total: '이 서버에 등록된 도구 수 (폐기 예정 별칭 포함) = tools/list 길이. manifestTotal 은 toolset 제한 없는 전체.',
@@ -82,6 +84,34 @@ export function registerResources(
   server: McpServer,
   options: { manifest?: ToolManifest; toolsets?: ToolsetSelection } = {},
 ) {
+  const getToolMenu = (lang: MenuLanguage) => {
+    const manifest = options.manifest ?? readToolManifest();
+    const selection = options.toolsets ?? resolveToolsets(process.env, manifest);
+    return buildToolMenu(manifest, selection, lang);
+  };
+
+  server.resource(
+    'tools-menu',
+    TOOL_MENU_URI,
+    { description: '사용할 서비스 다중 선택용 텍스트 목록', mimeType: 'text/plain' },
+    async () => {
+      const lang = resolveLang();
+      return { contents: [{ uri: TOOL_MENU_URI, mimeType: 'text/plain', text: formatToolMenu(getToolMenu(lang), lang) }] };
+    },
+  );
+
+  server.resource(
+    'tools-menu-selection',
+    new ResourceTemplate(TOOL_SELECTION_URI, { list: undefined }),
+    { description: '쉼표로 구분한 서비스 ID의 정식 도구 이름', mimeType: 'application/json' },
+    async (uri, { areas }) => {
+      const input = Array.isArray(areas) ? areas.join(',') : (areas ?? '');
+      const selected = selectToolMenu(getToolMenu(resolveLang()), decodeURIComponent(input));
+      if (!selected) throw new Error('Unknown service selection. Read mimi-seed://tools/menu for available services.');
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(selected) }] };
+    },
+  );
+
   server.resource(
     'auth-status',
     'mimi-seed://auth/status',

@@ -38,6 +38,18 @@ ToolSearch(query="select:<tool_name>[,<tool_name>...]")
 
 Use the MCP client's native discovery when tools are deferred. If the required schema is already visible, call the tool directly.
 
+### Let the user choose services
+
+If the user starts Mimi Seed without a specific task, show the plain-text `mimi-seed://tools/menu` resource
+and ask which services they want to use. The `select-tools` prompt provides the same menu. Accept several
+numbers, service names, or a free-form description. Map the answer to the IDs shown in parentheses and
+ask a short follow-up when the intent is unclear.
+
+Read `mimi-seed://tools/menu/{areas}` using the selected comma-separated IDs, for example
+`mimi-seed://tools/menu/ga4,bigquery`. This returns tool names for the selection. Load the tools needed for
+the current step using the host's discovery feature. YouTube video production and uploads have separate
+choices. Keep operation-specific approvals in effect.
+
 ### Ready-made `select:` batches
 
 Use the table to find tool names, then select only the active tools needed for the current step. The table is generated from the full manifest. Check the runtime catalog if this server limits its toolsets.
@@ -190,6 +202,7 @@ The server can expose only the domains a project needs — set these in the MCP 
 |----------|---------|
 | `MIMI_SEED_TOOLSETS` | Comma-separated domain keys from `mimi-seed://tools/catalog` (`playstore`, `appstore`, `firebase`, …) and/or groups: `store` (playstore · appstore · android · ai), `google` (firebase · admob · iam · billing · bigquery · ga4 · gsc · googleads), `social` (facebook · instagram · threads · tiktok · youtube), `media` (video · youtube), `build` (ci · jenkins · android), `all`. Unset = everything (default). |
 | `MIMI_SEED_TOOLSETS_EXCLUDE` | Same syntax; removed from the include set. |
+| `MIMI_SEED_TOOLS` | Optional exact tool names for a launcher to supply at startup. Names must be available under the toolset settings. The server registers only the supplied names, including any auth or checks tools explicitly selected. |
 
 A few tools also belong to a second toolset: `youtube_upload_video` / `youtube_get_video_status` /
 `youtube_update_video_privacy` (`video` domain) are also in `youtube`, and `jenkins_upload_playstore_sa` (`android`)

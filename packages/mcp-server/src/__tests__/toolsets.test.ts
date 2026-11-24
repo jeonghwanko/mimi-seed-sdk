@@ -50,6 +50,14 @@ describe('resolveToolsets', () => {
     expect(resolveToolsets({ MIMI_SEED_TOOLSETS: 'all' }, manifest).all).toBe(true);
   });
 
+  it.each(['', 'ga4_run_report,unknown_tool', 'youtube_upload_video'])(
+    '정확한 도구 목록이 비었거나 선택한 도메인에 없으면 실패한다 (%s)',
+    (toolNames) => {
+      expect(() => resolveToolsets({ MIMI_SEED_TOOLSETS: 'ga4', MIMI_SEED_TOOLS: toolNames }, manifest))
+        .toThrow(/MIMI_SEED_TOOLS/);
+    },
+  );
+
   it('describeToolsets — mimi_seed_status 한 줄', () => {
     expect(describeToolsets(resolveToolsets({}, manifest), manifest)).toMatch(/^all \(/);
     const line = describeToolsets(resolveToolsets({ MIMI_SEED_TOOLSETS: 'gsc' }, manifest), manifest);

@@ -170,8 +170,10 @@ Registered in `mcp-server/src/resources.ts` and `prompts.ts`:
   (the full `docs/agent-guide.md`, served from the committed copy `packages/mcp-server/assets/agent-guide.md`
   — refreshed by `npm run plugin:sync`), and `mimi-seed://tools/catalog` (runtime capability index built
   from `tool-manifest.json` — per-domain `label`/`credential`/`summary`, the `write`/`destructive` lists, and
-  deprecated aliases — filtered to the tools this server actually registered under `MIMI_SEED_TOOLSETS`).
-- **Prompts → slash commands** — `getting-started`, `deploy`, `health`, `review-inbox`, surfaced in MCP
+  deprecated aliases — filtered to the tools this server actually registered).
+  `mimi-seed://tools/menu` and `mimi-seed://tools/menu/{areas}` share the CLI's catalog-derived choice
+  list and resolve selected areas to exact tool names. Launchers can pass the names via `MIMI_SEED_TOOLS`.
+- **Prompts → slash commands** — `select-tools`, `getting-started`, `deploy`, `health`, `review-inbox`, surfaced in MCP
   clients as `/mimi-seed:<name>`. More in [[skills-plugins]].
 
 ## Shared source: `packages/core`

@@ -11,7 +11,7 @@
     "mcp",
     "cli"
   ],
-  "version": "0.23.3",
+  "version": "0.24.0",
   "description": "Release Doctor: check Expo, React Native and Unity release risks before connecting app stores.",
   "bin": {
     "mimi-seed": "dist/index.js"

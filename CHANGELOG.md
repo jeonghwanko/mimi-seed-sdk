@@ -18,14 +18,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-24
+
 ### Added
 
 - GA4 CLI commands and MCP tools accept a named Google login profile. Reports accept a page size and row offset.
+- Use the CLI service menu or MCP selection prompt to choose multiple work areas before loading tools. YouTube production and channel operations are separate choices.
 
 ### Fixed
 
 - GA4 account, property, and stream discovery accepts read-only OAuth grants and follows all result pages.
 - Paged GA4 reports sort by the requested dimensions. The CLI finishes writing large JSON reports before exiting.
+
+### Tool changes
+
+- None.
 
 ## [0.23.3] - 2026-11-24
 

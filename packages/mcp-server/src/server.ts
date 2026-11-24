@@ -44,6 +44,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   }, {
     instructions: [
       'Mimi Seed manages app stores, cloud services, CI, social publishing, and media. Use the client’s tool discovery to load only the active tools needed for the current step.',
+      'If the user starts Mimi Seed without a specific task, show mimi-seed://tools/menu and let them choose one or more services by number, name, or free-form description. Read mimi-seed://tools/menu/{areas} for the selected comma-separated service IDs before loading tools for the task.',
       'For a targeted read, start with the domain tool. Use mimi_seed_status for onboarding, connection diagnostics, or unresolved authentication errors.',
       'For preview-gated writes, get the preview and explicit approval before confirming the same operation.',
     ].join(' '),
@@ -81,7 +82,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   registerYouTubeTools(registrar);
   registerTikTokBusinessTools(registrar);
   registerDriveTools(registrar);
-  registerPrompts(server, toolsets);
+  registerPrompts(server, toolsets, manifest);
   registerResources(server, { manifest, toolsets });
 
   return server;
