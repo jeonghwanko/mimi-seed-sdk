@@ -15,10 +15,10 @@ interface AppAttributes {
 }
 
 export async function listApps() {
-  const data = (await apiGet('/apps', {
+  const data = await apiGet<AscListDocument<AppAttributes>>('/apps', {
     'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
     'limit': '200',
-  })) as AscListDocument<AppAttributes>;
+  });
   return (data.data ?? []).map((a) => ({
     id: a.id,
     name: a.attributes?.name,
@@ -29,19 +29,21 @@ export async function listApps() {
 }
 
 export async function getApp(appId: string) {
-  const data = (await apiGet(`/apps/${encodePathSegment(appId)}`, {
+  const data = await apiGet<AscSingleDocument<AppAttributes>>(`/apps/${encodePathSegment(appId)}`, {
     'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
     'include': 'appStoreVersions',
-  })) as AscSingleDocument<AppAttributes>;
+  });
   return data.data;
 }
 
 // ─── TestFlight 베타 그룹 ───
 
 export async function listBetaGroups(appId: string) {
-  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/betaGroups`, {
+  const data = await apiGet<AscListDocument<{
+    name?: string; isInternalGroup?: boolean; publicLink?: string; publicLinkEnabled?: boolean;
+  }>>(`/apps/${encodePathSegment(appId)}/betaGroups`, {
     'fields[betaGroups]': 'name,isInternalGroup,publicLink,publicLinkEnabled',
-  })) as AscListDocument<{ name?: string; isInternalGroup?: boolean; publicLink?: string; publicLinkEnabled?: boolean }>;
+  });
   return (data.data ?? []).map((g) => ({
     id: g.id,
     name: g.attributes?.name,
@@ -58,9 +60,11 @@ export async function listBetaGroups(appId: string) {
 const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
 
 export async function getAppInfo(appId: string) {
-  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/appInfos`, {
+  const data = await apiGet<AscListDocument<{
+    state?: string; appStoreState?: string; appStoreAgeRating?: string;
+  }>>(`/apps/${encodePathSegment(appId)}/appInfos`, {
     'fields[appInfos]': 'state,appStoreAgeRating,brazilAgeRating',
-  })) as AscListDocument<{ state?: string; appStoreState?: string; appStoreAgeRating?: string }>;
+  });
   return (data.data ?? []).map((i) => ({
     id: i.id,
     // 새 필드명 state, 옛 필드명 appStoreState 모두 케어
@@ -210,11 +214,11 @@ export async function listCustomerReviews(
   if (opts.territory) params['filter[territory]'] = opts.territory;
   if (opts.rating != null) params['filter[rating]'] = String(opts.rating);
 
-  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/customerReviews`, params)) as AscListDocument<
+  const data = await apiGet<AscListDocument<
     CustomerReviewAttributes,
     { response?: AscToOne },
     AscResource<CustomerReviewResponseAttributes>
-  >;
+  >>(`/apps/${encodePathSegment(appId)}/customerReviews`, params);
 
   // include로 가져온 답변 매핑
   const responses = new Map<string, CustomerReviewResponseAttributes | undefined>();

@@ -223,12 +223,15 @@ export async function buildAppStoreReleasePlan(opts: {
   let versionId: string | undefined;
   let buildAttached = false;
   try {
-    const versions = await apiGet(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
-      'filter[appStoreState]': APPSTORE_EDITABLE_STATES,
-      ...(versionString ? { 'filter[versionString]': versionString } : {}),
-      ...(requestedVersionId ? { 'filter[id]': requestedVersionId } : {}),
-      limit: requestedVersionId ? '1' : '5',
-    }) as AscListDocument<{ versionString?: string; appStoreState?: string; platform?: string }>;
+    const versions = await apiGet<AscListDocument<{ versionString?: string; appStoreState?: string; platform?: string }>>(
+      `/apps/${encodePathSegment(appId)}/appStoreVersions`,
+      {
+        'filter[appStoreState]': APPSTORE_EDITABLE_STATES,
+        ...(versionString ? { 'filter[versionString]': versionString } : {}),
+        ...(requestedVersionId ? { 'filter[id]': requestedVersionId } : {}),
+        limit: requestedVersionId ? '1' : '5',
+      },
+    );
     const matches = (versions.data ?? []).filter((version) =>
       (!requestedVersionId || version.id === requestedVersionId)
       && (!versionString || version.attributes?.versionString === versionString),

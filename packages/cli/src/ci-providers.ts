@@ -117,6 +117,20 @@ export type BuildResult = "success" | "failure" | "cancelled" | "timeout";
 
 // ── GitHub Actions ──
 
+interface GitHubWorkflowRun {
+  id: number;
+  html_url: string;
+  created_at: string;
+}
+
+function isGitHubWorkflowRun(value: unknown): value is GitHubWorkflowRun {
+  if (typeof value !== "object" || value === null) return false;
+  const run = value as Record<string, unknown>;
+  return typeof run.id === "number" && Number.isSafeInteger(run.id) && run.id > 0
+    && typeof run.html_url === "string" && run.html_url.length > 0
+    && typeof run.created_at === "string" && Number.isFinite(Date.parse(run.created_at));
+}
+
 export async function ghTriggerWorkflow(
   cfg: CiProviderConfig,
   workflow: string,
@@ -142,10 +156,11 @@ export async function ghTriggerWorkflow(
     { headers: githubHeaders(cfg.token) },
   );
   if (!runsRes.ok) return null;
-  const data = (await runsRes.json()) as { workflow_runs: any[] };
-  const run =
-    data.workflow_runs.find((r: any) => new Date(r.created_at) >= startTime) ??
-    data.workflow_runs[0];
+  const data: unknown = await runsRes.json();
+  if (typeof data !== "object" || data === null || !("workflow_runs" in data)
+      || !Array.isArray(data.workflow_runs)) return null;
+  const runs = data.workflow_runs.filter(isGitHubWorkflowRun);
+  const run = runs.find((entry) => new Date(entry.created_at) >= startTime) ?? runs[0];
   if (!run) return null;
   return { runId: run.id, url: run.html_url };
 }

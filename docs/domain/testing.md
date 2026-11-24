@@ -83,19 +83,21 @@ repo the comments carry the "why" and the incident dates, so blame is a real ass
 (`no-floating-promises`, `await-thenable`, `no-misused-promises`) are the point — this codebase is almost all
 async, and a missing `await` looks like success. They lint through `tsconfig.lint.json`, not the build config:
 the latter excludes `src/__tests__`, which had left the test files with **no type checking at all**.
-In `packages/mcp-server` a hand-written `any` is also an error (`no-explicit-any`): declare the fields you read
-(e.g. `appstore/types.ts` for ASC JSON:API shapes) or take `unknown` and narrow. The implicit `any` that
-`res.json()` returns is still allowed — the `no-unsafe-*` rules stay off.
+In both packages, explicit `any` is an error (`no-explicit-any`). Declare the fields you read
+(e.g. `appstore/types.ts` for ASC JSON:API shapes) or take `unknown` and narrow. The App Store review-submission
+module also enables `no-unsafe-*` to enforce typed API calls. Other modules still allow implicit `any` from legacy
+API clients and JSON parsing.
 
 ### Where each guard actually runs in CI
 
-`.github/workflows/ci.yml` has three jobs, and the split matters:
+`.github/workflows/ci.yml` runs these jobs:
 
 | Job | Runs | Why separate |
 |---|---|---|
-| `repo-guards` | root `npm run plugin:check` (generated docs, plugin copy, versions) plus the `scripts/*.test.mjs` node tests, on the `.nvmrc` version, once (outside the OS matrix) | the package jobs set `working-directory: packages/<pkg>` and therefore **never execute a root script**. No package suite covers `plugins/mimi-seed/` drift, so without this job the `plugin:sync` rule is enforced by nothing. |
+| `repo-guards` | root `npm run plugin:check` (generated docs, plugin copy, versions) plus the `scripts/*.test.mjs` Node tests, ShellCheck for shell scripts, and actionlint for workflows, once outside the OS matrix | the package jobs set `working-directory: packages/<pkg>` and therefore **never execute a root script**. No package suite covers `plugins/mimi-seed/` drift, so without this job the `plugin:sync` rule is enforced by nothing. |
 | `build-test` (matrix: `cli`/`mcp-server` × node 22/24 on Linux, plus node 24 on Windows) | `npm run build && npm test` — **tests only, never publishes** | node **22** is the declared floor (`.nvmrc`, both `engines`); testing only 24 means nobody ever ran the floor. The Windows leg covers the `.cmd`-shim / `PATH` / path-separator code that a Linux runner never executes. |
-| `publish` (`v*` tag push only) | `needs: [repo-guards, build-test]`; publishes **mcp-server first, then cli**, each skipped if its version is already on npm (`.github/scripts/publish-if-new.sh`) | one sequential job means a failed mcp-server publish stops the cli step — a cli whose pinned MCP bins don't exist on npm is broken on install. Every test leg must be green first. |
+| `required-ci` | Reports as `Required CI` and fails unless both `repo-guards` and every `build-test` leg succeed | `main` requires this stable check name across matrix updates. |
+| `publish` (`v*` tag push only) | `needs: required-ci`; publishes **mcp-server first, then cli**, each skipped if its version is already on npm (`.github/scripts/publish-if-new.sh`) | one sequential job means a failed mcp-server publish stops the cli step — a cli whose pinned MCP bins don't exist on npm is broken on install. Every test leg must be green first. |
 
 `build-test` has `needs: repo-guards` on purpose: a drifted commit is stopped before the tests, not by
 mcp-server's `prepublishOnly` in the middle of a release. The publish **trigger** lives only in the `publish`

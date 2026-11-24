@@ -38,6 +38,19 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      - name: Lint workflows and shell scripts
+        run: |
+          shellcheck --version
+          find .github scripts -type f -name '*.sh' -exec shellcheck {} +
+          archive=actionlint_1.7.12_linux_amd64.tar.gz
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$archive" \
+            --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$RUNNER_TEMP/$archive" \
+            | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+
       - run: npm run plugin:check
       - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs scripts/changelog-check.test.mjs
 
@@ -86,6 +99,21 @@ jobs:
       - name: Test
         run: npm test
 
+  # Keep this name stable in main branch protection as the matrix changes.
+  required-ci:
+    name: Required CI
+    needs: [repo-guards, build-test]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check repository guards and build matrix
+        env:
+          REPO_GUARDS: ${{ needs.repo-guards.result }}
+          BUILD_TEST: ${{ needs.build-test.result }}
+        run: |
+          printf 'Repository guards: %s\nBuild and test: %s\n' "$REPO_GUARDS" "$BUILD_TEST"
+          [[ "$REPO_GUARDS" == success && "$BUILD_TEST" == success ]]
+
   # 배포는 **모든** 테스트 레그(OS·Node·패키지 전부)와 repo-guards 가 녹색일 때만, 한 잡에서
   # 순서대로 한다: mcp-server 먼저, cli 나중. 예전엔 매트릭스 레그가 각자 자기 패키지를
   # publish 해서(fail-fast: false) mcp-server 가 실패해도 cli 만 npm 에 올라가는 반쪽 릴리스가
@@ -99,7 +127,7 @@ jobs:
   # 프리릴리스(`-beta.N`/`-next.N`)는 scripts/release-channel.mjs 가 해당 dist-tag 로 보낸다.
   publish:
     name: publish (mcp-server → cli)
-    needs: [repo-guards, build-test]
+    needs: required-ci
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     # 워크플로 concurrency 는 ref 별이라 태그 두 개(v0.20.0, v0.20.1)를 연달아 푸시하면
     # publish 가 동시에 돈다 — 2026-07-09 packument 409 경합의 재발 경로. publish 만 전역 직렬화.

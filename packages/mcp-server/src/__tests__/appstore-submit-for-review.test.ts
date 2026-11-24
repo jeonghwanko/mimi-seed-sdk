@@ -309,6 +309,19 @@ describe('submitVersionForReview', () => {
       init?.method === 'POST' && String(url).endsWith('/reviewSubmissionItems'))).toHaveLength(0);
   });
 
+  it('기존 심사 목록 응답에 data 배열이 없으면 스토어를 변경하지 않는다', async () => {
+    const fetchMock = vi.fn(async (url: string | URL, _init?: RequestInit) => {
+      const value = String(url);
+      if (value.includes('/appStoreVersions/')) return versionMetaResponse();
+      if (value.includes('/reviewSubmissions?')) return jsonResponse({ meta: {} });
+      throw new Error(`unexpected request: ${value}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(submitVersionForReview(VERSION_ID)).rejects.toThrow(/data 배열/);
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
+  });
+
   it('기존 항목 조회 실패를 빈 목록으로 취급하지 않고 제출을 중단한다', async () => {
     const fetchMock = vi.fn(async (url: string | URL, _init?: RequestInit) => {
       const value = String(url);
