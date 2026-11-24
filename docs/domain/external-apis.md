@@ -207,6 +207,13 @@ App Store review item discovery must read the version relationship and propagate
 An existing item is reused instead of posted twice. Submission confirmation remains separate from
 the read-only preview; a repeated call must inspect the existing submission before mutating it.
 
+App Store release status and review previews request related data with the version. Match included
+resources to that version's linkage before using them. Read the same version's relationship endpoints
+when the included response omits a resource or a localization page. Follow localization pages on the
+same endpoint and verify the linked localization IDs before rendering a review preview.
+After a phased-release change, verify the linked resource and its reported state before reporting success.
+[Read App Store version information](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-appstoreversions-_id_)
+
 ## Security note (public repo)
 
 Error messages may include provider reasons — make sure they never echo **credential values, tokens, `.p8`

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { encodePathSegment } from '../lib/url-path.js';
 import { isNotFound } from './http.js';
-import { appStorePagination, getAppStoreResponse, pageIsIncomplete } from './read-response.js';
+import { appStorePagination, getAppStoreResponse, includedAppStoreResource, pageIsIncomplete } from './read-response.js';
 
 const editableStates = ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'METADATA_REJECTED', 'REJECTED'];
 
@@ -116,11 +116,7 @@ async function selectVersion(
 
     const linkage = buildRelationship.safeParse(row.relationships?.build);
     const linkedBuildId = linkage.success ? linkage.data.data?.id : undefined;
-    const included = linkedBuildId ? (page.included ?? []).filter((item) => {
-      const ref = buildReference.safeParse(item);
-      return ref.success && ref.data.id === linkedBuildId;
-    }) : [];
-    const embedded = included.length === 1 ? buildResource.safeParse(included[0]) : undefined;
+    const embedded = linkage.data?.data && includedAppStoreResource(page.included, linkage.data.data, buildResource);
     candidates.push({
       id: row.id,
       versionString: version,
@@ -132,7 +128,7 @@ async function selectVersion(
       linkedBuildId,
       build: linkage.success && linkage.data.data === null
         ? { status: 'missing' }
-        : embedded?.success ? buildReadiness(embedded.data) : undefined,
+        : embedded ? buildReadiness(embedded) : undefined,
     });
   }
   if (candidates.length > 1) return { status: 'ambiguous' };

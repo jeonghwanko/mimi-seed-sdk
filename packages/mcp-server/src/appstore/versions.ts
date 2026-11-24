@@ -2,7 +2,7 @@
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import { apiGet, apiPatch, apiPost } from './client.js';
-import type { AscListDocument, AscSingleDocument, AscToOne } from './types.js';
+import type { AscListDocument, AscResource, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 // ─── 버전 ───
@@ -339,7 +339,13 @@ export async function getVersionAppAndPlatform(versionId: string): Promise<{ app
     `/appStoreVersions/${encodePathSegment(versionId)}`,
     { 'fields[appStoreVersions]': 'platform,app', include: 'app' },
   );
-  const version = data?.data;
+  return requireVersionAppAndPlatform(versionId, data?.data);
+}
+
+export function requireVersionAppAndPlatform(
+  versionId: string,
+  version: AscResource<{ platform?: string | null }, { app?: AscToOne }> | undefined,
+): { appId: string; platform: string } {
   const platform = version?.attributes?.platform;
   const app = version?.relationships?.app?.data;
   if (version?.id !== versionId || version.type !== 'appStoreVersions' || app?.type !== 'apps'

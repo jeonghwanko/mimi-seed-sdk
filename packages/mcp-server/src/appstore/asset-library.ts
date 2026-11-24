@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { apiGet } from './client.js';
-import { isNotFound, V1_BASE } from './http.js';
+import { isNotFound } from './http.js';
 import { collectPages } from '../lib/paginate.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { appStoreNextPagePath } from './read-response.js';
 
 const id = z.string().min(1);
 const resourceRef = z.object({ type: z.string(), id });
@@ -183,7 +184,6 @@ async function readPlacements(localizationId: string, filters: Record<string, st
     if (isNotFound(error)) return null;
     throw error;
   }
-  const base = new URL(V1_BASE);
   const seen = new Set<string>();
   let total = 0;
   return collectPages(async (next) => {
@@ -196,14 +196,8 @@ async function readPlacements(localizationId: string, filters: Record<string, st
       seen.add(row.id);
     }
     total = Math.max(total, meta?.paging?.total ?? 0);
-    let nextPageToken: string | undefined;
-    if (links?.next) {
-      const url = new URL(links.next, `${V1_BASE}${path}`);
-      if (url.origin !== base.origin || url.pathname !== `${base.pathname}${path}` || url.username || url.password) {
-        throw new Error('App Store Connect의 미디어 배치 페이지 링크가 올바르지 않습니다.');
-      }
-      nextPageToken = `${path}${url.search}`;
-    } else if (meta?.paging?.nextCursor || total > seen.size) {
+    const nextPageToken = links?.next ? appStoreNextPagePath(path, links.next) : undefined;
+    if (!nextPageToken && (meta?.paging?.nextCursor || total > seen.size)) {
       throw new Error('App Store Connect의 미디어 배치 목록이 불완전합니다.');
     }
     return {

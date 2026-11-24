@@ -279,7 +279,7 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
 
       // 추가 트랙 — 1차와 중복은 skip. 한 트랙 실패해도 나머지 트랙은 계속 시도.
       if (syncTracks && syncTracks.length > 0) {
-        const targets = syncTracks.filter((t) => t !== track);
+        const targets = [...new Set(syncTracks)].filter((t) => t !== track);
         for (const t of targets) {
           try {
             const r = await playstore.updateLatestReleaseNotes(auth, packageName, t, language, text);

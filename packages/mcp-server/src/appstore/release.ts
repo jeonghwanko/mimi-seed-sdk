@@ -7,7 +7,10 @@
 //   3. 단계적 출시 시작·일시중지·재개·즉시완료 (phasedRelease)
 // Play 는 userFraction/halted 로 3번이 되는데 iOS 만 비어 있었다.
 
+import { z } from 'zod';
+import { apiPatch, apiPost } from './client.js';
 import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
+import { appStoreResourceRef, appStoreToOne, getAppStoreResponse, includedAppStoreResource } from './read-response.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 export type AppleReleaseType = 'MANUAL' | 'AFTER_APPROVAL' | 'SCHEDULED';
@@ -44,54 +47,85 @@ const STATE_NOTE: Record<string, string> = {
   METADATA_REJECTED: '메타데이터 거절 — 수정 후 재제출.',
 };
 
-async function get<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const headers = await authHeadersOrThrow();
-  const query = params ? `?${new URLSearchParams(params).toString()}` : '';
-  return apiRequest<T>(V1_BASE, `${path}${query}`, headers, { method: 'GET' });
+const phasedType = 'appStoreVersionPhasedReleases';
+const phasedRelation = 'appStoreVersionPhasedRelease';
+const phasedFields = 'phasedReleaseState,startDate,totalPauseDuration,currentDayNumber';
+const phasedRef = appStoreResourceRef.extend({
+  type: z.literal(phasedType),
+});
+const phasedResource = phasedRef.extend({
+  attributes: z.object({
+    phasedReleaseState: z.enum(['INACTIVE', 'ACTIVE', 'PAUSED', 'COMPLETE']),
+    currentDayNumber: z.number().nullish(),
+    startDate: z.string().nullish(),
+    totalPauseDuration: z.number().nullish(),
+  }),
+});
+const phasedResponse = z.object({ data: phasedResource.nullable() });
+const phasedCreateResponse = z.object({ data: phasedRef });
+
+const releaseDocument = z.object({
+  data: appStoreResourceRef.extend({
+    type: z.literal('appStoreVersions'),
+    attributes: z.object({
+      versionString: z.string().nullish(),
+      appStoreState: z.string().nullish(),
+      appVersionState: z.string().nullish(),
+      releaseType: z.string().nullish(),
+      earliestReleaseDate: z.string().nullish(),
+    }).nullish(),
+    relationships: z.object({ [phasedRelation]: z.unknown().optional() }).nullish(),
+  }),
+  included: z.array(z.unknown()).nullish(),
+});
+
+async function readVersion(versionId: string, includePhased = false) {
+  const fields = 'versionString,appStoreState,appVersionState,releaseType,earliestReleaseDate';
+  const document = await getAppStoreResponse(releaseDocument, `/appStoreVersions/${encodePathSegment(versionId)}`, {
+    'fields[appStoreVersions]': includePhased ? `${fields},${phasedRelation}` : fields,
+    ...(includePhased ? { include: phasedRelation, [`fields[${phasedType}]`]: phasedFields } : {}),
+  });
+  if (document.data.id !== versionId) throw new Error('App Store Connect에서 요청한 버전과 다른 버전을 반환했습니다.');
+  return document;
 }
 
-async function send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
-  const headers = await authHeadersOrThrow();
-  return apiRequest<T>(V1_BASE, path, headers, {
-    method,
-    ...(body === undefined
-      ? {}
-      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-  });
+function versionSummary(row: z.infer<typeof releaseDocument>['data']): VersionReleaseSummary {
+  const a = row.attributes;
+  return {
+    versionId: row.id,
+    versionString: a?.versionString ?? undefined,
+    state: a?.appStoreState ?? a?.appVersionState ?? undefined,
+    releaseType: a?.releaseType ?? undefined,
+    earliestReleaseDate: a?.earliestReleaseDate ?? undefined,
+  };
 }
 
 export async function getVersionSummary(versionId: string): Promise<VersionReleaseSummary> {
-  const data = await get<{ data?: { id: string; attributes?: Record<string, string> } }>(
-    `/appStoreVersions/${encodePathSegment(versionId)}`,
-    { 'fields[appStoreVersions]': 'versionString,appStoreState,releaseType,earliestReleaseDate' },
-  );
-  const a = data.data?.attributes ?? {};
+  return versionSummary((await readVersion(versionId)).data);
+}
+
+function phasedSummary(row: z.infer<typeof phasedResource>): PhasedReleaseSummary {
+  const attributes = row.attributes;
   return {
-    versionId,
-    versionString: a.versionString,
-    state: a.appStoreState,
-    releaseType: a.releaseType,
-    earliestReleaseDate: a.earliestReleaseDate,
+    id: row.id,
+    state: attributes.phasedReleaseState,
+    currentDayNumber: attributes.currentDayNumber ?? undefined,
+    startDate: attributes.startDate ?? undefined,
+    totalPauseDuration: attributes.totalPauseDuration ?? undefined,
   };
 }
 
 /** to-one 관계는 없을 때 200 + data:null 로 오기도 하고 404 로 오기도 한다. 둘 다 "없음"으로 본다. */
-async function getPhasedRelease(versionId: string): Promise<PhasedReleaseSummary | null> {
+async function getPhasedRelease(versionId: string, linkedId?: string): Promise<PhasedReleaseSummary | null> {
   try {
-    const data = await get<{ data?: { id: string; attributes?: Record<string, unknown> } | null }>(
-      `/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionPhasedRelease`,
+    const { data } = await getAppStoreResponse(
+      phasedResponse, `/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionPhasedRelease`,
+      { [`fields[${phasedType}]`]: phasedFields },
     );
-    if (!data.data) return null;
-    const a = (data.data.attributes ?? {});
-    return {
-      id: data.data.id,
-      state: a.phasedReleaseState as PhasedReleaseState | undefined,
-      currentDayNumber: a.currentDayNumber as number | undefined,
-      startDate: a.startDate as string | undefined,
-      totalPauseDuration: a.totalPauseDuration as number | undefined,
-    };
+    if (linkedId && data?.id !== linkedId) throw new Error('App Store Connect의 단계적 출시 연결과 상세 조회 결과가 일치하지 않습니다.');
+    return data ? phasedSummary(data) : null;
   } catch (err) {
-    if (isNotFound(err)) return null;
+    if (!linkedId && isNotFound(err)) return null;
     throw err;
   }
 }
@@ -106,8 +140,12 @@ export async function getReleaseStatus(versionId: string): Promise<{
   phased: PhasedReleaseSummary | null;
   note: string;
 }> {
-  const version = await getVersionSummary(versionId);
-  const phased = await getPhasedRelease(versionId);
+  const document = await readVersion(versionId, true);
+  const version = versionSummary(document.data);
+  const linkage = appStoreToOne.safeParse(document.data.relationships?.[phasedRelation]).data?.data;
+  const ref = linkage?.type === phasedType ? linkage : undefined;
+  const included = ref && includedAppStoreResource(document.included, ref, phasedResource);
+  const phased = linkage === null ? null : included ? phasedSummary(included) : await getPhasedRelease(versionId, ref?.id);
   return { version, phased, note: stateNote(version.state) };
 }
 
@@ -130,7 +168,7 @@ export async function requestRelease(versionId: string): Promise<VersionReleaseS
     );
   }
 
-  await send('POST', '/appStoreVersionReleaseRequests', {
+  await apiPost<unknown>('/appStoreVersionReleaseRequests', {
     data: {
       type: 'appStoreVersionReleaseRequests',
       relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } } },
@@ -160,7 +198,7 @@ export async function updateReleaseType(args: {
   if (releaseType === 'SCHEDULED') attributes.earliestReleaseDate = earliestReleaseDate;
   else if (earliestReleaseDate === undefined) attributes.earliestReleaseDate = null;
 
-  await send('PATCH', `/appStoreVersions/${encodePathSegment(versionId)}`, {
+  await apiPatch<unknown>(`/appStoreVersions/${encodePathSegment(versionId)}`, {
     data: { type: 'appStoreVersions', id: versionId, attributes },
   });
 
@@ -181,23 +219,23 @@ export async function setPhasedRelease(args: {
   action: Exclude<PhasedReleaseAction, 'status'>;
 }): Promise<{ action: string; phased: PhasedReleaseSummary | null; version: VersionReleaseSummary }> {
   const { versionId, action } = args;
-  const version = await getVersionSummary(versionId);
-  const current = await getPhasedRelease(versionId);
+  const { version, phased: current } = await getReleaseStatus(versionId);
 
   if (action === 'enable') {
     if (!current) {
-      const created = await send<{ data?: { id: string } }>('POST', '/appStoreVersionPhasedReleases', {
+      const result = await apiPost<unknown>('/appStoreVersionPhasedReleases', {
         data: {
           type: 'appStoreVersionPhasedReleases',
           attributes: { phasedReleaseState: 'ACTIVE' },
           relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } } },
         },
       });
-      void created;
-    } else if (current.state === 'PAUSED') {
-      await patchState(current.id, 'ACTIVE');
+      const createdId = phasedCreateResponse.safeParse(result).data?.data.id;
+      return { action, phased: await verifyPhasedChange(versionId, createdId), version };
     }
-    return { action, phased: await getPhasedRelease(versionId), version };
+    if (current.state !== 'PAUSED') return { action, phased: current, version };
+    await patchState(current.id, 'ACTIVE');
+    return { action, phased: await verifyPhasedChange(versionId, current.id, 'ACTIVE'), version };
   }
 
   if (!current) {
@@ -210,18 +248,33 @@ export async function setPhasedRelease(args: {
   }
 
   if (action === 'disable') {
-    await send('DELETE', `/appStoreVersionPhasedReleases/${encodePathSegment(current.id)}`);
+    await apiRequest<unknown>(V1_BASE, `/appStoreVersionPhasedReleases/${encodePathSegment(current.id)}`, await authHeadersOrThrow(), {
+      method: 'DELETE',
+    });
     return { action, phased: null, version };
   }
 
   const next: PhasedReleaseState =
     action === 'pause' ? 'PAUSED' : action === 'resume' ? 'ACTIVE' : 'COMPLETE';
   await patchState(current.id, next);
-  return { action, phased: await getPhasedRelease(versionId), version };
+  return { action, phased: await verifyPhasedChange(versionId, current.id, next), version };
+}
+
+async function verifyPhasedChange(versionId: string, id?: string, expectedState?: PhasedReleaseState) {
+  try {
+    const phased = await getPhasedRelease(versionId, id);
+    if (!phased || (expectedState && phased.state !== expectedState)) {
+      throw new Error('단계적 출시의 변경된 상태가 응답에 없습니다.');
+    }
+    return phased;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`단계적 출시 변경 요청이 접수됐지만 결과를 확인할 수 없습니다. 상태를 먼저 조회하세요. 원인: ${reason}`, { cause: error });
+  }
 }
 
 async function patchState(phasedReleaseId: string, state: PhasedReleaseState): Promise<void> {
-  await send('PATCH', `/appStoreVersionPhasedReleases/${encodePathSegment(phasedReleaseId)}`, {
+  await apiPatch<unknown>(`/appStoreVersionPhasedReleases/${encodePathSegment(phasedReleaseId)}`, {
     data: {
       type: 'appStoreVersionPhasedReleases',
       id: phasedReleaseId,

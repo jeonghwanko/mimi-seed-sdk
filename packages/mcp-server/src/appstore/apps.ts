@@ -17,7 +17,7 @@ interface AppAttributes {
 
 export async function listApps() {
   const data = await apiGet<AscListDocument<AppAttributes>>('/apps', {
-    'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
+    'fields[apps]': 'name,bundleId,sku,primaryLocale',
     'limit': '200',
   });
   return (data.data ?? []).map((a) => ({
@@ -32,7 +32,6 @@ export async function listApps() {
 export async function getApp(appId: string) {
   const data = await apiGet<AscSingleDocument<AppAttributes>>(`/apps/${encodePathSegment(appId)}`, {
     'fields[apps]': 'name,bundleId,sku,primaryLocale,contentRightsDeclaration',
-    'include': 'appStoreVersions',
   });
   return data.data;
 }
