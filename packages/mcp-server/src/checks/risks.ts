@@ -237,87 +237,116 @@ export async function checkAppStoreVersionRisks(
   { id: selectedVersionId, platform }: Pick<AppStoreVersionCandidate, 'id' | 'platform'>,
   expected: AppStorePolicy = {},
 ): Promise<SubmissionRisk[]> {
+  const [localizations, policy] = await Promise.all([
+    checkAppStoreLocalizationRisks(selectedVersionId),
+    checkAppStorePolicyRisks(appId, platform, expected),
+  ]);
+  return [...localizations, ...policy];
+}
+
+const MAX_SCREENSHOT_LOOKUPS = 4;
+type VersionLocalization = z.infer<typeof versionLocalizationPage>['data'][number];
+
+async function checkAppStoreLocalizationRisks(selectedVersionId: string): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
   const versionId = encodePathSegment(selectedVersionId);
+  const locs = await safeGet(
+    () => getAppStoreResponse(versionLocalizationPage, `/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
+      limit: '200',
+      include: 'placements,appScreenshotSets',
+      'limit[placements]': '50',
+      'limit[appScreenshotSets]': '1',
+      'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,placements,appScreenshotSets',
+      'fields[appAssetLibraryPlacements]': 'placementType,state,image',
+    }),
+    risks,
+    'LOCALIZATIONS',
+    '버전 로컬라이제이션',
+  );
+  if (!locs) return risks;
 
-  // 버전 메타데이터·스크린샷과 앱 단위 개인정보처리방침을 병행 조회한다.
-  const [locs, appInfo] = await Promise.all([
-    safeGet(
-      () => getAppStoreResponse(versionLocalizationPage, `/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
-        limit: '200',
-        include: 'placements,appScreenshotSets',
-        'limit[placements]': '50',
-        'limit[appScreenshotSets]': '1',
-        'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,placements,appScreenshotSets',
-        'fields[appAssetLibraryPlacements]': 'placementType,state,image',
-      }),
-      risks,
-      'LOCALIZATIONS',
-      '버전 로컬라이제이션',
-    ),
-    safeGet(
-      () => selectAppInfo(appId, { privacyPlatform: platform }),
-      risks,
-      'APP_INFO',
-      '앱 정보',
-    ),
-  ]);
-
-  if (locs && pageIsIncomplete(locs, locs.data.length)) {
+  if (pageIsIncomplete(locs, locs.data.length)) {
     risks.push({
       level: 'warning',
       code: 'API_ERROR_LOCALIZATIONS_INCOMPLETE',
       title: '버전 로컬라이제이션 목록이 불완전함',
       detail: 'App Store Connect에서 대상 버전의 전체 로컬라이제이션을 확인하세요.',
     });
-  } else if (locs?.data.length === 0) {
+  } else if (locs.data.length === 0) {
     risks.push({ level: 'blocker', code: 'NO_LOCALIZATIONS', title: '로컬라이제이션 없음', detail: '메타데이터를 입력하세요.' });
   }
 
-  if (locs) {
-    const placementsById = indexIncludedPlacements(locs.included ?? []);
-    for (const loc of locs.data) {
-      const { locale: rawLocale, description, whatsNew, keywords } = loc.attributes ?? {};
-      const locale = rawLocale ?? loc.id;
-      if (!description) risks.push({ level: 'blocker', code: `NO_DESC_${locale}`, title: `${locale} 설명 없음`, detail: '앱 설명은 필수 항목입니다.' });
-      if (!whatsNew) risks.push({ level: 'warning', code: `NO_WHATS_NEW_${locale}`, title: `${locale} 새로운 기능 없음`, detail: '릴리즈 노트를 입력하면 다운로드 전환율이 높아집니다.' });
-      if (!keywords) risks.push({ level: 'warning', code: `NO_KEYWORDS_${locale}`, title: `${locale} 키워드 없음`, detail: '키워드는 검색 노출에 직접 영향을 줍니다.' });
-
-      const screenshots = await safeGet(
-        async () => {
-          let readiness = includedScreenshotReadiness(loc.relationships?.placements, placementsById);
-          if (readiness === 'unknown') {
-            const placements = await listMediaPlacements(loc.id, 'screenshots');
-            readiness = placements ? screenshotPlacementReadiness(placements) : 'missing';
-          }
-          if (readiness === 'missing' && screenshotSetPresence(loc.relationships?.appScreenshotSets) !== false) {
-            readiness = await checkLegacyScreenshotReadiness(loc.id);
-          }
-          if (readiness === 'unknown') throw new Error('App Store Connect의 스크린샷 상태를 확인할 수 없습니다.');
-          return readiness;
-        },
-        risks,
-        `SCREENSHOTS_${locale}`,
-        `${locale} 스크린샷`,
-      );
-      if (screenshots === 'missing') {
-        risks.push({
-          level: 'blocker',
-          code: `NO_SCREENSHOTS_${locale}`,
-          title: `${locale} 스크린샷 없음`,
-          detail: '대상 플랫폼에서 허용하는 스크린샷을 로케일에 배치하세요.',
-        });
-      } else if (screenshots === 'not-ready') {
-        risks.push({
-          level: 'blocker',
-          code: `SCREENSHOTS_NOT_READY_${locale}`,
-          title: `${locale} 스크린샷 준비 미완료`,
-          detail: '배치된 스크린샷이 처리 중이거나 처리에 실패했습니다. App Store Connect에서 상태를 확인하세요.',
-        });
-      }
+  const placementsById = indexIncludedPlacements(locs.included ?? []);
+  const localeRisks = new Array<SubmissionRisk[]>(locs.data.length);
+  let nextLocale = 0;
+  // Each worker finishes one locale's placement and legacy fallbacks before taking the next.
+  await Promise.all(Array.from({ length: Math.min(MAX_SCREENSHOT_LOOKUPS, locs.data.length) }, async () => {
+    while (nextLocale < locs.data.length) {
+      const index = nextLocale++;
+      localeRisks[index] = await checkAppStoreLocale(locs.data[index], placementsById);
     }
-  }
+  }));
+  return risks.concat(...localeRisks);
+}
 
+async function checkAppStoreLocale(
+  loc: VersionLocalization,
+  placementsById: ReturnType<typeof indexIncludedPlacements>,
+): Promise<SubmissionRisk[]> {
+  const risks: SubmissionRisk[] = [];
+  const { locale: rawLocale, description, whatsNew, keywords } = loc.attributes ?? {};
+  const locale = rawLocale ?? loc.id;
+  if (!description) risks.push({ level: 'blocker', code: `NO_DESC_${locale}`, title: `${locale} 설명 없음`, detail: '앱 설명은 필수 항목입니다.' });
+  if (!whatsNew) risks.push({ level: 'warning', code: `NO_WHATS_NEW_${locale}`, title: `${locale} 새로운 기능 없음`, detail: '릴리즈 노트를 입력하면 다운로드 전환율이 높아집니다.' });
+  if (!keywords) risks.push({ level: 'warning', code: `NO_KEYWORDS_${locale}`, title: `${locale} 키워드 없음`, detail: '키워드는 검색 노출에 직접 영향을 줍니다.' });
+
+  const screenshots = await safeGet(
+    async () => {
+      let readiness = includedScreenshotReadiness(loc.relationships?.placements, placementsById);
+      if (readiness === 'unknown') {
+        const placements = await listMediaPlacements(loc.id, 'screenshots');
+        readiness = placements ? screenshotPlacementReadiness(placements) : 'missing';
+      }
+      if (readiness === 'missing' && screenshotSetPresence(loc.relationships?.appScreenshotSets) !== false) {
+        readiness = await checkLegacyScreenshotReadiness(loc.id);
+      }
+      if (readiness === 'unknown') throw new Error('App Store Connect의 스크린샷 상태를 확인할 수 없습니다.');
+      return readiness;
+    },
+    risks,
+    `SCREENSHOTS_${locale}`,
+    `${locale} 스크린샷`,
+  );
+  if (screenshots === 'missing') {
+    risks.push({
+      level: 'blocker',
+      code: `NO_SCREENSHOTS_${locale}`,
+      title: `${locale} 스크린샷 없음`,
+      detail: '대상 플랫폼에서 허용하는 스크린샷을 로케일에 배치하세요.',
+    });
+  } else if (screenshots === 'not-ready') {
+    risks.push({
+      level: 'blocker',
+      code: `SCREENSHOTS_NOT_READY_${locale}`,
+      title: `${locale} 스크린샷 준비 미완료`,
+      detail: '배치된 스크린샷이 처리 중이거나 처리에 실패했습니다. App Store Connect에서 상태를 확인하세요.',
+    });
+  }
+  return risks;
+}
+
+async function checkAppStorePolicyRisks(
+  appId: string,
+  platform: AppStoreVersionCandidate['platform'],
+  expected: AppStorePolicy,
+): Promise<SubmissionRisk[]> {
+  const risks: SubmissionRisk[] = [];
+  const appInfo = await safeGet(
+    () => selectAppInfo(appId, { privacyPlatform: platform }),
+    risks,
+    'APP_INFO',
+    '앱 정보',
+  );
   if (!appInfo) return risks;
   if ('reason' in appInfo) {
     risks.push({
@@ -330,20 +359,23 @@ export async function checkAppStoreVersionRisks(
   }
 
   const { target, policy } = appInfo;
+  const privacyRisks: SubmissionRisk[] = [];
+  const ageRatingRisks: SubmissionRisk[] = [];
   const [hasPrivacy, ageRating] = await Promise.all([
     policy.hasPrivacy ?? safeGet(
       () => readAppInfoPrivacy(target.id, platform),
-      risks,
+      privacyRisks,
       'PRIVACY',
       '개인정보 로컬라이제이션',
     ),
     policy.ageRating ?? safeGet(
       () => readAppInfoAgeRatingForRelease(target.id),
-      risks,
+      ageRatingRisks,
       'AGE_RATING_SOCIAL',
       '연령등급 소셜 미디어 응답',
     ),
   ]);
+  risks.push(...privacyRisks, ...ageRatingRisks);
   if (hasPrivacy === false) {
     risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 없음', detail: platform === 'TV_OS' ? '대상 tvOS 앱의 개인정보처리방침 텍스트를 입력하세요.' : '대상 앱의 개인정보처리방침 URL을 입력하세요.' });
   }

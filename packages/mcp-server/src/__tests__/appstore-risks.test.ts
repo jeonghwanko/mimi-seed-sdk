@@ -161,6 +161,50 @@ describe('checkAppStoreRisks', () => {
     });
   }
 
+  it('로케일 보완 조회를 최대 4개씩 진행하고 원래 로케일 순서를 유지한다', async () => {
+    const locales = ['en-US', 'ko', 'ja', 'it', 'de-DE'];
+    const pending = new Map<string, () => void>();
+    const started: string[] = [];
+    mockReadinessResponse('/appStoreVersions/version-1/appStoreVersionLocalizations', {
+      data: locales.map((locale) => mediaLocale(locale, `placement-${locale}`)),
+    });
+    const base = mocks.apiGet.getMockImplementation();
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      const match = /^\/appStoreVersionLocalizations\/loc-(.+)\/placements$/.exec(path);
+      if (!match) return base?.(path);
+      const locale = match[1];
+      started.push(locale);
+      await new Promise<void>((resolve) => { pending.set(locale, resolve); });
+      return { data: [] };
+    });
+
+    const check = checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    await vi.waitFor(() => expect(started).toEqual(locales.slice(0, 4)));
+    pending.get('it')?.();
+    await vi.waitFor(() => expect(started).toEqual(locales));
+    for (const locale of [...locales].reverse()) pending.get(locale)?.();
+    await expect(check).resolves.toEqual(locales.map((locale) => expect.objectContaining({ code: `NO_SCREENSHOTS_${locale}` })));
+  });
+
+  it('로케일 목록 응답이 오기 전에 앱 정책 보완 조회를 시작한다', async () => {
+    const locsPath = '/appStoreVersions/version-1/appStoreVersionLocalizations';
+    let finishLocalizations!: (value: unknown) => void;
+    const localizations = new Promise((resolve) => { finishLocalizations = resolve; });
+    mockReadinessResponse(locsPath, localizations);
+
+    const check = checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    try {
+      await vi.waitFor(() => {
+        const paths = mocks.apiGet.mock.calls.map(([path]) => path);
+        expect(paths).toContain('/appInfos/info-1/appInfoLocalizations');
+        expect(paths).toContain('/appInfos/info-1/ageRatingDeclaration');
+      });
+    } finally {
+      finishLocalizations({ data: [] });
+      await check;
+    }
+  });
+
   it.each([
     ['/apps/1234567890/appStoreVersions', { meta: {} }, 'API_ERROR_VERSIONS'],
     ['/apps/1234567890/appStoreVersions', { data: [], meta: { paging: { nextCursor: 'next' } } }, 'API_ERROR_VERSIONS_INCOMPLETE'],

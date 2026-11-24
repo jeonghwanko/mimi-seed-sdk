@@ -22,6 +22,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - `release_status` accepts an exact Google Play version code and can disambiguate an App Store version by platform.
 
+### Changed
+
+- App Store release checks overlap screenshot lookups across localizations and start policy lookups as soon as the app info is available.
+
 ### Fixed
 
 - Google Play operations for the same app wait for the current edit to finish in the MCP process. Failed writes discard the edit if the commit has yet to start.
