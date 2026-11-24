@@ -12,7 +12,7 @@ import { apiGet } from '../appstore/tools.js';
 import { isNotFound } from '../appstore/http.js';
 import type { AscListDocument } from '../appstore/types.js';
 import { encodePathSegment } from '../lib/url-path.js';
-import { APPSTORE_EDITABLE_STATES, checkPlayStoreRisks, checkAppStoreRisks, isRiskCheckIncomplete, type SubmissionRisk } from './risks.js';
+import { APPSTORE_EDITABLE_STATES, checkPlayStoreRisksInEdit, checkAppStoreRisks, isRiskCheckIncomplete, type SubmissionRisk } from './risks.js';
 
 export type StepState = 'done' | 'pending' | 'blocked';
 
@@ -107,27 +107,25 @@ export async function buildPlayStoreReleasePlan(opts: {
   const { auth, packageName, versionCode, track, language } = opts;
   const steps: PlanStep[] = [];
 
-  // 1) 인증 + 트랙 / 빌드 상태 조회 (단일 edit session)
-  let trackInfo: { hasTargetVersion: boolean; selectedVersionCode?: string; releaseStatus?: string } = {
-    hasTargetVersion: false,
-  };
+  // 트랙과 제출 위험을 같은 edit에서 조회해 대상 빌드 선택에 사용한 응답을 재사용한다.
+  let checks;
   try {
-    await withEdit(auth, packageName, async (editId) => {
-      // 리스팅 존재 여부는 checkPlayStoreRisks 가 따로 본다. 예전엔 여기서도 한 번 더
-      // 받아 listingPresent 에 담았지만 그 값을 읽는 곳이 없어 edit 세션마다 낭비였다.
-      const tracks = await publisher()
-        .edits.tracks.list({ auth, packageName, editId });
-      const targetTrack = tracks.data.tracks?.find((t) => t.track === track);
+    checks = await withEdit(auth, packageName, async (editId) => {
+      const { data } = await publisher().edits.tracks.list({ auth, packageName, editId });
+      const tracks = data.tracks ?? [];
+      const targetTrack = tracks.find((t) => t.track === track);
       const releases = targetTrack?.releases ?? [];
       const selectedVersionCode = versionCode ?? releases.flatMap((candidate) => candidate.versionCodes ?? [])
         .reduce<string | undefined>((latest, code) => latest === undefined || Number(code) > Number(latest) ? code : latest, undefined);
       const release = releases.find((candidate) => selectedVersionCode && candidate.versionCodes?.includes(selectedVersionCode));
-      trackInfo = {
+      const trackInfo = {
         hasTargetVersion: release !== undefined,
         selectedVersionCode,
         releaseStatus: release?.status ?? undefined,
       };
-      return null;
+      const target = selectedVersionCode ? { track, versionCode: selectedVersionCode } : undefined;
+      const risks = await checkPlayStoreRisksInEdit(auth, packageName, editId, language, target, tracks);
+      return { trackInfo, target, risks };
     });
     steps.push({ state: 'done', title: 'Google Play 인증 + 트랙 조회 성공' });
   } catch (e) {
@@ -142,6 +140,8 @@ export async function buildPlayStoreReleasePlan(opts: {
       steps,
     );
   }
+
+  const { trackInfo, target, risks } = checks;
 
   // 2) 빌드 도착 확인
   if (trackInfo.hasTargetVersion) {
@@ -162,8 +162,6 @@ export async function buildPlayStoreReleasePlan(opts: {
   }
 
   // 3) 메타데이터 / 스크린샷 / 정책 위험 점검
-  const target = trackInfo.selectedVersionCode ? { track, versionCode: trackInfo.selectedVersionCode } : undefined;
-  const risks = await checkPlayStoreRisks(auth, packageName, language, target);
   if (risks.length === 0) {
     steps.push({
       state: 'done',

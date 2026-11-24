@@ -1,8 +1,9 @@
+import { z } from 'zod';
 import type { OAuth2Client } from 'google-auth-library';
+import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { apiGet } from '../appstore/tools.js';
 import { isNotFound } from '../appstore/http.js';
-import type { AscListDocument } from '../appstore/types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { extractHttpStatus } from '../lib/google-errors.js';
 
@@ -29,89 +30,95 @@ export async function checkPlayStoreRisks(
   language = 'ko-KR',
   target?: { track: string; versionCode: string },
 ): Promise<SubmissionRisk[]> {
+  return withEdit(auth, packageName, (editId) => checkPlayStoreRisksInEdit(auth, packageName, editId, language, target));
+}
+
+export async function checkPlayStoreRisksInEdit(
+  auth: OAuth2Client,
+  packageName: string,
+  editId: string,
+  language: string,
+  target?: { track: string; versionCode: string },
+  tracksSnapshot?: readonly androidpublisher_v3.Schema$Track[],
+): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
 
-  await withEdit(auth, packageName, async (editId) => {
-    const [listing, phoneScreenshots, icons, details, tracks] = await Promise.all([
-      safeGet(async () => {
-        try {
-          return await publisher().edits.listings.get({ auth, packageName, editId, language });
-        } catch (error) {
-          if (extractHttpStatus(error) === 404) return { data: null };
-          throw error;
-        }
-      }, risks, 'LISTING', `${language} 리스팅`),
-      safeGet(
-        () => publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'phoneScreenshots' }),
-        risks, 'SCREENSHOTS', '전화 스크린샷',
-      ),
-      safeGet(
-        () => publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'icon' }),
-        risks, 'ICON', '앱 아이콘',
-      ),
-      safeGet(
-        () => publisher().edits.details.get({ auth, packageName, editId }),
-        risks, 'DETAILS', '앱 연락처',
-      ),
-      safeGet(
-        () => publisher().edits.tracks.list({ auth, packageName, editId }),
-        risks, 'TRACKS', '릴리스 트랙',
-      ),
-    ]);
-
-    if (listing && !listing.data) {
-      risks.push({ level: 'blocker', code: 'NO_LISTING', title: `${language} 리스팅 없음`, detail: 'Play Console에서 스토어 정보를 입력하세요.', fixUrl: 'https://play.google.com/console/developers' });
-    } else if (listing?.data) {
-      const { title, shortDescription, fullDescription } = listing.data;
-      if (!title || title.length < 2) {
-        risks.push({ level: 'blocker', code: 'NO_TITLE', title: '앱 이름 없음', detail: '제목은 필수 항목입니다.' });
-      } else if (title.length > 50) {
-        risks.push({ level: 'warning', code: 'TITLE_TOO_LONG', title: '앱 이름 50자 초과', detail: `현재 ${title.length}자. Google 가이드라인: 50자 이내.` });
+  const [listing, phoneScreenshots, icons, details, tracks] = await Promise.all([
+    safeGet(async () => {
+      try {
+        return await publisher().edits.listings.get({ auth, packageName, editId, language });
+      } catch (error) {
+        if (extractHttpStatus(error) === 404) return { data: null };
+        throw error;
       }
-      if (!shortDescription || shortDescription.length < 10) {
-        risks.push({ level: 'warning', code: 'NO_SHORT_DESC', title: '짧은 설명 없음', detail: '짧은 설명은 검색 노출에 영향을 줍니다.' });
+    }, risks, 'LISTING', `${language} 리스팅`),
+    safeGet(
+      () => publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'phoneScreenshots' }),
+      risks, 'SCREENSHOTS', '전화 스크린샷',
+    ),
+    safeGet(
+      () => publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'icon' }),
+      risks, 'ICON', '앱 아이콘',
+    ),
+    safeGet(
+      () => publisher().edits.details.get({ auth, packageName, editId }),
+      risks, 'DETAILS', '앱 연락처',
+    ),
+    tracksSnapshot ?? safeGet(
+      async () => (await publisher().edits.tracks.list({ auth, packageName, editId })).data.tracks ?? [],
+      risks, 'TRACKS', '릴리스 트랙',
+    ),
+  ]);
+
+  if (listing && !listing.data) {
+    risks.push({ level: 'blocker', code: 'NO_LISTING', title: `${language} 리스팅 없음`, detail: 'Play Console에서 스토어 정보를 입력하세요.', fixUrl: 'https://play.google.com/console/developers' });
+  } else if (listing?.data) {
+    const { title, shortDescription, fullDescription } = listing.data;
+    if (!title || title.length < 2) {
+      risks.push({ level: 'blocker', code: 'NO_TITLE', title: '앱 이름 없음', detail: '제목은 필수 항목입니다.' });
+    } else if (title.length > 50) {
+      risks.push({ level: 'warning', code: 'TITLE_TOO_LONG', title: '앱 이름 50자 초과', detail: `현재 ${title.length}자. Google 가이드라인: 50자 이내.` });
+    }
+    if (!shortDescription || shortDescription.length < 10) {
+      risks.push({ level: 'warning', code: 'NO_SHORT_DESC', title: '짧은 설명 없음', detail: '짧은 설명은 검색 노출에 영향을 줍니다.' });
+    }
+    if (!fullDescription || fullDescription.length < 50) {
+      risks.push({ level: 'blocker', code: 'NO_FULL_DESC', title: '전체 설명 없음', detail: '전체 설명은 필수 항목입니다.' });
+    } else if (fullDescription.length > 4000) {
+      risks.push({ level: 'warning', code: 'DESC_TOO_LONG', title: '설명 4000자 초과', detail: `현재 ${fullDescription.length}자. 4000자 이내로 줄이세요.` });
+    }
+  }
+
+  const screenCount = phoneScreenshots?.data?.images?.length ?? 0;
+  if (phoneScreenshots && screenCount === 0) {
+    risks.push({ level: 'blocker', code: 'NO_SCREENSHOTS', title: '전화 스크린샷 없음', detail: '최소 2장 이상의 스크린샷이 필요합니다.' });
+  } else if (phoneScreenshots && screenCount < 2) {
+    risks.push({ level: 'warning', code: 'FEW_SCREENSHOTS', title: `스크린샷 ${screenCount}장 (권장: 4~8장)`, detail: '더 많은 스크린샷이 전환율을 높입니다.' });
+  }
+
+  if (icons && !icons.data?.images?.length) {
+    risks.push({ level: 'blocker', code: 'NO_ICON', title: '앱 아이콘 없음', detail: '512×512px PNG 아이콘이 필요합니다.' });
+  }
+
+  if (details && !details.data?.contactEmail) {
+    risks.push({ level: 'warning', code: 'NO_CONTACT_EMAIL', title: '개발자 이메일 없음', detail: 'Play Console에서 개발자 연락처를 설정하세요.' });
+  }
+
+  if (tracks) {
+    if (target) {
+      const targetTrack = tracks.find((track) => track.track === target.track);
+      if (!targetTrack?.releases?.some((release) => release.versionCodes?.includes(target.versionCode))) {
+        risks.push({
+          level: 'blocker',
+          code: 'TARGET_BUILD_NOT_FOUND',
+          title: '대상 트랙에서 빌드를 찾을 수 없음',
+          detail: `${target.track} 트랙에 versionCode ${target.versionCode}가 있는지 확인하세요.`,
+        });
       }
-      if (!fullDescription || fullDescription.length < 50) {
-        risks.push({ level: 'blocker', code: 'NO_FULL_DESC', title: '전체 설명 없음', detail: '전체 설명은 필수 항목입니다.' });
-      } else if (fullDescription.length > 4000) {
-        risks.push({ level: 'warning', code: 'DESC_TOO_LONG', title: '설명 4000자 초과', detail: `현재 ${fullDescription.length}자. 4000자 이내로 줄이세요.` });
-      }
+    } else if (!tracks.some((track) => track.releases?.some((release) => release.versionCodes?.length))) {
+      risks.push({ level: 'blocker', code: 'NO_BUILD', title: '업로드된 빌드 없음', detail: '내부 테스트 트랙에 APK/AAB를 먼저 업로드하세요.' });
     }
-
-    const screenCount = phoneScreenshots?.data?.images?.length ?? 0;
-    if (phoneScreenshots && screenCount === 0) {
-      risks.push({ level: 'blocker', code: 'NO_SCREENSHOTS', title: '전화 스크린샷 없음', detail: '최소 2장 이상의 스크린샷이 필요합니다.' });
-    } else if (phoneScreenshots && screenCount < 2) {
-      risks.push({ level: 'warning', code: 'FEW_SCREENSHOTS', title: `스크린샷 ${screenCount}장 (권장: 4~8장)`, detail: '더 많은 스크린샷이 전환율을 높입니다.' });
-    }
-
-    if (icons && !icons.data?.images?.length) {
-      risks.push({ level: 'blocker', code: 'NO_ICON', title: '앱 아이콘 없음', detail: '512×512px PNG 아이콘이 필요합니다.' });
-    }
-
-    if (details && !details.data?.contactEmail) {
-      risks.push({ level: 'warning', code: 'NO_CONTACT_EMAIL', title: '개발자 이메일 없음', detail: 'Play Console에서 개발자 연락처를 설정하세요.' });
-    }
-
-    if (tracks) {
-      const releaseTracks = tracks.data.tracks ?? [];
-      if (target) {
-        const targetTrack = releaseTracks.find((track) => track.track === target.track);
-        if (!targetTrack?.releases?.some((release) => release.versionCodes?.includes(target.versionCode))) {
-          risks.push({
-            level: 'blocker',
-            code: 'TARGET_BUILD_NOT_FOUND',
-            title: '대상 트랙에서 빌드를 찾을 수 없음',
-            detail: `${target.track} 트랙에 versionCode ${target.versionCode}가 있는지 확인하세요.`,
-          });
-        }
-      } else if (!releaseTracks.some((track) => track.releases?.some((release) => release.versionCodes?.length))) {
-        risks.push({ level: 'blocker', code: 'NO_BUILD', title: '업로드된 빌드 없음', detail: '내부 테스트 트랙에 APK/AAB를 먼저 업로드하세요.' });
-      }
-    }
-
-    return null;
-  });
+  }
 
   return risks;
 }
@@ -138,26 +145,75 @@ async function safeGet<T>(
 
 const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
 
-interface AppInfoRecord {
-  id: string;
-  attributes?: { state?: string; appStoreState?: string };
+const idResource = z.object({ id: z.string().min(1) });
+const pagination = z.object({
+  links: z.object({ next: z.string().nullish() }).nullish(),
+  meta: z.object({ paging: z.object({
+    total: z.number().int().nonnegative().optional(),
+    nextCursor: z.string().nullish(),
+  }).optional() }).optional(),
+});
+const resourcePage = pagination.extend({ data: z.array(idResource) });
+const screenshotPage = pagination.extend({ data: z.array(z.unknown()) });
+const versionLocalizationPage = pagination.extend({
+  data: z.array(idResource.extend({
+    attributes: z.object({
+      locale: z.string().nullish(),
+      description: z.string().trim().nullish(),
+      whatsNew: z.string().trim().nullish(),
+      keywords: z.string().trim().nullish(),
+    }).nullish(),
+    relationships: z.object({ appScreenshotSets: z.unknown() }).nullish(),
+  })),
+});
+const appInfoPage = pagination.extend({
+  data: z.array(idResource.extend({
+    attributes: z.object({ state: z.string().nullish(), appStoreState: z.string().nullish() }).nullish(),
+  })),
+});
+const privacyLocalizationPage = pagination.extend({
+  data: z.array(z.object({
+    attributes: z.object({
+      privacyPolicyUrl: z.string().trim().nullish(),
+      privacyPolicyText: z.string().trim().nullish(),
+    }).nullish(),
+  })),
+});
+const buildRelationship = z.object({
+  data: idResource.extend({ type: z.literal('builds').optional() }).nullable(),
+});
+const ageAnswer = z.boolean().nullish().transform((value) => value ?? undefined);
+const ageRatingResponse = z.object({
+  data: z.object({
+    attributes: z.object({
+      userGeneratedContent: ageAnswer,
+      socialMedia: ageAnswer,
+      socialMediaAgeRestricted: ageAnswer,
+      ageAssurance: ageAnswer,
+    }),
+  }).nullable(),
+});
+
+async function getAppStoreResponse<T>(schema: z.ZodType<T>, path: string, params?: Record<string, string>): Promise<T> {
+  const response = schema.safeParse(await apiGet<unknown>(path, params));
+  if (!response.success) {
+    const field = response.error.issues[0]?.path.join('.') || '응답 본문';
+    throw new Error(`App Store Connect 응답 형식 오류 (${field}).`);
+  }
+  return response.data;
 }
 
-interface AppInfoLocalizationRecord {
-  attributes?: { locale?: string; privacyPolicyUrl?: string; privacyPolicyText?: string };
+function pageIsIncomplete(page: z.infer<typeof pagination>, count: number): boolean {
+  return Boolean(page.links?.next || page.meta?.paging?.nextCursor) || (page.meta?.paging?.total ?? 0) > count;
 }
 
-interface AgeRatingRecord {
-  attributes?: {
-    userGeneratedContent?: boolean;
-    socialMedia?: boolean;
-    socialMediaAgeRestricted?: boolean;
-    ageAssurance?: boolean;
-  };
-}
-
-interface BuildRelationshipResponse {
-  data?: { type: 'builds'; id: string } | null;
+function screenshotSetPresence(response: unknown): boolean | undefined {
+  const parsed = screenshotPage.safeParse(response);
+  if (!parsed.success) return undefined;
+  const page = parsed.data;
+  if (page.data.some((set) => idResource.safeParse(set).success)) return true;
+  if (page.data.length === 0 && !pageIsIncomplete(page, 0)) return false;
+  return undefined;
 }
 
 export async function checkAppStoreRisks(
@@ -167,8 +223,8 @@ export async function checkAppStoreRisks(
   const risks: SubmissionRisk[] = [];
 
   const appPath = `/apps/${encodePathSegment(appId)}`;
-  const versions = await safeGet<AscListDocument>(
-    () => apiGet(`${appPath}/appStoreVersions`, {
+  const versions = await safeGet(
+    () => getAppStoreResponse(resourcePage, `${appPath}/appStoreVersions`, {
       'filter[appStoreState]': APPSTORE_EDITABLE_STATES,
       ...(expected.versionId ? { 'filter[id]': expected.versionId, limit: '1' } : { limit: '5' }),
     }),
@@ -180,8 +236,17 @@ export async function checkAppStoreRisks(
   if (!versions) return risks;
 
   const version = expected.versionId
-    ? versions.data?.find(({ id }) => id === expected.versionId)
-    : versions.data?.[0];
+    ? versions.data.find(({ id }) => id === expected.versionId)
+    : versions.data[0];
+  if (!version && pageIsIncomplete(versions, versions.data.length)) {
+    risks.push({
+      level: 'warning',
+      code: 'API_ERROR_VERSIONS_INCOMPLETE',
+      title: '편집 가능한 버전 목록이 불완전함',
+      detail: 'App Store Connect에서 대상 버전을 확인한 뒤 다시 점검하세요.',
+    });
+    return risks;
+  }
   if (!version && expected.versionId) {
     risks.push({
       level: 'blocker',
@@ -202,28 +267,42 @@ export async function checkAppStoreRisks(
   // 2) 개인정보 URL은 appInfoLocalization 단위(앱 단위)로 조회.
   const [locs, attachedBuildRel, appInfos] = await Promise.all([
     safeGet(
-      () => apiGet(`/appStoreVersions/${versionId}/appStoreVersionLocalizations`),
+      () => getAppStoreResponse(versionLocalizationPage, `/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
+        limit: '200',
+        include: 'appScreenshotSets',
+        'limit[appScreenshotSets]': '1',
+        'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,appScreenshotSets',
+      }),
       risks,
       'LOCALIZATIONS',
       '버전 로컬라이제이션',
     ),
-    safeGet<BuildRelationshipResponse>(
-      () => apiGet(`/appStoreVersions/${versionId}/relationships/build`),
+    safeGet(
+      async () => buildRelationship.safeParse(await apiGet<unknown>(`/appStoreVersions/${versionId}/relationships/build`)),
       risks,
       'BUILD',
       '버전 첨부 빌드',
     ),
     safeGet(
-      () => apiGet(`${appPath}/appInfos`, { 'fields[appInfos]': 'state', 'limit': '10' }),
+      () => getAppStoreResponse(appInfoPage, `${appPath}/appInfos`, { 'fields[appInfos]': 'state', 'limit': '10' }),
       risks,
       'APP_INFO',
       '앱 정보',
     ),
   ]);
 
-  if (locs && !locs.data?.length) {
+  if (locs && pageIsIncomplete(locs, locs.data.length)) {
+    risks.push({
+      level: 'warning',
+      code: 'API_ERROR_LOCALIZATIONS_INCOMPLETE',
+      title: '버전 로컬라이제이션 목록이 불완전함',
+      detail: 'App Store Connect에서 대상 버전의 전체 로컬라이제이션을 확인하세요.',
+    });
+  } else if (locs?.data.length === 0) {
     risks.push({ level: 'blocker', code: 'NO_LOCALIZATIONS', title: '로컬라이제이션 없음', detail: '메타데이터를 입력하세요.' });
-  } else if (locs?.data) {
+  }
+
+  if (locs) {
     for (const loc of locs.data) {
       const { locale: rawLocale, description, whatsNew, keywords } = loc.attributes ?? {};
       const locale = rawLocale ?? loc.id;
@@ -231,13 +310,19 @@ export async function checkAppStoreRisks(
       if (!whatsNew) risks.push({ level: 'warning', code: `NO_WHATS_NEW_${locale}`, title: `${locale} 새로운 기능 없음`, detail: '릴리즈 노트를 입력하면 다운로드 전환율이 높아집니다.' });
       if (!keywords) risks.push({ level: 'warning', code: `NO_KEYWORDS_${locale}`, title: `${locale} 키워드 없음`, detail: '키워드는 검색 노출에 직접 영향을 줍니다.' });
 
-      const screenshots = await safeGet(
-        () => apiGet(`/appStoreVersionLocalizations/${loc.id}/appScreenshotSets`),
-        risks,
-        `SCREENSHOTS_${locale}`,
-        `${locale} 스크린샷 셋`,
-      );
-      if (screenshots && !screenshots.data?.length) {
+      const hasScreenshots = screenshotSetPresence(loc.relationships?.appScreenshotSets)
+        ?? await safeGet(
+          async () => {
+            const sets = await apiGet<unknown>(`/appStoreVersionLocalizations/${encodePathSegment(loc.id)}/appScreenshotSets`);
+            const presence = screenshotSetPresence(sets);
+            if (presence === undefined) throw new Error('App Store Connect의 스크린샷 셋 응답이 불완전합니다.');
+            return presence;
+          },
+          risks,
+          `SCREENSHOTS_${locale}`,
+          `${locale} 스크린샷 셋`,
+        );
+      if (hasScreenshots === false) {
         risks.push({
           level: 'blocker',
           code: `NO_SCREENSHOTS_${locale}`,
@@ -250,20 +335,18 @@ export async function checkAppStoreRisks(
 
   // 명시한 버전의 첨부 상태는 다른 버전의 빌드로 확인할 수 없다.
   let buildVerdict: 'present' | 'missing' | 'unknown' = 'unknown';
-  if (attachedBuildRel?.data?.id) {
-    buildVerdict = 'present';
-  } else if (attachedBuildRel?.data === null) {
-    buildVerdict = 'missing';
+  if (attachedBuildRel?.success) {
+    buildVerdict = attachedBuildRel.data.data === null ? 'missing' : 'present';
   } else if (attachedBuildRel) {
     risks.push({
       level: 'warning',
       code: 'API_ERROR_BUILD_LINKAGE',
       title: '버전 첨부 빌드 확인 실패',
-      detail: 'App Store Connect의 빌드 관계 응답에 데이터가 없습니다.',
+      detail: 'App Store Connect의 빌드 관계 응답이 올바르지 않습니다.',
     });
   } else if (!expected.versionId) {
     const fallbackBuilds = await safeGet(
-      () => apiGet(`/builds`, {
+      () => getAppStoreResponse(resourcePage, '/builds', {
         'filter[app]': appId,
         'fields[builds]': 'version,uploadedDate,processingState',
         'sort': '-uploadedDate',
@@ -273,7 +356,8 @@ export async function checkAppStoreRisks(
       'BUILDS_FALLBACK',
       '앱 빌드 목록(폴백)',
     );
-    buildVerdict = fallbackBuilds?.data?.length ? 'present' : fallbackBuilds ? 'missing' : 'unknown';
+    if (fallbackBuilds?.data.length) buildVerdict = 'present';
+    else if (fallbackBuilds && !pageIsIncomplete(fallbackBuilds, 0)) buildVerdict = 'missing';
   }
   if (buildVerdict === 'missing') {
     risks.push({ level: 'blocker', code: 'NO_BUILD', title: '버전에 연결된 빌드 없음', detail: '대상 버전에 사용할 빌드를 업로드하고 연결하세요.' });
@@ -282,32 +366,43 @@ export async function checkAppStoreRisks(
   // 개인정보처리방침 — appInfoLocalization 어디 한 곳이라도 URL 또는 in-app 텍스트가 있으면 OK.
   // appInfos 조회 자체가 실패하면 unknown으로 두고 blocker 안 띄움 (warning만 기록됨).
   if (appInfos) {
-    const infos = (appInfos.data ?? []) as AppInfoRecord[];
-    const stateOf = (i: AppInfoRecord) => i.attributes?.state ?? i.attributes?.appStoreState ?? '';
-    const editable = infos.find((i) => stateOf(i) !== APP_INFO_LIVE_STATE) ?? infos[0];
+    const infos = appInfos.data;
+    const editable = infos.find(({ attributes }) =>
+      (attributes?.state ?? attributes?.appStoreState) !== APP_INFO_LIVE_STATE,
+    ) ?? infos[0];
 
-    if (!editable) {
+    if (!editable || pageIsIncomplete(appInfos, infos.length)) {
       risks.push({
         level: 'warning',
         code: 'API_ERROR_APP_INFO_LINKAGE',
         title: '앱 정보 레코드를 확인할 수 없음',
-        detail: '앱 정보 레코드가 없어 개인정보 처리방침과 연령등급 점검을 완료할 수 없습니다.',
+        detail: '대상 앱 정보 레코드를 확인해야 개인정보 처리방침과 연령등급을 점검할 수 있습니다.',
       });
     } else {
-      const [localizations, ageRating] = await Promise.all([
+      const infoPath = `/appInfos/${encodePathSegment(editable.id)}`;
+      const [hasPrivacy, ageRating] = await Promise.all([
         safeGet(
-          () => apiGet(`/appInfos/${editable.id}/appInfoLocalizations`, {
-            'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
-            'limit': '200',
-          }),
+          async () => {
+            const localizations = await getAppStoreResponse(privacyLocalizationPage, `${infoPath}/appInfoLocalizations`, {
+              'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
+              'limit': '200',
+            });
+            if (localizations.data.some(({ attributes }) => attributes?.privacyPolicyUrl || attributes?.privacyPolicyText)) {
+              return true;
+            }
+            if (pageIsIncomplete(localizations, localizations.data.length)) {
+              throw new Error('App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.');
+            }
+            return false;
+          },
           risks,
           'PRIVACY',
           '개인정보 로컬라이제이션',
         ),
-        safeGet<{ data?: AgeRatingRecord | null }>(
+        safeGet(
           async () => {
             try {
-              return await apiGet(`/appInfos/${editable.id}/ageRatingDeclaration`, {
+              return await getAppStoreResponse(ageRatingResponse, `${infoPath}/ageRatingDeclaration`, {
                 'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted,ageAssurance',
               });
             } catch (error) {
@@ -321,17 +416,17 @@ export async function checkAppStoreRisks(
           '연령등급 소셜 미디어 응답',
         ),
       ]);
-      if (localizations) {
-        const locs = (localizations.data ?? []) as AppInfoLocalizationRecord[];
-        const hasPrivacy = locs.some((l) => l.attributes?.privacyPolicyUrl || l.attributes?.privacyPolicyText);
-        if (!hasPrivacy) {
-          risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 URL 없음', detail: 'App Store 가이드라인 5.1.1 — 필수 항목입니다. 모든 로컬라이제이션에서 privacyPolicyUrl 또는 privacyPolicyText 중 하나를 입력하세요.' });
-        }
+      if (hasPrivacy === false) {
+        risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 URL 없음', detail: 'App Store 가이드라인 5.1.1 — 필수 항목입니다. 모든 로컬라이제이션에서 privacyPolicyUrl 또는 privacyPolicyText 중 하나를 입력하세요.' });
       }
 
       if (ageRating) {
-        const declaration = ageRating.data?.attributes ?? {};
-        if (declaration.socialMedia === undefined || declaration.socialMediaAgeRestricted === undefined) {
+        const attributes = ageRating.data?.attributes;
+        const socialMedia = attributes?.socialMedia;
+        const socialMediaAgeRestricted = attributes?.socialMediaAgeRestricted;
+        const ageAssurance = attributes?.ageAssurance;
+        const userGeneratedContent = attributes?.userGeneratedContent;
+        if (socialMedia === undefined || socialMediaAgeRestricted === undefined) {
           risks.push({
             level: 'blocker',
             code: 'SOCIAL_MEDIA_ANSWERS_MISSING',
@@ -340,7 +435,7 @@ export async function checkAppStoreRisks(
             fixUrl: 'https://developer.apple.com/news/?id=tlur8uvi',
           });
         }
-        if (declaration.socialMediaAgeRestricted === true && declaration.socialMedia !== true) {
+        if (socialMediaAgeRestricted === true && socialMedia !== true) {
           risks.push({
             level: 'blocker',
             code: 'SOCIAL_MEDIA_AGE_RESTRICTION_MISMATCH',
@@ -348,7 +443,7 @@ export async function checkAppStoreRisks(
             detail: 'socialMediaAgeRestricted=true는 socialMedia=true인 앱에서만 의미가 있습니다.',
           });
         }
-        if (declaration.socialMediaAgeRestricted === true && declaration.ageAssurance !== true) {
+        if (socialMediaAgeRestricted === true && ageAssurance !== true) {
           risks.push({
             level: 'blocker',
             code: 'SOCIAL_MEDIA_AGE_ASSURANCE_MISSING',
@@ -359,29 +454,29 @@ export async function checkAppStoreRisks(
         }
         if (
           expected.socialMedia !== undefined
-          && declaration.socialMedia !== undefined
-          && declaration.socialMedia !== expected.socialMedia
+          && socialMedia !== undefined
+          && socialMedia !== expected.socialMedia
         ) {
           risks.push({
             level: 'blocker',
             code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH',
             title: '앱 기능과 App Store 소셜 미디어 응답 불일치',
-            detail: `프로젝트 기능 선언은 socialMedia=${expected.socialMedia}이지만 App Store Connect는 ${String(declaration.socialMedia)}입니다.`,
+            detail: `프로젝트 기능 선언은 socialMedia=${expected.socialMedia}이지만 App Store Connect는 ${String(socialMedia)}입니다.`,
           });
         }
         if (
           expected.socialMediaAgeRestricted !== undefined
-          && declaration.socialMediaAgeRestricted !== undefined
-          && declaration.socialMediaAgeRestricted !== expected.socialMediaAgeRestricted
+          && socialMediaAgeRestricted !== undefined
+          && socialMediaAgeRestricted !== expected.socialMediaAgeRestricted
         ) {
           risks.push({
             level: 'blocker',
             code: 'SOCIAL_MEDIA_AGE_GATE_MISMATCH',
             title: '13세 미만 기능 제한과 App Store 응답 불일치',
-            detail: `프로젝트 기능 선언은 socialMediaAgeRestricted=${expected.socialMediaAgeRestricted}이지만 App Store Connect는 ${String(declaration.socialMediaAgeRestricted)}입니다.`,
+            detail: `프로젝트 기능 선언은 socialMediaAgeRestricted=${expected.socialMediaAgeRestricted}이지만 App Store Connect는 ${String(socialMediaAgeRestricted)}입니다.`,
           });
         }
-        if (declaration.userGeneratedContent && declaration.socialMedia === false) {
+        if (userGeneratedContent && socialMedia === false) {
           risks.push({
             level: 'warning',
             code: 'UGC_WITHOUT_SOCIAL_MEDIA',

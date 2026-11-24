@@ -69,8 +69,8 @@ export default tseslint.config(
   },
 
   {
-    // 심사 제출은 외부 응답이 any로 흘러가지 않도록 타입이 있는 API 호출을 사용한다.
-    files: ['src/appstore/review-submission.ts'],
+    // 심사 제출과 위험 점검의 외부 응답에 타입이 있는 API 호출을 강제한다.
+    files: ['src/appstore/review-submission.ts', 'src/checks/risks.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'error',
       '@typescript-eslint/no-unsafe-member-access': 'error',

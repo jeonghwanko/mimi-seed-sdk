@@ -18,10 +18,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- App Store submission checks batch screenshot set lookups across localizations.
+- Google Play release plans use one edit and one track lookup for build selection and submission checks.
+- npm release CI verifies the published package installs and runs before continuing to the next package.
+
 ### Fixed
 
 - GitHub Actions dispatch ignores malformed run entries when identifying the triggered build.
 - App Store submission stops if the existing review-submission list is missing from the API response.
+- App Store readiness checks flag malformed responses and incomplete lists for review before submission.
 
 ### Tool changes
 

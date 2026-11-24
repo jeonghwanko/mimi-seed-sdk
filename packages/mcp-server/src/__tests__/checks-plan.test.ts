@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   withEdit: vi.fn(),
   publisher: vi.fn(),
-  checkPlayStoreRisks: vi.fn(),
+  checkPlayStoreRisksInEdit: vi.fn(),
   checkAppStoreRisks: vi.fn(),
 }));
 
@@ -26,7 +26,7 @@ vi.mock('../playstore/tools.js', () => ({
 }));
 vi.mock('../checks/risks.js', async (original) => ({
   ...(await original<typeof import('../checks/risks.js')>()),
-  checkPlayStoreRisks: mocks.checkPlayStoreRisks,
+  checkPlayStoreRisksInEdit: mocks.checkPlayStoreRisksInEdit,
   checkAppStoreRisks: mocks.checkAppStoreRisks,
 }));
 
@@ -36,16 +36,17 @@ const auth = {} as OAuth2Client;
 const PKG = 'com.example.app';
 
 /** withEdit(auth, pkg, fn) — 실제 구현처럼 콜백에 editId 를 넘겨 실행한다. */
-function editSucceeds(tracks: unknown, listing: unknown) {
+function editSucceeds(tracks: unknown) {
+  const list = vi.fn().mockResolvedValue(tracks);
   mocks.publisher.mockReturnValue({
     edits: {
-      tracks: { list: vi.fn().mockResolvedValue(tracks) },
-      listings: { get: vi.fn().mockResolvedValue(listing) },
+      tracks: { list },
     },
   });
   mocks.withEdit.mockImplementation(
     async (_a: unknown, _p: unknown, fn: (editId: string) => Promise<unknown>) => fn('edit-1'),
   );
+  return list;
 }
 
 const trackWith = (versionCodes: string[], status = 'draft') => ({
@@ -54,13 +55,13 @@ const trackWith = (versionCodes: string[], status = 'draft') => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.checkPlayStoreRisks.mockResolvedValue([]);
+  mocks.checkPlayStoreRisksInEdit.mockResolvedValue([]);
   mocks.checkAppStoreRisks.mockResolvedValue([]);
 });
 
 describe('buildPlayStoreReleasePlan', () => {
   it('빌드 도착 + 위험 0 이면 제출 단계가 pending 이고 비가역 표시가 붙는다', async () => {
-    editSucceeds(trackWith(['42']), { data: { title: 'My App' } });
+    editSucceeds(trackWith(['42']));
 
     const plan = await buildPlayStoreReleasePlan({
       auth, packageName: PKG, versionCode: '42', track: 'production', language: 'ko-KR',
@@ -75,21 +76,22 @@ describe('buildPlayStoreReleasePlan', () => {
   });
 
   it('버전 생략 시 확인한 최신 코드 하나로 점검과 노트 적용 대상을 고정한다', async () => {
-    editSucceeds({
-      data: { tracks: [{ track: 'production', releases: [
-        { versionCodes: ['41'] }, { versionCodes: ['45', '42'] },
-      ] }] },
-    }, { data: { title: 'My App' } });
+    const snapshot = trackWith(['41', '45', '42']).data.tracks;
+    const list = editSucceeds({ data: { tracks: snapshot } });
     const plan = await buildPlayStoreReleasePlan({ auth, packageName: PKG, track: 'production', language: 'ko-KR' });
 
-    expect(mocks.checkPlayStoreRisks).toHaveBeenCalledWith(auth, PKG, 'ko-KR', { track: 'production', versionCode: '45' });
+    expect(mocks.withEdit).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledExactlyOnceWith({ auth, packageName: PKG, editId: 'edit-1' });
+    expect(mocks.checkPlayStoreRisksInEdit).toHaveBeenCalledExactlyOnceWith(
+      auth, PKG, 'edit-1', 'ko-KR', { track: 'production', versionCode: '45' }, snapshot,
+    );
     expect(plan).toContain('playstore_update_release_notes (track=production, versionCode=45)');
     expect(plan).toContain('playstore_submit_release (track=production, versionCode=45)');
   });
 
   it('블로커가 있으면 제출 단계를 pending 으로 열어주지 않는다', async () => {
-    editSucceeds(trackWith(['42']), { data: { title: 'My App' } });
-    mocks.checkPlayStoreRisks.mockResolvedValue([
+    editSucceeds(trackWith(['42']));
+    mocks.checkPlayStoreRisksInEdit.mockResolvedValue([
       { code: 'NO_SCREENSHOT', level: 'blocker', title: '스크린샷 없음', detail: '최소 2장 필요' },
     ]);
 
@@ -103,7 +105,7 @@ describe('buildPlayStoreReleasePlan', () => {
   });
 
   it('트랙에 릴리즈가 없으면 빌드 단계와 제출 단계가 모두 blocked', async () => {
-    editSucceeds(trackWith([]), { data: { title: 'My App' } });
+    editSucceeds(trackWith([]));
 
     const plan = await buildPlayStoreReleasePlan({
       auth, packageName: PKG, track: 'production', language: 'ko-KR',
@@ -114,7 +116,7 @@ describe('buildPlayStoreReleasePlan', () => {
   });
 
   it('지정한 versionCode 가 트랙에 없으면 blocked (다른 코드가 있어도)', async () => {
-    editSucceeds(trackWith(['41']), { data: { title: 'My App' } });
+    editSucceeds(trackWith(['41']));
 
     const plan = await buildPlayStoreReleasePlan({
       auth, packageName: PKG, versionCode: '42', track: 'production', language: 'ko-KR',
@@ -124,7 +126,7 @@ describe('buildPlayStoreReleasePlan', () => {
   });
 
   it('인증/조회 실패는 blocked 로 끝나고 이후 단계를 만들지 않는다', async () => {
-    mocks.withEdit.mockRejectedValue(new Error('403 permission denied'));
+    editSucceeds({}).mockRejectedValue(new Error('403 permission denied'));
 
     const plan = await buildPlayStoreReleasePlan({
       auth, packageName: PKG, track: 'production', language: 'ko-KR',
@@ -134,12 +136,12 @@ describe('buildPlayStoreReleasePlan', () => {
     expect(plan).toContain('403 permission denied');
     // 조회가 안 됐는데 제출 단계를 그려주면 에이전트가 그걸 따라간다.
     expect(plan).not.toContain('release status 변경');
-    expect(mocks.checkPlayStoreRisks).not.toHaveBeenCalled();
+    expect(mocks.checkPlayStoreRisksInEdit).not.toHaveBeenCalled();
   });
 
   it('경고만 있으면 blocked 가 아니라 pending 이다', async () => {
-    editSucceeds(trackWith(['42']), { data: { title: 'My App' } });
-    mocks.checkPlayStoreRisks.mockResolvedValue([
+    editSucceeds(trackWith(['42']));
+    mocks.checkPlayStoreRisksInEdit.mockResolvedValue([
       { code: 'SHORT_DESC', level: 'warning', title: '짧은 설명 미흡', detail: '개선 권장' },
     ]);
 
@@ -241,7 +243,7 @@ describe('buildAppStoreReleasePlan', () => {
 
 describe('플랜 응답의 계약', () => {
   it('TodoWrite 지시문과 비가역 도구 경고가 항상 붙는다', async () => {
-    editSucceeds(trackWith(['42']), { data: { title: 'My App' } });
+    editSucceeds(trackWith(['42']));
 
     const plan = await buildPlayStoreReleasePlan({
       auth, packageName: PKG, track: 'production', language: 'ko-KR',

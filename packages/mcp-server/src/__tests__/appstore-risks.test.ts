@@ -31,7 +31,7 @@ beforeEach(() => vi.resetAllMocks());
 it('Play 제출 점검은 해당 앱의 서비스 계정을 사용할 수 있다', async () => {
   const serviceAccount = {};
   mocks.requirePlayStoreAuth.mockResolvedValue(serviceAccount);
-  mocks.withEdit.mockResolvedValue(null);
+  mocks.withEdit.mockResolvedValue([]);
 
   await withClient(async (client) => {
     const result = await client.callTool({
@@ -81,10 +81,92 @@ it('Play 출시 점검은 다른 트랙의 같은 코드와 같은 트랙의 다
       name: 'playstore_check_submission_risks', arguments: { ...args, track: 'beta' },
     });
     expect(JSON.stringify(matching.content)).not.toContain('TARGET_BUILD_NOT_FOUND');
+
+    tracks.mockRejectedValueOnce(new Error('track lookup failed'));
+    const incomplete = await client.callTool({ name: 'playstore_check_submission_risks', arguments: args });
+    expect(JSON.stringify(incomplete.content)).toContain('API_ERROR_TRACKS');
+    expect(JSON.stringify(incomplete.content)).not.toContain('TARGET_BUILD_NOT_FOUND');
+
+    tracks.mockClear();
+    mocks.withEdit.mockClear();
+    const plan = await client.callTool({
+      name: 'playstore_plan_release',
+      arguments: { packageName: args.packageName, track: 'beta' },
+    });
+    expect(plan.isError).toBeFalsy();
+    expect(JSON.stringify(plan.content)).toContain('beta 트랙에 versionCode 42 도착 확인');
+    expect(mocks.withEdit).toHaveBeenCalledTimes(1);
+    expect(tracks).toHaveBeenCalledTimes(1);
   }, { env: { MIMI_SEED_TOOLSETS: 'playstore' } });
 });
 
 describe('checkAppStoreRisks', () => {
+  function mockReadinessResponse(pathOverride: string, response: unknown) {
+    const responses: Record<string, unknown> = {
+      '/apps/1234567890/appStoreVersions': { data: [{ id: 'version-1' }] },
+      '/appStoreVersions/version-1/appStoreVersionLocalizations': {
+        data: [{
+          id: 'loc-en',
+          attributes: { locale: 'en-US', description: 'Description', keywords: 'example', whatsNew: 'Notes' },
+          relationships: { appScreenshotSets: { data: [{ id: 'set-en' }] } },
+        }],
+      },
+      '/appStoreVersions/version-1/relationships/build': { data: { type: 'builds', id: 'build-1' } },
+      '/apps/1234567890/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
+      '/appInfos/info-1/appInfoLocalizations': { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] },
+      '/appInfos/info-1/ageRatingDeclaration': { data: { attributes: { socialMedia: false, socialMediaAgeRestricted: false } } },
+    };
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      if (path === pathOverride) return response;
+      if (path in responses) return responses[path];
+      throw new Error(`unexpected path: ${path}`);
+    });
+  }
+
+  it.each([
+    ['/apps/1234567890/appStoreVersions', { meta: {} }, 'API_ERROR_VERSIONS'],
+    ['/apps/1234567890/appStoreVersions', { data: [], meta: { paging: { nextCursor: 'next' } } }, 'API_ERROR_VERSIONS_INCOMPLETE'],
+    ['/appStoreVersions/version-1/appStoreVersionLocalizations', { data: [null] }, 'API_ERROR_LOCALIZATIONS'],
+    ['/appStoreVersions/version-1/relationships/build', { data: { type: 'apps', id: 'wrong-resource' } }, 'API_ERROR_BUILD_LINKAGE'],
+    ['/apps/1234567890/appInfos', {
+      data: [{ id: 'live-info', attributes: { state: 'READY_FOR_DISTRIBUTION' } }],
+      meta: { paging: { total: 2 } },
+    }, 'API_ERROR_APP_INFO_LINKAGE'],
+    ['/appInfos/info-1/appInfoLocalizations', { data: [{ attributes: { privacyPolicyUrl: true } }] }, 'API_ERROR_PRIVACY'],
+    ['/appInfos/info-1/appInfoLocalizations', { data: [], links: { next: 'https://example.com/next' } }, 'API_ERROR_PRIVACY'],
+    ['/appInfos/info-1/ageRatingDeclaration', { data: { attributes: { socialMedia: 'false', socialMediaAgeRestricted: false } } }, 'API_ERROR_AGE_RATING_SOCIAL'],
+  ] as const)('형식 오류 또는 불완전한 응답을 점검 미완료로 표시한다 (%s, %j, %s)', async (path, response, code) => {
+    mockReadinessResponse(path, response);
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code, level: 'warning' })]);
+    expect(formatRisks(risks, 'App Store')).toContain('점검 미완료');
+    expect(formatRisks(risks, 'App Store')).not.toContain('제출 가능');
+  });
+
+  it('개인정보 목록의 현재 페이지에서 정책을 확인하면 점검을 완료한다', async () => {
+    mockReadinessResponse('/appInfos/info-1/appInfoLocalizations', {
+      data: [{ attributes: { privacyPolicyText: 'Privacy notice' } }],
+      meta: { paging: { total: 2 } },
+    });
+    await expect(checkAppStoreRisks('1234567890', { versionId: 'version-1' })).resolves.toEqual([]);
+  });
+
+  it('완전한 개인정보 목록에 공백만 있으면 정책 누락으로 판정한다', async () => {
+    mockReadinessResponse('/appInfos/info-1/appInfoLocalizations', {
+      data: [{ attributes: { privacyPolicyUrl: ' ', privacyPolicyText: '' } }],
+    });
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'NO_PRIVACY', level: 'blocker' })]);
+  });
+
+  it('연령등급 응답의 null은 소셜 미디어 질문 미응답으로 판정한다', async () => {
+    mockReadinessResponse('/appInfos/info-1/ageRatingDeclaration', {
+      data: { attributes: { socialMedia: null, socialMediaAgeRestricted: false } },
+    });
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'SOCIAL_MEDIA_ANSWERS_MISSING', level: 'blocker' })]);
+  });
+
   it('요청한 버전 ID를 검사하고 목록 첫 버전에는 접근하지 않는다', async () => {
     mocks.apiGet.mockResolvedValue({ data: [] });
     mocks.apiGet.mockResolvedValueOnce({ data: [{ id: 'other-version' }, { id: 'target-version' }] });
@@ -98,8 +180,14 @@ describe('checkAppStoreRisks', () => {
     }, { env: { MIMI_SEED_TOOLSETS: 'appstore' } });
 
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({ 'filter[id]': 'target-version' }));
-    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/target-version/appStoreVersionLocalizations');
-    expect(mocks.apiGet).not.toHaveBeenCalledWith('/appStoreVersions/other-version/appStoreVersionLocalizations');
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/target-version/appStoreVersionLocalizations', {
+      limit: '200',
+      include: 'appScreenshotSets',
+      'limit[appScreenshotSets]': '1',
+      'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,appScreenshotSets',
+    });
+    expect(mocks.apiGet.mock.calls.map(([path]) => path))
+      .not.toContain('/appStoreVersions/other-version/appStoreVersionLocalizations');
   });
 
   it('요청한 버전이 앱의 편집 가능 목록에 없으면 점검을 막는다', async () => {
@@ -170,7 +258,7 @@ describe('checkAppStoreRisks', () => {
     );
   });
 
-  it('각 로케일의 스크린샷을 따로 검사한다', async () => {
+  it('한 번의 로컬라이제이션 조회에서 스크린샷 셋을 로케일별로 판정한다', async () => {
     mocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/apps/1234567890/appStoreVersions') {
         return { data: [{ id: 'version-1' }] };
@@ -180,6 +268,10 @@ describe('checkAppStoreRisks', () => {
           data: [
             {
               id: 'loc-ko',
+              relationships: { appScreenshotSets: {
+                data: [{ id: 'set-ko', type: 'appScreenshotSets' }],
+                meta: { paging: { total: 2 } },
+              } },
               attributes: {
                 locale: 'ko',
                 description: '설명',
@@ -189,6 +281,7 @@ describe('checkAppStoreRisks', () => {
             },
             {
               id: 'loc-en',
+              relationships: { appScreenshotSets: { data: [] } },
               attributes: {
                 locale: 'en-US',
                 description: 'Description',
@@ -197,13 +290,8 @@ describe('checkAppStoreRisks', () => {
               },
             },
           ],
+          included: [{ id: 'set-ko', type: 'appScreenshotSets' }],
         };
-      }
-      if (path === '/appStoreVersionLocalizations/loc-ko/appScreenshotSets') {
-        return { data: [{ id: 'set-ko' }] };
-      }
-      if (path === '/appStoreVersionLocalizations/loc-en/appScreenshotSets') {
-        return { data: [] };
       }
       if (path === '/appStoreVersions/version-1/relationships/build') {
         return { data: { type: 'builds', id: 'build-1' } };
@@ -218,6 +306,37 @@ describe('checkAppStoreRisks', () => {
       expect.objectContaining({ code: 'NO_SCREENSHOTS_en-US', level: 'blocker' }),
     );
     expect(risks.some((risk) => risk.code === 'NO_SCREENSHOTS_ko')).toBe(false);
+    expect(mocks.apiGet.mock.calls.filter(([path]) => path.endsWith('/appScreenshotSets'))).toHaveLength(0);
+  });
+
+  it('스크린샷 셋 관계와 로케일 목록이 불완전하면 누락으로 단정하지 않는다', async () => {
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      if (path.endsWith('/appStoreVersions')) return { data: [{ id: 'version-1' }] };
+      if (path.endsWith('/appStoreVersionLocalizations')) return {
+        data: [
+          { id: 'loc-en', attributes: { locale: 'en-US' }, relationships: {
+            appScreenshotSets: { data: [], meta: { paging: { total: 1 } } },
+          } },
+          { id: 'loc-ko', attributes: { locale: 'ko' }, relationships: {
+            appScreenshotSets: { data: [null] },
+          } },
+        ],
+        links: { next: 'https://example.com/localizations?page=2' },
+      };
+      if (path === '/appStoreVersionLocalizations/loc-en/appScreenshotSets') return { data: [{ id: 'set-en' }] };
+      if (path === '/appStoreVersionLocalizations/loc-ko/appScreenshotSets') return { data: [], meta: { paging: { total: 1 } } };
+      if (path.endsWith('/relationships/build')) return { data: { id: 'build-1' } };
+      if (path.endsWith('/appInfos')) return { data: [] };
+      throw new Error(`unexpected path: ${path}`);
+    });
+
+    const risks = await checkAppStoreRisks('1234567890');
+    const codes = risks.map(({ code }) => code);
+    expect(codes).toContain('API_ERROR_LOCALIZATIONS_INCOMPLETE');
+    expect(codes).toContain('API_ERROR_SCREENSHOTS_ko');
+    expect(codes).not.toContain('API_ERROR_SCREENSHOTS_en-US');
+    expect(codes.some((code) => code.startsWith('NO_SCREENSHOTS_'))).toBe(false);
+    expect(mocks.apiGet.mock.calls.filter(([path]) => path.endsWith('/appScreenshotSets'))).toHaveLength(2);
   });
 
   it('프로젝트의 소셜 기능 사실과 ASC 연령등급 응답 불일치를 blocker로 만든다', async () => {
