@@ -74,8 +74,14 @@ export function flagList(p: ParsedArgs, name: string): string[] | undefined {
 export class CliUsageError extends Error {}
 
 /** 결과 JSON 을 stdout 으로 출력 (stderr 는 진행/안내용). */
-export function printJson(data: unknown): void {
-  process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+export function printJson(data: unknown): Promise<void> {
+  // process.exit() 전에 리포트 전체가 파이프로 전달될 때까지 기다린다.
+  return new Promise((resolve, reject) => {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n', (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 /**
@@ -103,7 +109,7 @@ export async function runDomainCli(opts: {
 
   try {
     const result = await handler(p);
-    printJson(result);
+    await printJson(result);
     process.exit(0);
   } catch (e) {
     if (e instanceof CliUsageError) {

@@ -56,11 +56,13 @@ describe('GA4 BigQuery link API', () => {
   });
 
   it('기존 링크가 있으면 생성 요청을 no-op 처리한다', async () => {
-    mocks.list.mockResolvedValue({
-      data: {
-        bigqueryLinks: [{ name: 'properties/12345/bigQueryLinks/7', project: 'projects/98765' }],
-      },
-    });
+    mocks.list
+      .mockResolvedValueOnce({ data: { nextPageToken: 'next-page' } })
+      .mockResolvedValueOnce({
+        data: {
+          bigqueryLinks: [{ name: 'properties/12345/bigQueryLinks/7', project: 'projects/98765' }],
+        },
+      });
 
     const result = await createBigQueryLink(auth, '12345', options);
 
@@ -68,6 +70,9 @@ describe('GA4 BigQuery link API', () => {
       created: false,
       ready: false,
       action: 'no-op-existing-link',
+    });
+    expect(mocks.list).toHaveBeenNthCalledWith(2, {
+      auth, parent: 'properties/12345', pageSize: 200, pageToken: 'next-page',
     });
     expect(mocks.create).not.toHaveBeenCalled();
   });

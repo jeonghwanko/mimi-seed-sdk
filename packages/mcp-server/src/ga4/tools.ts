@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import { collectPages } from '../lib/paginate.js';
 import { resourceName } from '../lib/resource-id.js';
 
 /**
@@ -9,18 +10,18 @@ import { resourceName } from '../lib/resource-id.js';
  * enable 하면 GA4 property 가 자동 생성되지만, 그 경로는 property 이름/타임존/통화나
  * web data stream(measurement ID, G-XXXX) 을 제어할 수 없다. 풀 컨트롤이 필요하면 이 모듈을 쓴다.
  *
- * 인증은 mimi-seed OAuth 클라이언트(`requireAuth()`)를 그대로 사용 — `analytics.edit` 스코프 필요.
- * (스코프 추가 후 기존 사용자는 1회 재로그인: `npx -y @yoonion/mimi-seed-mcp mimi-seed-auth`)
+ * 인증은 mimi-seed OAuth 클라이언트(`requireAuth()`)를 사용한다.
+ * Admin API 조회는 읽기 또는 수정 스코프, 생성은 수정 스코프가 필요하다.
  */
 const admin = () => google.analyticsadmin('v1beta');
 const adminAlpha = () => google.analyticsadmin('v1alpha');
 const data = () => google.analyticsdata('v1beta');
 
-/** Admin API(analyticsadmin — property/data stream 생성·조회)가 요구하는 스코프. */
+/** Admin API의 생성 호출이 요구하는 스코프. */
 export const GA4_SCOPE = 'https://www.googleapis.com/auth/analytics.edit';
 
 /**
- * Data API(analyticsdata — runReport)가 요구하는 스코프.
+ * GA4 읽기 스코프. Data API는 이 스코프와 analytics를 허용한다.
  *
  * ⚠️ analytics.edit 은 **Admin API 전용**이라 Data API 가 받아주지 않는다. 둘을 같은
  * 스코프로 묶으면 pre-flight 는 통과시켜 놓고 구글이 403 을 던져서, "API 가 꺼졌나"로
@@ -28,6 +29,9 @@ export const GA4_SCOPE = 'https://www.googleapis.com/auth/analytics.edit';
  * (2026-07 실사고: 맑음 D1 지표를 뽑으려다 Analytics API 활성화 문제로 오인.)
  */
 export const GA4_DATA_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
+export const GA4_ADMIN_READ_SCOPES = [GA4_DATA_SCOPE, GA4_SCOPE] as const;
+export const GA4_REPORT_SCOPES = [GA4_DATA_SCOPE, 'https://www.googleapis.com/auth/analytics'] as const;
+export const GA4_REPORT_MAX_LIMIT = 250_000;
 
 export type Ga4Auth = OAuth2Client;
 
@@ -150,18 +154,21 @@ export function flattenBigQueryLink(link: {
 
 /** 접근 가능한 GA 계정 + 각 계정의 property 요약. accountId/propertyId 를 찾는 시작점. */
 export async function listAccountSummaries(auth: Ga4Auth) {
-  const res = await admin().accountSummaries.list({ auth, pageSize: 200 });
-  return res.data.accountSummaries ?? [];
+  const { accountSummaries } = admin();
+  return collectPages(async (pageToken) => {
+    const { data } = await accountSummaries.list({ auth, pageSize: 200, ...(pageToken && { pageToken }) });
+    return { items: data.accountSummaries ?? [], nextPageToken: data.nextPageToken };
+  });
 }
 
 /** 계정 하위 GA4 property 목록. accountId: '123' 또는 'accounts/123'. */
 export async function listProperties(auth: Ga4Auth, accountId: string) {
-  const res = await admin().properties.list({
-    auth,
-    filter: `parent:${normalizeAccountName(accountId)}`,
-    pageSize: 200,
+  const filter = `parent:${normalizeAccountName(accountId)}`;
+  const { properties } = admin();
+  return collectPages(async (pageToken) => {
+    const { data } = await properties.list({ auth, filter, pageSize: 200, ...(pageToken && { pageToken }) });
+    return { items: data.properties ?? [], nextPageToken: data.nextPageToken };
   });
-  return res.data.properties ?? [];
 }
 
 // ─── property / data stream 생성 (attach 핵심) ───
@@ -202,24 +209,26 @@ export async function createDataStream(
 }
 
 export async function listDataStreams(auth: Ga4Auth, propertyId: string) {
-  const res = await admin().properties.dataStreams.list({
-    auth,
-    parent: normalizePropertyName(propertyId),
-    pageSize: 200,
+  const parent = normalizePropertyName(propertyId);
+  const { dataStreams } = admin().properties;
+  const streams = await collectPages(async (pageToken) => {
+    const { data } = await dataStreams.list({ auth, parent, pageSize: 200, ...(pageToken && { pageToken }) });
+    return { items: data.dataStreams ?? [], nextPageToken: data.nextPageToken };
   });
-  return (res.data.dataStreams ?? []).map((d) => flattenDataStream(d));
+  return streams.map(flattenDataStream);
 }
 
 // ─── BigQuery export 링크 ───
 
 /** GA4 property 에 연결된 BigQuery export 링크 목록. */
 export async function listBigQueryLinks(auth: Ga4Auth, propertyId: string) {
-  const res = await adminAlpha().properties.bigQueryLinks.list({
-    auth,
-    parent: normalizePropertyName(propertyId),
-    pageSize: 200,
+  const parent = normalizePropertyName(propertyId);
+  const { bigQueryLinks } = adminAlpha().properties;
+  const links = await collectPages(async (pageToken) => {
+    const { data } = await bigQueryLinks.list({ auth, parent, pageSize: 200, ...(pageToken && { pageToken }) });
+    return { items: data.bigqueryLinks ?? [], nextPageToken: data.nextPageToken };
   });
-  return (res.data.bigqueryLinks ?? []).map((link) => flattenBigQueryLink(link));
+  return links.map(flattenBigQueryLink);
 }
 
 /**
@@ -273,16 +282,26 @@ export interface RunReportParams {
   endDate: string;
   dimensions?: string[];
   metrics?: string[];
+  limit?: number;
+  offset?: number;
 }
 
 export async function runReport(auth: Ga4Auth, propertyId: string, params: RunReportParams) {
+  const dimensions = (params.dimensions ?? []).map((name) => ({ name }));
+  const paged = params.limit !== undefined || params.offset !== undefined;
   const res = await data().properties.runReport({
     auth,
     property: normalizePropertyName(propertyId),
     requestBody: {
       dateRanges: [{ startDate: params.startDate, endDate: params.endDate }],
-      dimensions: (params.dimensions ?? []).map((name) => ({ name })),
+      dimensions,
       metrics: (params.metrics ?? ['activeUsers', 'eventCount']).map((name) => ({ name })),
+      // 모든 분류 기준으로 정렬해 페이지 경계에서 순서가 같은 행을 없앤다.
+      orderBys: paged && dimensions.length > 0
+        ? dimensions.map(({ name }) => ({ dimension: { dimensionName: name, orderType: 'ALPHANUMERIC' } }))
+        : undefined,
+      limit: params.limit?.toString(),
+      offset: params.offset?.toString(),
     },
   });
   return res.data;

@@ -33,18 +33,16 @@ function formatAuthError(p: AuthErrorPayload, profile?: string): string {
  *
  * OAuth 토큰에만 적용된다 — SA JWT 는 자체 scopes 로 토큰을 받으므로 이 검사 대상이 아니다.
  */
-function assertStoredScope(requiredScope: string | undefined, scopeStr: string | undefined, profile?: string): void {
+function assertStoredScope(requiredScope: string | readonly string[] | undefined, scopeStr: string | undefined, profile?: string): void {
   if (!requiredScope) return;
-  const missing =
-    scopeStr === undefined
-      ? !isPreTrackingScope(requiredScope)
-      : !scopeStr.split(' ').filter(Boolean).includes(requiredScope);
-  if (!missing) return;
-  const domainArg = domainsForScope(requiredScope).join(',');
+  const scopes = typeof requiredScope === 'string' ? [requiredScope] : requiredScope;
+  const grantedScopes = scopeStr?.split(/\s+/);
+  if (scopes.some((scope) => grantedScopes ? grantedScopes.includes(scope) : isPreTrackingScope(scope))) return;
+  const domainArg = [...new Set(scopes.flatMap(domainsForScope))].join(',');
   throw new Error(
     formatAuthError({
       code: 'INSUFFICIENT_SCOPE',
-      message: `이 도구는 추가 권한이 필요해 (${requiredScope}). 현재 로그인에 그 권한이 없어.`,
+      message: `이 도구는 추가 권한이 필요해 (${scopes.join(' 또는 ')}). 현재 로그인에 그 권한이 없어.`,
       hint: domainArg
         ? `mimi-seed-auth${profile === undefined ? '' : ` --profile ${profile}`} --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
         : 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
@@ -61,13 +59,14 @@ function assertStoredScope(requiredScope: string | undefined, scopeStr: string |
  *
  * 기존엔 만료 시 각 OAuth 도구(firebase/admob/iam/googleads/checks)가
  * googleapis GaxiosError 를 그대로 노출 → 사용자는 "재로그인하라"는 안내를 못 받았다.
+ * 스코프 배열을 넘기면 그중 하나만 부여되어 있어도 통과한다.
  */
-export async function requireAuth(requiredScope?: string, profile?: string) {
+export async function requireAuth(requiredScope?: string | readonly string[], profile?: string) {
   const result = await ensureFreshAccessToken(undefined, profile);
   if (result.status === 'unauthenticated' || result.status === 'expired_refresh_failed') {
     throw new Error(formatAuthError(result.error, profile));
   }
-  const client = getAuthenticatedClient(profile);
+  const client = getAuthenticatedClient(profile, result.tokens);
   if (!client) {
     throw new Error(
       formatAuthError({
@@ -79,8 +78,7 @@ export async function requireAuth(requiredScope?: string, profile?: string) {
       }),
     );
   }
-  // 방금 갱신(또는 fresh 확인)한 토큰의 scope 로 검사한다 — 디스크를 다시 읽으면 그 사이
-  // 다른 프로세스의 재로그인과 섞여 한 호출 안에서 서로 다른 토큰을 볼 수 있다.
+  // 같은 토큰으로 인증 클라이언트를 만든 뒤 해당 토큰의 스코프를 검사한다.
   assertStoredScope(requiredScope, result.tokens.scope, profile);
   return client;
 }

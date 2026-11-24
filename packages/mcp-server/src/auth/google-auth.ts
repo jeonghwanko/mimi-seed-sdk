@@ -189,12 +189,20 @@ export function createOAuth2Client(clientId: string, clientSecret: string) {
  * Get authenticated OAuth2 client.
  * Returns null if not authenticated yet.
  */
-export function getAuthenticatedClient(profile?: string): ReturnType<typeof createOAuth2Client> | null {
-  const creds = getStoredCredentials(profile);
-  if (!creds) return null;
+export function getAuthenticatedClient(profile?: string, expectedTokens?: StoredTokens): ReturnType<typeof createOAuth2Client> | null {
+  const grant = profile === undefined ? undefined : readProfile(profile);
+  const creds = profile === undefined ? getStoredCredentials() : grant?.credentials;
+  const tokens = profile === undefined ? getStoredTokens() : grant?.tokens;
+  if (!creds || !tokens) return null;
 
-  const tokens = getStoredTokens(profile);
-  if (!tokens) return null;
+  // requireAuth가 권한을 확인한 토큰과 실제 요청에 쓰는 토큰이 일치해야 한다.
+  if (expectedTokens && (
+    tokens.refresh_token !== expectedTokens.refresh_token ||
+    tokens.access_token !== expectedTokens.access_token ||
+    tokens.scope !== expectedTokens.scope
+  )) {
+    throw new Error('요청을 준비하는 동안 Google 인증이 변경됐습니다. 같은 프로필로 다시 시도하세요.');
+  }
 
   const client = createOAuth2Client(creds.clientId, creds.clientSecret);
   client.setCredentials(tokens);
@@ -458,7 +466,8 @@ export function ensureFreshAccessToken(marginMs = 300_000, profile?: string): Pr
 }
 
 async function ensureFreshAccessTokenOnce(marginMs: number, profile?: string): Promise<RefreshStatus> {
-  const tokens = getStoredTokens(profile);
+  const grant = profile === undefined ? undefined : readProfile(profile);
+  const tokens = profile === undefined ? getStoredTokens() : grant?.tokens;
   if (!tokens) {
     return {
       status: 'unauthenticated',
@@ -498,7 +507,7 @@ async function ensureFreshAccessTokenOnce(marginMs: number, profile?: string): P
   // 원격 의존을 최초 1회로 끝낸다. 조회 실패는 raw throw 가 아니라 분류된 에러로 반환.
   let clientId: string;
   let clientSecret: string;
-  const stored = getStoredCredentials(profile);
+  const stored = profile === undefined ? getStoredCredentials() : grant?.credentials;
   if (stored?.clientId && stored?.clientSecret) {
     ({ clientId, clientSecret } = stored);
   } else {
