@@ -50,6 +50,8 @@ and BigQuery all ride on the same OAuth token. Start there.
 
 **Unlocks:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`, `drive_*` (requested with `--domains drive`; only files and folders mimi-seed creates)
 
+For Search Console analysis, sign in with `mimi-seed auth login --domains gsc_readonly`. The existing `gsc` grant also covers reads and is required for sitemap submission. Use a named Google login profile to choose which account the GSC tools use.
+
 YouTube Analytics reports use the separate `youtube_analytics` grant. Channel, video-list, and comment reads can use that grant or the existing publishing `youtube` grant; video management writes and comment replies use `youtube`.
 
 **You need first:** a Google account. That's all.

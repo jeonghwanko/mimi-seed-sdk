@@ -18,6 +18,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-24
+
+### Added
+
+- Search Console tools accept a named Google login profile and offer a `gsc_readonly` OAuth grant for analysis. Sitemap submission requires the existing `gsc` grant.
+- Search Console reports support Google-side filters, paging, and an aggregate-only response.
+
+### Fixed
+
+- Search Console breakdowns report the current page subtotal in `rowSummary`. Set `includeTotals: true` to also populate `summary` with a separate Google aggregate.
+- Search Console reports return `null` when average position is unavailable. Sitemap reads omit the deprecated indexed URL count.
+
+### Tool changes
+
+- None.
+
 ## [0.23.4] - 2026-11-24
 
 ### Added

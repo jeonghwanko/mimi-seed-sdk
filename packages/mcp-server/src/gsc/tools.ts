@@ -1,5 +1,6 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
+import type { searchconsole_v1 } from '@googleapis/searchconsole';
 import { notDotSegment } from '../lib/resource-id.js';
 
 /**
@@ -7,7 +8,7 @@ import { notDotSegment } from '../lib/resource-id.js';
  *
  * `searchconsole('v1')` 은 구 `webmasters('v3')` 의 후속으로, sites/sitemaps/
  * searchanalytics 에 더해 URL Inspection(`urlInspection.index.inspect`)을 포함한다.
- * 인증은 mimi-seed OAuth 클라이언트(`requireAuth()`)를 그대로 사용 — webmasters 스코프 필요.
+ * 조회에는 webmasters.readonly 또는 webmasters, 사이트맵 제출에는 webmasters를 사용한다.
  */
 const sc = () => google.searchconsole('v1');
 
@@ -22,16 +23,21 @@ export async function listSites(auth: GscAuth) {
 
 // ─── 사이트맵 ───
 
+function withoutIndexedCount(sitemap: searchconsole_v1.Schema$WmxSitemap) {
+  if (!sitemap.contents) return sitemap;
+  return { ...sitemap, contents: sitemap.contents.map(({ indexed: _indexed, ...content }) => content) };
+}
+
 export async function listSitemaps(auth: GscAuth, siteUrl: string, sitemapIndex?: string) {
   const res = await sc().sitemaps.list({ auth, siteUrl: notDotSegment(siteUrl, 'siteUrl'), sitemapIndex });
-  return res.data.sitemap ?? [];
+  return (res.data.sitemap ?? []).map(withoutIndexedCount);
 }
 
 export async function getSitemap(auth: GscAuth, siteUrl: string, feedpath: string) {
   const res = await sc().sitemaps.get({
     auth, siteUrl: notDotSegment(siteUrl, 'siteUrl'), feedpath: notDotSegment(feedpath, 'feedpath'),
   });
-  return res.data;
+  return withoutIndexedCount(res.data);
 }
 
 /** 사이트맵 제출 — webmasters(read-write) 스코프 필요. 응답 본문은 없음(204). */
@@ -59,29 +65,101 @@ export async function inspectUrl(
 
 // ─── 검색 성과 (Search Analytics) ───
 
-export interface SearchAnalyticsParams {
+export const SEARCH_TYPES = ['web', 'image', 'video', 'news', 'discover', 'googleNews'] as const;
+export const SEARCH_FILTER_DIMENSIONS = ['page', 'query', 'country', 'device', 'searchAppearance', 'brandedClassification'] as const;
+export const SEARCH_FILTER_OPERATORS = ['equals', 'notEquals', 'contains', 'notContains', 'includingRegex', 'excludingRegex'] as const;
+
+interface SearchAnalyticsFilter {
+  dimension: (typeof SEARCH_FILTER_DIMENSIONS)[number];
+  operator?: (typeof SEARCH_FILTER_OPERATORS)[number];
+  expression: string;
+}
+
+interface SearchAnalyticsParams {
   startDate: string;
   endDate: string;
-  dimensions?: string[];
+  dimensions?: string;
   rowLimit?: number;
   startRow?: number;
-  type?: 'web' | 'image' | 'video' | 'news' | 'discover' | 'googleNews';
+  type?: (typeof SEARCH_TYPES)[number];
+  filters?: SearchAnalyticsFilter[];
+  summaryOnly?: boolean;
+  includeTotals?: boolean;
+}
+
+async function querySearchAnalytics(
+  auth: GscAuth,
+  siteUrl: string,
+  requestBody: searchconsole_v1.Schema$SearchAnalyticsQueryRequest,
+) {
+  const res = await sc().searchanalytics.query({
+    auth,
+    siteUrl,
+    requestBody,
+  });
+  const rows = res.data.rows ?? [];
+  // Discover and the Google News app/site don't report position. Google can return a zero placeholder.
+  const hasPosition = requestBody.type !== 'discover' && requestBody.type !== 'googleNews';
+  return {
+    rows: hasPosition ? rows : rows.map((row) => ({ ...row, position: null })),
+    aggregationType: res.data.responseAggregationType ?? null,
+  };
 }
 
 export async function searchAnalytics(auth: GscAuth, siteUrl: string, params: SearchAnalyticsParams) {
-  const res = await sc().searchanalytics.query({
-    auth,
-    siteUrl: notDotSegment(siteUrl, 'siteUrl'),
-    requestBody: {
-      startDate: params.startDate,
-      endDate: params.endDate,
-      dimensions: params.dimensions,
-      rowLimit: params.rowLimit ?? 1000,
-      startRow: params.startRow,
-      type: params.type,
-    },
+  const { startDate, endDate, startRow = 0, rowLimit = 1000, type = 'web', filters, summaryOnly, includeTotals } = params;
+  if (startDate > endDate) throw new Error('startDate는 endDate 이전 또는 같은 날짜여야 해.');
+  const dimensions = params.dimensions?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+  const reportDimensions = summaryOnly ? [] : dimensions;
+  if (startRow > 0 && reportDimensions.length === 0 && !summaryOnly) {
+    throw new Error('startRow는 dimensions로 분해한 조회에만 사용할 수 있어.');
+  }
+
+  const property = notDotSegment(siteUrl, 'siteUrl');
+  const period = { startDate, endDate };
+  const request = {
+    ...period,
+    type,
+    dimensionFilterGroups: filters?.length
+      ? [{ groupType: 'and', filters: filters.map((filter) => ({ ...filter, operator: filter.operator ?? 'equals' })) }]
+      : undefined,
+  };
+  const report = { period, type, dimensions: reportDimensions };
+  if (reportDimensions.length === 0) {
+    const { rows, aggregationType } = await querySearchAnalytics(auth, property, { ...request, rowLimit: 1 });
+    return { ...report, aggregationType, summary: summarizeRows(rows), ...(summaryOnly ? {} : { rows }) };
+  }
+
+  const { rows, aggregationType } = await querySearchAnalytics(auth, property, {
+    ...request, dimensions: reportDimensions, rowLimit, startRow,
   });
-  return res.data.rows ?? [];
+  const page = {
+    ...report,
+    aggregationType,
+    rowSummary: summarizeRows(rows),
+    pagination: {
+      startRow,
+      rowLimit,
+      nextStartRow: rows.length === rowLimit ? startRow + rows.length : null,
+      mayOmitRows: true,
+    },
+    rows,
+  };
+  if (!includeTotals) return page;
+
+  // Google requires automatic aggregation when a page filter is present. With only a
+  // page grouping, preserve page aggregation after removing the grouping for totals.
+  let totalAggregation: string | undefined;
+  if (!filters?.some((filter) => filter.dimension === 'page')) {
+    if (aggregationType === 'byPage' || aggregationType === 'byProperty') totalAggregation = aggregationType;
+    else if (reportDimensions.includes('page')) totalAggregation = 'byPage';
+  }
+  const totals = await querySearchAnalytics(auth, property, {
+    ...request,
+    rowLimit: 1,
+    aggregationType: totalAggregation,
+  });
+  return { ...page, summary: summarizeRows(totals.rows), totalAggregationType: totals.aggregationType };
 }
 
 // ─── 집계 헬퍼 (순수 함수 — 테스트 대상) ───
@@ -100,14 +178,27 @@ export interface SearchAnalyticsRow {
  * 노출이 1인 행과 1000인 행을 동등 취급해 실제 평균 순위를 왜곡한다.
  */
 export function summarizeRows(rows: SearchAnalyticsRow[]) {
-  const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
-  const totalImpressions = rows.reduce((s, r) => s + (r.impressions ?? 0), 0);
-  const weightedPos = rows.reduce((s, r) => s + (r.position ?? 0) * (r.impressions ?? 0), 0);
+  let totalClicks = 0;
+  let totalImpressions = 0;
+  let positionImpressions = 0;
+  let weightedPosition = 0;
+  for (const row of rows) {
+    const impressions = row.impressions ?? 0;
+    totalClicks += row.clicks ?? 0;
+    totalImpressions += impressions;
+    if (row.position != null && row.position > 0) {
+      positionImpressions += impressions;
+      weightedPosition += row.position * impressions;
+    }
+  }
+
   return {
     rowCount: rows.length,
     totalClicks,
     totalImpressions,
     avgCtr: totalImpressions > 0 ? Math.round((totalClicks / totalImpressions) * 10000) / 10000 : 0,
-    avgPosition: totalImpressions > 0 ? Math.round((weightedPos / totalImpressions) * 100) / 100 : 0,
+    avgPosition: totalImpressions > 0 && positionImpressions === totalImpressions
+      ? Math.round((weightedPosition / totalImpressions) * 100) / 100
+      : null,
   };
 }

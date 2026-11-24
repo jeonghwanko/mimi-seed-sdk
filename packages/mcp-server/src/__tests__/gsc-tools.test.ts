@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { summarizeRows, type SearchAnalyticsRow } from '../gsc/tools.js';
 
 describe('summarizeRows', () => {
-  it('빈 배열은 0으로 집계', () => {
+  it('빈 배열은 클릭·노출·CTR을 0으로, 평균 순위를 null로 집계', () => {
     expect(summarizeRows([])).toEqual({
       rowCount: 0,
       totalClicks: 0,
       totalImpressions: 0,
       avgCtr: 0,
-      avgPosition: 0,
+      avgPosition: null,
     });
   });
 
@@ -44,5 +44,17 @@ describe('summarizeRows', () => {
     expect(s.totalClicks).toBe(1);
     expect(s.totalImpressions).toBe(10);
     expect(s.avgPosition).toBe(3);
+  });
+
+  it('일부 노출의 순위만 있어도 전체 평균 순위는 알 수 없다', () => {
+    const rows: SearchAnalyticsRow[] = [
+      { clicks: 2, impressions: 80, position: 0 },
+      { clicks: 3, impressions: 10 },
+      { clicks: 5, impressions: 10, position: 4 },
+    ];
+    expect(summarizeRows(rows)).toEqual({
+      rowCount: 3, totalClicks: 10, totalImpressions: 100, avgCtr: 0.1, avgPosition: null,
+    });
+    expect(summarizeRows(rows.slice(0, 2)).avgPosition).toBeNull();
   });
 });

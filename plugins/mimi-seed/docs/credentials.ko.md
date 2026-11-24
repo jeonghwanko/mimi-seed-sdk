@@ -50,6 +50,8 @@ Cloud IAM · BigQuery 가 모두 같은 OAuth 토큰을 탄다. 여기서 시작
 
 **열리는 것:** `firebase_*`, `admob_*`, `playstore_*`, `googleads_*`, `gsc_*`, `ga4_*`, `iam_*`, `bigquery_*`, `youtube_*`, `drive_*` (`--domains drive` 로 요청; mimi-seed 가 만든 파일·폴더만)
 
+Search Console 분석에는 `mimi-seed auth login --domains gsc_readonly`로 로그인한다. 기존 `gsc` 권한으로도 조회할 수 있고, 사이트맵 제출에는 `gsc` 권한이 필요하다. 이름 있는 Google 로그인 프로필로 GSC 도구에서 사용할 계정을 선택할 수 있다.
+
 YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한다. 채널·영상 목록·댓글 조회는 이 권한이나 기존 게시용 `youtube` 권한으로 할 수 있고, 영상 관리 쓰기와 댓글 답글은 `youtube` 권한을 사용한다.
 
 **먼저 필요한 것:** Google 계정. 그게 전부다.
