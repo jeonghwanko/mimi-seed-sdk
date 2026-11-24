@@ -8,18 +8,18 @@ import { encodePathSegment } from '../lib/url-path.js';
 // ─── 버전 ───
 
 export async function listVersions(appId: string, filters: { versionString?: string; platform?: ApplePlatform } = {}) {
-  const data = (await apiGet(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
-    'fields[appStoreVersions]': 'versionString,platform,appStoreState,releaseType,createdDate',
-    'limit': '10',
-    ...(filters.versionString ? { 'filter[versionString]': filters.versionString } : {}),
-    ...(filters.platform ? { 'filter[platform]': filters.platform } : {}),
-  })) as AscListDocument<{
+  const data = await apiGet<AscListDocument<{
     versionString?: string;
     platform?: ApplePlatform;
     appStoreState?: string;
     releaseType?: string;
     createdDate?: string;
-  }>;
+  }>>(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
+    'fields[appStoreVersions]': 'versionString,platform,appStoreState,releaseType,createdDate',
+    'limit': '10',
+    ...(filters.versionString ? { 'filter[versionString]': filters.versionString } : {}),
+    ...(filters.platform ? { 'filter[platform]': filters.platform } : {}),
+  });
   return (data.data ?? []).map((v) => ({
     id: v.id,
     version: v.attributes?.versionString,
@@ -173,15 +173,15 @@ export async function attachLatestValidBuild(
 // ─── 로컬라이제이션 (메타데이터) ───
 
 export async function getVersionLocalizations(versionId: string) {
-  const data = (await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionLocalizations`, {
-    'fields[appStoreVersionLocalizations]': 'locale,description,keywords,promotionalText,whatsNew',
-  })) as AscListDocument<{
+  const data = await apiGet<AscListDocument<{
     locale?: string;
     description?: string;
     keywords?: string;
     promotionalText?: string;
     whatsNew?: string;
-  }>;
+  }>>(`/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionLocalizations`, {
+    'fields[appStoreVersionLocalizations]': 'locale,description,keywords,promotionalText,whatsNew',
+  });
   return (data.data ?? []).map((l) => ({
     id: l.id,
     locale: l.attributes?.locale,
@@ -316,12 +316,14 @@ export async function getReviewNotes(
 // ─── 빌드 ───
 
 export async function listBuilds(appId: string) {
-  const data = (await apiGet(`/builds`, {
+  const data = await apiGet<AscListDocument<{
+    version?: string; uploadedDate?: string; processingState?: string;
+  }>>('/builds', {
     'filter[app]': appId,
     'fields[builds]': 'version,uploadedDate,processingState,buildAudienceType',
     'sort': '-uploadedDate',
     'limit': '10',
-  })) as AscListDocument<{ version?: string; uploadedDate?: string; processingState?: string }>;
+  });
   return (data.data ?? []).map((b) => ({
     id: b.id,
     version: b.attributes?.version,
@@ -333,10 +335,10 @@ export async function listBuilds(appId: string) {
 // ─── 버전 → 앱/플랫폼 역조회 (빌드 연결·심사 제출이 공유) ───
 
 export async function getVersionAppAndPlatform(versionId: string): Promise<{ appId: string; platform: string }> {
-  const data = (await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}`, {
-    'fields[appStoreVersions]': 'platform,app',
-    'include': 'app',
-  })) as AscSingleDocument<{ platform?: string }, { app?: AscToOne }> | undefined;
+  const data = await apiGet<AscSingleDocument<{ platform?: string }, { app?: AscToOne }> | undefined>(
+    `/appStoreVersions/${encodePathSegment(versionId)}`,
+    { 'fields[appStoreVersions]': 'platform,app', include: 'app' },
+  );
   const platform = data?.data?.attributes?.platform;
   const appId = data?.data?.relationships?.app?.data?.id;
   if (!platform || !appId) {

@@ -79,6 +79,8 @@ describe('ghTriggerWorkflow', () => {
       .mockResolvedValueOnce(
         jsonResp({
           workflow_runs: [
+            // 잘못된 레코드는 타임스탬프가 맞아도 선택하지 않는다.
+            { id: 'invalid', html_url: 'malformed', created_at: new Date(Date.now() + 5000).toISOString() },
             // 다른 사람이 먼저 트리거한 run
             { id: 999, html_url: 'old', created_at: '2020-01-01T00:00:00Z' },
             // 우리 트리거 (now+5초로 가정)
@@ -92,6 +94,13 @@ describe('ghTriggerWorkflow', () => {
       );
     const result = await ghTriggerWorkflow(ghCfg, 'deploy.yml', 'main');
     expect(result?.runId).toBe(100);
+  });
+
+  it('returns null when the runs response has no usable run', async () => {
+    fetchMock
+      .mockResolvedValueOnce(noContent())
+      .mockResolvedValueOnce(jsonResp({ workflow_runs: [{ id: 1, html_url: 'run' }, null] }));
+    await expect(ghTriggerWorkflow(ghCfg, 'deploy.yml', 'main')).resolves.toBeNull();
   });
 
   it('throws on non-2xx dispatch', async () => {

@@ -4,6 +4,7 @@
 import { apiGet, apiPatch, apiPost } from './client.js';
 import { getVersionAppAndPlatform, getVersionLocalizations } from './versions.js';
 import type { AppStoreProductType } from './http.js';
+import type { AscListDocument, AscRef, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 // ─── 심사 제출 (Submit for Review) ───
@@ -11,13 +12,28 @@ import { encodePathSegment } from '../lib/url-path.js';
 // 새 모델은 /reviewSubmissions + /reviewSubmissionItems 2단계 + PATCH submitted=true.
 // 참고: https://developer.apple.com/documentation/appstoreconnectapi/submit-an-app-for-review
 
+type ReviewSubmissionAttributes = { state?: string; submittedDate?: string | null };
+type ReviewSubmissionList = AscListDocument<ReviewSubmissionAttributes, { appStoreVersionForReview?: AscToOne }>;
+type ReviewSubmissionItems = AscListDocument<
+  { state?: string },
+  Record<string, AscToOne | undefined>,
+  AscRef & { attributes?: {
+    versionString?: string;
+    appVersionState?: string;
+    productId?: string;
+    name?: string;
+    referenceName?: string;
+    state?: string;
+  } }
+>;
+
 async function findOpenReviewSubmission(
   appId: string, platform: string, versionId: string,
 ): Promise<{ id: string; versionAttached: boolean; state?: string } | null> {
   // ASC API는 filter[state]=CREATED를 더 이상 허용하지 않음 (READY_FOR_REVIEW, WAITING_FOR_REVIEW 등만 허용).
   // CREATED 상태 submission은 별도로 조회 불가 → 이미 진행 중인 submission만 재사용.
   // 없으면 submitVersionForReview가 새로 생성.
-  const data = await apiGet('/reviewSubmissions', {
+  const data = await apiGet<ReviewSubmissionList>('/reviewSubmissions', {
     'filter[app]': appId,
     'filter[platform]': platform,
     'filter[state]': 'READY_FOR_REVIEW,WAITING_FOR_REVIEW,COMPLETING,UNRESOLVED_ISSUES',
@@ -26,11 +42,10 @@ async function findOpenReviewSubmission(
   if (data?.links?.next) {
     throw new Error('reviewSubmission 목록이 여러 페이지야. 기존 버전 묶음을 모두 확인할 수 없어 제출을 중단했어.');
   }
-  const submissions = (data?.data ?? []) as Array<{
-    id: string;
-    attributes?: { state?: string };
-    relationships?: { appStoreVersionForReview?: { data?: { id?: string } | null } };
-  }>;
+  if (!Array.isArray(data?.data)) {
+    throw new Error('reviewSubmission 목록 응답에 data 배열이 없어. 제출을 중단했어.');
+  }
+  const submissions = data.data;
   let reusable: { id: string; versionAttached: boolean; state?: string } | null = null;
   let staleSubmission: { id: string; versionAttached: boolean; state: string } | null = null;
   let hasUnrelatedItems = false;
@@ -64,17 +79,8 @@ async function findOpenReviewSubmission(
   return reusable;
 }
 
-type ReviewSubmissionItem = {
-  id: string;
-  attributes?: { state?: string };
-  relationships?: Record<string, { data?: { type?: string; id?: string } | null }>;
-};
-
-async function getReviewSubmissionItems(submissionId: string): Promise<{
-  items: ReviewSubmissionItem[];
-  included: Array<{ type: string; id: string; attributes?: Record<string, string> }>;
-}> {
-  const data = await apiGet(`/reviewSubmissions/${encodePathSegment(submissionId)}/items`, {
+async function getReviewSubmissionItems(submissionId: string) {
+  const data = await apiGet<ReviewSubmissionItems>(`/reviewSubmissions/${encodePathSegment(submissionId)}/items`, {
     include: 'appStoreVersion,inAppPurchaseVersion,subscriptionVersion,subscriptionGroupVersion',
     limit: '50',
   });
@@ -84,7 +90,7 @@ async function getReviewSubmissionItems(submissionId: string): Promise<{
   if (data?.links?.next) {
     throw new Error(`reviewSubmission ${submissionId} 항목이 여러 페이지야. 전체 항목을 확인할 수 없어 제출을 중단했어.`);
   }
-  return { items: (data?.data ?? []) as ReviewSubmissionItem[], included: data?.included ?? [] };
+  return { items: data.data, included: data.included ?? [] };
 }
 
 /**
@@ -108,7 +114,7 @@ export async function buildSubmitForReviewPreview(versionId: string): Promise<{
   const { appId, platform } = await getVersionAppAndPlatform(versionId);
 
   // 버전 메타: versionString + state
-  const versionData = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}`, {
+  const versionData = await apiGet<AscSingleDocument<{ versionString?: string; appStoreState?: string }>>(`/appStoreVersions/${encodePathSegment(versionId)}`, {
     'fields[appStoreVersions]': 'versionString,appStoreState',
   }).catch(() => null);
   const versionString: string | undefined = versionData?.data?.attributes?.versionString;
@@ -116,7 +122,7 @@ export async function buildSubmitForReviewPreview(versionId: string): Promise<{
 
   // attached build
   let attachedBuild: { id: string; buildNumber?: string; uploadedDate?: string; processingState?: string } | undefined;
-  const build = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/build`, {
+  const build = await apiGet<AscSingleDocument<{ version?: string; uploadedDate?: string; processingState?: string }>>(`/appStoreVersions/${encodePathSegment(versionId)}/build`, {
     'fields[builds]': 'version,uploadedDate,processingState',
   }).catch(() => null);
   if (build?.data?.id) {
@@ -151,7 +157,7 @@ export async function buildSubmitForReviewPreview(versionId: string): Promise<{
 }
 
 async function createReviewSubmission(appId: string, platform: string): Promise<string> {
-  const created = await apiPost('/reviewSubmissions', {
+  const created = await apiPost<AscSingleDocument>('/reviewSubmissions', {
     data: {
       type: 'reviewSubmissions',
       attributes: { platform },
@@ -244,7 +250,7 @@ export async function submitVersionForReview(versionId: string) {
   // 3. PATCH submitted=true → state: CREATED → WAITING_FOR_REVIEW
   const submitted = existing?.versionAttached && existing.state === 'WAITING_FOR_REVIEW'
     ? { data: { attributes: { state: existing.state } } }
-    : await apiPatch(`/reviewSubmissions/${encodePathSegment(submissionId)}`, {
+    : await apiPatch<AscSingleDocument<ReviewSubmissionAttributes>>(`/reviewSubmissions/${encodePathSegment(submissionId)}`, {
       data: {
         type: 'reviewSubmissions',
         id: submissionId,
@@ -313,7 +319,7 @@ export async function addProductToReviewSubmission(args: {
       };
 
   try {
-    const created = await apiPost(path, body);
+    const created = await apiPost<AscSingleDocument>(path, body);
     return { internalId, productType, endpoint: path, submissionId: created?.data?.id };
   } catch (error) {
     if (!isNoPendingVersionError(error)) throw error;
@@ -352,7 +358,7 @@ export async function addProductToReviewSubmission(args: {
  * READY_FOR_REVIEW 로 보인다. 그게 재사용 대상이다.
  */
 async function findDraftReviewSubmission(appId: string, platform: string): Promise<string | null> {
-  const data = await apiGet('/reviewSubmissions', {
+  const data = await apiGet<ReviewSubmissionList>('/reviewSubmissions', {
     'filter[app]': appId,
     'filter[platform]': platform,
     'filter[state]': 'READY_FOR_REVIEW',
@@ -361,10 +367,10 @@ async function findDraftReviewSubmission(appId: string, platform: string): Promi
   if (data?.links?.next) {
     throw new Error('심사 초안 목록이 여러 페이지야. 안전한 빈 초안을 확인할 수 없어 제출을 중단했어.');
   }
-  const drafts = (data?.data ?? []) as Array<{
-    id: string;
-    relationships?: { appStoreVersionForReview?: { data?: { id?: string } | null } };
-  }>;
+  if (!Array.isArray(data?.data)) {
+    throw new Error('심사 초안 목록 응답에 data 배열이 없어. 제출을 중단했어.');
+  }
+  const drafts = data.data;
   for (const draft of drafts) {
     const { items } = await getReviewSubmissionItems(draft.id);
     if (items.length === 0 && !draft.relationships?.appStoreVersionForReview?.data?.id) return draft.id;
@@ -404,40 +410,20 @@ export async function listReviewSubmissions(args: {
 }): Promise<{ appId: string; platform: string; submissions: ReviewSubmissionSummary[] }> {
   const platform = args.platform ?? 'IOS';
   const limit = Math.min(Math.max(args.limit ?? 5, 1), 20);
-  const data = await apiGet('/reviewSubmissions', {
+  const data = await apiGet<ReviewSubmissionList>('/reviewSubmissions', {
     'filter[app]': args.appId,
     'filter[platform]': platform,
     'limit': String(limit),
   });
-  const submissions = (data?.data ?? []) as Array<{
-    id: string;
-    attributes?: { state?: string; submittedDate?: string | null };
-  }>;
+  const submissions = data?.data ?? [];
 
   const result: ReviewSubmissionSummary[] = [];
   for (const sub of submissions) {
     // 버전만 include 하면 IAP·구독·구독그룹 항목이 전부 "?" 로 남아, 정작 중요한
     // "이 묶음에 상품이 들어갔나"를 이 도구로 판별할 수 없었다 (2026-07-25 실측).
     const itemsData = await getReviewSubmissionItems(sub.id);
-    const included = new Map(
-      (itemsData.included as Array<{
-        type: string;
-        id: string;
-        attributes?: {
-          versionString?: string;
-          appVersionState?: string;
-          productId?: string;
-          name?: string;
-          referenceName?: string;
-          state?: string;
-        };
-      }>).map((inc) => [`${inc.type}:${inc.id}`, inc]),
-    );
-    const items = (itemsData.items as Array<{
-      id: string;
-      attributes?: { state?: string };
-      relationships?: Record<string, { data?: { type?: string; id?: string } | null }>;
-    }>).map((item) => {
+    const included = new Map(itemsData.included.map((inc) => [`${inc.type}:${inc.id}`, inc]));
+    const items = itemsData.items.map((item) => {
       const target = Object.entries(item.relationships ?? {}).find(
         ([key, rel]) => key !== 'reviewSubmission' && rel?.data?.id,
       )?.[1]?.data;
@@ -470,7 +456,7 @@ export async function removeReviewSubmissionItem(itemId: string): Promise<{
   state?: string;
   removed: boolean;
 }> {
-  const patched = await apiPatch(`/reviewSubmissionItems/${encodeURIComponent(itemId)}`, {
+  const patched = await apiPatch<AscSingleDocument<{ state?: string; removed?: boolean }>>(`/reviewSubmissionItems/${encodeURIComponent(itemId)}`, {
     data: { type: 'reviewSubmissionItems', id: itemId, attributes: { removed: true } },
   });
   return {
@@ -500,7 +486,7 @@ export async function addVersionToReviewSubmission(args: {
   versionId: string;
 }): Promise<{ itemId?: string; submissionId: string; versionId: string; itemCount: number }> {
   const { submissionId, versionId } = args;
-  const created = await apiPost('/reviewSubmissionItems', {
+  const created = await apiPost<AscSingleDocument>('/reviewSubmissionItems', {
     data: {
       type: 'reviewSubmissionItems',
       relationships: {
@@ -511,7 +497,7 @@ export async function addVersionToReviewSubmission(args: {
   });
 
   // 제출 전에 몇 개가 들어있는지 보여준다 — 첫 심사에서 "상품이 빠졌는지"를 눈으로 확인해야 한다.
-  const items = await apiGet(`/reviewSubmissions/${encodePathSegment(submissionId)}/items`, { limit: '50' }).catch(
+  const items = await apiGet<ReviewSubmissionItems>(`/reviewSubmissions/${encodePathSegment(submissionId)}/items`, { limit: '50' }).catch(
     () => null,
   );
   return {
@@ -532,20 +518,17 @@ async function releaseVersionFromStaleSubmissions(
   platform: string,
   versionId: string,
 ): Promise<number> {
-  const data = await apiGet('/reviewSubmissions', {
+  const data = await apiGet<ReviewSubmissionList>('/reviewSubmissions', {
     'filter[app]': appId,
     'filter[platform]': platform,
     'filter[state]': 'UNRESOLVED_ISSUES',
     'limit': '5',
   }).catch(() => null);
-  const stale = (data?.data ?? []) as Array<{ id: string }>;
+  const stale = data?.data ?? [];
   let released = 0;
   for (const sub of stale) {
-    const items = await apiGet(`/reviewSubmissions/${encodePathSegment(sub.id)}/items`, { limit: '50' }).catch(() => null);
-    const rows = (items?.data ?? []) as Array<{
-      id: string;
-      relationships?: { appStoreVersion?: { data?: { id?: string } } };
-    }>;
+    const items = await apiGet<ReviewSubmissionItems>(`/reviewSubmissions/${encodePathSegment(sub.id)}/items`, { limit: '50' }).catch(() => null);
+    const rows = items?.data ?? [];
     for (const row of rows) {
       if (row?.relationships?.appStoreVersion?.data?.id !== versionId) continue;
       await removeReviewSubmissionItem(row.id);
@@ -569,7 +552,7 @@ export async function cancelVersionReview(versionId: string): Promise<{
   const { appId, platform } = await getVersionAppAndPlatform(versionId);
 
   // 취소 가능한 상태(WAITING_FOR_REVIEW)의 submission 검색
-  const data = await apiGet('/reviewSubmissions', {
+  const data = await apiGet<ReviewSubmissionList>('/reviewSubmissions', {
     'filter[app]': appId,
     'filter[platform]': platform,
     'filter[state]': 'WAITING_FOR_REVIEW',
@@ -595,7 +578,7 @@ export async function cancelVersionReview(versionId: string): Promise<{
   // "큐 진입 후에는 웹에서만 취소 가능" 이라는 잘못된 통설이 굳어 있었다.
   // 실제로는 WAITING_FOR_REVIEW 에서도 canceled:true 가 통한다 (2026-07-25 실측):
   //   200 → state: CANCELING → (수십 초) → COMPLETE, 항목은 REMOVED, 버전은 편집 가능 복귀.
-  const patched = await apiPatch(`/reviewSubmissions/${encodePathSegment(submissionId)}`, {
+  const patched = await apiPatch<AscSingleDocument<ReviewSubmissionAttributes>>(`/reviewSubmissions/${encodePathSegment(submissionId)}`, {
     data: {
       type: 'reviewSubmissions',
       id: submissionId,

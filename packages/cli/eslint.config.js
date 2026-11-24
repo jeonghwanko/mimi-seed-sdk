@@ -45,9 +45,8 @@ export default tseslint.config(
       ],
 
       // ── 이 코드베이스에서 의도적으로 쓰는 것 ───────────────────────────
-      // 원격 MCP 응답과 감지된 프로젝트 파일은 스키마가 없다. any 를 막으면 가짜
-      // 타입을 지어내게 되고, 그 타입이 곧 거짓말이 된다.
-      '@typescript-eslint/no-explicit-any': 'off',
+      // 외부 응답은 unknown 으로 받아 좁히거나 사용하는 필드만 타입으로 선언한다.
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',

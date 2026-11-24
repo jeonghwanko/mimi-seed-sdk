@@ -9,9 +9,9 @@ import { fetchWithTimeout } from '../lib/http.js';
 
 const BASE = V1_BASE;
 
-export async function apiGet(path: string, params?: Record<string, string>) {
+export async function apiGet<T = UntypedAscJson>(path: string, params?: Record<string, string>): Promise<T> {
   const query = params ? `?${new URLSearchParams(params).toString()}` : '';
-  return apiRequest<UntypedAscJson>(BASE, `${path}${query}`, await authHeadersOrThrow(), { method: 'GET' });
+  return apiRequest<T>(BASE, `${path}${query}`, await authHeadersOrThrow(), { method: 'GET' });
 }
 
 export interface AppStoreVerifyResult {
@@ -82,8 +82,8 @@ export async function verifyAppStoreCredentials(
   };
 }
 
-export async function apiPatch(path: string, body: unknown) {
-  return apiRequest<UntypedAscJson>(BASE, path, await authHeadersOrThrow(), {
+export async function apiPatch<T = UntypedAscJson>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(BASE, path, await authHeadersOrThrow(), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -91,8 +91,8 @@ export async function apiPatch(path: string, body: unknown) {
 }
 
 /** 201 Created — 본문에 created entity. 일부 엔드포인트는 204 (→ { ok: true }). */
-export async function apiPost(path: string, body: unknown) {
-  return apiRequest<UntypedAscJson>(BASE, path, await authHeadersOrThrow(), {
+export async function apiPost<T = UntypedAscJson>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(BASE, path, await authHeadersOrThrow(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

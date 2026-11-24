@@ -69,6 +69,18 @@ export default tseslint.config(
   },
 
   {
+    // 심사 제출은 외부 응답이 any로 흘러가지 않도록 타입이 있는 API 호출을 사용한다.
+    files: ['src/appstore/review-submission.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+    },
+  },
+
+  {
     // 테스트는 mock 특성상 타입 우회가 잦다.
     files: ['src/__tests__/**/*.ts'],
     rules: {
