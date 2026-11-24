@@ -428,6 +428,7 @@ Bundled skills (auto-loaded by the Claude Code / Codex plugin from [`skills/`](s
 | `appstore-publish` | App Store Connect What's New + screenshots |
 | `deploy` | End-to-end: CI build → blocker check → notes → apply |
 | `video-create-publish` | Story/Shorts production → typography and crop review → render validation → optional YouTube publish |
+| [`game-intro-short`](skills/game-intro-short/SKILL.md) | Game Shorts from real gameplay, with verified results and language-matched footage, captions, and narration |
 | `mimi-seed-install` | Install & register from a git checkout — contributors / unpublished code |
 | `mimi-seed-update` | Update to the latest server / skills / CLI — and verify the *running* version |
 

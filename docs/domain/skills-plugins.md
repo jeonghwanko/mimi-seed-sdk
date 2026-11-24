@@ -9,7 +9,7 @@
 
 ## Skills (`skills/`)
 
-Eight skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
+Each skill has a `SKILL.md` with YAML frontmatter (`name`, `description`) auto-discovered by the client:
 
 | Skill | Role |
 |---|---|
@@ -19,6 +19,7 @@ Eight skills, each a `SKILL.md` with YAML frontmatter (`name`, `description`) au
 | `appstore-publish` | App Store Connect metadata, TestFlight builds, screenshots |
 | `deploy` | End-to-end: CI build → readiness check → release notes → store apply |
 | `video-create-publish` | Story/short-form video → typography and subject-safe crop review → render validation → optional YouTube publish |
+| `game-intro-short` | Game Short from captured gameplay → verify the decision and result → localize and deliver |
 | `mimi-seed-update` | Upgrade an install to the latest server / skills / CLI, then verify the *running* version |
 | `mimi-seed-install` | Install **from a clone**: `npm run setup` (both packages → build → `npm link` → `claude mcp add`), then hand off to `mimi-seed setup` for language + credentials |
 

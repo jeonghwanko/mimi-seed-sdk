@@ -429,6 +429,7 @@ Claude Code / Codex 플러그인은 [`skills/`](skills/)의 스킬을 함께 로
 | `appstore-publish` | App Store Connect What's New + 스크린샷 |
 | `deploy` | CI 빌드 → 블로커 점검 → 노트 → 스토어 적용 end-to-end |
 | `video-create-publish` | story/쇼츠 제작 → 타이포·크롭 검수 → 렌더 검증 → 선택적 YouTube 게시 |
+| [`game-intro-short`](skills/game-intro-short/SKILL.md) | 실제 플레이와 확인된 결과를 담은 게임 쇼츠 제작. 게임 화면, 자막, 내레이션 현지화 |
 | `mimi-seed-install` | git 체크아웃을 소스에서 설치·등록 — 기여자 / 미배포 코드 |
 | `mimi-seed-update` | 서버·스킬·CLI를 최신으로 올리고 **실제 돌고 있는 버전**까지 검증 |
 

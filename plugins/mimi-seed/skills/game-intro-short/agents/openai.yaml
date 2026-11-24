@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Intro Shorts"
+  short_description: "Make Shorts from real gameplay and verified results."
+  default_prompt: "Make a vertical game introduction from real gameplay. Show one player decision and its result, then verify the rendered video."
