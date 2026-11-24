@@ -16,10 +16,13 @@ const mocks = vi.hoisted(() => ({
   withEdit: vi.fn(),
   publisher: vi.fn(),
   checkPlayStoreRisksInEdit: vi.fn(),
-  checkAppStoreRisks: vi.fn(),
+  checkAppStoreVersionRisks: vi.fn(),
 }));
 
-vi.mock('../appstore/tools.js', () => ({ apiGet: mocks.apiGet }));
+vi.mock('../appstore/client.js', async (original) => ({
+  ...(await original<typeof import('../appstore/client.js')>()),
+  apiGet: mocks.apiGet,
+}));
 vi.mock('../playstore/tools.js', () => ({
   withEdit: mocks.withEdit,
   publisher: mocks.publisher,
@@ -27,7 +30,7 @@ vi.mock('../playstore/tools.js', () => ({
 vi.mock('../checks/risks.js', async (original) => ({
   ...(await original<typeof import('../checks/risks.js')>()),
   checkPlayStoreRisksInEdit: mocks.checkPlayStoreRisksInEdit,
-  checkAppStoreRisks: mocks.checkAppStoreRisks,
+  checkAppStoreVersionRisks: mocks.checkAppStoreVersionRisks,
 }));
 
 import { buildPlayStoreReleasePlan, buildAppStoreReleasePlan } from '../checks/plan.js';
@@ -54,9 +57,9 @@ const trackWith = (versionCodes: string[], status = 'draft') => ({
 });
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.checkPlayStoreRisksInEdit.mockResolvedValue([]);
-  mocks.checkAppStoreRisks.mockResolvedValue([]);
+  mocks.checkAppStoreVersionRisks.mockResolvedValue([]);
 });
 
 describe('buildPlayStoreReleasePlan', () => {
@@ -155,14 +158,17 @@ describe('buildPlayStoreReleasePlan', () => {
 });
 
 describe('buildAppStoreReleasePlan', () => {
-  const versionsResponse = {
-    data: [{ id: 'v-1', attributes: { versionString: '1.3.0', appStoreState: 'PREPARE_FOR_SUBMISSION' } }],
+  const linkedBuild = { id: 'build-1', type: 'builds' };
+  const validBuild = { ...linkedBuild, attributes: { processingState: 'VALID' } };
+  const versionRow = {
+    id: 'v-1',
+    attributes: { versionString: '1.3.0', appVersionState: 'PREPARE_FOR_SUBMISSION' },
+    relationships: { build: { data: linkedBuild } },
   };
+  const versionsResponse = { data: [versionRow], included: [validBuild] };
 
   it('버전 + 빌드 연결 + 위험 0 이면 제출이 pending', async () => {
-    mocks.apiGet
-      .mockResolvedValueOnce(versionsResponse)
-      .mockResolvedValueOnce({ data: { id: 'build-1' } });
+    mocks.apiGet.mockResolvedValueOnce(versionsResponse);
 
     const plan = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '1.3.0' });
 
@@ -170,7 +176,12 @@ describe('buildAppStoreReleasePlan', () => {
     expect(plan).toContain('☑︎ 버전에 빌드 연결됨');
     expect(plan).toMatch(/◻︎ 심사 제출 \(reviewSubmissions v2\) ⚠️ 비가역/);
     expect(plan).toContain('appstore_submit_for_review (versionId=v-1)');
-    expect(mocks.checkAppStoreRisks).toHaveBeenCalledWith('1234567890', { versionId: 'v-1' });
+    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', 'v-1');
+    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
+    expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
+      include: 'build',
+      'fields[builds]': 'processingState',
+    }));
   });
 
   it('같은 버전 문자열이 여러 플랫폼에 있으면 대상 ID가 필요하다', async () => {
@@ -180,28 +191,48 @@ describe('buildAppStoreReleasePlan', () => {
     const ambiguous = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '1.3.0' });
     expect(ambiguous).toContain('App Store 버전 대상을 하나로 확정할 수 없음');
     expect(ambiguous).not.toContain('appstore_update_whats_new');
-    expect(mocks.checkAppStoreRisks).not.toHaveBeenCalled();
+    expect(mocks.checkAppStoreVersionRisks).not.toHaveBeenCalled();
 
-    mocks.apiGet.mockResolvedValueOnce({ data: [mac] }).mockResolvedValueOnce({ data: { id: 'build-1' } });
+    mocks.apiGet.mockResolvedValueOnce({ data: [mac] }).mockResolvedValueOnce({ data: validBuild });
     const pinned = await buildAppStoreReleasePlan({ appId: '1234567890', versionId: 'v-mac' });
     expect(pinned).toContain('1.3.0 / MAC_OS');
     expect(pinned).toContain('appstore_submit_for_review (versionId=v-mac)');
-    expect(mocks.checkAppStoreRisks).toHaveBeenCalledWith('1234567890', { versionId: 'v-mac' });
+    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', 'v-mac');
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/v-mac/build', { 'fields[builds]': 'processingState' });
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       'filter[id]': 'v-mac',
-      'filter[appStoreState]': expect.stringContaining('METADATA_REJECTED'),
+      'filter[appVersionState]': expect.stringContaining('METADATA_REJECTED'),
     }));
   });
 
   it('빌드가 안 붙어 있으면 위험이 0이어도 제출은 blocked', async () => {
-    mocks.apiGet
-      .mockResolvedValueOnce(versionsResponse)
-      .mockResolvedValueOnce({ data: null });
+    mocks.apiGet.mockResolvedValueOnce({ data: [{ ...versionRow, relationships: { build: { data: null } } }] });
 
     const plan = await buildAppStoreReleasePlan({ appId: '1234567890' });
 
     expect(plan).toContain('⛔ 버전에 빌드 미연결');
     expect(plan).toMatch(/⛔ 심사 제출/);
+    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['PROCESSING', 'FAILED', 'INVALID'])('연결 빌드가 %s이면 제출을 막고 상세 조회를 생략한다', async (processingState) => {
+    mocks.apiGet.mockResolvedValueOnce({
+      data: [versionRow],
+      included: [{ ...linkedBuild, attributes: { processingState } }],
+    });
+    const plan = await buildAppStoreReleasePlan({ appId: '1234567890', versionId: 'v-1' });
+    expect(plan).toContain('⛔ 연결된 빌드 처리 미완료');
+    expect(plan).toContain(processingState);
+    expect(plan).toContain('⛔ 심사 제출');
+    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('두 번째 페이지가 남아 있으면 첫 페이지의 버전을 자동 선택하지 않는다', async () => {
+    mocks.apiGet.mockResolvedValueOnce({ ...versionsResponse, meta: { paging: { total: 2 } } });
+    const plan = await buildAppStoreReleasePlan({ appId: '1234567890' });
+    expect(plan).toContain('App Store 버전 대상을 하나로 확정할 수 없음');
+    expect(mocks.checkAppStoreVersionRisks).not.toHaveBeenCalled();
+    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
   });
 
   it('편집 가능한 버전이 없으면 blocked', async () => {
@@ -214,10 +245,8 @@ describe('buildAppStoreReleasePlan', () => {
   });
 
   it('버전이 일치하고 빌드가 연결돼도 조회 미완료면 노트 적용과 제출을 막는다', async () => {
-    mocks.apiGet
-      .mockResolvedValueOnce(versionsResponse)
-      .mockResolvedValueOnce({ data: { id: 'build-1' } });
-    mocks.checkAppStoreRisks.mockResolvedValue([
+    mocks.apiGet.mockResolvedValueOnce(versionsResponse);
+    mocks.checkAppStoreVersionRisks.mockResolvedValue([
       { code: 'API_ERROR_SCREENSHOTS_en-US', level: 'warning', title: '스크린샷 조회 실패', detail: '403' },
     ]);
     const plan = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '1.3.0' });
@@ -227,10 +256,8 @@ describe('buildAppStoreReleasePlan', () => {
   });
 
   it('블로커가 있으면 빌드가 붙어 있어도 제출은 blocked', async () => {
-    mocks.apiGet
-      .mockResolvedValueOnce(versionsResponse)
-      .mockResolvedValueOnce({ data: { id: 'build-1' } });
-    mocks.checkAppStoreRisks.mockResolvedValue([
+    mocks.apiGet.mockResolvedValueOnce(versionsResponse);
+    mocks.checkAppStoreVersionRisks.mockResolvedValue([
       { code: 'NO_SCREENSHOT', level: 'blocker', title: '스크린샷 없음', detail: '필수' },
     ]);
 

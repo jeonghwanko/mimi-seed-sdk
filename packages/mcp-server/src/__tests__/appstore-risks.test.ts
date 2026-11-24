@@ -129,14 +129,22 @@ describe('checkAppStoreRisks', () => {
     };
   }
 
-  function mockReadinessResponse(pathOverride: string, response: unknown, extra: Record<string, unknown> = {}) {
+  const linkedBuild = { id: 'build-1', type: 'builds' };
+  const validBuild = { ...linkedBuild, attributes: { processingState: 'VALID' } };
+  const versionWithBuild = {
+    id: 'version-1',
+    attributes: { appVersionState: 'PREPARE_FOR_SUBMISSION' },
+    relationships: { build: { data: linkedBuild } },
+  };
+
+  function mockReadinessResponse(pathOverride?: string, response?: unknown, extra: Record<string, unknown> = {}) {
     const responses: Record<string, unknown> = {
-      '/apps/1234567890/appStoreVersions': { data: [{ id: 'version-1' }] },
+      '/apps/1234567890/appStoreVersions': { data: [versionWithBuild], included: [validBuild] },
       '/appStoreVersions/version-1/appStoreVersionLocalizations': {
         data: [mediaLocale('en-US', 'placement-en')],
         included: [screenshotPlacement('placement-en')],
       },
-      '/appStoreVersions/version-1/relationships/build': { data: { type: 'builds', id: 'build-1' } },
+      '/appStoreVersions/version-1/build': { data: validBuild },
       '/apps/1234567890/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
       '/appInfos/info-1/appInfoLocalizations': { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] },
       '/appInfos/info-1/ageRatingDeclaration': { data: { attributes: { socialMedia: false, socialMediaAgeRestricted: false } } },
@@ -153,7 +161,6 @@ describe('checkAppStoreRisks', () => {
     ['/apps/1234567890/appStoreVersions', { meta: {} }, 'API_ERROR_VERSIONS'],
     ['/apps/1234567890/appStoreVersions', { data: [], meta: { paging: { nextCursor: 'next' } } }, 'API_ERROR_VERSIONS_INCOMPLETE'],
     ['/appStoreVersions/version-1/appStoreVersionLocalizations', { data: [null] }, 'API_ERROR_LOCALIZATIONS'],
-    ['/appStoreVersions/version-1/relationships/build', { data: { type: 'apps', id: 'wrong-resource' } }, 'API_ERROR_BUILD_LINKAGE'],
     ['/apps/1234567890/appInfos', {
       data: [{ id: 'live-info', attributes: { state: 'READY_FOR_DISTRIBUTION' } }],
       meta: { paging: { total: 2 } },
@@ -226,10 +233,58 @@ describe('checkAppStoreRisks', () => {
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
   });
 
+  it('MCP 출시 플랜이 실제 위험 점검까지 실행해도 버전과 빌드를 한 번만 조회한다', async () => {
+    mockReadinessResponse();
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: 'appstore_plan_release',
+        arguments: { appId: '1234567890', versionId: 'version-1' },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(JSON.stringify(result.content)).toContain('◻︎ 심사 제출');
+    }, { env: { MIMI_SEED_TOOLSETS: 'appstore' } });
+    const paths = mocks.apiGet.mock.calls.map(([path]) => path);
+    expect(paths.filter((path) => path === '/apps/1234567890/appStoreVersions')).toHaveLength(1);
+    expect(paths.filter((path) => path.endsWith('/build'))).toHaveLength(0);
+  });
+
+  it('연결된 빌드가 included에 없으면 해당 버전의 빌드만 상세 조회한다', async () => {
+    mockReadinessResponse('/apps/1234567890/appStoreVersions', {
+      data: [versionWithBuild],
+      included: [{ ...validBuild, id: 'unrelated-build' }],
+    });
+    await expect(checkAppStoreRisks('1234567890', { versionId: 'version-1' })).resolves.toEqual([]);
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/version-1/build', { 'fields[builds]': 'processingState' });
+  });
+
+  it.each([
+    { data: { ...validBuild, id: 'some-other-build' } },
+    { data: { ...validBuild, attributes: {} } },
+    { data: null },
+  ])('상세 응답으로 목록의 빌드를 확인할 수 없으면 점검 미완료로 표시한다 (%j)', async (detail) => {
+    mockReadinessResponse('/apps/1234567890/appStoreVersions', {
+      data: [versionWithBuild],
+      included: [],
+    }, { '/appStoreVersions/version-1/build': detail });
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'API_ERROR_BUILD', level: 'warning' })]);
+    expect(formatRisks(risks, 'App Store')).toContain('점검 미완료');
+  });
+
+  it('처리 실패한 연결 빌드는 단독 위험 점검에서도 제출 차단 사유다', async () => {
+    mockReadinessResponse('/apps/1234567890/appStoreVersions', {
+      data: [versionWithBuild],
+      included: [{ ...linkedBuild, attributes: { processingState: 'FAILED' } }],
+    });
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'BUILD_NOT_READY', level: 'blocker', detail: expect.stringContaining('FAILED') })]);
+    expect(mocks.apiGet.mock.calls.map(([path]) => path)).not.toContain('/appStoreVersions/version-1/build');
+  });
+
   it('대상 버전의 첨부 조회가 실패하면 다른 버전의 빌드로 제출 가능을 표시하지 않는다', async () => {
     mocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'target-version' }] };
-      if (path.endsWith('/relationships/build')) throw new Error('attachment forbidden');
+      if (path.endsWith('/build')) throw new Error('attachment forbidden');
       if (path === '/builds') return { data: [{ id: 'other-build' }] };
       if (path.endsWith('/appStoreVersionLocalizations')) return {
         data: [mediaLocale('en-US', 'placement-en')],
@@ -280,7 +335,7 @@ describe('checkAppStoreRisks', () => {
     expect(mocks.apiGet).toHaveBeenCalledWith(
       '/apps/1234567890/appStoreVersions',
       expect.objectContaining({
-        'filter[appStoreState]':
+        'filter[appVersionState]':
           'PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,METADATA_REJECTED,REJECTED',
       }),
     );
@@ -335,7 +390,7 @@ describe('checkAppStoreRisks', () => {
     mocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'version-1' }] };
       if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') return { data: [] };
-      if (path === '/appStoreVersions/version-1/relationships/build') return { data: { id: 'build-1' } };
+      if (path === '/appStoreVersions/version-1/build') return { data: validBuild };
       if (path === '/apps/1234567890/appInfos') {
         return { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] };
       }
@@ -363,7 +418,7 @@ describe('checkAppStoreRisks', () => {
     mocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'version-1' }] };
       if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') return { data: [] };
-      if (path === '/appStoreVersions/version-1/relationships/build') return { data: { id: 'build-1' } };
+      if (path === '/appStoreVersions/version-1/build') return { data: validBuild };
       if (path === '/apps/1234567890/appInfos') return { data: [{ id: 'info-1', attributes: {} }] };
       if (path === '/appInfos/info-1/appInfoLocalizations') {
         return { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] };
@@ -394,7 +449,7 @@ describe('checkAppStoreRisks', () => {
     mocks.apiGet.mockImplementation(async (path: string) => {
       if (path === '/apps/1234567890/appStoreVersions') return { data: [{ id: 'version-1' }] };
       if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') return { data: [] };
-      if (path === '/appStoreVersions/version-1/relationships/build') return { data: { id: 'build-1' } };
+      if (path === '/appStoreVersions/version-1/build') return { data: validBuild };
       if (path === '/apps/1234567890/appInfos') return { data: [{ id: 'info-1', attributes: {} }] };
       if (path === '/appInfos/info-1/appInfoLocalizations') {
         return { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] };

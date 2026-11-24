@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { OAuth2Client } from 'google-auth-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher, withEdit } from '../playstore/tools.js';
-import { apiGet } from '../appstore/tools.js';
+import { appStorePagination as pagination, getAppStoreResponse, pageIsIncomplete } from '../appstore/read-response.js';
+import { listEditableAppStoreVersions, resolveAppStoreVersionBuild, type AppStoreBuildReadiness } from '../appstore/release-target.js';
 import { includedScreenshotReadiness, indexIncludedPlacements, listMediaPlacements, screenshotPlacementReadiness } from '../appstore/asset-library.js';
 import { checkLegacyScreenshotReadiness } from '../appstore/screenshots.js';
 import { isNotFound } from '../appstore/http.js';
@@ -22,9 +23,6 @@ export interface SubmissionRisk {
 export function isRiskCheckIncomplete(risk: SubmissionRisk): boolean {
   return risk.code.startsWith('API_ERROR_');
 }
-
-export const APPSTORE_EDITABLE_STATES =
-  'PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,METADATA_REJECTED,REJECTED';
 
 export async function checkPlayStoreRisks(
   auth: OAuth2Client,
@@ -148,14 +146,6 @@ async function safeGet<T>(
 const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
 
 const idResource = z.object({ id: z.string().min(1) });
-const pagination = z.object({
-  links: z.object({ next: z.string().nullish() }).nullish(),
-  meta: z.object({ paging: z.object({
-    total: z.number().int().nonnegative().optional(),
-    nextCursor: z.string().nullish(),
-  }).optional() }).optional(),
-});
-const resourcePage = pagination.extend({ data: z.array(idResource) });
 const screenshotPage = pagination.extend({ data: z.array(z.unknown()) });
 const versionLocalizationPage = pagination.extend({
   data: z.array(idResource.extend({
@@ -182,9 +172,6 @@ const privacyLocalizationPage = pagination.extend({
     }).nullish(),
   })),
 });
-const buildRelationship = z.object({
-  data: idResource.extend({ type: z.literal('builds').optional() }).nullable(),
-});
 const ageAnswer = z.boolean().nullish().transform((value) => value ?? undefined);
 const ageRatingResponse = z.object({
   data: z.object({
@@ -197,19 +184,6 @@ const ageRatingResponse = z.object({
   }).nullable(),
 });
 
-async function getAppStoreResponse<T>(schema: z.ZodType<T>, path: string, params?: Record<string, string>): Promise<T> {
-  const response = schema.safeParse(await apiGet<unknown>(path, params));
-  if (!response.success) {
-    const field = response.error.issues[0]?.path.join('.') || '응답 본문';
-    throw new Error(`App Store Connect 응답 형식 오류 (${field}).`);
-  }
-  return response.data;
-}
-
-function pageIsIncomplete(page: z.infer<typeof pagination>, count: number): boolean {
-  return Boolean(page.links?.next || page.meta?.paging?.nextCursor) || (page.meta?.paging?.total ?? 0) > count;
-}
-
 function screenshotSetPresence(response: unknown): boolean | undefined {
   const parsed = screenshotPage.safeParse(response);
   if (!parsed.success) return undefined;
@@ -219,18 +193,33 @@ function screenshotSetPresence(response: unknown): boolean | undefined {
   return undefined;
 }
 
+type AppStorePolicy = { socialMedia?: boolean; socialMediaAgeRestricted?: boolean };
+
+export function appStoreBuildRisk(build: AppStoreBuildReadiness): SubmissionRisk | undefined {
+  switch (build.status) {
+    case 'ready':
+      return undefined;
+    case 'missing':
+      return { level: 'blocker', code: 'NO_BUILD', title: '버전에 연결된 빌드 없음', detail: '대상 버전에 사용할 빌드를 업로드하고 연결하세요.' };
+    case 'not-ready':
+      return {
+        level: 'blocker',
+        code: 'BUILD_NOT_READY',
+        title: '연결된 빌드 처리 미완료',
+        detail: `빌드 ${build.id}의 처리 상태는 ${build.processingState}입니다. App Store Connect에서 처리 결과를 확인하세요.`,
+      };
+    case 'unknown':
+      return { level: 'warning', code: 'API_ERROR_BUILD', title: '연결된 빌드 점검 미완료', detail: build.detail };
+  }
+}
+
 export async function checkAppStoreRisks(
   appId: string,
-  expected: { versionId?: string; socialMedia?: boolean; socialMediaAgeRestricted?: boolean } = {},
+  expected: AppStorePolicy & { versionId?: string } = {},
 ): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
-
-  const appPath = `/apps/${encodePathSegment(appId)}`;
   const versions = await safeGet(
-    () => getAppStoreResponse(resourcePage, `${appPath}/appStoreVersions`, {
-      'filter[appStoreState]': APPSTORE_EDITABLE_STATES,
-      ...(expected.versionId ? { 'filter[id]': expected.versionId, limit: '1' } : { limit: '5' }),
-    }),
+    () => listEditableAppStoreVersions(appId, { versionId: expected.versionId }),
     risks,
     'VERSIONS',
     '편집 가능한 버전 목록',
@@ -238,10 +227,8 @@ export async function checkAppStoreRisks(
 
   if (!versions) return risks;
 
-  const version = expected.versionId
-    ? versions.data.find(({ id }) => id === expected.versionId)
-    : versions.data[0];
-  if (!version && pageIsIncomplete(versions, versions.data.length)) {
+  const version = versions.candidates[0];
+  if (!version && versions.incomplete) {
     risks.push({
       level: 'warning',
       code: 'API_ERROR_VERSIONS_INCOMPLETE',
@@ -264,11 +251,25 @@ export async function checkAppStoreRisks(
     return risks;
   }
 
-  const versionId = encodePathSegment(version.id);
+  const [build, otherRisks] = await Promise.all([
+    resolveAppStoreVersionBuild(version),
+    checkAppStoreVersionRisks(appId, version.id, expected),
+  ]);
+  const buildRisk = appStoreBuildRisk(build);
+  return buildRisk ? [buildRisk, ...otherRisks] : otherRisks;
+}
 
-  // 1) 메타데이터·스크린샷·버전 첨부 빌드는 versionId 기반으로 조회.
-  // 2) 개인정보 URL은 appInfoLocalization 단위(앱 단위)로 조회.
-  const [locs, attachedBuildRel, appInfos] = await Promise.all([
+export async function checkAppStoreVersionRisks(
+  appId: string,
+  selectedVersionId: string,
+  expected: AppStorePolicy = {},
+): Promise<SubmissionRisk[]> {
+  const risks: SubmissionRisk[] = [];
+  const appPath = `/apps/${encodePathSegment(appId)}`;
+  const versionId = encodePathSegment(selectedVersionId);
+
+  // 버전 메타데이터·스크린샷과 앱 단위 개인정보처리방침을 병행 조회한다.
+  const [locs, appInfos] = await Promise.all([
     safeGet(
       () => getAppStoreResponse(versionLocalizationPage, `/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
         limit: '200',
@@ -281,12 +282,6 @@ export async function checkAppStoreRisks(
       risks,
       'LOCALIZATIONS',
       '버전 로컬라이제이션',
-    ),
-    safeGet(
-      async () => buildRelationship.safeParse(await apiGet<unknown>(`/appStoreVersions/${versionId}/relationships/build`)),
-      risks,
-      'BUILD',
-      '버전 첨부 빌드',
     ),
     safeGet(
       () => getAppStoreResponse(appInfoPage, `${appPath}/appInfos`, { 'fields[appInfos]': 'state', 'limit': '10' }),
@@ -349,36 +344,6 @@ export async function checkAppStoreRisks(
         });
       }
     }
-  }
-
-  // 명시한 버전의 첨부 상태는 다른 버전의 빌드로 확인할 수 없다.
-  let buildVerdict: 'present' | 'missing' | 'unknown' = 'unknown';
-  if (attachedBuildRel?.success) {
-    buildVerdict = attachedBuildRel.data.data === null ? 'missing' : 'present';
-  } else if (attachedBuildRel) {
-    risks.push({
-      level: 'warning',
-      code: 'API_ERROR_BUILD_LINKAGE',
-      title: '버전 첨부 빌드 확인 실패',
-      detail: 'App Store Connect의 빌드 관계 응답이 올바르지 않습니다.',
-    });
-  } else if (!expected.versionId) {
-    const fallbackBuilds = await safeGet(
-      () => getAppStoreResponse(resourcePage, '/builds', {
-        'filter[app]': appId,
-        'fields[builds]': 'version,uploadedDate,processingState',
-        'sort': '-uploadedDate',
-        'limit': '5',
-      }),
-      risks,
-      'BUILDS_FALLBACK',
-      '앱 빌드 목록(폴백)',
-    );
-    if (fallbackBuilds?.data.length) buildVerdict = 'present';
-    else if (fallbackBuilds && !pageIsIncomplete(fallbackBuilds, 0)) buildVerdict = 'missing';
-  }
-  if (buildVerdict === 'missing') {
-    risks.push({ level: 'blocker', code: 'NO_BUILD', title: '버전에 연결된 빌드 없음', detail: '대상 버전에 사용할 빌드를 업로드하고 연결하세요.' });
   }
 
   // 개인정보처리방침 — appInfoLocalization 어디 한 곳이라도 URL 또는 in-app 텍스트가 있으면 OK.
