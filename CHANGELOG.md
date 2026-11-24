@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.23.3] - 2026-11-24
+
 ### Added
 
 - `release_status` accepts an exact Google Play version code and can disambiguate an App Store version by platform.
