@@ -3,6 +3,7 @@ import type { ToolRegistrar } from '../../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as appstore from '../../appstore/tools.js';
 import { buildAppStoreReleasePlan } from '../../checks/plan.js';
+import { appStoreRiskPolicyShape, releaseReadinessResult, releaseReadinessShape } from '../../checks/release-readiness.js';
 import { textResult } from '../../lib/mcp-response.js';
 import { reviewSubmissionsText, submitForReviewDryRunText } from '../../appstore/messages.js';
 
@@ -91,11 +92,15 @@ export function registerSubmitForReviewTools(server: ToolRegistrar) {
       appId: z.string().describe('App Store 앱 ID (appstore_list_apps 결과의 id)'),
       versionString: z.string().trim().min(1).optional().describe('대상 버전 문자열 (예: 1.3.0)'),
       versionId: z.string().trim().min(1).optional().describe('정확한 버전 ID (appstore_list_versions 결과)'),
+      ...appStoreRiskPolicyShape,
     },
-    async ({ appId, versionString, versionId }) => {
-      const text = await buildAppStoreReleasePlan({ appId, versionString, versionId });
-      return textResult(text);
+    async ({ appId, versionString, versionId, socialMediaCapability, socialMediaAgeRestricted }) => {
+      const { text, readiness } = await buildAppStoreReleasePlan({
+        appId, versionString, versionId, policy: { socialMedia: socialMediaCapability, socialMediaAgeRestricted },
+      });
+      return releaseReadinessResult(text, readiness);
     },
+    releaseReadinessShape,
   );
 
   server.tool(

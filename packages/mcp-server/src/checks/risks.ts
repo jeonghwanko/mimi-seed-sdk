@@ -4,25 +4,20 @@ import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { appStorePagination as pagination, getAppStoreResponse, pageIsIncomplete } from '../appstore/read-response.js';
 import { selectAppInfo } from '../appstore/app-info.js';
-import { selectEditableAppStoreVersion, resolveAppStoreVersionBuild, type AppStoreBuildReadiness, type AppStoreVersionCandidate } from '../appstore/release-target.js';
+import type { AppStoreBuildReadiness, AppStoreVersionCandidate } from '../appstore/release-target.js';
 import { includedScreenshotReadiness, indexIncludedPlacements, listMediaPlacements, screenshotPlacementReadiness } from '../appstore/asset-library.js';
 import { checkLegacyScreenshotReadiness } from '../appstore/screenshots.js';
 import { readAppInfoAgeRatingForRelease, readAppInfoPrivacy } from '../appstore/app-info-policy.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { extractHttpStatus } from '../lib/google-errors.js';
+import { isRiskCheckIncomplete, releaseReadiness, type SubmissionRisk } from './release-readiness.js';
 
-export type RiskLevel = 'blocker' | 'warning' | 'info';
-
-export interface SubmissionRisk {
-  level: RiskLevel;
-  code: string;
-  title: string;
-  detail: string;
-  fixUrl?: string;
-}
-
-export function isRiskCheckIncomplete(risk: SubmissionRisk): boolean {
-  return risk.code.startsWith('API_ERROR_');
+export function findPlayTargetReleases(
+  tracks: readonly androidpublisher_v3.Schema$Track[],
+  target: { track: string; versionCode: string },
+) {
+  return tracks.filter(({ track }) => track === target.track)
+    .flatMap(({ releases }) => releases?.filter((release) => release.versionCodes?.includes(target.versionCode)) ?? []);
 }
 
 export async function checkPlayStoreRisks(
@@ -30,8 +25,21 @@ export async function checkPlayStoreRisks(
   packageName: string,
   language = 'ko-KR',
   target?: { track: string; versionCode: string },
-): Promise<SubmissionRisk[]> {
-  return withEdit(auth, packageName, (editId) => checkPlayStoreRisksInEdit(auth, packageName, editId, language, target));
+) {
+  const releaseTarget = { store: 'playstore' as const, packageName, ...target };
+  try {
+    const risks = await withEdit(auth, packageName, (editId) => checkPlayStoreRisksInEdit(auth, packageName, editId, language, target));
+    const targetVerified = target !== undefined && !risks.some(({ code }) =>
+      code === 'API_ERROR_TRACKS' || code === 'TARGET_BUILD_NOT_FOUND' || code === 'API_ERROR_TARGET_BUILD_AMBIGUOUS');
+    return releaseReadiness(releaseTarget, risks, targetVerified);
+  } catch (error) {
+    return releaseReadiness(releaseTarget, [{
+      level: 'warning',
+      code: 'API_ERROR_PLAY_EDIT',
+      title: 'Google Play edit 조회 실패',
+      detail: error instanceof Error ? error.message : String(error),
+    }], false, false);
+  }
 }
 
 export async function checkPlayStoreRisksInEdit(
@@ -107,8 +115,15 @@ export async function checkPlayStoreRisksInEdit(
 
   if (tracks) {
     if (target) {
-      const targetTrack = tracks.find((track) => track.track === target.track);
-      if (!targetTrack?.releases?.some((release) => release.versionCodes?.includes(target.versionCode))) {
+      const matches = findPlayTargetReleases(tracks, target);
+      if (matches.length > 1) {
+        risks.push({
+          level: 'warning',
+          code: 'API_ERROR_TARGET_BUILD_AMBIGUOUS',
+          title: '대상 트랙에 일치하는 릴리스가 여러 개 있음',
+          detail: `${target.track} 트랙에서 versionCode ${target.versionCode}가 포함된 릴리스 상태를 확인하세요.`,
+        });
+      } else if (matches.length === 0) {
         risks.push({
           level: 'blocker',
           code: 'TARGET_BUILD_NOT_FOUND',
@@ -167,7 +182,7 @@ function screenshotSetPresence(response: unknown): boolean | undefined {
   return undefined;
 }
 
-type AppStorePolicy = { socialMedia?: boolean; socialMediaAgeRestricted?: boolean };
+export type AppStorePolicy = { socialMedia?: boolean; socialMediaAgeRestricted?: boolean };
 
 export function appStoreBuildRisk(build: AppStoreBuildReadiness): SubmissionRisk | undefined {
   switch (build.status) {
@@ -185,51 +200,6 @@ export function appStoreBuildRisk(build: AppStoreBuildReadiness): SubmissionRisk
     case 'unknown':
       return { level: 'warning', code: 'API_ERROR_BUILD', title: '연결된 빌드 점검 미완료', detail: build.detail };
   }
-}
-
-export async function checkAppStoreRisks(
-  appId: string,
-  expected: AppStorePolicy & { versionId?: string } = {},
-): Promise<SubmissionRisk[]> {
-  const risks: SubmissionRisk[] = [];
-  const selection = await safeGet(
-    () => selectEditableAppStoreVersion(appId, { versionId: expected.versionId }),
-    risks,
-    'VERSIONS',
-    '편집 가능한 버전 목록',
-  );
-
-  if (!selection) return risks;
-  if (selection.status === 'incomplete' || selection.status === 'ambiguous') {
-    risks.push({
-      level: 'warning',
-      code: selection.status === 'incomplete' ? 'API_ERROR_VERSIONS_INCOMPLETE' : 'API_ERROR_VERSIONS_AMBIGUOUS',
-      title: '편집 가능한 버전을 하나로 확인할 수 없음',
-      detail: 'App Store Connect에서 대상 플랫폼과 편집 상태를 확인한 뒤 해당 versionId로 다시 점검하세요.',
-    });
-    return risks;
-  }
-  if (selection.status === 'missing') {
-    if (expected.versionId) {
-      risks.push({
-        level: 'blocker',
-        code: 'TARGET_VERSION_UNVERIFIED',
-        title: '대상 버전을 점검할 수 없음',
-        detail: '대상 앱의 편집 가능한 버전 목록에서 요청한 버전을 확인하세요.',
-      });
-    } else {
-      risks.push({ level: 'blocker', code: 'NO_EDITABLE_VERSION', title: '편집 가능한 버전 없음', detail: 'App Store Connect에서 새 버전을 만드세요.', fixUrl: 'https://appstoreconnect.apple.com' });
-    }
-    return risks;
-  }
-
-  const { version } = selection;
-  const [build, otherRisks] = await Promise.all([
-    resolveAppStoreVersionBuild(version),
-    checkAppStoreVersionRisks(appId, version, expected),
-  ]);
-  const buildRisk = appStoreBuildRisk(build);
-  return buildRisk ? [buildRisk, ...otherRisks] : otherRisks;
 }
 
 export async function checkAppStoreVersionRisks(

@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - `release_status` accepts an exact Google Play version code and can disambiguate an App Store version by platform.
+- Both stores' release plans and submission-risk checks expose a shared MCP output schema with the checked target, completion status, blocking codes, and risks. The App Store plan also accepts the expected social media policy inputs.
 
 ### Changed
 
@@ -31,6 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Google Play operations for the same app wait for the current edit to finish in the MCP process. Failed writes discard the edit if the commit has yet to start.
 - `release_status` returns the build attached to the requested App Store version, normally in a single Apple API request. The legacy `recentBuilds` array contains only the attached build when verified.
 - `release_status` reports multiple matches when a Google Play track has more than one release matching the request.
+- Google Play release plans mark a completed release as done and skip the resubmission step.
 
 ### Tool changes
 

@@ -33,7 +33,15 @@ vi.mock('../checks/risks.js', async (original) => ({
   checkAppStoreVersionRisks: mocks.checkAppStoreVersionRisks,
 }));
 
-import { buildPlayStoreReleasePlan, buildAppStoreReleasePlan } from '../checks/plan.js';
+import { buildPlayStoreReleasePlan as playPlan, buildAppStoreReleasePlan as appPlan } from '../checks/plan.js';
+
+async function buildPlayStoreReleasePlan(opts: Parameters<typeof playPlan>[0]) {
+  return (await playPlan(opts)).text;
+}
+
+async function buildAppStoreReleasePlan(opts: Parameters<typeof appPlan>[0]) {
+  return (await appPlan(opts)).text;
+}
 
 const auth = {} as OAuth2Client;
 const PKG = 'com.example.app';
@@ -63,6 +71,17 @@ beforeEach(() => {
 });
 
 describe('buildPlayStoreReleasePlan', () => {
+  it('이미 완료된 릴리스는 다시 제출하도록 안내하지 않는다', async () => {
+    editSucceeds(trackWith(['42'], 'completed'));
+
+    const plan = await buildPlayStoreReleasePlan({
+      auth, packageName: PKG, versionCode: '42', track: 'production', language: 'ko-KR',
+    });
+
+    expect(plan).toContain('☑︎ production 트랙의 대상 릴리스가 이미 completed 상태임');
+    expect(plan).not.toContain('playstore_submit_release (track=');
+  });
+
   it('빌드 도착 + 위험 0 이면 제출 단계가 pending 이고 비가역 표시가 붙는다', async () => {
     editSucceeds(trackWith(['42']));
 
@@ -176,7 +195,7 @@ describe('buildAppStoreReleasePlan', () => {
     expect(plan).toContain('☑︎ 버전에 빌드 연결됨');
     expect(plan).toMatch(/◻︎ 심사 제출 \(reviewSubmissions v2\) ⚠️ 비가역/);
     expect(plan).toContain('appstore_submit_for_review (versionId=v-1)');
-    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-1', platform: 'IOS' }));
+    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-1', platform: 'IOS' }), undefined);
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       include: 'build',
@@ -197,7 +216,7 @@ describe('buildAppStoreReleasePlan', () => {
     const pinned = await buildAppStoreReleasePlan({ appId: '1234567890', versionId: 'v-mac' });
     expect(pinned).toContain('1.3.0 / MAC_OS');
     expect(pinned).toContain('appstore_submit_for_review (versionId=v-mac)');
-    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-mac', platform: 'MAC_OS' }));
+    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-mac', platform: 'MAC_OS' }), undefined);
     expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/v-mac/build', { 'fields[builds]': 'processingState,version' });
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       'filter[id]': 'v-mac',
@@ -238,10 +257,15 @@ describe('buildAppStoreReleasePlan', () => {
   it('편집 가능한 버전이 없으면 blocked', async () => {
     mocks.apiGet.mockResolvedValueOnce({ data: [] });
 
-    const plan = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '9.9.9' });
+    const { text: plan, readiness } = await appPlan({ appId: '1234567890', versionString: '9.9.9' });
 
     expect(plan).toContain('⛔ 편집 가능한 9.9.9 버전 없음');
     expect(plan).toMatch(/⛔ 심사 제출/);
+    expect(readiness).toMatchObject({
+      target: { store: 'appstore', appId: '1234567890', versionString: '9.9.9' },
+      targetVerified: false, checkStatus: 'incomplete', canSubmit: false,
+      blockingCodes: ['TARGET_VERSION_UNVERIFIED'],
+    });
   });
 
   it('버전이 일치하고 빌드가 연결돼도 조회 미완료면 노트 적용과 제출을 막는다', async () => {

@@ -1,7 +1,9 @@
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
-import { checkPlayStoreRisks, checkAppStoreRisks, formatRisks } from '../checks/risks.js';
+import { checkPlayStoreRisks, formatRisks } from '../checks/risks.js';
+import { checkAppStoreSubmission } from '../checks/appstore-submission.js';
+import { appStoreRiskPolicyShape, releaseReadinessResult, releaseReadinessShape } from '../checks/release-readiness.js';
 import { validateAppStoreScreenshots, validatePlayStoreScreenshots, formatValidationResults } from '../checks/screenshots.js';
 import { requirePlayStoreAuth } from '../helpers.js';
 import { appStorePlatformSchema } from '../appstore/release-target.js';
@@ -47,11 +49,12 @@ export function registerChecksTools(server: ToolRegistrar) {
       }
       const auth = await requirePlayStoreAuth(packageName);
       const target = track && versionCode ? { track, versionCode } : undefined;
-      const risks = await checkPlayStoreRisks(auth, packageName, language, target);
+      const readiness = await checkPlayStoreRisks(auth, packageName, language, target);
       const label = target ? `Google Play ${packageName} (${target.track}/${target.versionCode})` : 'Google Play';
-      const text = formatRisks(risks, label);
-      return textResult(text);
+      const text = formatRisks(readiness.risks, label);
+      return releaseReadinessResult(text, readiness);
     },
+    releaseReadinessShape,
   );
 
   server.tool(
@@ -66,19 +69,18 @@ export function registerChecksTools(server: ToolRegistrar) {
     {
       appId: z.string().describe('App Store 앱 ID (appstore_list_apps 결과의 id 필드)'),
       versionId: z.string().min(1).optional().describe('대상 App Store 버전 ID (appstore_list_versions 결과)'),
-      socialMediaCapability: z.boolean().optional().describe('앱이 소셜 피드·UGC 확산 기능을 제공하는지에 대한 프로젝트 사실'),
-      socialMediaAgeRestricted: z.boolean().optional().describe('소셜 미디어 기능이 13세 미만에게 비활성화되는지에 대한 프로젝트 사실'),
+      ...appStoreRiskPolicyShape,
     },
     async ({ appId, versionId, socialMediaCapability, socialMediaAgeRestricted }) => {
-      const risks = await checkAppStoreRisks(appId, {
+      const { readiness } = await checkAppStoreSubmission(appId, {
         versionId,
-        socialMedia: socialMediaCapability,
-        socialMediaAgeRestricted,
+        policy: { socialMedia: socialMediaCapability, socialMediaAgeRestricted },
       });
       const label = versionId ? `App Store ${appId} (${versionId})` : 'App Store';
-      const text = formatRisks(risks, label);
-      return textResult(text);
+      const text = formatRisks(readiness.risks, label);
+      return releaseReadinessResult(text, readiness);
     },
+    releaseReadinessShape,
   );
 
   server.tool(

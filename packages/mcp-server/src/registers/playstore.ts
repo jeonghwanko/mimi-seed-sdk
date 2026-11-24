@@ -19,6 +19,7 @@ import * as playFinancials from '../playstore/financials.js';
 import * as iam from '../iam/tools.js';
 import { resolveServiceAccountJsonInput } from '../iam/key-files.js';
 import { buildPlayStoreReleasePlan } from '../checks/plan.js';
+import { releaseReadinessResult, releaseReadinessShape } from '../checks/release-readiness.js';
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../lib/text-validators.js';
 import { jsonResult, textResult, errorResult } from '../lib/mcp-response.js';
 import { googleSubscriptionCreationResult } from '../lib/store-create-result.js';
@@ -552,15 +553,16 @@ export function registerPlaystoreTools(server: ToolRegistrar) {
     },
     async ({ packageName, versionCode, track, language }) => {
       const auth = await requirePlayStoreAuth(packageName);
-      const text = await buildPlayStoreReleasePlan({
+      const { text, readiness } = await buildPlayStoreReleasePlan({
         auth,
         packageName,
         versionCode,
         track: track ?? 'production',
         language: language ?? 'ko-KR',
       });
-      return textResult(text);
+      return releaseReadinessResult(text, readiness);
     },
+    releaseReadinessShape,
   );
 
   server.tool(
