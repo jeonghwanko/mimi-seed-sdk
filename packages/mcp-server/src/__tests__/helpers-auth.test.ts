@@ -53,6 +53,7 @@ describe('requireAuth — 사전 갱신 + 친절한 에러', () => {
 describe('requireAuth — 스코프 pre-flight (도메인 선택형 로그인)', () => {
   const CLOUD_PLATFORM = 'https://www.googleapis.com/auth/cloud-platform';
   const GA4_EDIT = 'https://www.googleapis.com/auth/analytics.edit';
+  const GA4_READONLY = 'https://www.googleapis.com/auth/analytics.readonly';
   const client = { id: 'oauth' };
 
   const withScope = (scope: string | undefined) =>
@@ -66,12 +67,23 @@ describe('requireAuth — 스코프 pre-flight (도메인 선택형 로그인)',
     withScope(CLOUD_PLATFORM);
     await expect(requireAuth(CLOUD_PLATFORM, 'travel')).resolves.toBe(client);
     expect(h.ensureFreshAccessToken).toHaveBeenCalledWith(undefined, 'travel');
-    expect(h.getAuthenticatedClient).toHaveBeenCalledWith('travel');
+    expect(h.getAuthenticatedClient).toHaveBeenCalledWith('travel', { scope: CLOUD_PLATFORM });
   });
 
   it('요구 스코프가 부여돼 있으면 통과', async () => {
     withScope(`${CLOUD_PLATFORM} ${GA4_EDIT}`);
     await expect(requireAuth(CLOUD_PLATFORM)).resolves.toBe(client);
+  });
+
+  it.each([GA4_READONLY, GA4_EDIT])('선택 스코프 중 하나(%s)만 부여되어도 통과', async (scope) => {
+    withScope(scope);
+    await expect(requireAuth([GA4_READONLY, GA4_EDIT])).resolves.toBe(client);
+  });
+
+  it('선택 스코프가 모두 없으면 프로필과 도메인을 안내한다', async () => {
+    withScope(CLOUD_PLATFORM);
+    await expect(requireAuth([GA4_READONLY, GA4_EDIT], 'analytics-team'))
+      .rejects.toThrow(/--profile analytics-team --domains ga4\b/);
   });
 
   it('요구 스코프 미부여면 INSUFFICIENT_SCOPE + 해당 도메인 --domains 안내로 throw', async () => {

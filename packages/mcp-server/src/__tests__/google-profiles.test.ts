@@ -147,6 +147,20 @@ describe('Google account/channel profiles', () => {
     expect(auth.getStoredTokens('channel-a')?.access_token).toBe('example-access');
   });
 
+  it.each([undefined, 'channel-a'])('권한 확인 뒤 교체된 Google 로그인(%s)으로 요청하지 않는다', async (profile) => {
+    await login(profile);
+    const snapshot = await auth.ensureFreshAccessToken(undefined, profile);
+    if (snapshot.status !== 'fresh') throw new Error('Expected a fresh grant');
+    expect(auth.getAuthenticatedClient(profile, snapshot.tokens)).not.toBeNull();
+
+    h.tokenResponse = { ...h.tokenResponse, refresh_token: 'example-replacement-grant' };
+    await login(profile);
+    const clientCount = h.clients.length;
+
+    expect(() => auth.getAuthenticatedClient(profile, snapshot.tokens)).toThrow(/Google 인증이 변경/);
+    expect(h.clients).toHaveLength(clientCount);
+  });
+
   it('만료 토큰은 해당 프로필만 갱신하고 채널 메타데이터를 보존한다', async () => {
     await login('channel-a', channelA);
     h.tokenResponse = { ...h.tokenResponse, refresh_token: 'example-rotated-refresh', expiry_date: 1 };
