@@ -1,4 +1,6 @@
 import { getAuthHeaders } from './auth.js';
+import { apiGet } from './client.js';
+import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -67,17 +69,22 @@ interface ScreenshotAttributes {
   imageAsset?: unknown;
 }
 
+type ScreenshotSetsDocument = AscListDocument<
+  { screenshotDisplayType?: string },
+  { appScreenshots?: AscToMany },
+  AscResource<ScreenshotAttributes>
+>;
+
+function fetchScreenshotSets<T>(localizationId: string, includeImageMetadata: boolean): Promise<T> {
+  return apiGet<T>(`/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/appScreenshotSets`, {
+    include: 'appScreenshots',
+    'fields[appScreenshotSets]': 'screenshotDisplayType,appScreenshots',
+    'fields[appScreenshots]': includeImageMetadata ? 'fileName,fileSize,assetDeliveryState,imageAsset' : 'assetDeliveryState',
+  });
+}
+
 export async function listScreenshotSets(localizationId: string) {
-  const data = await req<AscListDocument<
-    { screenshotDisplayType?: string },
-    { appScreenshots?: AscToMany },
-    AscResource<ScreenshotAttributes>
-  > | null>(
-    `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/appScreenshotSets` +
-      `?include=appScreenshots` +
-      `&fields[appScreenshotSets]=screenshotDisplayType,appScreenshots` +
-      `&fields[appScreenshots]=fileName,fileSize,assetDeliveryState,imageAsset`,
-  );
+  const data = await fetchScreenshotSets<ScreenshotSetsDocument | null>(localizationId, true);
   const included = data?.included ?? [];
   return (data?.data ?? []).map((s) => ({
     id: s.id,
@@ -93,6 +100,59 @@ export async function listScreenshotSets(localizationId: string) {
       };
     }),
   }));
+}
+
+
+const pagingFields = {
+  links: z.object({ next: z.string().nullish() }).nullish(),
+  meta: z.object({ paging: z.object({
+    total: z.number().int().nonnegative().optional(),
+    nextCursor: z.string().nullish(),
+  }).optional() }).nullish(),
+};
+const legacyScreenshotRef = z.object({ type: z.literal('appScreenshots'), id: z.string().min(1) });
+const legacyScreenshotSets = z.object({
+  ...pagingFields,
+  data: z.array(z.object({
+    relationships: z.object({
+      appScreenshots: z.object({ ...pagingFields, data: z.array(legacyScreenshotRef) }).nullish(),
+    }).nullish(),
+  })),
+  included: z.array(legacyScreenshotRef.extend({
+    attributes: z.object({
+      assetDeliveryState: z.object({ state: z.string().nullish() }).nullish(),
+    }).nullish(),
+  })).nullish(),
+});
+
+function hasMoreScreenshots(page: z.infer<z.ZodObject<typeof pagingFields>>, count: number): boolean {
+  return Boolean(page.links?.next || page.meta?.paging?.nextCursor) || (page.meta?.paging?.total ?? 0) > count;
+}
+
+export async function checkLegacyScreenshotReadiness(
+  localizationId: string,
+): Promise<'ready' | 'missing' | 'not-ready' | 'unknown'> {
+  const result = legacyScreenshotSets.safeParse(await fetchScreenshotSets<unknown>(localizationId, false));
+  if (!result.success) return 'unknown';
+  const { data, included } = result.data;
+  const states = new Map((included ?? []).map((asset) => [asset.id, asset.attributes?.assetDeliveryState?.state]));
+  let hasScreenshot = false;
+  let incomplete = hasMoreScreenshots(result.data, data.length);
+  for (const set of data) {
+    const relationship = set.relationships?.appScreenshots;
+    if (!relationship) {
+      incomplete = true;
+      continue;
+    }
+    incomplete ||= hasMoreScreenshots(relationship, relationship.data.length);
+    for (const screenshot of relationship.data) {
+      const state = states.get(screenshot.id);
+      if (state === 'COMPLETE') return 'ready';
+      hasScreenshot = true;
+      if (state !== 'AWAITING_UPLOAD' && state !== 'UPLOAD_COMPLETE' && state !== 'FAILED') incomplete = true;
+    }
+  }
+  return incomplete ? 'unknown' : hasScreenshot ? 'not-ready' : 'missing';
 }
 
 // ─── 셋 확보 (존재하면 재사용, 없으면 생성) ───

@@ -101,20 +101,46 @@ it('Play 출시 점검은 다른 트랙의 같은 코드와 같은 트랙의 다
 });
 
 describe('checkAppStoreRisks', () => {
-  function mockReadinessResponse(pathOverride: string, response: unknown) {
+  function screenshotPlacement(id: string, state = 'PARENT_PREPARE_FOR_SUBMISSION') {
+    return {
+      type: 'appAssetLibraryPlacements',
+      id,
+      attributes: { placementType: 'APP_SCREENSHOT', state },
+      relationships: { image: { data: { type: 'appAssetLibraryImages', id: `image-${id}` } } },
+    };
+  }
+
+  function mediaLocale(locale: string, placementId?: string, screenshotSets: { id: string }[] = []) {
+    return {
+      id: `loc-${locale}`,
+      attributes: { locale, description: 'Description', keywords: 'example', whatsNew: 'Notes' },
+      relationships: {
+        placements: { data: placementId ? [{ type: 'appAssetLibraryPlacements', id: placementId }] : [] },
+        appScreenshotSets: { data: screenshotSets },
+      },
+    };
+  }
+
+  function legacyScreenshotPage(state: string) {
+    const image = { id: 'image-legacy', type: 'appScreenshots' };
+    return {
+      data: [{ id: 'set-en', relationships: { appScreenshots: { data: [image] } } }],
+      included: [{ ...image, attributes: { assetDeliveryState: { state } } }],
+    };
+  }
+
+  function mockReadinessResponse(pathOverride: string, response: unknown, extra: Record<string, unknown> = {}) {
     const responses: Record<string, unknown> = {
       '/apps/1234567890/appStoreVersions': { data: [{ id: 'version-1' }] },
       '/appStoreVersions/version-1/appStoreVersionLocalizations': {
-        data: [{
-          id: 'loc-en',
-          attributes: { locale: 'en-US', description: 'Description', keywords: 'example', whatsNew: 'Notes' },
-          relationships: { appScreenshotSets: { data: [{ id: 'set-en' }] } },
-        }],
+        data: [mediaLocale('en-US', 'placement-en')],
+        included: [screenshotPlacement('placement-en')],
       },
       '/appStoreVersions/version-1/relationships/build': { data: { type: 'builds', id: 'build-1' } },
       '/apps/1234567890/appInfos': { data: [{ id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } }] },
       '/appInfos/info-1/appInfoLocalizations': { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] },
       '/appInfos/info-1/ageRatingDeclaration': { data: { attributes: { socialMedia: false, socialMediaAgeRestricted: false } } },
+      ...extra,
     };
     mocks.apiGet.mockImplementation(async (path: string) => {
       if (path === pathOverride) return response;
@@ -182,9 +208,11 @@ describe('checkAppStoreRisks', () => {
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({ 'filter[id]': 'target-version' }));
     expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/target-version/appStoreVersionLocalizations', {
       limit: '200',
-      include: 'appScreenshotSets',
+      include: 'placements,appScreenshotSets',
+      'limit[placements]': '50',
       'limit[appScreenshotSets]': '1',
-      'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,appScreenshotSets',
+      'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,placements,appScreenshotSets',
+      'fields[appAssetLibraryPlacements]': 'placementType,state,image',
     });
     expect(mocks.apiGet.mock.calls.map(([path]) => path))
       .not.toContain('/appStoreVersions/other-version/appStoreVersionLocalizations');
@@ -204,9 +232,9 @@ describe('checkAppStoreRisks', () => {
       if (path.endsWith('/relationships/build')) throw new Error('attachment forbidden');
       if (path === '/builds') return { data: [{ id: 'other-build' }] };
       if (path.endsWith('/appStoreVersionLocalizations')) return {
-        data: [{ id: 'loc-en', attributes: { description: 'Description', whatsNew: 'Notes', keywords: 'example' } }],
+        data: [mediaLocale('en-US', 'placement-en')],
+        included: [screenshotPlacement('placement-en')],
       };
-      if (path.endsWith('/appScreenshotSets')) return { data: [{ id: 'screenshot-set' }] };
       if (path.endsWith('/appInfos')) return { data: [{ id: 'info-1' }] };
       if (path.endsWith('/appInfoLocalizations')) return { data: [{ attributes: { privacyPolicyUrl: 'https://example.com/privacy' } }] };
       if (path.endsWith('/ageRatingDeclaration')) return { data: { attributes: { socialMedia: false, socialMediaAgeRestricted: false } } };
@@ -258,85 +286,49 @@ describe('checkAppStoreRisks', () => {
     );
   });
 
-  it('한 번의 로컬라이제이션 조회에서 스크린샷 셋을 로케일별로 판정한다', async () => {
-    mocks.apiGet.mockImplementation(async (path: string) => {
-      if (path === '/apps/1234567890/appStoreVersions') {
-        return { data: [{ id: 'version-1' }] };
-      }
-      if (path === '/appStoreVersions/version-1/appStoreVersionLocalizations') {
-        return {
-          data: [
-            {
-              id: 'loc-ko',
-              relationships: { appScreenshotSets: {
-                data: [{ id: 'set-ko', type: 'appScreenshotSets' }],
-                meta: { paging: { total: 2 } },
-              } },
-              attributes: {
-                locale: 'ko',
-                description: '설명',
-                whatsNew: '새로운 기능',
-                keywords: '날씨',
-              },
-            },
-            {
-              id: 'loc-en',
-              relationships: { appScreenshotSets: { data: [] } },
-              attributes: {
-                locale: 'en-US',
-                description: 'Description',
-                whatsNew: 'What is new',
-                keywords: 'weather',
-              },
-            },
-          ],
-          included: [{ id: 'set-ko', type: 'appScreenshotSets' }],
-        };
-      }
-      if (path === '/appStoreVersions/version-1/relationships/build') {
-        return { data: { type: 'builds', id: 'build-1' } };
-      }
-      if (path === '/apps/1234567890/appInfos') return { data: [] };
-      throw new Error(`unexpected path: ${path}`);
+  it('한 번의 로컬라이제이션 조회에서 각 로케일의 배치만 판정한다', async () => {
+    mockReadinessResponse('/appStoreVersions/version-1/appStoreVersionLocalizations', {
+      data: [
+        mediaLocale('ko', 'placement-ko'),
+        mediaLocale('en-US'),
+        mediaLocale('ja', 'placement-ja'),
+      ],
+      included: [
+        screenshotPlacement('placement-ko'),
+        screenshotPlacement('placement-ja', 'ASSET_PROCESSING'),
+      ],
     });
-
     const risks = await checkAppStoreRisks('1234567890');
-
-    expect(risks).toContainEqual(
-      expect.objectContaining({ code: 'NO_SCREENSHOTS_en-US', level: 'blocker' }),
-    );
-    expect(risks.some((risk) => risk.code === 'NO_SCREENSHOTS_ko')).toBe(false);
-    expect(mocks.apiGet.mock.calls.filter(([path]) => path.endsWith('/appScreenshotSets'))).toHaveLength(0);
+    expect(risks.map(({ code }) => code)).toEqual([
+      'NO_SCREENSHOTS_en-US', 'SCREENSHOTS_NOT_READY_ja',
+    ]);
+    expect(mocks.apiGet.mock.calls.filter(([path]) => /\/(placements|appScreenshotSets)$/.test(path))).toHaveLength(0);
   });
 
-  it('스크린샷 셋 관계와 로케일 목록이 불완전하면 누락으로 단정하지 않는다', async () => {
-    mocks.apiGet.mockImplementation(async (path: string) => {
-      if (path.endsWith('/appStoreVersions')) return { data: [{ id: 'version-1' }] };
-      if (path.endsWith('/appStoreVersionLocalizations')) return {
-        data: [
-          { id: 'loc-en', attributes: { locale: 'en-US' }, relationships: {
-            appScreenshotSets: { data: [], meta: { paging: { total: 1 } } },
-          } },
-          { id: 'loc-ko', attributes: { locale: 'ko' }, relationships: {
-            appScreenshotSets: { data: [null] },
-          } },
-        ],
-        links: { next: 'https://example.com/localizations?page=2' },
-      };
-      if (path === '/appStoreVersionLocalizations/loc-en/appScreenshotSets') return { data: [{ id: 'set-en' }] };
-      if (path === '/appStoreVersionLocalizations/loc-ko/appScreenshotSets') return { data: [], meta: { paging: { total: 1 } } };
-      if (path.endsWith('/relationships/build')) return { data: { id: 'build-1' } };
-      if (path.endsWith('/appInfos')) return { data: [] };
-      throw new Error(`unexpected path: ${path}`);
+  it('불완전한 배치 관계만 별도 조회하고 로케일 목록 불완전을 표시한다', async () => {
+    mockReadinessResponse('/appStoreVersions/version-1/appStoreVersionLocalizations', {
+      data: [mediaLocale('en-US', 'missing-from-included')],
+      links: { next: 'https://example.com/localizations?page=2' },
+    }, {
+      '/appStoreVersionLocalizations/loc-en-US/placements': { data: [screenshotPlacement('placement-en')] },
     });
 
     const risks = await checkAppStoreRisks('1234567890');
-    const codes = risks.map(({ code }) => code);
-    expect(codes).toContain('API_ERROR_LOCALIZATIONS_INCOMPLETE');
-    expect(codes).toContain('API_ERROR_SCREENSHOTS_ko');
-    expect(codes).not.toContain('API_ERROR_SCREENSHOTS_en-US');
-    expect(codes.some((code) => code.startsWith('NO_SCREENSHOTS_'))).toBe(false);
-    expect(mocks.apiGet.mock.calls.filter(([path]) => path.endsWith('/appScreenshotSets'))).toHaveLength(2);
+    expect(risks.map(({ code }) => code)).toEqual(['API_ERROR_LOCALIZATIONS_INCOMPLETE']);
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersionLocalizations/loc-en-US/placements', expect.anything());
+  });
+
+  it.each([
+    [{ data: [{ id: 'set-en', relationships: { appScreenshots: { data: [] } } }] }, 'NO_SCREENSHOTS_en-US'],
+    [legacyScreenshotPage('UPLOAD_COMPLETE'), 'SCREENSHOTS_NOT_READY_en-US'],
+    [legacyScreenshotPage('COMPLETE'), undefined],
+    [{ data: [], meta: { paging: { total: 1 } } }, 'API_ERROR_SCREENSHOTS_en-US'],
+  ] as const)('기존 세트의 실제 이미지와 처리 상태를 조회한다 (%j)', async (legacy, expected) => {
+    mockReadinessResponse('/appStoreVersions/version-1/appStoreVersionLocalizations', {
+      data: [mediaLocale('en-US', undefined, [{ id: 'set-en' }])],
+    }, { '/appStoreVersionLocalizations/loc-en-US/appScreenshotSets': legacy });
+    const risks = await checkAppStoreRisks('1234567890');
+    expect(risks.map(({ code }) => code)).toEqual(expected ? [expected] : []);
   });
 
   it('프로젝트의 소셜 기능 사실과 ASC 연령등급 응답 불일치를 blocker로 만든다', async () => {

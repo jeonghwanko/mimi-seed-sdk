@@ -3,6 +3,8 @@ import type { OAuth2Client } from 'google-auth-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { apiGet } from '../appstore/tools.js';
+import { includedScreenshotReadiness, indexIncludedPlacements, listMediaPlacements, screenshotPlacementReadiness } from '../appstore/asset-library.js';
+import { checkLegacyScreenshotReadiness } from '../appstore/screenshots.js';
 import { isNotFound } from '../appstore/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { extractHttpStatus } from '../lib/google-errors.js';
@@ -163,8 +165,9 @@ const versionLocalizationPage = pagination.extend({
       whatsNew: z.string().trim().nullish(),
       keywords: z.string().trim().nullish(),
     }).nullish(),
-    relationships: z.object({ appScreenshotSets: z.unknown() }).nullish(),
+    relationships: z.object({ placements: z.unknown(), appScreenshotSets: z.unknown() }).nullish(),
   })),
+  included: z.array(z.unknown()).nullish(),
 });
 const appInfoPage = pagination.extend({
   data: z.array(idResource.extend({
@@ -269,9 +272,11 @@ export async function checkAppStoreRisks(
     safeGet(
       () => getAppStoreResponse(versionLocalizationPage, `/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
         limit: '200',
-        include: 'appScreenshotSets',
+        include: 'placements,appScreenshotSets',
+        'limit[placements]': '50',
         'limit[appScreenshotSets]': '1',
-        'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,appScreenshotSets',
+        'fields[appStoreVersionLocalizations]': 'locale,description,whatsNew,keywords,placements,appScreenshotSets',
+        'fields[appAssetLibraryPlacements]': 'placementType,state,image',
       }),
       risks,
       'LOCALIZATIONS',
@@ -303,6 +308,7 @@ export async function checkAppStoreRisks(
   }
 
   if (locs) {
+    const placementsById = indexIncludedPlacements(locs.included ?? []);
     for (const loc of locs.data) {
       const { locale: rawLocale, description, whatsNew, keywords } = loc.attributes ?? {};
       const locale = rawLocale ?? loc.id;
@@ -310,24 +316,36 @@ export async function checkAppStoreRisks(
       if (!whatsNew) risks.push({ level: 'warning', code: `NO_WHATS_NEW_${locale}`, title: `${locale} 새로운 기능 없음`, detail: '릴리즈 노트를 입력하면 다운로드 전환율이 높아집니다.' });
       if (!keywords) risks.push({ level: 'warning', code: `NO_KEYWORDS_${locale}`, title: `${locale} 키워드 없음`, detail: '키워드는 검색 노출에 직접 영향을 줍니다.' });
 
-      const hasScreenshots = screenshotSetPresence(loc.relationships?.appScreenshotSets)
-        ?? await safeGet(
-          async () => {
-            const sets = await apiGet<unknown>(`/appStoreVersionLocalizations/${encodePathSegment(loc.id)}/appScreenshotSets`);
-            const presence = screenshotSetPresence(sets);
-            if (presence === undefined) throw new Error('App Store Connect의 스크린샷 셋 응답이 불완전합니다.');
-            return presence;
-          },
-          risks,
-          `SCREENSHOTS_${locale}`,
-          `${locale} 스크린샷 셋`,
-        );
-      if (hasScreenshots === false) {
+      const screenshots = await safeGet(
+        async () => {
+          let readiness = includedScreenshotReadiness(loc.relationships?.placements, placementsById);
+          if (readiness === 'unknown') {
+            const placements = await listMediaPlacements(loc.id, 'screenshots');
+            readiness = placements ? screenshotPlacementReadiness(placements) : 'missing';
+          }
+          if (readiness === 'missing' && screenshotSetPresence(loc.relationships?.appScreenshotSets) !== false) {
+            readiness = await checkLegacyScreenshotReadiness(loc.id);
+          }
+          if (readiness === 'unknown') throw new Error('App Store Connect의 스크린샷 상태를 확인할 수 없습니다.');
+          return readiness;
+        },
+        risks,
+        `SCREENSHOTS_${locale}`,
+        `${locale} 스크린샷`,
+      );
+      if (screenshots === 'missing') {
         risks.push({
           level: 'blocker',
           code: `NO_SCREENSHOTS_${locale}`,
           title: `${locale} 스크린샷 없음`,
-          detail: 'iPhone 6.5" 또는 6.9" 스크린샷이 필요합니다.',
+          detail: '대상 플랫폼에서 허용하는 스크린샷을 로케일에 배치하세요.',
+        });
+      } else if (screenshots === 'not-ready') {
+        risks.push({
+          level: 'blocker',
+          code: `SCREENSHOTS_NOT_READY_${locale}`,
+          title: `${locale} 스크린샷 준비 미완료`,
+          detail: '배치된 스크린샷이 처리 중이거나 처리에 실패했습니다. App Store Connect에서 상태를 확인하세요.',
         });
       }
     }
