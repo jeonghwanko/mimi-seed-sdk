@@ -7,6 +7,7 @@
 // Play 쪽 대응물(데이터 안전 CSV)은 playstore/data-safety.ts 에 있다 — 자격증명 계통이 달라서 파일을 나눴다.
 
 import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
+import { requireAppInfo } from './app-info.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
 /** Apple 이 쓰는 빈도 척도. 필드마다 같은 enum 을 쓴다. */
@@ -36,28 +37,16 @@ async function send<T>(
   });
 }
 
-/** 연령 등급은 appInfo 에 딸려 있다. 편집 가능한 appInfo 를 우선 고른다. */
-async function resolveAppInfoId(appId: string): Promise<string> {
-  const data = await get<{ data?: Array<{ id: string; attributes?: Record<string, string> }> }>(
-    V1_BASE,
-    `/apps/${encodePathSegment(appId)}/appInfos`,
-    { 'fields[appInfos]': 'state' },
-  );
-  const infos = data.data ?? [];
-  if (infos.length === 0) throw new Error(`앱 ${appId} 의 appInfo 를 찾지 못했다.`);
-  const editable = infos.find((i) => {
-    const s = i.attributes?.state ?? i.attributes?.appStoreState;
-    return s && s !== 'READY_FOR_DISTRIBUTION' && s !== 'REPLACED_WITH_NEW_INFO';
-  });
-  return (editable ?? infos[0]).id;
+export async function getAgeRating(appId: string) {
+  const { id } = await requireAppInfo(appId);
+  return readAppInfoAgeRating(id);
 }
 
-export async function getAgeRating(appId: string): Promise<{
+async function readAppInfoAgeRating(appInfoId: string): Promise<{
   appInfoId: string;
   declarationId?: string;
   declaration: AgeRatingDeclaration;
 }> {
-  const appInfoId = await resolveAppInfoId(appId);
   // 선언 리소스가 아직 없는 앱이 있다 — 그때는 404 다. 에러 대신 "없음"으로 돌려주고
   // updateAgeRating 이 사람이 읽을 안내를 내도록 한다.
   try {
@@ -106,7 +95,11 @@ export async function updateAgeRating(args: {
     data: { type: 'ageRatingDeclarations', id: current.declarationId, attributes },
   });
 
-  const after = await getAgeRating(appId);
+  const verificationError = `연령등급 변경 요청 후 대상 선언 ${current.declarationId}의 저장 결과를 확인할 수 없습니다.`;
+  const after = await readAppInfoAgeRating(current.appInfoId).catch((error: unknown) => {
+    throw new Error(verificationError, { cause: error });
+  });
+  if (after.declarationId !== current.declarationId) throw new Error(verificationError);
   return { declarationId: current.declarationId, declaration: after.declaration };
 }
 

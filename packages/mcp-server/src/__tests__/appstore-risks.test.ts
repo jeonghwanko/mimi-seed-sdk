@@ -176,6 +176,35 @@ describe('checkAppStoreRisks', () => {
     expect(formatRisks(risks, 'App Store')).not.toContain('제출 가능');
   });
 
+  it('위험 점검은 교체·운영·심사 레코드보다 편집 가능한 앱 정보를 사용한다', async () => {
+    mockReadinessResponse('/apps/1234567890/appInfos', {
+      data: [
+        { id: 'replaced-info', attributes: { state: 'REPLACED_WITH_NEW_INFO' } },
+        { id: 'live-info', attributes: { state: 'READY_FOR_DISTRIBUTION' } },
+        { id: 'review-info', attributes: { state: 'WAITING_FOR_REVIEW' } },
+        { id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } },
+      ],
+    });
+    await expect(checkAppStoreRisks('1234567890', { versionId: 'version-1' })).resolves.toEqual([]);
+    const paths = mocks.apiGet.mock.calls.map(([path]) => path);
+    expect(paths.filter((path) => path.startsWith('/appInfos/'))).toEqual([
+      '/appInfos/info-1/appInfoLocalizations',
+      '/appInfos/info-1/ageRatingDeclaration',
+    ]);
+  });
+
+  it('앱 정보 레코드가 여러 개의 초안이면 개인정보와 연령등급 점검을 중단한다', async () => {
+    mockReadinessResponse('/apps/1234567890/appInfos', {
+      data: [
+        { id: 'info-1', attributes: { state: 'PREPARE_FOR_SUBMISSION' } },
+        { id: 'other-info', attributes: { state: 'DEVELOPER_REJECTED' } },
+      ],
+    });
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'API_ERROR_APP_INFO_LINKAGE', level: 'warning' })]);
+    expect(mocks.apiGet.mock.calls.some(([path]) => path.startsWith('/appInfos/'))).toBe(false);
+  });
+
   it('개인정보 목록의 현재 페이지에서 정책을 확인하면 점검을 완료한다', async () => {
     mockReadinessResponse('/appInfos/info-1/appInfoLocalizations', {
       data: [{ attributes: { privacyPolicyText: 'Privacy notice' } }],

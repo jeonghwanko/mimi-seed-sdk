@@ -29,6 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - App Store submission checks verify screenshot processing state and batch known placements across localizations.
 - App Store release plans reuse the selected version and attached build from one API response using the current version-state filter.
 - App Store release checks verify the attached build's processing state before opening submission steps.
+- App Store metadata, age ratings, and release checks share the same current app-info selection.
+- Age-rating updates verify the original declaration without looking up the app's info records again.
 - Google Play release plans use one edit and one track lookup for build selection and submission checks.
 - npm release CI verifies the published package installs and runs before continuing to the next package.
 

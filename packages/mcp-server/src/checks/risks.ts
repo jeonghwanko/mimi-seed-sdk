@@ -3,6 +3,7 @@ import type { OAuth2Client } from 'google-auth-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { appStorePagination as pagination, getAppStoreResponse, pageIsIncomplete } from '../appstore/read-response.js';
+import { selectAppInfo } from '../appstore/app-info.js';
 import { listEditableAppStoreVersions, resolveAppStoreVersionBuild, type AppStoreBuildReadiness } from '../appstore/release-target.js';
 import { includedScreenshotReadiness, indexIncludedPlacements, listMediaPlacements, screenshotPlacementReadiness } from '../appstore/asset-library.js';
 import { checkLegacyScreenshotReadiness } from '../appstore/screenshots.js';
@@ -143,8 +144,6 @@ async function safeGet<T>(
   }
 }
 
-const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
-
 const idResource = z.object({ id: z.string().min(1) });
 const screenshotPage = pagination.extend({ data: z.array(z.unknown()) });
 const versionLocalizationPage = pagination.extend({
@@ -158,11 +157,6 @@ const versionLocalizationPage = pagination.extend({
     relationships: z.object({ placements: z.unknown(), appScreenshotSets: z.unknown() }).nullish(),
   })),
   included: z.array(z.unknown()).nullish(),
-});
-const appInfoPage = pagination.extend({
-  data: z.array(idResource.extend({
-    attributes: z.object({ state: z.string().nullish(), appStoreState: z.string().nullish() }).nullish(),
-  })),
 });
 const privacyLocalizationPage = pagination.extend({
   data: z.array(z.object({
@@ -265,11 +259,10 @@ export async function checkAppStoreVersionRisks(
   expected: AppStorePolicy = {},
 ): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
-  const appPath = `/apps/${encodePathSegment(appId)}`;
   const versionId = encodePathSegment(selectedVersionId);
 
   // 버전 메타데이터·스크린샷과 앱 단위 개인정보처리방침을 병행 조회한다.
-  const [locs, appInfos] = await Promise.all([
+  const [locs, appInfo] = await Promise.all([
     safeGet(
       () => getAppStoreResponse(versionLocalizationPage, `/appStoreVersions/${versionId}/appStoreVersionLocalizations`, {
         limit: '200',
@@ -284,7 +277,7 @@ export async function checkAppStoreVersionRisks(
       '버전 로컬라이제이션',
     ),
     safeGet(
-      () => getAppStoreResponse(appInfoPage, `${appPath}/appInfos`, { 'fields[appInfos]': 'state', 'limit': '10' }),
+      () => selectAppInfo(appId),
       risks,
       'APP_INFO',
       '앱 정보',
@@ -346,128 +339,122 @@ export async function checkAppStoreVersionRisks(
     }
   }
 
-  // 개인정보처리방침 — appInfoLocalization 어디 한 곳이라도 URL 또는 in-app 텍스트가 있으면 OK.
-  // appInfos 조회 자체가 실패하면 unknown으로 두고 blocker 안 띄움 (warning만 기록됨).
-  if (appInfos) {
-    const infos = appInfos.data;
-    const editable = infos.find(({ attributes }) =>
-      (attributes?.state ?? attributes?.appStoreState) !== APP_INFO_LIVE_STATE,
-    ) ?? infos[0];
+  if (!appInfo) return risks;
+  if ('reason' in appInfo) {
+    risks.push({
+      level: 'warning',
+      code: 'API_ERROR_APP_INFO_LINKAGE',
+      title: '앱 정보 레코드를 확인할 수 없음',
+      detail: appInfo.reason,
+    });
+    return risks;
+  }
 
-    if (!editable || pageIsIncomplete(appInfos, infos.length)) {
+  // 개인정보처리방침과 연령등급은 공통으로 선택한 앱 정보 레코드에서 점검한다.
+  const infoPath = `/appInfos/${encodePathSegment(appInfo.target.id)}`;
+  const [hasPrivacy, ageRating] = await Promise.all([
+    safeGet(
+      async () => {
+        const localizations = await getAppStoreResponse(privacyLocalizationPage, `${infoPath}/appInfoLocalizations`, {
+          'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
+          'limit': '200',
+        });
+        if (localizations.data.some(({ attributes }) => attributes?.privacyPolicyUrl || attributes?.privacyPolicyText)) {
+          return true;
+        }
+        if (pageIsIncomplete(localizations, localizations.data.length)) {
+          throw new Error('App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.');
+        }
+        return false;
+      },
+      risks,
+      'PRIVACY',
+      '개인정보 로컬라이제이션',
+    ),
+    safeGet(
+      async () => {
+        try {
+          return await getAppStoreResponse(ageRatingResponse, `${infoPath}/ageRatingDeclaration`, {
+            'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted,ageAssurance',
+          });
+        } catch (error) {
+          // A 404 means the declaration is genuinely absent, not that the check is unknown.
+          if (isNotFound(error)) return { data: null };
+          throw error;
+        }
+      },
+      risks,
+      'AGE_RATING_SOCIAL',
+      '연령등급 소셜 미디어 응답',
+    ),
+  ]);
+  if (hasPrivacy === false) {
+    risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 URL 없음', detail: 'App Store 가이드라인 5.1.1 — 필수 항목입니다. 모든 로컬라이제이션에서 privacyPolicyUrl 또는 privacyPolicyText 중 하나를 입력하세요.' });
+  }
+
+  if (ageRating) {
+    const attributes = ageRating.data?.attributes;
+    const socialMedia = attributes?.socialMedia;
+    const socialMediaAgeRestricted = attributes?.socialMediaAgeRestricted;
+    const ageAssurance = attributes?.ageAssurance;
+    const userGeneratedContent = attributes?.userGeneratedContent;
+    if (socialMedia === undefined || socialMediaAgeRestricted === undefined) {
+      risks.push({
+        level: 'blocker',
+        code: 'SOCIAL_MEDIA_ANSWERS_MISSING',
+        title: '연령등급 소셜 미디어 질문 미응답',
+        detail: '2026년 9월부터 신규 앱·업데이트 제출에 socialMedia와 socialMediaAgeRestricted 응답이 필요합니다.',
+        fixUrl: 'https://developer.apple.com/news/?id=tlur8uvi',
+      });
+    }
+    if (socialMediaAgeRestricted === true && socialMedia !== true) {
+      risks.push({
+        level: 'blocker',
+        code: 'SOCIAL_MEDIA_AGE_RESTRICTION_MISMATCH',
+        title: '13세 미만 제한 응답 불일치',
+        detail: 'socialMediaAgeRestricted=true는 socialMedia=true인 앱에서만 의미가 있습니다.',
+      });
+    }
+    if (socialMediaAgeRestricted === true && ageAssurance !== true) {
+      risks.push({
+        level: 'blocker',
+        code: 'SOCIAL_MEDIA_AGE_ASSURANCE_MISSING',
+        title: '13세 미만 소셜 기능 제한에 연령 확인이 없음',
+        detail: 'Apple은 socialMediaAgeRestricted=true인 경우 최소한 Declared Age Range API로 연령 범위를 확인하도록 요구합니다. ageAssurance 응답과 실제 구현을 확인하세요.',
+        fixUrl: 'https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions',
+      });
+    }
+    if (
+      expected.socialMedia !== undefined
+      && socialMedia !== undefined
+      && socialMedia !== expected.socialMedia
+    ) {
+      risks.push({
+        level: 'blocker',
+        code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH',
+        title: '앱 기능과 App Store 소셜 미디어 응답 불일치',
+        detail: `프로젝트 기능 선언은 socialMedia=${expected.socialMedia}이지만 App Store Connect는 ${String(socialMedia)}입니다.`,
+      });
+    }
+    if (
+      expected.socialMediaAgeRestricted !== undefined
+      && socialMediaAgeRestricted !== undefined
+      && socialMediaAgeRestricted !== expected.socialMediaAgeRestricted
+    ) {
+      risks.push({
+        level: 'blocker',
+        code: 'SOCIAL_MEDIA_AGE_GATE_MISMATCH',
+        title: '13세 미만 기능 제한과 App Store 응답 불일치',
+        detail: `프로젝트 기능 선언은 socialMediaAgeRestricted=${expected.socialMediaAgeRestricted}이지만 App Store Connect는 ${String(socialMediaAgeRestricted)}입니다.`,
+      });
+    }
+    if (userGeneratedContent && socialMedia === false) {
       risks.push({
         level: 'warning',
-        code: 'API_ERROR_APP_INFO_LINKAGE',
-        title: '앱 정보 레코드를 확인할 수 없음',
-        detail: '대상 앱 정보 레코드를 확인해야 개인정보 처리방침과 연령등급을 점검할 수 있습니다.',
+        code: 'UGC_WITHOUT_SOCIAL_MEDIA',
+        title: 'UGC는 있으나 소셜 미디어 기능은 없음으로 응답',
+        detail: '피드·좋아요·댓글·공유·발견 기능이 있다면 socialMedia 응답을 true로 바꿔야 합니다.',
       });
-    } else {
-      const infoPath = `/appInfos/${encodePathSegment(editable.id)}`;
-      const [hasPrivacy, ageRating] = await Promise.all([
-        safeGet(
-          async () => {
-            const localizations = await getAppStoreResponse(privacyLocalizationPage, `${infoPath}/appInfoLocalizations`, {
-              'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
-              'limit': '200',
-            });
-            if (localizations.data.some(({ attributes }) => attributes?.privacyPolicyUrl || attributes?.privacyPolicyText)) {
-              return true;
-            }
-            if (pageIsIncomplete(localizations, localizations.data.length)) {
-              throw new Error('App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.');
-            }
-            return false;
-          },
-          risks,
-          'PRIVACY',
-          '개인정보 로컬라이제이션',
-        ),
-        safeGet(
-          async () => {
-            try {
-              return await getAppStoreResponse(ageRatingResponse, `${infoPath}/ageRatingDeclaration`, {
-                'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted,ageAssurance',
-              });
-            } catch (error) {
-              // A 404 means the declaration is genuinely absent, not that the check is unknown.
-              if (isNotFound(error)) return { data: null };
-              throw error;
-            }
-          },
-          risks,
-          'AGE_RATING_SOCIAL',
-          '연령등급 소셜 미디어 응답',
-        ),
-      ]);
-      if (hasPrivacy === false) {
-        risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 URL 없음', detail: 'App Store 가이드라인 5.1.1 — 필수 항목입니다. 모든 로컬라이제이션에서 privacyPolicyUrl 또는 privacyPolicyText 중 하나를 입력하세요.' });
-      }
-
-      if (ageRating) {
-        const attributes = ageRating.data?.attributes;
-        const socialMedia = attributes?.socialMedia;
-        const socialMediaAgeRestricted = attributes?.socialMediaAgeRestricted;
-        const ageAssurance = attributes?.ageAssurance;
-        const userGeneratedContent = attributes?.userGeneratedContent;
-        if (socialMedia === undefined || socialMediaAgeRestricted === undefined) {
-          risks.push({
-            level: 'blocker',
-            code: 'SOCIAL_MEDIA_ANSWERS_MISSING',
-            title: '연령등급 소셜 미디어 질문 미응답',
-            detail: '2026년 9월부터 신규 앱·업데이트 제출에 socialMedia와 socialMediaAgeRestricted 응답이 필요합니다.',
-            fixUrl: 'https://developer.apple.com/news/?id=tlur8uvi',
-          });
-        }
-        if (socialMediaAgeRestricted === true && socialMedia !== true) {
-          risks.push({
-            level: 'blocker',
-            code: 'SOCIAL_MEDIA_AGE_RESTRICTION_MISMATCH',
-            title: '13세 미만 제한 응답 불일치',
-            detail: 'socialMediaAgeRestricted=true는 socialMedia=true인 앱에서만 의미가 있습니다.',
-          });
-        }
-        if (socialMediaAgeRestricted === true && ageAssurance !== true) {
-          risks.push({
-            level: 'blocker',
-            code: 'SOCIAL_MEDIA_AGE_ASSURANCE_MISSING',
-            title: '13세 미만 소셜 기능 제한에 연령 확인이 없음',
-            detail: 'Apple은 socialMediaAgeRestricted=true인 경우 최소한 Declared Age Range API로 연령 범위를 확인하도록 요구합니다. ageAssurance 응답과 실제 구현을 확인하세요.',
-            fixUrl: 'https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions',
-          });
-        }
-        if (
-          expected.socialMedia !== undefined
-          && socialMedia !== undefined
-          && socialMedia !== expected.socialMedia
-        ) {
-          risks.push({
-            level: 'blocker',
-            code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH',
-            title: '앱 기능과 App Store 소셜 미디어 응답 불일치',
-            detail: `프로젝트 기능 선언은 socialMedia=${expected.socialMedia}이지만 App Store Connect는 ${String(socialMedia)}입니다.`,
-          });
-        }
-        if (
-          expected.socialMediaAgeRestricted !== undefined
-          && socialMediaAgeRestricted !== undefined
-          && socialMediaAgeRestricted !== expected.socialMediaAgeRestricted
-        ) {
-          risks.push({
-            level: 'blocker',
-            code: 'SOCIAL_MEDIA_AGE_GATE_MISMATCH',
-            title: '13세 미만 기능 제한과 App Store 응답 불일치',
-            detail: `프로젝트 기능 선언은 socialMediaAgeRestricted=${expected.socialMediaAgeRestricted}이지만 App Store Connect는 ${String(socialMediaAgeRestricted)}입니다.`,
-          });
-        }
-        if (userGeneratedContent && socialMedia === false) {
-          risks.push({
-            level: 'warning',
-            code: 'UGC_WITHOUT_SOCIAL_MEDIA',
-            title: 'UGC는 있으나 소셜 미디어 기능은 없음으로 응답',
-            detail: '피드·좋아요·댓글·공유·발견 기능이 있다면 socialMedia 응답을 true로 바꿔야 합니다.',
-          });
-        }
-      }
     }
   }
 
