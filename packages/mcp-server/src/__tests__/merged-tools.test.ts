@@ -83,11 +83,11 @@ describe('playstore_update_release_notes — versionCode 지정 / 생략(최신 
     });
   });
 
-  it('versionCode 를 생략하면 최신 릴리스 + syncTracks', async () => {
+  it('versionCode 를 생략하면 각 syncTracks 를 한 번씩만 수정한다', async () => {
     await withClient(async (client) => {
       const r = await client.callTool({
         name: 'playstore_update_release_notes',
-        arguments: { ...base, syncTracks: ['production', 'internal'] },
+        arguments: { ...base, syncTracks: ['production', 'internal', 'production'] },
       });
       expect(m.updateLatestReleaseNotes.mock.calls.map((c) => c[2])).toEqual(['internal', 'production']);
       expect(textOf(r)).toContain('sync production');

@@ -8,8 +8,9 @@
 
 import type { OAuth2Client } from 'google-auth-library';
 import { publisher, withEdit } from '../playstore/tools.js';
-import { selectEditableAppStoreVersion, resolveAppStoreVersionBuild, type AppStoreVersionCandidate } from '../appstore/release-target.js';
-import { appStoreBuildRisk, checkPlayStoreRisksInEdit, checkAppStoreVersionRisks, isRiskCheckIncomplete, type SubmissionRisk } from './risks.js';
+import { checkAppStoreSubmission } from './appstore-submission.js';
+import { checkPlayStoreRisksInEdit, findPlayTargetReleases, type AppStorePolicy } from './risks.js';
+import { blocksReleaseSubmission, isRiskCheckIncomplete, releaseReadiness, type SubmissionRisk } from './release-readiness.js';
 
 export type StepState = 'done' | 'pending' | 'blocked';
 
@@ -47,13 +48,9 @@ function fmtState(s: StepState): string {
   return s === 'done' ? '☑︎' : s === 'blocked' ? '⛔' : '◻︎';
 }
 
-function blocksSubmission(risk: SubmissionRisk): boolean {
-  return risk.level === 'blocker' || isRiskCheckIncomplete(risk);
-}
-
 function risksToSteps(risks: SubmissionRisk[], toolHint: string): PlanStep[] {
   return risks.map((r) => ({
-    state: blocksSubmission(r) ? 'blocked' : 'pending',
+    state: blocksReleaseSubmission(r) ? 'blocked' : 'pending',
     title: `[${r.code}] ${r.title}`,
     detail: r.detail + (r.fixUrl ? `  → ${r.fixUrl}` : ''),
     tool: r.level === 'blocker' ? toolHint : undefined,
@@ -100,7 +97,7 @@ export async function buildPlayStoreReleasePlan(opts: {
   versionCode?: string;
   track: 'production' | 'beta' | 'alpha' | 'internal';
   language: string;
-}): Promise<string> {
+}) {
   const { auth, packageName, versionCode, track, language } = opts;
   const steps: PlanStep[] = [];
 
@@ -114,46 +111,56 @@ export async function buildPlayStoreReleasePlan(opts: {
       const releases = targetTrack?.releases ?? [];
       const selectedVersionCode = versionCode ?? releases.flatMap((candidate) => candidate.versionCodes ?? [])
         .reduce<string | undefined>((latest, code) => latest === undefined || Number(code) > Number(latest) ? code : latest, undefined);
-      const release = releases.find((candidate) => selectedVersionCode && candidate.versionCodes?.includes(selectedVersionCode));
-      const trackInfo = {
-        hasTargetVersion: release !== undefined,
-        selectedVersionCode,
-        releaseStatus: release?.status ?? undefined,
-      };
       const target = selectedVersionCode ? { track, versionCode: selectedVersionCode } : undefined;
+      const matches = target ? findPlayTargetReleases(tracks, target) : [];
+      const trackInfo = {
+        matchCount: matches.length,
+        selectedVersionCode,
+        releaseStatus: matches[0]?.status ?? undefined,
+      };
       const risks = await checkPlayStoreRisksInEdit(auth, packageName, editId, language, target, tracks);
       return { trackInfo, target, risks };
     });
     steps.push({ state: 'done', title: 'Google Play 인증 + 트랙 조회 성공' });
   } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    const title = 'Google Play 인증 또는 트랙 조회 실패';
     steps.push({
       state: 'blocked',
-      title: 'Google Play 인증 또는 트랙 조회 실패',
-      detail: e instanceof Error ? e.message : String(e),
+      title,
+      detail,
       tool: 'mimi_seed_auth_status',
     });
-    return renderPlan(
-      { platform: 'Play Store', identity: packageName, version: versionCode ?? 'latest', track },
-      steps,
-    );
+    return {
+      text: renderPlan({ platform: 'Play Store', identity: packageName, version: versionCode ?? 'latest', track }, steps),
+      readiness: releaseReadiness({ store: 'playstore', packageName, track, versionCode }, [
+        { level: 'warning', code: 'API_ERROR_PLAY_EDIT', title, detail },
+      ], false, false),
+    };
   }
 
   const { trackInfo, target, risks } = checks;
 
   // 2) 빌드 도착 확인
-  if (trackInfo.hasTargetVersion) {
+  if (trackInfo.matchCount === 1) {
     steps.push({
       state: 'done',
       title: `${track} 트랙에 versionCode ${trackInfo.selectedVersionCode} 도착 확인`,
       detail: `현재 release status: ${trackInfo.releaseStatus ?? 'unknown'}`,
     });
-  } else {
+  } else if (trackInfo.matchCount === 0) {
     steps.push({
       state: 'blocked',
       title: versionCode
         ? `${track} 트랙에 versionCode ${versionCode} 없음`
         : `${track} 트랙에 release 없음`,
       detail: 'Gradle / Fastlane / Play Console 업로드를 먼저 완료하세요.',
+      tool: 'playstore_list_tracks',
+    });
+  } else {
+    steps.push({
+      state: 'blocked',
+      title: `${track} 트랙에 versionCode ${trackInfo.selectedVersionCode}와 일치하는 릴리스가 여러 개 있음`,
       tool: 'playstore_list_tracks',
     });
   }
@@ -168,16 +175,21 @@ export async function buildPlayStoreReleasePlan(opts: {
     const blockers = risks.filter((r) => r.level === 'blocker');
     const warnings = risks.filter((r) => r.level === 'warning');
     steps.push({
-      state: risks.some(blocksSubmission) ? 'blocked' : 'pending',
+      state: risks.some(blocksReleaseSubmission) ? 'blocked' : 'pending',
       title: `제출 위험 ${risks.length}건 (블로커 ${blockers.length} / 경고 ${warnings.length})${risks.some(isRiskCheckIncomplete) ? ' · 점검 미완료' : ''}`,
-      detail: '아래 항목을 개별 수정 후 다시 plan 호출 권장',
-      tool: 'playstore_check_submission_risks',
+      detail: '아래 항목을 수정한 뒤 다시 점검하세요.',
     });
     steps.push(...risksToSteps(blockers, 'playstore_update_listing'));
     steps.push(...risksToSteps(warnings, 'playstore_update_listing'));
   }
 
-  const canSubmit = trackInfo.hasTargetVersion && !risks.some(blocksSubmission);
+  const readiness = releaseReadiness(
+    { store: 'playstore', packageName, track, versionCode: target?.versionCode },
+    target ? risks : [{ level: 'blocker', code: 'TARGET_BUILD_NOT_FOUND', title: `${track} 트랙에 release 없음`,
+      detail: 'Gradle / Fastlane / Play Console 업로드를 먼저 완료하세요.' }, ...risks],
+    trackInfo.matchCount === 1,
+  );
+  const { canSubmit } = readiness;
   // 4) 릴리즈 노트
   steps.push({
     state: canSubmit ? 'pending' : 'blocked',
@@ -186,21 +198,25 @@ export async function buildPlayStoreReleasePlan(opts: {
     tool: target ? `playstore_update_release_notes (track=${track}, versionCode=${target.versionCode})` : undefined,
   });
 
-  // 5) 제출
-  steps.push({
-    state: canSubmit ? 'pending' : 'blocked',
-    title: `${track} 트랙 release status 변경 (draft → completed)`,
-    detail: canSubmit
-      ? '⚠️ 비가역에 가까움. 사용자 명시 동의 필수.'
-      : '블로커 해결 후 가능',
-    tool: target ? `playstore_submit_release (track=${track}, versionCode=${target.versionCode})` : undefined,
-    irreversible: true,
-  });
+  // A completed release can coexist with a rollout. Submitting it again could replace that rollout.
+  if (trackInfo.matchCount === 1 && trackInfo.releaseStatus === 'completed') {
+    steps.push({ state: 'done', title: `${track} 트랙의 대상 릴리스가 이미 completed 상태임` });
+  } else {
+    steps.push({
+      state: canSubmit ? 'pending' : 'blocked',
+      title: `${track} 트랙 release status 변경 (draft → completed)`,
+      detail: canSubmit
+        ? '⚠️ 비가역에 가까움. 사용자 명시 동의 필수.'
+        : '블로커 해결 후 가능',
+      tool: target ? `playstore_submit_release (track=${track}, versionCode=${target.versionCode})` : undefined,
+      irreversible: true,
+    });
+  }
 
-  return renderPlan(
-    { platform: 'Play Store', identity: packageName, version: target?.versionCode ?? 'latest', track },
-    steps,
-  );
+  return {
+    text: renderPlan({ platform: 'Play Store', identity: packageName, version: target?.versionCode ?? 'latest', track }, steps),
+    readiness,
+  };
 }
 
 // ─── App Store ────────────────────────────────────────────────────────
@@ -209,73 +225,60 @@ export async function buildAppStoreReleasePlan(opts: {
   appId: string;
   versionString?: string;
   versionId?: string;
-}): Promise<string> {
+  policy?: AppStorePolicy;
+}) {
   const { appId, versionString, versionId: requestedVersionId } = opts;
   const context: PlanContext = { platform: 'App Store', identity: appId, version: versionString ?? requestedVersionId ?? 'latest' };
   const steps: PlanStep[] = [];
+  const inspection = await checkAppStoreSubmission(appId, opts);
+  const { readiness } = inspection;
 
-  // 1) 편집 가능한 버전과 포함된 빌드를 같은 응답에서 선택한다.
-  let version: AppStoreVersionCandidate | undefined;
-  try {
-    const selection = await selectEditableAppStoreVersion(appId, { versionString, versionId: requestedVersionId });
-    if (selection.status === 'ambiguous' || selection.status === 'incomplete') {
-      steps.push({
-        state: 'blocked',
-        title: 'App Store 버전 대상을 하나로 확정할 수 없음',
-        detail: '대상 플랫폼과 버전을 확인하고 해당 versionId로 다시 점검하세요.',
-        tool: 'appstore_list_versions',
-      });
-      return renderPlan(context, steps);
-    }
-
-    if (selection.status === 'selected') {
-      version = selection.version;
-      context.version = [version.versionString ?? version.id, version.platform].filter(Boolean).join(' / ');
-      steps.push({
-        state: 'done',
-        title: `편집 가능한 버전 발견 (${version.versionString ?? version.id}, state=${version.state})`,
-      });
-    } else {
-      steps.push({
-        state: 'blocked',
-        title: versionString
-          ? `편집 가능한 ${versionString} 버전 없음`
-          : '편집 가능한 버전 없음',
-        detail: '대상 앱과 버전이 일치하며 편집 가능한지 App Store Connect에서 확인하세요.',
-      });
-    }
-  } catch (e) {
+  if (inspection.status === 'error') {
     steps.push({
       state: 'blocked',
       title: 'App Store 인증 또는 버전 조회 실패',
-      detail: e instanceof Error ? e.message : String(e),
+      detail: readiness.risks[0].detail,
       tool: 'mimi_seed_auth_status',
     });
-    return renderPlan(context, steps);
+    return { text: renderPlan(context, steps), readiness };
+  }
+  if (inspection.status === 'ambiguous' || inspection.status === 'incomplete') {
+    steps.push({
+      state: 'blocked',
+      title: 'App Store 버전 대상을 하나로 확정할 수 없음',
+      detail: '대상 플랫폼과 버전을 확인하고 해당 versionId로 다시 점검하세요.',
+      tool: 'appstore_list_versions',
+    });
+    return { text: renderPlan(context, steps), readiness };
   }
 
-  // 2) 선택한 버전을 재조회하지 않고 빌드와 정책 위험을 점검한다.
-  const versionId = version?.id;
-  let buildReady = false;
+  let versionId: string | undefined;
   let risks: SubmissionRisk[] = [];
-  if (version) {
-    const [build, versionRisks] = await Promise.all([
-      resolveAppStoreVersionBuild(version),
-      checkAppStoreVersionRisks(appId, version),
-    ]);
-    buildReady = build.status === 'ready';
-    risks = versionRisks;
-    const buildRisk = appStoreBuildRisk(build);
+  if (inspection.status === 'selected') {
+    const { version, buildRisk } = inspection;
+    versionId = version.id;
+    risks = inspection.versionRisks;
+    context.version = `${version.versionString ?? version.id} / ${version.platform}`;
+    steps.push({
+      state: 'done',
+      title: `편집 가능한 버전 발견 (${version.versionString ?? version.id}, state=${version.state})`,
+    });
     if (buildRisk) {
       steps.push({
         state: 'blocked',
-        title: build.status === 'missing' ? '버전에 빌드 미연결' : buildRisk.title,
+        title: buildRisk.code === 'NO_BUILD' ? '버전에 빌드 미연결' : buildRisk.title,
         detail: buildRisk.detail,
         tool: 'appstore_list_builds',
       });
     } else {
       steps.push({ state: 'done', title: '버전에 빌드 연결됨' });
     }
+  } else {
+    steps.push({
+      state: 'blocked',
+      title: versionString ? `편집 가능한 ${versionString} 버전 없음` : '편집 가능한 버전 없음',
+      detail: '대상 앱과 버전이 일치하며 편집 가능한지 App Store Connect에서 확인하세요.',
+    });
   }
 
   if (!versionId) {
@@ -286,15 +289,15 @@ export async function buildAppStoreReleasePlan(opts: {
     const blockers = risks.filter((r) => r.level === 'blocker');
     const warnings = risks.filter((r) => r.level === 'warning');
     steps.push({
-      state: risks.some(blocksSubmission) ? 'blocked' : 'pending',
+      state: risks.some(blocksReleaseSubmission) ? 'blocked' : 'pending',
       title: `제출 위험 ${risks.length}건 (블로커 ${blockers.length} / 경고 ${warnings.length})${risks.some(isRiskCheckIncomplete) ? ' · 점검 미완료' : ''}`,
-      tool: 'appstore_check_submission_risks',
+      detail: '아래 항목을 수정한 뒤 다시 점검하세요.',
     });
     steps.push(...risksToSteps(blockers, 'appstore_update_localization'));
     steps.push(...risksToSteps(warnings, 'appstore_update_localization'));
   }
 
-  const canSubmit = buildReady && !risks.some(blocksSubmission);
+  const { canSubmit } = readiness;
   // 3) What's New / promotional text / reviewer notes
   steps.push({
     state: canSubmit ? 'pending' : 'blocked',
@@ -319,5 +322,5 @@ export async function buildAppStoreReleasePlan(opts: {
     irreversible: true,
   });
 
-  return renderPlan(context, steps);
+  return { text: renderPlan(context, steps), readiness };
 }

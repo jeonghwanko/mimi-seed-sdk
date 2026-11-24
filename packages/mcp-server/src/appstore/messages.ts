@@ -51,17 +51,17 @@ export function submitForReviewDryRunText(preview: SubmitForReviewPreview): stri
   lines.push('🛑 심사 제출 dry-run — 아직 실제 제출 안 함.');
   lines.push('');
   lines.push(`  versionId    : ${preview.versionId}`);
-  lines.push(`  versionString: ${preview.versionString ?? '(조회 실패)'}`);
-  lines.push(`  state        : ${preview.state ?? '(조회 실패)'}`);
+  lines.push(`  versionString: ${preview.versionString}`);
+  lines.push(`  state        : ${preview.state}`);
   lines.push(`  appId        : ${preview.appId}`);
   lines.push(`  platform     : ${preview.platform}`);
   if (preview.attachedBuild) {
-    lines.push(`  attachedBuild: #${preview.attachedBuild.buildNumber ?? '?'} (id=${preview.attachedBuild.id}, state=${preview.attachedBuild.processingState ?? '?'})`);
+    lines.push(`  attachedBuild: #${preview.attachedBuild.buildNumber} (id=${preview.attachedBuild.id}, state=${preview.attachedBuild.processingState})`);
   } else {
     lines.push(`  attachedBuild: ⚠️ 미연결 — appstore_attach_build 필요 (buildId 생략 = 최신 VALID 빌드)`);
   }
   if (preview.whatsNewByLocale.length === 0) {
-    lines.push(`  whatsNew     : ⚠️ 등록된 로컬라이제이션 없음`);
+    lines.push(`  whatsNew     : ⚠️ 등록된 출시 노트 없음`);
   } else {
     lines.push(`  whatsNew     :`);
     for (const wn of preview.whatsNewByLocale) {

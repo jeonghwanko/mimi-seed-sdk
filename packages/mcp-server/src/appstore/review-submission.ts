@@ -2,10 +2,12 @@
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import { apiGet, apiPatch, apiPost } from './client.js';
-import { getVersionAppAndPlatform, getVersionLocalizations } from './versions.js';
+import { getVersionAppAndPlatform } from './versions.js';
 import type { AppStoreProductType } from './http.js';
 import type { AscListDocument, AscRef, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
+
+export { buildSubmitForReviewPreview } from './review-preview.js';
 
 // ─── 심사 제출 (Submit for Review) ───
 // 2024년 1월부터 옛 /appStoreVersionSubmissions가 deprecated 됐고,
@@ -91,69 +93,6 @@ async function getReviewSubmissionItems(submissionId: string) {
     throw new Error(`reviewSubmission ${submissionId} 항목이 여러 페이지야. 전체 항목을 확인할 수 없어 제출을 중단했어.`);
   }
   return { items: data.data, included: data.included ?? [] };
-}
-
-/**
- * submit_for_review dry-run 프리뷰 — 비가역 제출 직전 사용자 확인용.
- *
- * 1.4.x 배포 사고 누적: submit 직후 되돌리지 못해 새 versionString bump 으로 우회해야
- * 하는 케이스가 반복됨 (reference_appstore_cancel_review_window). 그 원인이던
- * cancel_review 버그(submitted:false → 항상 409)는 2026-07-25 에 canceled:true 로 고쳤고,
- * 이제 WAITING_FOR_REVIEW 까지는 되돌릴 수 있다. 그래도 IN_REVIEW 이후는 못 되돌리니
- * 호출자가 의도한 그 버전·빌드인지 미리 보여줘서 잘못된 versionId 제출을 차단한다.
- */
-export async function buildSubmitForReviewPreview(versionId: string): Promise<{
-  versionId: string;
-  versionString?: string;
-  state?: string;
-  appId: string;
-  platform: string;
-  attachedBuild?: { id: string; buildNumber?: string; uploadedDate?: string; processingState?: string };
-  whatsNewByLocale: Array<{ locale: string; excerpt: string; length: number }>;
-}> {
-  const { appId, platform } = await getVersionAppAndPlatform(versionId);
-
-  // 버전 메타: versionString + state
-  const versionData = await apiGet<AscSingleDocument<{ versionString?: string; appStoreState?: string }>>(`/appStoreVersions/${encodePathSegment(versionId)}`, {
-    'fields[appStoreVersions]': 'versionString,appStoreState',
-  }).catch(() => null);
-  const versionString: string | undefined = versionData?.data?.attributes?.versionString;
-  const state: string | undefined = versionData?.data?.attributes?.appStoreState;
-
-  // attached build
-  let attachedBuild: { id: string; buildNumber?: string; uploadedDate?: string; processingState?: string } | undefined;
-  const build = await apiGet<AscSingleDocument<{ version?: string; uploadedDate?: string; processingState?: string }>>(`/appStoreVersions/${encodePathSegment(versionId)}/build`, {
-    'fields[builds]': 'version,uploadedDate,processingState',
-  }).catch(() => null);
-  if (build?.data?.id) {
-    attachedBuild = {
-      id: build.data.id,
-      buildNumber: build.data.attributes?.version,
-      uploadedDate: build.data.attributes?.uploadedDate,
-      processingState: build.data.attributes?.processingState,
-    };
-  }
-
-  // whatsNew 로컬라이제이션 발췌 (앞 200자)
-  type LocalizationRow = { id: string; locale: string; whatsNew: string };
-  const localizations = (await getVersionLocalizations(versionId).catch(() => [])) as LocalizationRow[];
-  const whatsNewByLocale = localizations
-    .filter((l: LocalizationRow) => typeof l.whatsNew === 'string' && l.whatsNew.length > 0)
-    .map((l: LocalizationRow) => ({
-      locale: l.locale,
-      length: l.whatsNew.length,
-      excerpt: l.whatsNew.length > 200 ? `${l.whatsNew.slice(0, 200)}…` : l.whatsNew,
-    }));
-
-  return {
-    versionId,
-    versionString,
-    state,
-    appId,
-    platform,
-    attachedBuild,
-    whatsNewByLocale,
-  };
 }
 
 async function createReviewSubmission(appId: string, platform: string): Promise<string> {

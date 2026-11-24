@@ -182,6 +182,7 @@ export interface ToolRegistrar {
     description: string,
     shape: Args,
     handler: ToolCallback<Args>,
+    outputSchema?: ZodRawShapeCompat,
   ): void;
   /** 이 서버에서 켜진 toolset (mimi_seed_status 가 보고한다). */
   readonly toolsets: ToolsetSelection;
@@ -212,11 +213,12 @@ export function createToolRegistrar(
     description: string,
     shape: ZodRawShapeCompat,
     handler: AnyHandler,
+    outputSchema?: ZodRawShapeCompat,
   ) => {
     if (!toolsets.isToolEnabled(meta.name)) return;
     server.registerTool<ZodRawShapeCompat, ZodRawShapeCompat>(
       meta.name,
-      { title: annotationsFor(meta).title, description, inputSchema: shape, annotations: annotationsFor(meta) },
+      { title: annotationsFor(meta).title, description, inputSchema: shape, outputSchema, annotations: annotationsFor(meta) },
       handler,
     );
   };
@@ -224,7 +226,7 @@ export function createToolRegistrar(
   return {
     toolsets,
     manifest,
-    tool(name, description, shape, handler) {
+    tool(name, description, shape, handler, outputSchema) {
       const meta = metaOf(name);
       if (meta.deprecatedFor) {
         throw new Error(
@@ -265,7 +267,7 @@ export function createToolRegistrar(
         };
       }
 
-      register(meta, finalDescription, finalShape, finalHandler);
+      register(meta, finalDescription, finalShape, finalHandler, outputSchema);
 
       for (const alias of meta.aliases) {
         const aliasMeta = metaOf(alias);
@@ -274,6 +276,7 @@ export function createToolRegistrar(
           `[DEPRECATED — use ${name}; removed in the next minor release] ${finalDescription}`,
           finalShape,
           finalHandler,
+          outputSchema,
         );
       }
     },

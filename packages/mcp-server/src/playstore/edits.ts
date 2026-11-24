@@ -13,6 +13,8 @@ import { GOOGLEAPIS_COMMIT_OPTIONS } from '../lib/google-timeouts.js';
 // 모든 호출에서 경로 파라미터가 정확히 '.'/'..' 이면 요청 전에 거부 (lib/resource-id.ts).
 export const publisher = () => guardDotSegmentParams(google.androidpublisher('v3'));
 
+const pendingEdits = new Map<string, Promise<unknown>>();
+
 export interface EditCommitInfo {
   /** true 면 커밋은 됐지만 심사 전송은 Play Console 에서 사람이 눌러야 한다. */
   changesNotSentForReview: boolean;
@@ -47,9 +49,29 @@ export async function withEdit<T>(
   commit = false,
   onCommit?: (info: EditCommitInfo) => void,
 ): Promise<T> {
+  // A new edit can invalidate an active edit for the same app, including when the new edit only reads.
+  const previous = pendingEdits.get(packageName);
+  const edit = (previous?.catch(() => undefined) ?? Promise.resolve())
+    .then(() => runEdit(auth, packageName, fn, commit, onCommit));
+  pendingEdits.set(packageName, edit);
+  try {
+    return await edit;
+  } finally {
+    if (pendingEdits.get(packageName) === edit) pendingEdits.delete(packageName);
+  }
+}
+
+async function runEdit<T>(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+  fn: (editId: string) => Promise<T>,
+  commit: boolean,
+  onCommit?: (info: EditCommitInfo) => void,
+): Promise<T> {
   const res = await publisher().edits.insert({ auth, packageName });
   const editId = res.data.id;
   if (!editId) throw new Error('Failed to create edit session');
+  let commitStarted = false;
   try {
     const result = await fn(editId);
     if (commit) {
@@ -57,13 +79,19 @@ export async function withEdit<T>(
       // onCommit?.(await commitEdit(...)) 로 쓰면 안 된다 — 옵셔널 호출은 수신자가
       // nullish 일 때 인자 자체를 평가하지 않아서, onCommit 을 안 넘긴 호출자(대부분)에서
       // 커밋이 통째로 사라진다. playstore-listing 테스트가 이걸 잡아냈다.
+      commitStarted = true;
       const info = await commitEdit(auth, packageName, editId);
       onCommit?.(info);
     }
     return result;
   } finally {
-    if (!commit) {
-      await publisher().edits.delete({ auth, packageName, editId }).catch(() => {});
+    // Once a commit has been attempted, a transport failure can leave its outcome uncertain.
+    if (!commitStarted) {
+      try {
+        await publisher().edits.delete({ auth, packageName, editId });
+      } catch {
+        // Cleanup is best effort. Preserve the outcome of the edit callback.
+      }
     }
   }
 }

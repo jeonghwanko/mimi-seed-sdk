@@ -48,8 +48,15 @@ function stubFetch(routes: Array<{ match: RegExp; method?: string; status?: numb
 }
 
 const version = (state: string, extra: Record<string, unknown> = {}) => ({
-  data: { id: 'v1', attributes: { versionString: '1.2.3', appStoreState: state, ...extra } },
+  data: { id: 'v1', type: 'appStoreVersions', attributes: { versionString: '1.2.3', appStoreState: state, ...extra } },
 });
+const phasedPath = /appStoreVersionPhasedRelease(?:\?|$)/;
+const phasedResource = { type: 'appStoreVersionPhasedReleases', id: 'p1', attributes: { phasedReleaseState: 'ACTIVE', currentDayNumber: 3 } };
+
+function versionWithPhased(data: { id: string; type: string } | null, included: unknown[] = []) {
+  const { data: row } = version('READY_FOR_SALE');
+  return { data: { ...row, relationships: { appStoreVersionPhasedRelease: { data } } }, included };
+}
 
 beforeEach(() => {
   calls = [];
@@ -118,14 +125,45 @@ describe('appstore_update_release_type', () => {
 });
 
 describe('appstore_phased_release', () => {
+  it('정상 단계적 출시 조회와 이미 활성화된 enable 은 버전 요청 한 번으로 처리한다', async () => {
+    stubFetch([{ match: /appStoreVersions\/v1\?/, json: versionWithPhased(phasedResource, [phasedResource]) }]);
+
+    const result = await getReleaseStatus('v1');
+    expect(result.phased).toMatchObject({ id: 'p1', state: 'ACTIVE', currentDayNumber: 3 });
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0].url).searchParams.get('include')).toBe('appStoreVersionPhasedRelease');
+
+    calls = [];
+    await expect(setPhasedRelease({ versionId: 'v1', action: 'enable' })).resolves.toMatchObject({
+      phased: { id: 'p1', state: 'ACTIVE' },
+    });
+    expect(calls.map(({ method }) => method)).toEqual(['GET']);
+  });
+
+  it('명시적으로 연결이 없거나 대상이 확인되지 않는 경우를 구분한다', async () => {
+    stubFetch([{ match: /appStoreVersions\/v1\?/, json: versionWithPhased(null) }]);
+    await expect(getReleaseStatus('v1')).resolves.toMatchObject({ phased: null });
+    expect(calls).toHaveLength(1);
+
+    calls = [];
+    stubFetch([
+      { match: /appStoreVersions\/v1\?/, json: versionWithPhased(phasedResource, [phasedResource, phasedResource]) },
+      { match: phasedPath, json: { data: { ...phasedResource, id: 'another' } } },
+    ]);
+    await expect(getReleaseStatus('v1')).rejects.toThrow(/일치하지 않습니다/);
+    expect(calls).toHaveLength(2);
+  });
+
   it('없으면 POST 로 만들고 ACTIVE 로 시작한다', async () => {
     stubFetch([
-      { match: /appStoreVersions\/v1\?/, json: version('READY_FOR_SALE') },
-      { match: /appStoreVersionPhasedRelease$/, json: { data: null } },
-      { match: /appStoreVersionPhasedReleases$/, method: 'POST', json: { data: { id: 'p1' } } },
+      { match: /appStoreVersions\/v1\?/, json: versionWithPhased(null) },
+      { match: phasedPath, json: { data: phasedResource } },
+      { match: /appStoreVersionPhasedReleases$/, method: 'POST', json: { data: phasedResource } },
     ]);
 
-    await setPhasedRelease({ versionId: 'v1', action: 'enable' });
+    await expect(setPhasedRelease({ versionId: 'v1', action: 'enable' })).resolves.toMatchObject({
+      phased: { id: 'p1', state: 'ACTIVE' },
+    });
 
     const post = calls.find((c) => c.method === 'POST');
     expect(post?.body.data.attributes.phasedReleaseState).toBe('ACTIVE');
@@ -134,10 +172,10 @@ describe('appstore_phased_release', () => {
 
   it('이미 있으면 PATCH 로 상태만 바꾼다 (pause → PAUSED)', async () => {
     stubFetch([
-      { match: /appStoreVersions\/v1\?/, json: version('READY_FOR_SALE') },
+      { match: /appStoreVersions\/v1\?/, json: versionWithPhased(phasedResource, [phasedResource]) },
       {
-        match: /appStoreVersionPhasedRelease$/,
-        json: { data: { id: 'p1', attributes: { phasedReleaseState: 'ACTIVE', currentDayNumber: 3 } } },
+        match: phasedPath,
+        json: { data: { ...phasedResource, attributes: { phasedReleaseState: 'PAUSED' } } },
       },
       { match: /appStoreVersionPhasedReleases\/p1/, method: 'PATCH', json: {} },
     ]);
@@ -150,10 +188,33 @@ describe('appstore_phased_release', () => {
     expect(calls.some((c) => c.method === 'POST')).toBe(false);
   });
 
+  it('생성 후 관계 조회가 비어 있으면 제거됐다고 보고하지 않는다', async () => {
+    stubFetch([
+      { match: /appStoreVersions\/v1\?/, json: versionWithPhased(null) },
+      { match: /appStoreVersionPhasedReleases$/, method: 'POST', json: { data: phasedResource } },
+      { match: phasedPath, json: { data: null } },
+    ]);
+    await expect(setPhasedRelease({ versionId: 'v1', action: 'enable' })).rejects.toThrow(/접수됐지만 결과를 확인할 수 없습니다/);
+    expect(calls.map(({ method }) => method)).toEqual(['GET', 'POST', 'GET']);
+  });
+
+  it.each([
+    ['다른 단계적 출시 ID', { ...phasedResource, id: 'replacement', attributes: { phasedReleaseState: 'PAUSED' } }],
+    ['이전 상태', phasedResource],
+  ])('상태 변경 뒤 %s가 반환되면 변경 성공을 확정하지 않는다', async (_case, readback) => {
+    stubFetch([
+      { match: /appStoreVersions\/v1\?/, json: versionWithPhased(phasedResource, [phasedResource]) },
+      { match: /appStoreVersionPhasedReleases\/p1/, method: 'PATCH', json: {} },
+      { match: phasedPath, json: { data: readback } },
+    ]);
+    await expect(setPhasedRelease({ versionId: 'v1', action: 'pause' })).rejects.toThrow(/접수됐지만 결과를 확인할 수 없습니다/);
+    expect(calls.map(({ method }) => method)).toEqual(['GET', 'PATCH', 'GET']);
+  });
+
   it('설정이 없는데 pause 하면 enable 을 안내한다', async () => {
     stubFetch([
       { match: /appStoreVersions\/v1\?/, json: version('READY_FOR_SALE') },
-      { match: /appStoreVersionPhasedRelease$/, json: { data: null } },
+      { match: phasedPath, json: { data: null } },
     ]);
 
     await expect(setPhasedRelease({ versionId: 'v1', action: 'pause' })).rejects.toThrow(/enable/);
@@ -166,7 +227,7 @@ describe('appstore_phased_release', () => {
     stubFetch([
       { match: /appStoreVersions\/v1\?/, json: version('READY_FOR_SALE') },
       {
-        match: /appStoreVersionPhasedRelease$/,
+        match: phasedPath,
         status: 403,
         json: { errors: [{ code: 'FORBIDDEN_ERROR', detail: 'resource not found for this API key (404-like text)' }] },
       },
@@ -178,7 +239,7 @@ describe('appstore_phased_release', () => {
   it('404 는 "단계적 출시 없음"으로 읽는다 (Apple 이 둘 다 쓴다)', async () => {
     stubFetch([
       { match: /appStoreVersions\/v1\?/, json: version('PENDING_DEVELOPER_RELEASE') },
-      { match: /appStoreVersionPhasedRelease$/, status: 404, json: { errors: [{ status: '404' }] } },
+      { match: phasedPath, status: 404, json: { errors: [{ status: '404' }] } },
     ]);
 
     const status = await getReleaseStatus('v1');

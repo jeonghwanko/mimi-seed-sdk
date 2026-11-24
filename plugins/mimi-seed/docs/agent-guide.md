@@ -234,6 +234,14 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 
 ## 4. Workflows (call sequences)
 
+Use `release_status` to check a known release across both stores. It reports the build linked to the selected
+Apple version. Use the exact Play version code when available.
+
+Use the store's `*_plan_release` for a checklist with submission risks already included. The plan and
+`*_check_submission_risks` expose the same MCP structured output. Use `target` for the checked identifiers
+and report `blockingCodes` or an incomplete check before continuing. A passing `canSubmit` result describes
+the checks performed. Keep the preview and approval steps below, and recheck after changes to the target.
+
 ### Play Store release / promote
 1. `playstore_list_tracks` — see current track/version state.
 2. Check the selected track and version code with `playstore_check_submission_risks`. Report blockers or incomplete checks and stop the release workflow.

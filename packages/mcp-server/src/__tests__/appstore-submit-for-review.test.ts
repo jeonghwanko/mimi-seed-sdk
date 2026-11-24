@@ -10,7 +10,7 @@ vi.mock('../appstore/auth.js', () => ({
   generateToken: vi.fn(),
 }));
 
-import { listReviewSubmissions, submitVersionForReview } from '../appstore/tools.js';
+import { buildSubmitForReviewPreview, listReviewSubmissions, submitVersionForReview } from '../appstore/tools.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -39,6 +39,120 @@ function versionMetaResponse() {
     },
   });
 }
+
+describe('buildSubmitForReviewPreview', () => {
+  const buildRef = { type: 'builds', id: 'build-1' };
+  const build = { ...buildRef, attributes: { version: '123', processingState: 'VALID' } };
+  const localeRef = { type: 'appStoreVersionLocalizations', id: 'locale-1' };
+  const locale = { ...localeRef, attributes: { locale: 'ko', whatsNew: 'Updated'.repeat(40) } };
+
+  function previewResponse(localizationTotal: number | undefined, included: unknown[], limit?: number) {
+    return {
+      data: {
+        id: VERSION_ID,
+        type: 'appStoreVersions',
+        attributes: { platform: 'IOS', versionString: '1.2.3', appStoreState: 'PREPARE_FOR_SUBMISSION' },
+        relationships: {
+          app: { data: { type: 'apps', id: APP_ID } },
+          build: { data: buildRef },
+          appStoreVersionLocalizations: { data: [localeRef], meta: { paging: { total: localizationTotal, limit } } },
+        },
+      },
+      included,
+    };
+  }
+
+  it('대상·빌드·노트가 포함되어 있으면 요청 한 번으로 미리보기를 만든다', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse(previewResponse(1, [build, locale, { ...build, id: 'another' }])));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(buildSubmitForReviewPreview(VERSION_ID)).resolves.toMatchObject({
+      versionId: VERSION_ID, appId: APP_ID, platform: 'IOS', versionString: '1.2.3',
+      attachedBuild: { id: 'build-1', buildNumber: '123', processingState: 'VALID' },
+      whatsNewByLocale: [{ locale: 'ko', length: 280, excerpt: `${locale.attributes.whatsNew.slice(0, 200)}…` }],
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(new URL(url).searchParams.get('include')).toBe('app,build,appStoreVersionLocalizations');
+    expect(init.method).toBe('GET');
+  });
+
+  it('포함 빌드가 없고 로케일이 잘렸으면 해당 버전의 상세 조회로 보완한다', async () => {
+    const second = { ...locale, id: 'locale-2', attributes: { locale: 'en-US', whatsNew: 'Notes' } };
+    const fetchMock = vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith('/build')) return jsonResponse({ data: build });
+      if (path.endsWith('/appStoreVersionLocalizations')) return jsonResponse({ data: [locale, second] });
+      return jsonResponse(previewResponse(2, [locale]));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const preview = await buildSubmitForReviewPreview(VERSION_ID);
+    expect(preview.attachedBuild?.id).toBe('build-1');
+    expect(preview.whatsNewByLocale.map(({ locale }) => locale)).toEqual(['ko', 'en-US']);
+    expect(fetchMock.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+      '/v1/appStoreVersions/ver-1', '/v1/appStoreVersions/ver-1/build', '/v1/appStoreVersions/ver-1/appStoreVersionLocalizations',
+    ]);
+  });
+
+  it('상세 조회가 다른 빌드를 반환하면 확정용 미리보기를 만들지 않는다', async () => {
+    const fetchMock = vi.fn(async (url: string) => new URL(url).pathname.endsWith('/build')
+      ? jsonResponse({ data: { ...build, id: 'another' } })
+      : jsonResponse(previewResponse(1, [locale])));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(buildSubmitForReviewPreview(VERSION_ID)).rejects.toThrow(/일치하지 않습니다/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('빌드 상세에 버전 번호나 처리 상태가 없으면 확인용 미리보기를 중단한다', async () => {
+    const fetchMock = vi.fn(async (url: string) => new URL(url).pathname.endsWith('/build')
+      ? jsonResponse({ data: { ...buildRef, attributes: { version: '123' } } })
+      : jsonResponse(previewResponse(1, [locale])));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(buildSubmitForReviewPreview(VERSION_ID)).rejects.toThrow(/processingState/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('보완 조회의 다음 페이지까지 확인하고 원래 관계의 로케일을 유지한다', async () => {
+    const second = { ...locale, id: 'locale-2', attributes: { locale: 'en-US', whatsNew: 'Second page' } };
+    const endpoint = '/v1/appStoreVersions/ver-1/appStoreVersionLocalizations';
+    const fetchMock = vi.fn(async (value: string) => {
+      const url = new URL(value);
+      if (url.pathname !== endpoint) {
+        // Apple may apply a smaller effective limit even if the request specifies 50.
+        return jsonResponse(previewResponse(undefined, [build, locale], 1));
+      }
+      if (url.searchParams.has('cursor')) return jsonResponse({ data: [second] });
+      return jsonResponse({ data: [locale], links: { next: '?cursor=next-page' }, meta: { paging: { total: 2 } } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const preview = await buildSubmitForReviewPreview(VERSION_ID);
+    expect(preview.whatsNewByLocale.map(({ locale }) => locale)).toEqual(['ko', 'en-US']);
+    expect(fetchMock.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(['/v1/appStoreVersions/ver-1', endpoint, endpoint]);
+  });
+
+  it('보완 조회가 버전에 연결된 로케일을 누락하면 미리보기를 중단한다', async () => {
+    const fetchMock = vi.fn(async (url: string) => new URL(url).pathname.endsWith('/appStoreVersionLocalizations')
+      ? jsonResponse({ data: [{ ...locale, id: 'replacement' }] })
+      : jsonResponse(previewResponse(1, [build])));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(buildSubmitForReviewPreview(VERSION_ID)).rejects.toThrow(/로케일 연결과 상세 조회 결과가 일치하지 않습니다/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    'https://example.com/v1/appStoreVersions/ver-1/appStoreVersionLocalizations?cursor=next-page',
+    '/v1/appStoreVersions/other/appStoreVersionLocalizations?cursor=next-page',
+  ])('보완 조회 페이지가 다른 리소스를 가리키면 따라가지 않는다 (%s)', async (next) => {
+    const fetchMock = vi.fn(async (url: string) => new URL(url).pathname.endsWith('/appStoreVersionLocalizations')
+      ? jsonResponse({ data: [locale], links: { next } })
+      : jsonResponse(previewResponse(2, [build, locale])));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(buildSubmitForReviewPreview(VERSION_ID)).rejects.toThrow(/다음 페이지 링크/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('submitVersionForReview', () => {
   it('열린 묶음이 없으면 새로 만들어 제출한다', async () => {

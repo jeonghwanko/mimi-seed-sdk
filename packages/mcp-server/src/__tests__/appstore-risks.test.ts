@@ -23,8 +23,13 @@ vi.mock('../helpers.js', async (original) => ({
   requireAuth: () => { throw new Error('OAuth unavailable'); },
 }));
 
-import { checkAppStoreRisks, formatRisks } from '../checks/risks.js';
+import { checkAppStoreSubmission } from '../checks/appstore-submission.js';
+import { formatRisks, type AppStorePolicy } from '../checks/risks.js';
 import { withClient } from './helpers.js';
+
+async function checkAppStoreRisks(appId: string, { versionId, ...policy }: AppStorePolicy & { versionId?: string } = {}) {
+  return (await checkAppStoreSubmission(appId, { versionId, policy })).readiness.risks;
+}
 
 beforeEach(() => vi.resetAllMocks());
 
@@ -39,6 +44,10 @@ it('Play 제출 점검은 해당 앱의 서비스 계정을 사용할 수 있다
       arguments: { packageName: 'com.example.app' },
     });
     expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      target: { store: 'playstore', packageName: 'com.example.app' },
+      targetVerified: false, checkStatus: 'complete', canSubmit: false, blockingCodes: [],
+    });
   }, { env: { MIMI_SEED_TOOLSETS: 'playstore' } });
 
   expect(mocks.requirePlayStoreAuth).toHaveBeenCalledWith('com.example.app');
@@ -76,11 +85,19 @@ it('Play 출시 점검은 다른 트랙의 같은 코드와 같은 트랙의 다
     expect(text).toContain('contact lookup failed');
     expect(text).not.toContain('NO_CONTACT_EMAIL');
     expect(text).not.toContain('경고 항목 검토 후 제출 가능');
+    expect(result.structuredContent).toMatchObject({
+      target: { store: 'playstore', ...args },
+      targetVerified: false, checkStatus: 'incomplete', canSubmit: false,
+      blockingCodes: expect.arrayContaining(['TARGET_BUILD_NOT_FOUND', 'API_ERROR_DETAILS']),
+    });
 
     const matching = await client.callTool({
       name: 'playstore_check_submission_risks', arguments: { ...args, track: 'beta' },
     });
     expect(JSON.stringify(matching.content)).not.toContain('TARGET_BUILD_NOT_FOUND');
+    expect(matching.structuredContent).toMatchObject({
+      targetVerified: true, checkStatus: 'incomplete', canSubmit: false, blockingCodes: ['API_ERROR_DETAILS'],
+    });
 
     tracks.mockRejectedValueOnce(new Error('track lookup failed'));
     const incomplete = await client.callTool({ name: 'playstore_check_submission_risks', arguments: args });
@@ -95,6 +112,7 @@ it('Play 출시 점검은 다른 트랙의 같은 코드와 같은 트랙의 다
     });
     expect(plan.isError).toBeFalsy();
     expect(JSON.stringify(plan.content)).toContain('beta 트랙에 versionCode 42 도착 확인');
+    expect(plan.structuredContent).toEqual(matching.structuredContent);
     expect(mocks.withEdit).toHaveBeenCalledTimes(1);
     expect(tracks).toHaveBeenCalledTimes(1);
   }, { env: { MIMI_SEED_TOOLSETS: 'playstore' } });
@@ -160,6 +178,78 @@ describe('checkAppStoreRisks', () => {
       throw new Error(`unexpected path: ${path}`);
     });
   }
+
+  it('App Store 플랜과 위험 점검은 동일한 구조화 결과를 반환하고 기존 텍스트를 제공한다', async () => {
+    mockReadinessResponse();
+    await withClient(async (client) => {
+      const { tools } = await client.listTools();
+      const names = ['appstore_plan_release', 'appstore_check_submission_risks', 'playstore_plan_release', 'playstore_check_submission_risks'];
+      const schemas = names.map((name) => tools.find((tool) => tool.name === name)?.outputSchema);
+      expect(schemas[0]).toMatchObject({ type: 'object', required: expect.arrayContaining([
+        'target', 'targetVerified', 'checkStatus', 'canSubmit', 'blockingCodes', 'risks',
+      ]) });
+      for (const schema of schemas) expect(schema).toEqual(schemas[0]);
+
+      const args = { appId: '1234567890', versionId: 'version-1', socialMediaCapability: true };
+      const plan = await client.callTool({ name: names[0], arguments: args });
+      const risks = await client.callTool({ name: names[1], arguments: args });
+      expect(plan.isError).toBeFalsy();
+      expect(risks.isError).toBeFalsy();
+      expect(plan.structuredContent).toEqual(risks.structuredContent);
+      expect(plan.structuredContent).toMatchObject({
+        target: { store: 'appstore', appId: args.appId, versionId: args.versionId, platform: 'IOS' },
+        targetVerified: true, checkStatus: 'complete', canSubmit: false,
+        blockingCodes: ['SOCIAL_MEDIA_CAPABILITY_MISMATCH'],
+        risks: [expect.objectContaining({ code: 'SOCIAL_MEDIA_CAPABILITY_MISMATCH', level: 'blocker' })],
+      });
+      expect(JSON.stringify(plan.content)).toContain('⛔ 심사 제출');
+      expect(JSON.stringify(risks.content)).toContain('SOCIAL_MEDIA_CAPABILITY_MISMATCH');
+    }, { env: { MIMI_SEED_TOOLSETS: 'store' } });
+  });
+
+  it('로케일 보완 조회를 최대 4개씩 진행하고 원래 로케일 순서를 유지한다', async () => {
+    const locales = ['en-US', 'ko', 'ja', 'it', 'de-DE'];
+    const pending = new Map<string, () => void>();
+    const started: string[] = [];
+    mockReadinessResponse('/appStoreVersions/version-1/appStoreVersionLocalizations', {
+      data: locales.map((locale) => mediaLocale(locale, `placement-${locale}`)),
+    });
+    const base = mocks.apiGet.getMockImplementation();
+    mocks.apiGet.mockImplementation(async (path: string) => {
+      const match = /^\/appStoreVersionLocalizations\/loc-(.+)\/placements$/.exec(path);
+      if (!match) return base?.(path);
+      const locale = match[1];
+      started.push(locale);
+      await new Promise<void>((resolve) => { pending.set(locale, resolve); });
+      return { data: [] };
+    });
+
+    const check = checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    await vi.waitFor(() => expect(started).toEqual(locales.slice(0, 4)));
+    pending.get('it')?.();
+    await vi.waitFor(() => expect(started).toEqual(locales));
+    for (const locale of [...locales].reverse()) pending.get(locale)?.();
+    await expect(check).resolves.toEqual(locales.map((locale) => expect.objectContaining({ code: `NO_SCREENSHOTS_${locale}` })));
+  });
+
+  it('로케일 목록 응답이 오기 전에 앱 정책 보완 조회를 시작한다', async () => {
+    const locsPath = '/appStoreVersions/version-1/appStoreVersionLocalizations';
+    let finishLocalizations!: (value: unknown) => void;
+    const localizations = new Promise((resolve) => { finishLocalizations = resolve; });
+    mockReadinessResponse(locsPath, localizations);
+
+    const check = checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    try {
+      await vi.waitFor(() => {
+        const paths = mocks.apiGet.mock.calls.map(([path]) => path);
+        expect(paths).toContain('/appInfos/info-1/appInfoLocalizations');
+        expect(paths).toContain('/appInfos/info-1/ageRatingDeclaration');
+      });
+    } finally {
+      finishLocalizations({ data: [] });
+      await check;
+    }
+  });
 
   it.each([
     ['/apps/1234567890/appStoreVersions', { meta: {} }, 'API_ERROR_VERSIONS'],
@@ -432,7 +522,7 @@ describe('checkAppStoreRisks', () => {
       included: [{ ...validBuild, id: 'unrelated-build' }],
     });
     await expect(checkAppStoreRisks('1234567890', { versionId: 'version-1' })).resolves.toEqual([]);
-    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/version-1/build', { 'fields[builds]': 'processingState' });
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/version-1/build', { 'fields[builds]': 'processingState,version' });
   });
 
   it.each([
