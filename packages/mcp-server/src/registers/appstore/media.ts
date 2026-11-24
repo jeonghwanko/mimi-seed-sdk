@@ -3,25 +3,35 @@ import type { ToolRegistrar } from '../../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as appstoreScreenshots from '../../appstore/screenshots.js';
 import * as previews from '../../appstore/previews.js';
+import { listProductPageMedia } from '../../appstore/asset-library.js';
+import { reorderMediaPlacements, uploadAndPlaceMedia } from '../../appstore/asset-library-write.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
 
 /** appstore_list_screenshots · appstore_upload_screenshot · appstore_delete_screenshot(_set) */
 export function registerScreenshotTools(server: ToolRegistrar) {
   server.tool(
     'appstore_list_screenshots',
-    "App Store 스크린샷 셋 + 이미지 목록 조회 (로컬라이제이션 단위). 디스플레이 타입별로 그룹핑됨",
+    [
+      'App Store 로케일의 스크린샷 목록과 처리 상태를 조회한다.',
+      '첫 JSON은 기존 세트 배열이다. App Asset Library 배치가 있으면 두 번째 JSON에 표시한다.',
+    ].join(' '),
     { localizationId: z.string().describe('로컬라이제이션 ID (appstore_get_metadata 결과의 id)') },
     async ({ localizationId }) => {
-      const sets = await appstoreScreenshots.listScreenshotSets(localizationId);
-      return jsonResult(sets);
+      const { legacySets, placements } = await listProductPageMedia(localizationId, 'screenshots', appstoreScreenshots.listScreenshotSets);
+      const legacy = jsonResult(legacySets);
+      if (placements.length === 0) return legacy;
+      const library = jsonResult({ source: 'app-asset-library', placements });
+      return { content: [...legacy.content, ...library.content] };
     },
   );
 
   server.tool(
     'appstore_upload_screenshot',
     [
-      "App Store 스크린샷 업로드 (자동 4단계: 셋 확보 → 예약 → 청크 업로드 → 커밋).",
-      "파일 경로는 로컬 절대경로. displayType은 Apple 공식 enum:",
+      'App Store 스크린샷을 업로드하거나 기존 Asset Library 에셋을 배치한다.',
+      'Asset Library 방식은 placementGroup과 filePath 또는 assetId를 사용한다. 파일 경로는 로컬 절대경로다.',
+      'Asset Library 결과가 processing이면 처리 완료 후 같은 assetId로 배치를 요청한다.',
+      '기존 세트 방식은 displayType과 filePath를 사용한다. displayType의 예:',
       "APP_IPHONE_69 (6.9\", 1290x2796) / APP_IPHONE_67 (6.7\", 1290x2796) /",
       "APP_IPHONE_65 (6.5\", 1242x2688) / APP_IPHONE_61 (6.1\", 1170x2532) /",
       "APP_IPHONE_58 (5.8\") / APP_IPHONE_55 (5.5\", 1242x2208) /",
@@ -31,10 +41,17 @@ export function registerScreenshotTools(server: ToolRegistrar) {
     ].join(' '),
     {
       localizationId: z.string().describe('로컬라이제이션 ID'),
-      displayType: z.string().describe('Apple 스크린샷 디스플레이 타입 (예: APP_IPHONE_69)'),
-      filePath: z.string().describe('업로드할 이미지 파일의 절대경로'),
+      displayType: z.string().optional().describe('기존 세트 디스플레이 타입 (예: APP_IPHONE_69)'),
+      placementGroup: z.string().min(1).optional().describe('Asset Library 배치 그룹 (예: IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE)'),
+      filePath: z.string().optional().describe('업로드할 이미지 파일의 절대경로'),
+      assetId: z.string().min(1).optional().describe('재사용할 Asset Library 이미지 ID'),
     },
-    async ({ localizationId, displayType, filePath }) => {
+    async ({ localizationId, displayType, placementGroup, filePath, assetId }) => {
+      if (placementGroup) {
+        if (displayType !== undefined) throw new Error('placementGroup과 displayType 중 하나만 지정하세요.');
+        return jsonResult(await uploadAndPlaceMedia({ localizationId, placementGroup, filePath, assetId, placementType: 'APP_SCREENSHOT' }));
+      }
+      if (!displayType || !filePath || assetId !== undefined) throw new Error('기존 세트 업로드에는 displayType과 filePath가 필요합니다.');
       const result = await appstoreScreenshots.uploadScreenshot(localizationId, displayType, filePath);
       return textResult(`✅ 스크린샷 업로드 완료 (${displayType})\n\n${JSON.stringify(result, null, 2)}`);
     },
@@ -43,7 +60,7 @@ export function registerScreenshotTools(server: ToolRegistrar) {
   server.tool(
     'appstore_delete_screenshot',
     'App Store 개별 스크린샷 삭제',
-    { screenshotId: z.string().describe('스크린샷 ID (appstore_list_screenshots 결과)') },
+    { screenshotId: z.string().describe('기존 세트에 속한 스크린샷 ID (appstore_list_screenshots 첫 번째 결과)') },
     async ({ screenshotId }) => {
       const result = await appstoreScreenshots.deleteScreenshot(screenshotId);
       return textResult(`✅ 스크린샷 삭제됨\n${JSON.stringify(result, null, 2)}`);
@@ -53,7 +70,7 @@ export function registerScreenshotTools(server: ToolRegistrar) {
   server.tool(
     'appstore_delete_screenshot_set',
     'App Store 스크린샷 셋 전체 삭제 (디스플레이 타입 교체 시 먼저 정리)',
-    { setId: z.string().describe('스크린샷 셋 ID (appstore_list_screenshots 결과)') },
+    { setId: z.string().describe('기존 스크린샷 셋 ID (appstore_list_screenshots 첫 번째 결과)') },
     async ({ setId }) => {
       const result = await appstoreScreenshots.deleteScreenshotSet(setId);
       return textResult(`✅ 셋 삭제됨\n${JSON.stringify(result, null, 2)}`);
@@ -75,8 +92,8 @@ export function registerPreviewTools(server: ToolRegistrar) {
   server.tool(
     'appstore_list_previews',
     [
-      '버전 로케일의 미리보기 동영상 세트를 조회한다 — 읽기 전용.',
-      '세트별 previewType 과 각 동영상의 처리 상태(assetDeliveryState)·포스터 프레임·videoUrl 을 보여준다.',
+      '버전 로케일의 미리보기 동영상 목록. 기존 세트와 App Asset Library 배치를 조회한다.',
+      '각 동영상의 처리 상태와 포스터 프레임을 보여준다.',
       '업로드 직후 인코딩이 끝났는지 확인할 때도 이걸 쓴다.',
     ].join(' '),
     {
@@ -85,18 +102,29 @@ export function registerPreviewTools(server: ToolRegistrar) {
         .describe('appStoreVersionLocalization ID (appstore_get_metadata 결과의 로케일별 id)'),
     },
     async ({ localizationId }) => {
-      const sets = await previews.listPreviewSets(localizationId);
-      if (sets.length === 0) {
+      const { legacySets, placements } = await listProductPageMedia(localizationId, 'previews', previews.listPreviewSets);
+      if (legacySets.length === 0 && placements.length === 0) {
         return textResult('미리보기 세트 없음.');
       }
       const lines: string[] = [];
-      for (const s of sets) {
+      for (const s of legacySets) {
         lines.push(`${s.previewType ?? '?'} (set ${s.id}) — ${s.previews.length}개`);
         for (const p of s.previews) {
           lines.push(
             `  ${p.id}: ${p.fileName ?? '?'} · ${p.state ?? '상태 미상'}` +
               (p.previewFrameTimeCode ? ` · 포스터 ${p.previewFrameTimeCode}` : '') +
               (p.videoUrl ? ' · 재생 가능' : ''),
+          );
+        }
+      }
+      if (placements.length > 0) {
+        lines.push('App Asset Library 배치');
+        for (const placement of placements) {
+          const { placementGroup, placementId, assetId, fileName, assetState, placementState, previewFrameTimeCode } = placement;
+          lines.push(
+            `${placementGroup ?? '?'} (placement ${placementId}): ${fileName ?? '?'} · ${assetState ?? '에셋 상태 미상'} · ${placementState ?? '배치 상태 미상'}` +
+              (assetId ? ` · assetId ${assetId}` : '') +
+              (previewFrameTimeCode ? ` · 포스터 ${previewFrameTimeCode}` : ''),
           );
         }
       }
@@ -107,23 +135,32 @@ export function registerPreviewTools(server: ToolRegistrar) {
   server.tool(
     'appstore_upload_preview',
     [
-      '제품 페이지 미리보기 **동영상**을 업로드한다 — appPreviewSets/appPreviews 4단계 업로드.',
-      'previewType 세트가 없으면 만들고, 예약 → 조각 업로드 → 커밋까지 한 번에 처리한다.',
-      '⚠️ 커밋 후 Apple 인코딩이 남는다 — 성공 응답이 곧 노출 가능은 아니다. appstore_list_previews 로 확인할 것.',
+      '제품 페이지 미리보기 동영상을 업로드하거나 기존 Asset Library 동영상을 배치한다.',
+      'Asset Library 방식은 placementGroup과 filePath 또는 assetId를 사용한다. 기존 세트 방식은 previewType과 filePath를 사용한다.',
+      'Asset Library 결과가 processing이면 인코딩 완료 후 같은 assetId로 배치를 요청한다. 저장한 배치는 appstore_list_previews로 확인한다.',
       'Apple 제약: 길이 15~30초, previewType 별 해상도 고정, 로케일·타입당 최대 3개. 어기면 인코딩 단계에서 거부된다.',
       'previewFrameTimeCode(HH:MM:SS:FF)로 포스터 프레임을 지정할 수 있다.',
       '파일은 절대경로로 넘긴다 (대용량이라 조각 업로드하며, 동영상 바이트는 대화에 싣지 않는다).',
     ].join(' '),
     {
       localizationId: z.string().describe('appStoreVersionLocalization ID'),
-      previewType: z.enum(PREVIEW_TYPES).describe('미리보기 타입 (기기군)'),
-      filePath: z.string().describe('동영상 파일 절대경로 (.mp4 / .mov / .m4v)'),
+      previewType: z.enum(PREVIEW_TYPES).optional().describe('기존 미리보기 타입 (기기군)'),
+      placementGroup: z.string().min(1).optional().describe('Asset Library 배치 그룹 (예: IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE)'),
+      filePath: z.string().optional().describe('동영상 파일 절대경로 (.mp4 / .mov / .m4v)'),
+      assetId: z.string().min(1).optional().describe('재사용할 Asset Library 동영상 ID'),
       previewFrameTimeCode: z
         .string()
         .optional()
         .describe('포스터 프레임 시각 HH:MM:SS:FF (예: 00:00:03:00)'),
     },
-    async ({ localizationId, previewType, filePath, previewFrameTimeCode }) => {
+    async ({ localizationId, previewType, placementGroup, filePath, assetId, previewFrameTimeCode }) => {
+      if (placementGroup) {
+        if (previewType !== undefined) throw new Error('placementGroup과 previewType 중 하나만 지정하세요.');
+        return jsonResult(await uploadAndPlaceMedia({
+          localizationId, placementGroup, filePath, assetId, previewFrameTimeCode, placementType: 'APP_PREVIEW',
+        }));
+      }
+      if (!previewType || !filePath || assetId !== undefined) throw new Error('기존 세트 업로드에는 previewType과 filePath가 필요합니다.');
       const r = await previews.uploadPreview({ localizationId, previewType, filePath, previewFrameTimeCode });
       return textResult([
         '✅ 미리보기 업로드 완료 (인코딩 대기)',
@@ -139,12 +176,12 @@ export function registerPreviewTools(server: ToolRegistrar) {
   server.tool(
     'appstore_delete_preview',
     [
-      '미리보기 동영상 또는 세트를 삭제한다 — DELETE /v1/appPreviews/{id} 또는 /appPreviewSets/{id}.',
+      '기존 미리보기 동영상 또는 세트를 삭제한다 — DELETE /v1/appPreviews/{id} 또는 /appPreviewSets/{id}.',
       '⚠️ 되돌릴 수 없다. 세트를 지우면 그 안의 동영상이 모두 사라진다. confirm 필요.',
     ].join(' '),
     {
-      previewId: z.string().optional().describe('삭제할 미리보기 ID (set 과 둘 중 하나)'),
-      setId: z.string().optional().describe('삭제할 미리보기 세트 ID (안의 동영상 전부 삭제)'),
+      previewId: z.string().optional().describe('기존 미리보기 ID (set 과 둘 중 하나)'),
+      setId: z.string().optional().describe('기존 미리보기 세트 ID (안의 동영상 전부 삭제)'),
       confirm: z.boolean().optional().describe('true 명시 시에만 삭제'),
     },
     async ({ previewId, setId, confirm }) => {
@@ -159,5 +196,16 @@ export function registerPreviewTools(server: ToolRegistrar) {
         : await previews.deletePreviewSet(setId as string);
       return textResult(`✅ 삭제 완료 — ${r.id}`);
     },
+  );
+
+  server.tool(
+    'appstore_reorder_media_placements',
+    '한 버전 로케일과 Asset Library 배치 그룹의 미디어 순서를 변경하고 저장된 순서를 다시 확인한다.',
+    {
+      localizationId: z.string().min(1).describe('appStoreVersionLocalization ID'),
+      placementGroup: z.string().min(1).describe('Asset Library 배치 그룹'),
+      placementIds: z.array(z.string().min(1)).min(1).describe('같은 그룹의 모든 placementId를 표시할 순서대로 지정'),
+    },
+    async (args) => jsonResult(await reorderMediaPlacements(args)),
   );
 }

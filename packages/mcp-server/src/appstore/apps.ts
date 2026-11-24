@@ -2,6 +2,7 @@
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import { apiGet, apiPatch, apiPost } from './client.js';
+import { listAppInfoRecords, requireAppInfo } from './app-info.js';
 import type { AscListDocument, AscResource, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
@@ -55,22 +56,8 @@ export async function listBetaGroups(appId: string) {
 
 // ─── 앱 정보 (카테고리 등) ───
 
-// AppInfoState — READY_FOR_DISTRIBUTION이 라이브 버전, 그 외(PREPARE_FOR_SUBMISSION /
-// DEVELOPER_REJECTED 등)가 편집 가능한 appInfo.
-const APP_INFO_LIVE_STATE = 'READY_FOR_DISTRIBUTION';
-
 export async function getAppInfo(appId: string) {
-  const data = await apiGet<AscListDocument<{
-    state?: string; appStoreState?: string; appStoreAgeRating?: string;
-  }>>(`/apps/${encodePathSegment(appId)}/appInfos`, {
-    'fields[appInfos]': 'state,appStoreAgeRating,brazilAgeRating',
-  });
-  return (data.data ?? []).map((i) => ({
-    id: i.id,
-    // 새 필드명 state, 옛 필드명 appStoreState 모두 케어
-    state: i.attributes?.state ?? i.attributes?.appStoreState,
-    ageRating: i.attributes?.appStoreAgeRating,
-  }));
+  return listAppInfoRecords(appId);
 }
 
 // ─── 앱 정보 로컬라이제이션 (이름·부제·개인정보 URL) ───
@@ -91,23 +78,8 @@ interface AppInfoLocalizationAttributes extends AppInfoLocalizationFields {
   locale?: string;
 }
 
-async function findEditableAppInfoId(appId: string): Promise<{ appInfoId: string; state: string }> {
-  const data = await apiGet(`/apps/${encodePathSegment(appId)}/appInfos`, {
-    'fields[appInfos]': 'state',
-    'limit': '10',
-  });
-  const infos = (data?.data ?? []) as Array<{ id: string; attributes?: { state?: string; appStoreState?: string } }>;
-  if (infos.length === 0) {
-    throw new Error(`앱 ${appId}에 appInfos가 없어. 앱 ID 확인 필요.`);
-  }
-  const stateOf = (i: typeof infos[number]) => i.attributes?.state ?? i.attributes?.appStoreState ?? '';
-  const editable = infos.find((i) => stateOf(i) !== APP_INFO_LIVE_STATE);
-  const target = editable ?? infos[0];
-  return { appInfoId: target.id, state: stateOf(target) };
-}
-
 export async function listAppInfoLocalizations(appId: string, locale?: string) {
-  const { appInfoId, state } = await findEditableAppInfoId(appId);
+  const { id: appInfoId, state = '' } = await requireAppInfo(appId);
   const data = await apiGet(`/appInfos/${encodePathSegment(appInfoId)}/appInfoLocalizations`, {
     'fields[appInfoLocalizations]': 'locale,name,subtitle,privacyPolicyUrl,privacyPolicyText',
     'limit': '200',
@@ -148,7 +120,7 @@ export async function createAppInfoLocalization(
   const attributes = Object.fromEntries(
     Object.entries(fields).filter(([, v]) => v !== undefined),
   );
-  const { appInfoId, state } = await findEditableAppInfoId(appId);
+  const { id: appInfoId, state = '' } = await requireAppInfo(appId);
   const data = await apiPost('/appInfoLocalizations', {
     data: {
       type: 'appInfoLocalizations',

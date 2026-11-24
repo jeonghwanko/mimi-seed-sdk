@@ -57,9 +57,9 @@ Use the table to find tool names, then select only the active tools needed for t
 | Pre-submission declarations (both stores) | `select:appstore_get_age_rating,appstore_update_age_rating,appstore_declare_encryption,appstore_get_availability,appstore_set_territory_availability,playstore_upload_data_safety` |
 | TestFlight external testing | `select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers,appstore_list_beta_groups,appstore_list_builds` |
 | App Store review submission (the bundle) | `select:appstore_list_review_submissions,appstore_add_version_to_review_submission,appstore_remove_review_submission_item,appstore_update_version_string,appstore_cancel_review` |
-| App Store preview videos | `select:appstore_list_previews,appstore_upload_preview,appstore_delete_preview,appstore_get_metadata` |
+| App Store preview videos | `select:appstore_list_previews,appstore_upload_preview,appstore_delete_preview,appstore_reorder_media_placements,appstore_get_metadata` |
 | Play post-release recovery | `select:playstore_list_recovery_actions,playstore_create_recovery_action,playstore_deploy_recovery_action,playstore_cancel_recovery_action,playstore_list_tracks` |
-| App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot,appstore_delete_screenshot_set,screenshot_validate` |
+| App Store screenshots | `select:appstore_list_app_info_localizations,appstore_get_metadata,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot,appstore_delete_screenshot_set,appstore_reorder_media_placements,screenshot_validate` |
 | App Store app info + review notes | `select:appstore_get_app_info,appstore_update_app_info_localization,appstore_create_app_info_localization,appstore_update_localization,appstore_get_review_notes,appstore_update_review_notes` |
 | App Store reviews | `select:appstore_list_reviews,appstore_reply_review,generate_review_reply` |
 | App Store IAP (products + review metadata) | `select:appstore_list_products,appstore_create_inapp_purchase,appstore_create_subscription,appstore_update_product,appstore_list_product_localizations,appstore_update_product_localization,appstore_update_product_review_note,appstore_upload_product_review_screenshot,appstore_add_product_to_review,appstore_delete_product` |
@@ -246,6 +246,16 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 2. When a build attachment is requested, verify and obtain approval for the exact build and version before `appstore_attach_build`.
 3. Run `appstore_check_submission_risks` for the selected version. Report blockers or incomplete checks and stop. If requested, apply approved release notes to the same version.
 4. For requested submissions, show the `appstore_submit_for_review` preview and get explicit approval before confirming with the same arguments.
+
+### App Store product page media
+
+Use the screenshot or preview listing to identify the version localization and its existing placements.
+For Asset Library uploads, use the placement group. When the result reports `status: "processing"`, wait for
+Apple to finish processing and call the same upload tool with the returned `assetId` and the same target to
+create the placement. A `status: "placed"` result identifies the saved placement. Run the submission risk
+check before submitting.
+If the upload committed but placement failed, reuse the returned asset ID. To reorder a group, include all
+of its placement IDs in the requested sequence, including both screenshots and previews when present.
 
 ### Service account key → Play / Jenkins (secrets stay on disk)
 1. `iam_create_service_account` (or reuse one) → `iam_create_key`. The key is written to

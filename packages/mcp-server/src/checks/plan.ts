@@ -8,11 +8,8 @@
 
 import type { OAuth2Client } from 'google-auth-library';
 import { publisher, withEdit } from '../playstore/tools.js';
-import { apiGet } from '../appstore/tools.js';
-import { isNotFound } from '../appstore/http.js';
-import type { AscListDocument } from '../appstore/types.js';
-import { encodePathSegment } from '../lib/url-path.js';
-import { APPSTORE_EDITABLE_STATES, checkPlayStoreRisks, checkAppStoreRisks, isRiskCheckIncomplete, type SubmissionRisk } from './risks.js';
+import { selectEditableAppStoreVersion, resolveAppStoreVersionBuild, type AppStoreVersionCandidate } from '../appstore/release-target.js';
+import { appStoreBuildRisk, checkPlayStoreRisksInEdit, checkAppStoreVersionRisks, isRiskCheckIncomplete, type SubmissionRisk } from './risks.js';
 
 export type StepState = 'done' | 'pending' | 'blocked';
 
@@ -107,27 +104,25 @@ export async function buildPlayStoreReleasePlan(opts: {
   const { auth, packageName, versionCode, track, language } = opts;
   const steps: PlanStep[] = [];
 
-  // 1) 인증 + 트랙 / 빌드 상태 조회 (단일 edit session)
-  let trackInfo: { hasTargetVersion: boolean; selectedVersionCode?: string; releaseStatus?: string } = {
-    hasTargetVersion: false,
-  };
+  // 트랙과 제출 위험을 같은 edit에서 조회해 대상 빌드 선택에 사용한 응답을 재사용한다.
+  let checks;
   try {
-    await withEdit(auth, packageName, async (editId) => {
-      // 리스팅 존재 여부는 checkPlayStoreRisks 가 따로 본다. 예전엔 여기서도 한 번 더
-      // 받아 listingPresent 에 담았지만 그 값을 읽는 곳이 없어 edit 세션마다 낭비였다.
-      const tracks = await publisher()
-        .edits.tracks.list({ auth, packageName, editId });
-      const targetTrack = tracks.data.tracks?.find((t) => t.track === track);
+    checks = await withEdit(auth, packageName, async (editId) => {
+      const { data } = await publisher().edits.tracks.list({ auth, packageName, editId });
+      const tracks = data.tracks ?? [];
+      const targetTrack = tracks.find((t) => t.track === track);
       const releases = targetTrack?.releases ?? [];
       const selectedVersionCode = versionCode ?? releases.flatMap((candidate) => candidate.versionCodes ?? [])
         .reduce<string | undefined>((latest, code) => latest === undefined || Number(code) > Number(latest) ? code : latest, undefined);
       const release = releases.find((candidate) => selectedVersionCode && candidate.versionCodes?.includes(selectedVersionCode));
-      trackInfo = {
+      const trackInfo = {
         hasTargetVersion: release !== undefined,
         selectedVersionCode,
         releaseStatus: release?.status ?? undefined,
       };
-      return null;
+      const target = selectedVersionCode ? { track, versionCode: selectedVersionCode } : undefined;
+      const risks = await checkPlayStoreRisksInEdit(auth, packageName, editId, language, target, tracks);
+      return { trackInfo, target, risks };
     });
     steps.push({ state: 'done', title: 'Google Play 인증 + 트랙 조회 성공' });
   } catch (e) {
@@ -142,6 +137,8 @@ export async function buildPlayStoreReleasePlan(opts: {
       steps,
     );
   }
+
+  const { trackInfo, target, risks } = checks;
 
   // 2) 빌드 도착 확인
   if (trackInfo.hasTargetVersion) {
@@ -162,8 +159,6 @@ export async function buildPlayStoreReleasePlan(opts: {
   }
 
   // 3) 메타데이터 / 스크린샷 / 정책 위험 점검
-  const target = trackInfo.selectedVersionCode ? { track, versionCode: trackInfo.selectedVersionCode } : undefined;
-  const risks = await checkPlayStoreRisks(auth, packageName, language, target);
   if (risks.length === 0) {
     steps.push({
       state: 'done',
@@ -219,24 +214,11 @@ export async function buildAppStoreReleasePlan(opts: {
   const context: PlanContext = { platform: 'App Store', identity: appId, version: versionString ?? requestedVersionId ?? 'latest' };
   const steps: PlanStep[] = [];
 
-  // 1) 편집 가능한 버전 조회
-  let versionId: string | undefined;
-  let buildAttached = false;
+  // 1) 편집 가능한 버전과 포함된 빌드를 같은 응답에서 선택한다.
+  let version: AppStoreVersionCandidate | undefined;
   try {
-    const versions = await apiGet<AscListDocument<{ versionString?: string; appStoreState?: string; platform?: string }>>(
-      `/apps/${encodePathSegment(appId)}/appStoreVersions`,
-      {
-        'filter[appStoreState]': APPSTORE_EDITABLE_STATES,
-        ...(versionString ? { 'filter[versionString]': versionString } : {}),
-        ...(requestedVersionId ? { 'filter[id]': requestedVersionId } : {}),
-        limit: requestedVersionId ? '1' : '5',
-      },
-    );
-    const matches = (versions.data ?? []).filter((version) =>
-      (!requestedVersionId || version.id === requestedVersionId)
-      && (!versionString || version.attributes?.versionString === versionString),
-    );
-    if (matches.length > 1 || (!requestedVersionId && versions.links?.next)) {
+    const selection = await selectEditableAppStoreVersion(appId, { versionString, versionId: requestedVersionId });
+    if (selection.status === 'ambiguous' || selection.status === 'incomplete') {
       steps.push({
         state: 'blocked',
         title: 'App Store 버전 대상을 하나로 확정할 수 없음',
@@ -246,31 +228,13 @@ export async function buildAppStoreReleasePlan(opts: {
       return renderPlan(context, steps);
     }
 
-    const version = matches[0];
-    if (version) {
-      versionId = version.id;
-      const { versionString: actualVersion, appStoreState, platform } = version.attributes ?? {};
-      context.version = [actualVersion ?? versionId, platform].filter(Boolean).join(' / ');
+    if (selection.status === 'selected') {
+      version = selection.version;
+      context.version = [version.versionString ?? version.id, version.platform].filter(Boolean).join(' / ');
       steps.push({
         state: 'done',
-        title: `편집 가능한 버전 발견 (${actualVersion}, state=${appStoreState})`,
+        title: `편집 가능한 버전 발견 (${version.versionString ?? version.id}, state=${version.state})`,
       });
-
-      const build = await apiGet(`/appStoreVersions/${encodePathSegment(versionId)}/build`).catch((error: unknown) => {
-        if (isNotFound(error)) return { data: null };
-        throw error;
-      });
-      buildAttached = Boolean(build?.data?.id);
-      if (buildAttached) {
-        steps.push({ state: 'done', title: '버전에 빌드 연결됨' });
-      } else {
-        steps.push({
-          state: 'blocked',
-          title: '버전에 빌드 미연결',
-          detail: 'TestFlight 빌드 처리 완료 후 App Store Connect에서 연결하거나 API로 attach.',
-          tool: 'appstore_list_builds',
-        });
-      }
     } else {
       steps.push({
         state: 'blocked',
@@ -290,12 +254,34 @@ export async function buildAppStoreReleasePlan(opts: {
     return renderPlan(context, steps);
   }
 
-  // 2) 메타데이터 / 스크린샷 / 정책 위험 점검
-  const risks = versionId ? await checkAppStoreRisks(appId, { versionId }) : [];
+  // 2) 선택한 버전을 재조회하지 않고 빌드와 정책 위험을 점검한다.
+  const versionId = version?.id;
+  let buildReady = false;
+  let risks: SubmissionRisk[] = [];
+  if (version) {
+    const [build, versionRisks] = await Promise.all([
+      resolveAppStoreVersionBuild(version),
+      checkAppStoreVersionRisks(appId, version),
+    ]);
+    buildReady = build.status === 'ready';
+    risks = versionRisks;
+    const buildRisk = appStoreBuildRisk(build);
+    if (buildRisk) {
+      steps.push({
+        state: 'blocked',
+        title: build.status === 'missing' ? '버전에 빌드 미연결' : buildRisk.title,
+        detail: buildRisk.detail,
+        tool: 'appstore_list_builds',
+      });
+    } else {
+      steps.push({ state: 'done', title: '버전에 빌드 연결됨' });
+    }
+  }
+
   if (!versionId) {
     steps.push({ state: 'blocked', title: '제출 위험 점검 미완료', detail: '대상 버전을 확인하세요.' });
   } else if (risks.length === 0) {
-    steps.push({ state: 'done', title: '제출 위험 점검 통과 (블로커 0)' });
+    steps.push({ state: 'done', title: '메타데이터·스크린샷·정책 위험 점검 통과' });
   } else {
     const blockers = risks.filter((r) => r.level === 'blocker');
     const warnings = risks.filter((r) => r.level === 'warning');
@@ -308,7 +294,7 @@ export async function buildAppStoreReleasePlan(opts: {
     steps.push(...risksToSteps(warnings, 'appstore_update_localization'));
   }
 
-  const canSubmit = versionId && buildAttached && !risks.some(blocksSubmission);
+  const canSubmit = buildReady && !risks.some(blocksSubmission);
   // 3) What's New / promotional text / reviewer notes
   steps.push({
     state: canSubmit ? 'pending' : 'blocked',

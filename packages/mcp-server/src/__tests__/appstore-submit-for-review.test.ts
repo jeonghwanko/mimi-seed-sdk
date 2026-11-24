@@ -32,8 +32,10 @@ const APP_ID = 'app-1';
 function versionMetaResponse() {
   return jsonResponse({
     data: {
+      id: VERSION_ID,
+      type: 'appStoreVersions',
       attributes: { platform: 'IOS' },
-      relationships: { app: { data: { id: APP_ID } } },
+      relationships: { app: { data: { type: 'apps', id: APP_ID } } },
     },
   });
 }

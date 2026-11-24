@@ -18,14 +18,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-11-24
+
+### Added
+
+- Upload and reuse App Asset Library screenshots and previews with a placement group.
+- Reorder a localization's App Asset Library media and verify the saved order.
+
+### Changed
+
+- App Store submission checks and media listings read App Asset Library placements alongside legacy media sets.
+- App Store submission checks verify screenshot processing state and batch known placements across localizations.
+- App Store release plans reuse the selected version and attached build from one API response using the current version-state filter.
+- App Store release checks verify the attached build's processing state before opening submission steps.
+- App Store metadata, age ratings, and release checks share the same current app-info selection.
+- Age-rating updates verify the original declaration without looking up the app's info records again.
+- App Store release checks reuse privacy and age-rating data included with the selected app-info record.
+- Google Play release plans use one edit and one track lookup for build selection and submission checks.
+- npm release CI verifies the published package installs and runs before continuing to the next package.
+
 ### Fixed
 
 - GitHub Actions dispatch ignores malformed run entries when identifying the triggered build.
 - App Store submission stops if the existing review-submission list is missing from the API response.
+- App Store readiness checks flag malformed responses and incomplete lists for review before submission.
+- App Store risk checks and release plans require a verified version and platform, validate platform-specific privacy policies, and confirm that linked screenshot assets are ready.
+- App Asset Library uploads preserve the asset ID during processing. Placement waits for a compatible processed asset in the target app's library.
 
 ### Tool changes
 
-- None.
+- Added `appstore_reorder_media_placements`.
 
 ## [0.23.1] - 2026-11-24
 

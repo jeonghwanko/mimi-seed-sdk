@@ -407,7 +407,7 @@ export const batches = [
   },
   {
     goal: 'App Store preview videos',
-    tools: ['appstore_list_previews', 'appstore_upload_preview', 'appstore_delete_preview', 'appstore_get_metadata'],
+    tools: ['appstore_list_previews', 'appstore_upload_preview', 'appstore_delete_preview', 'appstore_reorder_media_placements', 'appstore_get_metadata'],
   },
   {
     goal: 'Play post-release recovery',
@@ -420,7 +420,7 @@ export const batches = [
     goal: 'App Store screenshots',
     tools: [
       'appstore_list_app_info_localizations', 'appstore_get_metadata', 'appstore_list_screenshots',
-      'appstore_upload_screenshot', 'appstore_delete_screenshot', 'appstore_delete_screenshot_set', 'screenshot_validate',
+      'appstore_upload_screenshot', 'appstore_delete_screenshot', 'appstore_delete_screenshot_set', 'appstore_reorder_media_placements', 'screenshot_validate',
     ],
   },
   {

@@ -53,6 +53,7 @@ jobs:
 
       - run: npm run plugin:check
       - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs scripts/changelog-check.test.mjs
+      - run: bash scripts/publish-if-new.test.sh
 
   # 테스트 전용 — 이 잡은 절대 publish 하지 않는다 (publish 잡이 따로 있다).
   build-test:
@@ -186,15 +187,14 @@ jobs:
         with:
           node-version: 24
 
-      # mcp-server 먼저. prepublishOnly(agent-guide 동기화 확인 + tsc)가 여기서 터지면
-      # 아래 cli step 은 실행되지 않는다.
-      - name: Publish mcp-server if version is new
+      # mcp-server의 게시와 npm 설치 검증이 모두 끝나야 CLI 배포를 시작한다.
+      - name: Publish and verify mcp-server
         working-directory: packages/mcp-server
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash ../../.github/scripts/publish-if-new.sh mcp-server
 
-      - name: Publish cli if version is new
+      - name: Publish and verify cli
         working-directory: packages/cli
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Publish the package in the current directory to npm if its version is not there yet,
-# then create a GitHub Release for it. Called by the `publish` job in ci.yml, once per
+# Publish the package in the current directory if its version is new, verify that it
+# installs from npm, then create a GitHub Release for it. Called by the `publish` job in ci.yml, once per
 # package, from `packages/<package>` — mcp-server first, then cli.
 #
 # Usage: publish-if-new.sh <release-tag-prefix>     (e.g. `cli` → tag `cli-v1.2.3`)
 #
-# Exit code: 0 when the version is on npm afterwards (published now, or already there);
-# non-zero when publishing failed — the workflow then stops before the next package.
+# Exit code: 0 when the exact npm version installs and its executable starts.
+# Any publish or verification failure stops the workflow before the next package.
 #
 # Requires GH_TOKEN (GitHub Release) and an OIDC-capable npm (trusted publishing +
 # provenance; Node 24 / npm 11). No NPM_TOKEN is used.
@@ -17,25 +17,65 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 NAME=$(node -p "require('./package.json').name")
 VERSION=$(node -p "require('./package.json').version")
-CHANNEL=$(node --input-type=module -e "import { releaseChannel } from '$ROOT/scripts/release-channel.mjs'; console.log(releaseChannel(process.argv[1]))" "$VERSION")
+CHANNEL=$(node --input-type=module -e '
+  import { pathToFileURL } from "node:url";
+  const { releaseChannel } = await import(pathToFileURL(process.argv[1]));
+  console.log(releaseChannel(process.argv[2]));
+' "$ROOT/scripts/release-channel.mjs" "$VERSION")
 TAG="$TAG_PREFIX-v$VERSION"
+REGISTRY=https://registry.npmjs.org/
 RELEASE_FLAGS=()
 if [ "$CHANNEL" != "latest" ]; then RELEASE_FLAGS+=(--prerelease); fi
 
 on_npm() {
-  # --prefer-online 으로 캐시를 우회한다 — 방금 올린 버전도 바로 보이게.
-  npm view "$NAME@$VERSION" version --prefer-online >/dev/null 2>&1
+  local published_version
+  published_version=$(npm view "$NAME@$VERSION" version --registry="$REGISTRY" \
+    --prefer-online --fetch-retries=0 2>/dev/null) && [ "$published_version" = "$VERSION" ]
 }
 
-github_release() {
-  # 실패해도 publish 는 이미 끝났으므로 비치명적 처리. 이미 존재하면 gh 가 실패하고 || 가 삼킨다.
+verify_npm_install() (
+  local scratch bin installed_version attempt
+  scratch=$(mktemp -d) || exit 1
+  trap 'rm -rf -- "$scratch"' EXIT
+  cd "$scratch" || exit 1
+  # Registry reads and the installed executable do not need publishing credentials.
+  unset GH_TOKEN GITHUB_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN
+
+  # Scope the cache to this verification so a local tarball cannot hide a CDN failure.
+  # The package's exact version may be visible in metadata before the tarball is served.
+  for attempt in {1..15}; do
+    echo "→ verifying npm install of $NAME@$VERSION (attempt $attempt/15)"
+    if timeout 90s npm install "$NAME@$VERSION" --registry="$REGISTRY" \
+      --cache "$scratch/cache" --prefer-online --fetch-retries=0 \
+      --ignore-scripts --no-save --no-package-lock --no-audit --no-fund; then
+      bin="./node_modules/.bin/${NAME##*/}"
+      if ! installed_version=$(timeout 20s "$bin" --version); then
+        echo "::error::$NAME@$VERSION installed but its executable failed" >&2
+        exit 1
+      fi
+      if [ "$installed_version" != "$VERSION" ]; then
+        echo "::error::$NAME@$VERSION executable reported '$installed_version'" >&2
+        exit 1
+      fi
+      echo "✓ installed $NAME@$VERSION and verified --version"
+      exit 0
+    fi
+    if [ "$attempt" -lt 15 ]; then sleep 30; fi
+  done
+  echo "::error::Could not install $NAME@$VERSION from $REGISTRY" >&2
+  exit 1
+)
+
+finish_release() {
+  verify_npm_install || return 1
+  if gh release view "$TAG" >/dev/null 2>&1; then return 0; fi
   gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes "${RELEASE_FLAGS[@]}" \
-    || echo "⚠ GitHub Release 생성 실패/이미 존재 ($TAG) — 무시 (publish 는 성공)"
+    || echo "⚠ GitHub Release 생성 실패 ($TAG) — npm 설치 검증 완료"
 }
 
-# 빠른 경로: 이미 있으면 publish 시도 자체를 생략 (idempotent — 버전 안 바꾼 푸시는 no-op).
 if on_npm; then
-  echo "• $NAME@$VERSION 이미 npm 에 존재 — skip"
+  echo "• $NAME@$VERSION 이미 npm 에 존재 — 설치 검증"
+  finish_release
   exit 0
 fi
 
@@ -47,14 +87,14 @@ for attempt in 1 2 3; do
   echo "→ publishing $NAME@$VERSION (attempt $attempt, dist-tag $CHANNEL)"
   if npm publish --access public --provenance --tag "$CHANNEL"; then
     echo "✓ published $NAME@$VERSION (provenance 서명됨)"
-    github_release
+    finish_release
     exit 0
   fi
   sleep 15
   if on_npm; then
     # 부분 성공(publish 는 됐는데 응답만 실패) 케이스에도 Release 는 남긴다.
     echo "• $NAME@$VERSION 레지스트리에 이미 존재 (경합/부분 성공) — publish no-op"
-    github_release
+    finish_release
     exit 0
   fi
 done
