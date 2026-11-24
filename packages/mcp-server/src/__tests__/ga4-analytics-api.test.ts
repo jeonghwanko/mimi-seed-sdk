@@ -88,8 +88,9 @@ describe('GA4 MCP 인증과 페이지네이션', () => {
     { tool: 'ga4_list_properties', list: mocks.properties, key: 'properties', args: { accountId: '123' }, query: { filter: 'parent:accounts/123' } },
     { tool: 'ga4_list_data_streams', list: mocks.streams, key: 'dataStreams', args: { propertyId }, query: { parent: 'properties/12345' } },
   ])('$tool 가 읽기 전용 프로필로 모든 페이지를 조회한다', async ({ tool, list, key, args, query }) => {
+    const secondPage = 'page-2';
     list
-      .mockResolvedValueOnce({ data: { [key]: [{ name: 'first' }], nextPageToken: 'next-page' } })
+      .mockResolvedValueOnce({ data: { [key]: [{ name: 'first' }], nextPageToken: secondPage } })
       .mockResolvedValueOnce({ data: { [key]: [{ name: 'second' }] } });
 
     const result = await callTool(tool, { ...args, profile });
@@ -102,7 +103,7 @@ describe('GA4 MCP 인증과 페이지네이션', () => {
     expect(mocks.getAuthenticatedClient).toHaveBeenCalledWith(profile, { scope: GA4_DATA_SCOPE });
     expect(list).toHaveBeenCalledTimes(2);
     expect(list).toHaveBeenNthCalledWith(1, { ...query, auth, pageSize: 200 });
-    expect(list).toHaveBeenNthCalledWith(2, { ...query, auth, pageSize: 200, pageToken: 'next-page' });
+    expect(list).toHaveBeenNthCalledWith(2, { ...query, auth, pageSize: 200, pageToken: secondPage });
   });
 
   it('선택한 프로필과 페이지 위치를 전달하고 여러 분류 기준으로 정렬한다', async () => {
