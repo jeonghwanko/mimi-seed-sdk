@@ -20,6 +20,7 @@ import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
 import { printMcpSetup, writeCodexMcpConfig, claudeMcpAddCommand } from "./mcp-config.js";
 import { printCommandHelp, printHelp } from "./help.js";
+import { runMcpBin } from "./mcp-bin.js";
 import { catalog, t } from "./i18n.js";
 import { version as CLI_VERSION } from "../package.json";
 
@@ -195,6 +196,9 @@ async function main(): Promise<void> {
         break;
       case "ga4":
         await cmdGa4(restArgs);
+        break;
+      case "tools":
+        process.exitCode = await runMcpBin("mimi-seed-tools", restArgs);
         break;
       case "deploy":
         await cmdDeploy(restArgs);

@@ -2,6 +2,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ToolsetSelection } from './lib/toolsets.js';
 import { androidPackageName } from './lib/package-name.js';
+import { resolveLang } from '#core/lang.js';
+import type { ToolManifest } from './lib/package-root.js';
+import { buildToolMenu, formatToolMenu } from './lib/tool-menu.js';
 
 const stores = [
   {
@@ -55,10 +58,25 @@ function storeTarget(store: Store, targets: Targets) {
   return targets[store.target] ? `${store.label} (${targets[store.target]})` : store.label;
 }
 
-export function registerPrompts(server: McpServer, toolsets: ToolsetSelection) {
+export function registerPrompts(server: McpServer, toolsets: ToolsetSelection, manifest: ToolManifest) {
   const enabled = (name: string) => toolsets.isToolEnabled(name);
   const deployStores = stores.filter((store) => [store.check, store.releaseLookup, store.updateNotes].every(enabled));
   const reviewStores = stores.filter((store) => enabled(store.listReviews));
+
+  server.prompt(
+    'select-tools',
+    '이번 작업에 사용할 서비스를 텍스트 목록에서 선택',
+    {},
+    async () => {
+      const lang = resolveLang();
+      return promptMessage([
+        'Show the following service menu and wait for the user to choose. Accept multiple numbers, service names, or a free-form description of the work.',
+        formatToolMenu(buildToolMenu(manifest, toolsets, lang), lang),
+        'Map the reply to the service IDs in parentheses. If the intent is unclear, ask a short follow-up before loading tools.',
+        'Read mimi-seed://tools/menu/{areas} with the selected comma-separated IDs. Load only the tools needed for the stated task using host discovery. Keep all publish, write, and destructive confirmations in effect.',
+      ]);
+    },
+  );
 
   server.prompt(
     'getting-started',
@@ -66,10 +84,9 @@ export function registerPrompts(server: McpServer, toolsets: ToolsetSelection) {
     {},
     async () => promptMessage([
       'Mimi Seed 온보딩을 도와줘.',
-      '1. mimi_seed_status로 연결 상태를 확인한다.',
-      '2. 사용자가 기능을 물으면 mimi-seed://tools/catalog에서 활성 도메인을 요약한다.',
-      '3. 목표가 알려져 있으면 바로 진행하고, 불명확하면 먼저 확인한다. 연결이 필요한 경우 해당 서비스 설정을 안내한다.',
-      '4. 자격증명이 준비되면 활성 도구 중 목표에 맞는 첫 읽기 작업을 실행한다.',
+      '서비스가 정해지지 않았으면 mimi-seed://tools/menu의 목록을 보여주고 사용자의 선택을 기다린다.',
+      ...(enabled('mimi_seed_status') ? ['선택된 작업의 연결 상태 확인에 필요하면 mimi_seed_status를 사용한다.'] : []),
+      '연결이 필요한 경우 해당 서비스 설정을 안내하고, 준비되면 활성 도구 중 목표에 맞는 첫 읽기 작업을 실행한다.',
     ]),
   );
 
@@ -105,12 +122,12 @@ export function registerPrompts(server: McpServer, toolsets: ToolsetSelection) {
     );
   }
 
-  server.prompt(
+  if (enabled('mimi_seed_status') || stores.some((store) => enabled(store.check))) server.prompt(
     'health',
     '연결 상태와 대상 앱의 출시 준비도 점검',
     targetArgs,
     async (targets) => promptMessage([
-      'mimi_seed_status로 연결 상태를 확인하고 작업에 필요한 인증 문제를 알려줘.',
+      ...(enabled('mimi_seed_status') ? ['mimi_seed_status로 연결 상태를 확인하고 작업에 필요한 인증 문제를 알려줘.'] : []),
       ...selectStores(stores.filter((store) => enabled(store.check)), targets).map((store) =>
         `대상 앱이 특정된 경우 ${storeTarget(store, targets)}의 ${store.check}로 출시 블로커를 확인한다.`),
     ]),

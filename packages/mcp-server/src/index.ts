@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { buildServer } from './server.js';
 import { readPackageRootText } from './lib/package-root.js';
 
 // npm 패키지 루트의 버전을 단일 출처로 사용.
@@ -24,6 +22,7 @@ const SUBCOMMANDS: Record<string, () => Promise<unknown>> = {
   'mimi-seed-firebase': () => import('./firebase/cli.js'),
   'mimi-seed-admob': () => import('./admob/cli.js'),
   'mimi-seed-ga4': () => import('./ga4/cli.js'),
+  'mimi-seed-tools': () => import('./tools-cli.js'),
   'mimi-seed-release-doctor': () => import('./checks/release-doctor-cli.js'),
 };
 
@@ -65,6 +64,11 @@ async function main() {
     );
   }
 
+  // CLI subcommands and help can finish without loading the server's tool registrations.
+  const [{ StdioServerTransport }, { buildServer }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/server/stdio.js'),
+    import('./server.js'),
+  ]);
   const server = buildServer(version);
   const transport = new StdioServerTransport();
   await server.connect(transport);

@@ -13,11 +13,11 @@ const manifest = readToolManifest();
 const manifestNames = new Set(Object.values(manifest.domains).flatMap((d) => d.tools));
 
 describe('prompts & resources (boot smoke test)', () => {
-  it('프롬프트 4종이 등록되어 있다', async () => {
+  it('서비스 선택 프롬프트와 기존 워크플로 프롬프트가 등록되어 있다', async () => {
     await withClient(async (client) => {
       const { prompts } = await client.listPrompts();
       const names = prompts.map((p) => p.name).sort();
-      expect(names).toEqual(['deploy', 'getting-started', 'health', 'review-inbox']);
+      expect(names).toEqual(['deploy', 'getting-started', 'health', 'review-inbox', 'select-tools']);
     });
   });
 
@@ -29,8 +29,8 @@ describe('prompts & resources (boot smoke test)', () => {
         const { prompts } = await client.listPrompts();
         const names = prompts.map((prompt) => prompt.name).sort();
         expect(names).toEqual(toolset === 'media'
-          ? ['getting-started', 'health']
-          : ['deploy', 'getting-started', 'health', 'review-inbox']);
+          ? ['getting-started', 'health', 'select-tools']
+          : ['deploy', 'getting-started', 'health', 'review-inbox', 'select-tools']);
         expect(client.getInstructions()).toContain('For a targeted read, start with the domain tool.');
 
         for (const name of names) {
@@ -101,7 +101,7 @@ describe('prompts & resources (boot smoke test)', () => {
     }, { env: {} });
   });
 
-  it('리소스 3종이 등록되어 있다', async () => {
+  it('카탈로그, 서비스 메뉴 등 기본 리소스가 등록되어 있다', async () => {
     await withClient(async (client) => {
       const { resources } = await client.listResources();
       const uris = resources.map((r) => r.uri).sort();
@@ -109,8 +109,59 @@ describe('prompts & resources (boot smoke test)', () => {
         'mimi-seed://agent/guide',
         'mimi-seed://auth/status',
         'mimi-seed://tools/catalog',
+        'mimi-seed://tools/menu',
       ]);
     });
+  });
+
+  it('서비스 메뉴 텍스트와 프롬프트는 스키마 대신 선택지를 먼저 보여준다', async () => {
+    await withClient(async (client) => {
+      const { contents } = await client.readResource({ uri: 'mimi-seed://tools/menu' });
+      const content = contents[0];
+      if (!('text' in content)) throw new Error('Expected a text menu');
+      expect(content.mimeType).toBe('text/plain');
+      expect(content.text).toContain('1. GA4 (ga4)');
+      expect(content.text).toContain('2. BigQuery (bigquery)');
+      expect(content.text).not.toContain('ga4_run_report');
+      expect(content.text).not.toContain('inputSchema');
+      const prompt = await client.getPrompt({ name: 'select-tools' });
+      expect(prompt.messages[0].content).toMatchObject({ text: expect.stringContaining('free-form description') });
+    }, { env: {} });
+  });
+
+  it('다중 선택은 도구 이름을 합치고 YouTube 제작과 업로드를 각각 제공한다', async () => {
+    await withClient(async (client) => {
+      async function selected(ids: string) {
+        const { contents } = await client.readResource({ uri: `mimi-seed://tools/menu/${ids}` });
+        const content = contents[0];
+        if (!('text' in content)) throw new Error('Expected a JSON selection');
+        return JSON.parse(content.text) as { tools: string[] };
+      }
+      const overview = await selected('ga4,bigquery,ga4');
+      expect(overview.tools).toContain('ga4_run_report');
+      expect(overview.tools).toContain('bigquery_run_query');
+      expect(overview.tools).not.toContain('youtube_upload_video');
+      expect(new Set(overview.tools).size).toBe(overview.tools.length);
+      expect((await selected('ga4%2Cbigquery')).tools).toEqual(overview.tools);
+      const production = await selected('video');
+      const publishing = await selected('youtube');
+      expect(production.tools).toContain('video_render');
+      expect(production.tools).not.toContain('youtube_upload_video');
+      expect(publishing.tools).toContain('youtube_upload_video');
+      expect(publishing.tools).not.toContain('video_render');
+      await expect(selected('ga4,missing')).rejects.toThrow();
+    }, { env: {} });
+  });
+
+  it('정확한 이름으로 실행하면 메뉴와 tools/list에도 해당 도구만 남는다', async () => {
+    await withClient(async (client) => {
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(['ga4_run_report']);
+      const { contents } = await client.readResource({ uri: 'mimi-seed://tools/menu' });
+      expect(contents[0]).toMatchObject({ text: expect.stringContaining('1. GA4 (ga4)') });
+      expect(contents[0]).not.toMatchObject({ text: expect.stringContaining('BigQuery') });
+      expect((await client.listPrompts()).prompts.map((prompt) => prompt.name))
+        .toEqual(['select-tools', 'getting-started']);
+    }, { env: { MIMI_SEED_TOOLS: 'ga4_run_report' } });
   });
 
   it('agent/guide 리소스가 풀버전 가이드를 서빙한다 (폴백 아님)', async () => {
