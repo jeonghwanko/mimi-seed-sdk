@@ -176,6 +176,83 @@ describe('checkAppStoreRisks', () => {
     expect(formatRisks(risks, 'App Store')).not.toContain('제출 가능');
   });
 
+  const policyLocalization = { type: 'appInfoLocalizations', id: 'loc-policy' };
+  const ageDeclaration = { type: 'ageRatingDeclarations', id: 'decl-1' };
+  const appInfoWithPolicy = {
+    id: 'info-1',
+    attributes: { state: 'PREPARE_FOR_SUBMISSION' },
+    relationships: {
+      appInfoLocalizations: { data: [policyLocalization] },
+      ageRatingDeclaration: { data: ageDeclaration },
+    },
+  };
+  const includedPolicy = { ...policyLocalization, attributes: { privacyPolicyUrl: 'https://example.com/privacy' } };
+  const includedAge = {
+    ...ageDeclaration,
+    attributes: { socialMedia: false, socialMediaAgeRestricted: false, userGeneratedContent: false },
+  };
+
+  it('선택한 앱 정보에 정책과 연령등급이 포함되면 한 번의 조회로 점검한다', async () => {
+    mockReadinessResponse('/apps/1234567890/appInfos', {
+      data: [appInfoWithPolicy],
+      included: [includedPolicy, includedAge],
+    });
+
+    await expect(checkAppStoreRisks('1234567890', { versionId: 'version-1' })).resolves.toEqual([]);
+    const appInfoCalls = mocks.apiGet.mock.calls.filter(([path]) => path.includes('/appInfos'));
+    expect(appInfoCalls).toEqual([['/apps/1234567890/appInfos', expect.objectContaining({
+      include: 'appInfoLocalizations,ageRatingDeclaration',
+      'limit[appInfoLocalizations]': '10',
+      'fields[appInfos]': 'state,appInfoLocalizations,ageRatingDeclaration',
+    })]]);
+  });
+
+  it.each([
+    ['연령 확인 응답 누락', [{
+      ...ageDeclaration,
+      attributes: { socialMedia: true, socialMediaAgeRestricted: true },
+    }]],
+    ['연령등급 리소스 중복', [includedAge, includedAge]],
+    ['연령등급 리소스 미포함', []],
+  ])('%s 때 연령등급만 개별 조회하고 그 결과를 사용한다', async (_reason, ageResources) => {
+    mockReadinessResponse('/apps/1234567890/appInfos', {
+      data: [appInfoWithPolicy],
+      included: [includedPolicy, ...ageResources],
+    }, {
+      '/appInfos/info-1/ageRatingDeclaration': {
+        data: { attributes: { socialMedia: true, socialMediaAgeRestricted: true, ageAssurance: false } },
+      },
+    });
+
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'SOCIAL_MEDIA_AGE_ASSURANCE_MISSING', level: 'blocker' })]);
+    const paths = mocks.apiGet.mock.calls.map(([path]) => path);
+    expect(paths.filter((path) => path.startsWith('/appInfos/'))).toEqual(['/appInfos/info-1/ageRatingDeclaration']);
+  });
+
+  it('다른 앱 정보에 연결된 개인정보처리방침이 포함되어도 선택한 레코드를 개별 조회한다', async () => {
+    const draft = {
+      ...appInfoWithPolicy,
+      relationships: { ...appInfoWithPolicy.relationships, appInfoLocalizations: { data: [] } },
+    };
+    const live = {
+      id: 'live-info',
+      attributes: { state: 'READY_FOR_DISTRIBUTION' },
+      relationships: { appInfoLocalizations: { data: [policyLocalization] } },
+    };
+    mockReadinessResponse('/apps/1234567890/appInfos', {
+      data: [live, draft],
+      included: [includedPolicy, includedAge],
+    }, {
+      '/appInfos/info-1/appInfoLocalizations': { data: [] },
+    });
+
+    const risks = await checkAppStoreRisks('1234567890', { versionId: 'version-1' });
+    expect(risks).toEqual([expect.objectContaining({ code: 'NO_PRIVACY', level: 'blocker' })]);
+    const paths = mocks.apiGet.mock.calls.map(([path]) => path);
+    expect(paths.filter((path) => path.startsWith('/appInfos/'))).toEqual(['/appInfos/info-1/appInfoLocalizations']);
+  });
+
   it('위험 점검은 교체·운영·심사 레코드보다 편집 가능한 앱 정보를 사용한다', async () => {
     mockReadinessResponse('/apps/1234567890/appInfos', {
       data: [

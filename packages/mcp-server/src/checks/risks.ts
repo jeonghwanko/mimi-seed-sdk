@@ -7,7 +7,7 @@ import { selectAppInfo } from '../appstore/app-info.js';
 import { listEditableAppStoreVersions, resolveAppStoreVersionBuild, type AppStoreBuildReadiness } from '../appstore/release-target.js';
 import { includedScreenshotReadiness, indexIncludedPlacements, listMediaPlacements, screenshotPlacementReadiness } from '../appstore/asset-library.js';
 import { checkLegacyScreenshotReadiness } from '../appstore/screenshots.js';
-import { isNotFound } from '../appstore/http.js';
+import { readAppInfoAgeRatingForRelease, readAppInfoPrivacy } from '../appstore/app-info-policy.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { extractHttpStatus } from '../lib/google-errors.js';
 
@@ -158,26 +158,6 @@ const versionLocalizationPage = pagination.extend({
   })),
   included: z.array(z.unknown()).nullish(),
 });
-const privacyLocalizationPage = pagination.extend({
-  data: z.array(z.object({
-    attributes: z.object({
-      privacyPolicyUrl: z.string().trim().nullish(),
-      privacyPolicyText: z.string().trim().nullish(),
-    }).nullish(),
-  })),
-});
-const ageAnswer = z.boolean().nullish().transform((value) => value ?? undefined);
-const ageRatingResponse = z.object({
-  data: z.object({
-    attributes: z.object({
-      userGeneratedContent: ageAnswer,
-      socialMedia: ageAnswer,
-      socialMediaAgeRestricted: ageAnswer,
-      ageAssurance: ageAnswer,
-    }),
-  }).nullable(),
-});
-
 function screenshotSetPresence(response: unknown): boolean | undefined {
   const parsed = screenshotPage.safeParse(response);
   if (!parsed.success) return undefined;
@@ -277,7 +257,7 @@ export async function checkAppStoreVersionRisks(
       '버전 로컬라이제이션',
     ),
     safeGet(
-      () => selectAppInfo(appId),
+      () => selectAppInfo(appId, { includeReleasePolicy: true }),
       risks,
       'APP_INFO',
       '앱 정보',
@@ -350,39 +330,16 @@ export async function checkAppStoreVersionRisks(
     return risks;
   }
 
-  // 개인정보처리방침과 연령등급은 공통으로 선택한 앱 정보 레코드에서 점검한다.
-  const infoPath = `/appInfos/${encodePathSegment(appInfo.target.id)}`;
+  const { target, policy } = appInfo;
   const [hasPrivacy, ageRating] = await Promise.all([
-    safeGet(
-      async () => {
-        const localizations = await getAppStoreResponse(privacyLocalizationPage, `${infoPath}/appInfoLocalizations`, {
-          'fields[appInfoLocalizations]': 'locale,privacyPolicyUrl,privacyPolicyText',
-          'limit': '200',
-        });
-        if (localizations.data.some(({ attributes }) => attributes?.privacyPolicyUrl || attributes?.privacyPolicyText)) {
-          return true;
-        }
-        if (pageIsIncomplete(localizations, localizations.data.length)) {
-          throw new Error('App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.');
-        }
-        return false;
-      },
+    policy.hasPrivacy ?? safeGet(
+      () => readAppInfoPrivacy(target.id),
       risks,
       'PRIVACY',
       '개인정보 로컬라이제이션',
     ),
-    safeGet(
-      async () => {
-        try {
-          return await getAppStoreResponse(ageRatingResponse, `${infoPath}/ageRatingDeclaration`, {
-            'fields[ageRatingDeclarations]': 'userGeneratedContent,socialMedia,socialMediaAgeRestricted,ageAssurance',
-          });
-        } catch (error) {
-          // A 404 means the declaration is genuinely absent, not that the check is unknown.
-          if (isNotFound(error)) return { data: null };
-          throw error;
-        }
-      },
+    policy.ageRating ?? safeGet(
+      () => readAppInfoAgeRatingForRelease(target.id),
       risks,
       'AGE_RATING_SOCIAL',
       '연령등급 소셜 미디어 응답',

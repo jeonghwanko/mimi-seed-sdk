@@ -57,8 +57,7 @@ export async function listBetaGroups(appId: string) {
 // ─── 앱 정보 (카테고리 등) ───
 
 export async function getAppInfo(appId: string) {
-  const { records } = await listAppInfoRecords(appId, true);
-  return records;
+  return listAppInfoRecords(appId);
 }
 
 // ─── 앱 정보 로컬라이제이션 (이름·부제·개인정보 URL) ───
