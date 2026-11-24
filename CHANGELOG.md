@@ -18,6 +18,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `release_status` accepts an exact Google Play version code and can disambiguate an App Store version by platform.
+
+### Fixed
+
+- Google Play operations for the same app wait for the current edit to finish in the MCP process. Failed writes discard the edit if the commit has yet to start.
+- `release_status` returns the build attached to the requested App Store version, normally in a single Apple API request. The legacy `recentBuilds` array contains only the attached build when verified.
+- `release_status` reports multiple matches when a Google Play track has more than one release matching the request.
+
+### Tool changes
+
+- None.
+
 ## [0.23.2] - 2026-11-24
 
 ### Added

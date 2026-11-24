@@ -432,7 +432,7 @@ describe('checkAppStoreRisks', () => {
       included: [{ ...validBuild, id: 'unrelated-build' }],
     });
     await expect(checkAppStoreRisks('1234567890', { versionId: 'version-1' })).resolves.toEqual([]);
-    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/version-1/build', { 'fields[builds]': 'processingState' });
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/version-1/build', { 'fields[builds]': 'processingState,version' });
   });
 
   it.each([

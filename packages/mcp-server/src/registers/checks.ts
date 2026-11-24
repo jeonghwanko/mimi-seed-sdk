@@ -4,8 +4,8 @@ import { androidPackageName } from '../lib/package-name.js';
 import { checkPlayStoreRisks, checkAppStoreRisks, formatRisks } from '../checks/risks.js';
 import { validateAppStoreScreenshots, validatePlayStoreScreenshots, formatValidationResults } from '../checks/screenshots.js';
 import { requirePlayStoreAuth } from '../helpers.js';
-import * as appstore from '../appstore/tools.js';
-import * as playstore from '../playstore/tools.js';
+import { appStorePlatformSchema } from '../appstore/release-target.js';
+import { getReleaseStatus } from '../checks/release-status.js';
 import { errorResult, jsonResult, textResult } from '../lib/mcp-response.js';
 import { checkBillingCompliance } from '#core/checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
@@ -114,95 +114,32 @@ export function registerChecksTools(server: ToolRegistrar) {
   server.tool(
     'release_status',
     [
-      '양 스토어의 동일 버전 상태를 한 번에 조회 — 1.4.x 배포 시 "Play 는 production?", "ASC 는 심사중?" 을',
-      'list_versions + list_tracks 2회 호출 + grep 으로 합치던 멘탈 부담을 단일 응답으로 줄임.',
-      'App Store: appId 가 있을 때 listVersions 에서 version 일치 항목의 state/releaseType/attached build/createdDate.',
-      'Play Store: packageName 이 있을 때 listTracks 에서 동일 versionName 또는 versionCode 가 있는 모든 트랙의 status/versionCodes.',
-      'appId 또는 packageName 둘 다 비어 있으면 에러. 둘 중 하나만 줘도 그 스토어 상태만 조회 가능.',
+      'App Store와 Google Play에서 지정한 릴리스 상태를 조회합니다.',
+      'App Store는 버전·플랫폼 및 실제 연결된 빌드를, Google Play는 일치하는 모든 트랙과 버전 코드를 반환합니다.',
+      'appId 또는 packageName 중 하나만 전달하면 해당 스토어만 조회합니다.',
     ].join(' '),
     {
-      version: z.string().describe('조회할 버전명 (예: "1.4.9"). App Store versionString + Play release.name 매칭에 사용.'),
-      appId: z.string().optional().describe('App Store appId (appstore_list_apps 결과). 없으면 App Store 영역 skip.'),
-      packageName: androidPackageName.optional().describe('Play 패키지명 (예: com.example.app). 없으면 Play 영역 skip.'),
+      version: z.string().trim().min(1).optional().describe('조회할 버전명 (예: 1.4.9). App Store 조회에는 필수입니다.'),
+      appId: z.string().trim().min(1).optional().describe('App Store 앱 ID (appstore_list_apps 결과).'),
+      appStorePlatform: appStorePlatformSchema.optional().describe('동일한 버전명이 여러 Apple 플랫폼에 있는 경우 조회할 플랫폼.'),
+      packageName: androidPackageName.optional().describe('Google Play 패키지명 (예: com.example.app).'),
+      versionCode: z.string().regex(/^\d+$/).optional().describe('Google Play 버전 코드 (예: 373). 지정하면 Play 조회에 우선하며 Play만 조회할 때 version을 생략할 수 있습니다.'),
     },
-    async ({ version, appId, packageName }) => {
+    async (args) => {
+      const { version, appId, appStorePlatform, packageName, versionCode } = args;
       if (!appId && !packageName) {
-        throw new Error('appId 또는 packageName 중 최소 하나는 지정해야 해요.');
+        return errorResult('appId 또는 packageName 중 하나를 지정하세요.');
       }
-
-      // ── App Store ─────────────────────────────────────────
-      type AppStoreVersionRow = { id: string; version: string; state: string; releaseType?: string; createdDate?: string };
-      type AppStoreBuildRow = { id: string; version: string; processingState?: string };
-      let appStoreSection: unknown = null;
-      if (appId) {
-        try {
-          const versions = (await appstore.listVersions(appId)) as AppStoreVersionRow[];
-          const match = versions.find((v: AppStoreVersionRow) => v.version === version);
-          if (match) {
-            // attached build 조회 — listBuilds 까지 가지 않고 단일 versionId 의 build 만.
-            // appstore.tools.ts 의 attachBuildToVersion 인접 헬퍼는 외부 노출 X — 여기서는
-            // listBuilds(appId) 의 최근 10개에서 매칭 추정. 일치하는 buildNumber 가 없어도 무방.
-            const builds = (await appstore.listBuilds(appId).catch(() => [])) as AppStoreBuildRow[];
-            appStoreSection = {
-              versionId: match.id,
-              version: match.version,
-              state: match.state,
-              releaseType: match.releaseType,
-              createdDate: match.createdDate,
-              recentBuilds: builds.slice(0, 3).map((b: AppStoreBuildRow) => ({
-                id: b.id,
-                buildNumber: b.version,
-                processingState: b.processingState,
-              })),
-            };
-          } else {
-            appStoreSection = {
-              found: false,
-              available: versions.slice(0, 10).map((v: AppStoreVersionRow) => ({ version: v.version, state: v.state })),
-            };
-          }
-        } catch (e) {
-          appStoreSection = { error: e instanceof Error ? e.message : String(e) };
-        }
+      if (appId && !version) {
+        return errorResult('App Store를 조회하려면 appId와 version을 함께 전달하세요.');
       }
-
-      // ── Play Store ────────────────────────────────────────
-      let playStoreSection: unknown = null;
-      if (packageName) {
-        try {
-          const auth = await requirePlayStoreAuth(packageName);
-          const tracks = await playstore.listTracks(auth, packageName);
-          // 트랙별로 version 이 매칭되는 release 찾기.
-          //   match 기준: release.name === version (보통 "1.4.9" 또는 "1.4.9 (373)")
-          //   완전 일치가 없으면 prefix 매칭으로 폴백 (releaseName 표기 변동성 흡수).
-          const byTrack: Record<string, unknown> = {};
-          for (const t of tracks) {
-            const exact = t.releases.find((r) => r.name === version);
-            const prefix = exact ?? t.releases.find((r) => typeof r.name === 'string' && r.name?.startsWith(`${version} `));
-            if (prefix) {
-              byTrack[t.track ?? 'unknown'] = {
-                releaseName: prefix.name,
-                status: prefix.status,
-                versionCodes: prefix.versionCodes,
-              };
-            }
-          }
-          playStoreSection = Object.keys(byTrack).length > 0
-            ? byTrack
-            : {
-                found: false,
-                available: tracks.map((t) => ({
-                  track: t.track,
-                  releases: t.releases.map((r) => ({ name: r.name, status: r.status })),
-                })),
-              };
-        } catch (e) {
-          playStoreSection = { error: e instanceof Error ? e.message : String(e) };
-        }
+      if (packageName && !version && !versionCode) {
+        return errorResult('Google Play를 조회하려면 version 또는 versionCode를 전달하세요.');
       }
-
-      const result = { version, appStore: appStoreSection, playStore: playStoreSection };
-      return jsonResult(result);
+      if ((appStorePlatform && !appId) || (versionCode && !packageName)) {
+        return errorResult('appStorePlatform은 appId와, versionCode는 packageName과 함께 전달하세요.');
+      }
+      return jsonResult(await getReleaseStatus(args));
     },
   );
 }

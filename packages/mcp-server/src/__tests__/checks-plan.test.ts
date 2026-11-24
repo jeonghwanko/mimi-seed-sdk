@@ -180,7 +180,7 @@ describe('buildAppStoreReleasePlan', () => {
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       include: 'build',
-      'fields[builds]': 'processingState',
+      'fields[builds]': 'processingState,version',
     }));
   });
 
@@ -198,7 +198,7 @@ describe('buildAppStoreReleasePlan', () => {
     expect(pinned).toContain('1.3.0 / MAC_OS');
     expect(pinned).toContain('appstore_submit_for_review (versionId=v-mac)');
     expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-mac', platform: 'MAC_OS' }));
-    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/v-mac/build', { 'fields[builds]': 'processingState' });
+    expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/v-mac/build', { 'fields[builds]': 'processingState,version' });
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       'filter[id]': 'v-mac',
       'filter[appVersionState]': expect.stringContaining('METADATA_REJECTED'),

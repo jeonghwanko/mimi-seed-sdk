@@ -234,6 +234,9 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 
 ## 4. Workflows (call sequences)
 
+Use `release_status` to check a known release across both stores. It reports the build linked to the selected
+Apple version. Use the exact Play version code when available.
+
 ### Play Store release / promote
 1. `playstore_list_tracks` — see current track/version state.
 2. Check the selected track and version code with `playstore_check_submission_risks`. Report blockers or incomplete checks and stop the release workflow.

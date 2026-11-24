@@ -192,6 +192,11 @@ both the formatter and actual in-memory MCP tool calls without real store writes
 
 ## Store review retries
 
+Play `withEdit` serializes operations for the same package in one MCP process, from edit creation through
+commit or edit cleanup. A lookup can invalidate another edit because it opens an edit of its own. Operations
+from another process or Play Console can still invalidate an active edit.
+[Google Play concurrency considerations](https://developers.google.com/android-publisher/concurrency-considerations)
+
 Play `submitRelease` and `promoteRelease` replace the target track's release list with the selected
 release on `completed`, including when that version already exists as a draft. Keeping the previous
 completed release alongside it makes Google reject the edit. Non-completed updates preserve other
