@@ -18,6 +18,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- The `game-intro-short` skill turns real gameplay into a short video with verified results and
+  localized game footage, captions and narration. Install it with the Mimi Seed plugin.
+
 ## [0.23.0] - 2026-11-22
 
 ### Changed
