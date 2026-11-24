@@ -128,20 +128,32 @@ export function includedScreenshotReadiness(
 }
 
 /** Reads a single localization, including the referenced asset metadata. */
-export async function listMediaPlacements(localizationId: string, kind: MediaKind): Promise<MediaPlacement[] | null> {
-  const path = `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/placements`;
+export function listMediaPlacements(localizationId: string, kind: MediaKind): Promise<MediaPlacement[] | null> {
   const types = kind === 'screenshots' ? screenshotTypes : ['APP_PREVIEW'];
   const primary = kind === 'screenshots' ? 'image' : 'video';
   const assetType = kind === 'screenshots' ? 'appAssetLibraryImages' : 'appAssetLibraryVideos';
-  const params = {
-    limit: '200',
-    sort: 'placementGroupPosition',
+  return readPlacements(localizationId, {
     'filter[placementType]': types.join(','),
     'fields[appAssetLibraryPlacements]': `placementType,placementGroup,state,${primary}`,
     [`fields[${assetType}]`]: `fileName,fileSize,state${kind === 'previews' ? ',previewFrameTimeCode' : ''}`,
     include: primary,
-  };
+  }).then((rows) => rows?.filter((row) => types.includes(row.placementType)) ?? null);
+}
 
+export async function listPlacementGroup(localizationId: string, placementGroup: string): Promise<MediaPlacement[]> {
+  const rows = await readPlacements(localizationId, {
+    'filter[placementGroup]': placementGroup,
+    'fields[appAssetLibraryPlacements]': 'placementType,placementGroup,state,image,video',
+  });
+  if (!rows || rows.some((row) => row.placementGroup !== placementGroup)) {
+    throw new Error('App Store Connect에서 대상 미디어 배치 그룹을 확인할 수 없습니다.');
+  }
+  return rows;
+}
+
+async function readPlacements(localizationId: string, filters: Record<string, string>): Promise<MediaPlacement[] | null> {
+  const path = `/appStoreVersionLocalizations/${encodePathSegment(localizationId)}/placements`;
+  const params = { limit: '200', sort: 'placementGroupPosition', ...filters };
   let first: unknown;
   try {
     first = await apiGet<unknown>(path, params);
@@ -170,7 +182,7 @@ export async function listMediaPlacements(localizationId: string, kind: MediaKin
       throw new Error('App Store Connect의 미디어 배치 목록이 불완전합니다.');
     }
     return {
-      items: data.filter((row) => types.includes(row.attributes.placementType)).map((row) => toPlacement(row, assets)),
+      items: data.map((row) => toPlacement(row, assets)),
       nextPageToken,
     };
   });

@@ -18,6 +18,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Upload and reuse App Asset Library screenshots and previews with a placement group.
+- Reorder a localization's App Asset Library media and verify the saved order.
+
 ### Changed
 
 - App Store submission checks and media listings read App Asset Library placements alongside legacy media sets.
@@ -33,7 +38,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Tool changes
 
-- None.
+- Added `appstore_reorder_media_placements`.
 
 ## [0.23.1] - 2026-11-24
 

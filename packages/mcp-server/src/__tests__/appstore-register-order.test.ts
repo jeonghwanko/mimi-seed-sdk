@@ -68,6 +68,7 @@ const APPSTORE_ORDER = [
   'appstore_list_previews',
   'appstore_upload_preview',
   'appstore_delete_preview',
+  'appstore_reorder_media_placements',
   'appstore_get_sales_report',
   'appstore_get_finance_report',
 ];

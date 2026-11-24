@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**255 tools across 24 domains** — per-domain counts below.
+**256 tools across 24 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -27,7 +27,7 @@
 <!-- generated:catalog-counts:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Domain | Register file | Tools |
 |--------|---------------|------:|
-| App Store Connect | `registers/appstore.ts` → `registers/appstore/*.ts` | 63 |
+| App Store Connect | `registers/appstore.ts` → `registers/appstore/*.ts` | 64 |
 | Google Play | `registers/playstore.ts` | 38 |
 | Firebase | `registers/firebase.ts` | 21 |
 | AdMob | `registers/admob.ts` | 7 |
@@ -51,7 +51,7 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **24 modules** | **255** |
+| **Total** | **24 modules** | **256** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -81,7 +81,7 @@
   `purchaseOptions` 포함 — 구매 옵션 활성화 토글의 입력) are **not** duplicates; both stay.
 
 <!-- generated:catalog-domain:appstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## App Store Connect — `registers/appstore.ts` → `registers/appstore/*.ts` (63) · impl `appstore/*.ts`
+## App Store Connect — `registers/appstore.ts` → `registers/appstore/*.ts` (64) · impl `appstore/*.ts`
 
 - Read: `appstore_list_apps` · `appstore_verify_credentials` · `appstore_get_app` · `appstore_list_versions` ·
   `appstore_get_metadata` · `appstore_list_screenshots` · `appstore_get_review_notes` · `appstore_list_builds` ·
@@ -104,7 +104,8 @@
   `appstore_upload_product_review_screenshot` · `appstore_update_product` ·
   `appstore_add_version_to_review_submission` · `appstore_update_version_string` ·
   `appstore_update_release_type` (MANUAL / AFTER_APPROVAL / SCHEDULED 전환) ·
-  `appstore_update_age_rating` (심사 제출 전 필수) · `appstore_declare_encryption` (수출 규정 신고)
+  `appstore_update_age_rating` (심사 제출 전 필수) · `appstore_declare_encryption` (수출 규정 신고) ·
+  `appstore_reorder_media_placements`
 - **D** `appstore_delete_screenshot` · `appstore_delete_screenshot_set` · `appstore_reply_review` (public) ·
   `appstore_add_product_to_review` (IAP 단독 심사 즉시 제출) · `appstore_delete_product` · `appstore_submit_for_review` ·
   `appstore_remove_review_submission_item` · `appstore_cancel_review` · `appstore_release_version` (즉시 공개) ·
