@@ -156,10 +156,16 @@ export function listMediaPlacements(localizationId: string, kind: MediaKind): Pr
   }).then((rows) => rows?.filter((row) => types.includes(row.placementType)) ?? null);
 }
 
-export async function listPlacementGroup(localizationId: string, placementGroup: string): Promise<MediaPlacement[]> {
+export async function listPlacementGroup(
+  localizationId: string,
+  placementGroup: string,
+  includeAsset?: 'image' | 'video',
+): Promise<MediaPlacement[]> {
+  const assetType = includeAsset === 'video' ? 'appAssetLibraryVideos' : 'appAssetLibraryImages';
   const rows = await readPlacements(localizationId, {
     'filter[placementGroup]': placementGroup,
     'fields[appAssetLibraryPlacements]': 'placementType,placementGroup,state,image,video',
+    ...(includeAsset ? { include: includeAsset, [`fields[${assetType}]`]: 'state' } : {}),
   });
   if (!rows || rows.some((row) => row.placementGroup !== placementGroup)) {
     throw new Error('App Store Connect에서 대상 미디어 배치 그룹을 확인할 수 없습니다.');

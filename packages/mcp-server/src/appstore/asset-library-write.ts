@@ -210,11 +210,11 @@ export async function uploadAndPlaceMedia(args: PlacementTarget & {
         asset = await readAssetState(resource, assetId);
       }
     } else if (assetId) {
-      const related = (await listPlacementGroup(localizationId, placementGroup))
+      const related = (await listPlacementGroup(localizationId, placementGroup, relation))
         .filter((row) => row.placementType === placementType);
       const existing = related.filter((row) => row.assetId === assetId);
       if (existing.length === 1) {
-        return { status: 'placed', assetId, placementGroup, placementId: existing[0].placementId, placementState: existing[0].placementState, reusedPlacement: true };
+        return { status: 'placed', assetId, placementGroup, placementId: existing[0].placementId, placementState: existing[0].placementState, assetState: existing[0].assetState, reusedPlacement: true };
       }
       if (existing.length > 1 || related.some((row) => !row.assetId)) {
         throw new Error('대상 그룹의 기존 미디어 배치를 하나로 확인할 수 없습니다. 배치 목록을 확인하세요.');

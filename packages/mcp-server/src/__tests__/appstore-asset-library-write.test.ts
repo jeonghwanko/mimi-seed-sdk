@@ -225,6 +225,7 @@ it('이미 같은 그룹에 배치된 에셋은 읽기만 하고 기존 ID를 �
   await expect(uploadAndPlaceMedia({ ...target, placementType: 'APP_SCREENSHOT', assetId: 'asset-example' }))
     .resolves.toMatchObject({ placementId: 'already-placed', reusedPlacement: true });
   expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['GET', 'GET']);
+  expect(new URL(String(fetchMock.mock.calls[1][0])).searchParams.get('include')).toBe('image');
 });
 
 it('현재 그룹 전체의 순서를 작성하고 저장된 순서를 다시 조회한다', async () => {
