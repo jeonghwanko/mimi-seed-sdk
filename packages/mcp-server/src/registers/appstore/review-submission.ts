@@ -89,10 +89,11 @@ export function registerSubmitForReviewTools(server: ToolRegistrar) {
     ].join(' '),
     {
       appId: z.string().describe('App Store 앱 ID (appstore_list_apps 결과의 id)'),
-      versionString: z.string().optional().describe('대상 버전 (예: 1.3.0). 미지정 시 가장 최근 편집 가능 버전'),
+      versionString: z.string().trim().min(1).optional().describe('대상 버전 문자열 (예: 1.3.0)'),
+      versionId: z.string().trim().min(1).optional().describe('정확한 버전 ID (appstore_list_versions 결과)'),
     },
-    async ({ appId, versionString }) => {
-      const text = await buildAppStoreReleasePlan({ appId, versionString });
+    async ({ appId, versionString, versionId }) => {
+      const text = await buildAppStoreReleasePlan({ appId, versionString, versionId });
       return textResult(text);
     },
   );

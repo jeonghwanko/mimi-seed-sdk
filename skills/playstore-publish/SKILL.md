@@ -26,25 +26,25 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 Google Play 도구로 스토�
 
 ## 도구 로딩
 
-호출 전 schema 로드:
-```
-ToolSearch(query="select:playstore_get_app,playstore_get_listing,playstore_update_listing,playstore_update_details,playstore_list_tracks,playstore_upload_image,playstore_list_images,playstore_update_release_notes,playstore_promote_release,playstore_submit_release,playstore_check_submission_risks,playstore_plan_release,playstore_replace_images,playstore_delete_all_images,playstore_upload_data_safety")
-```
+스키마가 지연 로딩되면 현재 단계에 필요한 도구만 찾는다.
 
-인앱 상품·리뷰·통계까지 다룰 때 추가로:
+| 요청 | 시작 도구 |
+|---|---|
+| 트랙·릴리스 조회 또는 노트 변경 | `playstore_list_tracks` |
+| 리스팅 또는 이미지 조회 | `playstore_get_listing` 또는 `playstore_list_images` |
+| 출시 준비도 확인 | `playstore_check_submission_risks` |
+| 상품 조회 | `playstore_list_products` |
+| 미답변 리뷰 또는 설치 통계 | `playstore_list_reviews` 또는 `playstore_get_statistics` |
 
-```
-ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,playstore_list_subscriptions,playstore_create_onetime_product,playstore_create_subscription,playstore_update_product,playstore_update_product_listing,playstore_update_subscription_listing,playstore_update_product_state,playstore_list_reviews,playstore_reply_review,playstore_get_statistics,generate_review_reply")
-```
+쓰기 도구는 사용자가 요청한 작업에 필요할 때 로드한다.
 
-## 실행 흐름
+## 출시 흐름
 
 1. `playstore_list_tracks` — 현재 트랙별 버전/상태(production/beta/alpha/internal) 확인.
-2. `playstore_check_submission_risks` — 블로커(전체 설명/스크린샷/아이콘 등) 점검 후 사용자에게 체크리스트로 보고.
-3. 누락분 업로드:
-   - 텍스트: `playstore_update_listing` (title ≤30 / short ≤80 / full ≤4000)
-   - 이미지: `playstore_upload_image` (아래 표의 imageType·해상도 준수)
-   - 노트: `playstore_update_release_notes` (versionCode 생략 = 트랙 최신 릴리스, `syncTracks` 로 다른 트랙 동시 반영)
+2. `playstore_check_submission_risks`에 확인한 트랙과 버전 코드를 전달한다. 블로커나 점검 미완료가 있으면 보고하고 출시를 멈춘다.
+3. 사용자가 요청한 변경만 적용한다. 릴리스 노트는 대상 트랙, 버전 코드, 로캘, 문안을 보여주고 승인받은 뒤 `playstore_update_release_notes`로 반영한다. 다른 트랙도 요청받았다면 각 트랙의 적용 대상을 확인한다.
+   - 리스팅은 `playstore_update_listing`을 사용한다.
+   - 이미지는 아래 표의 규격을 확인한 뒤 `playstore_upload_image`를 사용한다.
 4. 출시/승격은 **preview → 사용자 승인 → confirm** 순서:
    - 같은 트랙 출시: `playstore_submit_release`
    - 트랙 간 승격: `playstore_promote_release` (fromTrack→toTrack, versionCode)
@@ -65,16 +65,14 @@ ToolSearch(query="select:playstore_list_products,playstore_list_inapp_products,p
 
 ## 리뷰 · 통계
 
-`playstore_list_reviews`로 미답변 리뷰(`developerComment`가 `null`)를 모으고 — 이미 답변된 리뷰에 다시 답하면
-기존 답변이 교체된다 — 초안은 `generate_review_reply`(`ANTHROPIC_API_KEY` 필요)로
-만든 뒤 **사용자 확인을 거쳐** `playstore_reply_review`로 게시한다. 답변은 공개되고 수정 이력이 남는다.
+미답변 리뷰는 `playstore_list_reviews`의 미답변 필터와 페이지 크기를 지정해 조회한다.
+결과가 비어 있어도 다음 페이지가 있을 수 있다. 더 읽어야 하면 페이지 토큰을 사용하되 이미 사용한 토큰이 다시 나오면 중단하고 확인한 범위를 보고한다. 중복 리뷰 ID는 건너뛴다.
+초안은 리뷰 내용으로 직접 작성한다. 사용자가 SDK 생성을 지정하면 `generate_review_reply`를 사용한다.
+게시 요청이 들어오면 `playstore_reply_review`로 미리보기를 받고 명시 승인 후 게시한다.
+기존 답변이 있는 리뷰에 게시하면 해당 답변이 교체된다.
 설치·평점 추이는 `playstore_get_statistics`로 읽는다.
 
 ## 출시 후 긴급 복구
-
-```
-ToolSearch(query="select:playstore_list_recovery_actions,playstore_create_recovery_action,playstore_deploy_recovery_action,playstore_cancel_recovery_action")
-```
 
 이미 배포된 앱이 치명적으로 망가졌을 때만 쓴다. `playstore_list_recovery_actions`로 현황을 보고,
 `playstore_create_recovery_action`으로 DRAFT를 만든 뒤(대상: allUsers 또는 versionCodes/versionRange —

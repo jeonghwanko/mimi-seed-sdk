@@ -123,7 +123,10 @@ describe('generateReviewReply', () => {
     expect(r.suggested).toBe('초안입니다');
     expect(r.note).toMatch(/검토/);
     // 게시 전 확인을 요구하는 문구가 사라지면 에이전트가 그대로 올릴 수 있다.
-    expect(formatReviewReply(r)).toContain('playstore_reply_review');
+    const output = formatReviewReply(r);
+    expect(output).toContain('원래 스토어');
+    expect(output).toContain('명시 승인');
+    expect(output).not.toMatch(/(?:playstore|appstore)_reply_review/);
   });
 });
 
@@ -171,8 +174,7 @@ describe('generateReleaseNotesFromCommits', () => {
       .messages[0].content;
     expect(prompt).toContain('commit-49');
     expect(prompt).not.toContain('commit-50');
-    // 분석한 커밋 수는 자르기 전 기준으로 보고한다.
-    expect(r.rawCommitsUsed).toBe(60);
+    expect(r.rawCommitsUsed).toBe(50);
   });
 });
 

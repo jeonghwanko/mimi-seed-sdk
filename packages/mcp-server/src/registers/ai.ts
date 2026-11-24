@@ -13,7 +13,7 @@ export function registerAiTools(server: ToolRegistrar) {
       'ANTHROPIC_API_KEY 환경변수가 필요합니다.',
       'commits: [{ message, author?, date? }] 형태로 전달하세요.',
       'locales: 다국어 생성할 로케일 배열 (예: ["ko", "en-US", "ja"])',
-      '생성 후 playstore_update_release_notes 또는 appstore_update_whats_new로 적용하세요.',
+      '초안을 반환합니다. 적용 요청은 대상 스토어와 버전, 문안을 확인하고 승인받은 뒤 처리합니다.',
     ].join(' '),
     {
       commits: z.array(z.object({
@@ -43,7 +43,7 @@ export function registerAiTools(server: ToolRegistrar) {
       'tone: friendly(친근) / professional(정중) / empathetic(공감) / brief(간결) — 기본: friendly',
       'language: ko / en / ja / zh 등 — 기본: ko',
       '⚠ 생성된 답변은 초안입니다. 게시 전 반드시 검토하세요.',
-      '답변 게시는 playstore_reply_review 도구를 사용하세요.',
+      '게시 요청은 해당 리뷰가 속한 스토어에서 미리보기와 명시 승인을 거쳐 처리합니다.',
     ].join(' '),
     {
       reviewText: z.string().describe('리뷰 원문'),

@@ -24,7 +24,8 @@ vi.mock('../playstore/tools.js', () => ({
   withEdit: mocks.withEdit,
   publisher: mocks.publisher,
 }));
-vi.mock('../checks/risks.js', () => ({
+vi.mock('../checks/risks.js', async (original) => ({
+  ...(await original<typeof import('../checks/risks.js')>()),
   checkPlayStoreRisks: mocks.checkPlayStoreRisks,
   checkAppStoreRisks: mocks.checkAppStoreRisks,
 }));
@@ -71,6 +72,19 @@ describe('buildPlayStoreReleasePlan', () => {
     expect(plan).toContain('진행률: ☑︎ 3  ◻︎ 2  ⛔ 0');
     // 블로커 0 이면 경고 배너는 나오지 않는다 (있으면 헛경보).
     expect(plan).not.toContain('⚠️  블로커');
+  });
+
+  it('버전 생략 시 확인한 최신 코드 하나로 점검과 노트 적용 대상을 고정한다', async () => {
+    editSucceeds({
+      data: { tracks: [{ track: 'production', releases: [
+        { versionCodes: ['41'] }, { versionCodes: ['45', '42'] },
+      ] }] },
+    }, { data: { title: 'My App' } });
+    const plan = await buildPlayStoreReleasePlan({ auth, packageName: PKG, track: 'production', language: 'ko-KR' });
+
+    expect(mocks.checkPlayStoreRisks).toHaveBeenCalledWith(auth, PKG, 'ko-KR', { track: 'production', versionCode: '45' });
+    expect(plan).toContain('playstore_update_release_notes (track=production, versionCode=45)');
+    expect(plan).toContain('playstore_submit_release (track=production, versionCode=45)');
   });
 
   it('블로커가 있으면 제출 단계를 pending 으로 열어주지 않는다', async () => {
@@ -154,6 +168,27 @@ describe('buildAppStoreReleasePlan', () => {
     expect(plan).toContain('☑︎ 버전에 빌드 연결됨');
     expect(plan).toMatch(/◻︎ 심사 제출 \(reviewSubmissions v2\) ⚠️ 비가역/);
     expect(plan).toContain('appstore_submit_for_review (versionId=v-1)');
+    expect(mocks.checkAppStoreRisks).toHaveBeenCalledWith('1234567890', { versionId: 'v-1' });
+  });
+
+  it('같은 버전 문자열이 여러 플랫폼에 있으면 대상 ID가 필요하다', async () => {
+    const ios = { id: 'v-ios', attributes: { versionString: '1.3.0', platform: 'IOS' } };
+    const mac = { id: 'v-mac', attributes: { versionString: '1.3.0', platform: 'MAC_OS', appStoreState: 'METADATA_REJECTED' } };
+    mocks.apiGet.mockResolvedValueOnce({ data: [ios, mac] });
+    const ambiguous = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '1.3.0' });
+    expect(ambiguous).toContain('App Store 버전 대상을 하나로 확정할 수 없음');
+    expect(ambiguous).not.toContain('appstore_update_whats_new');
+    expect(mocks.checkAppStoreRisks).not.toHaveBeenCalled();
+
+    mocks.apiGet.mockResolvedValueOnce({ data: [mac] }).mockResolvedValueOnce({ data: { id: 'build-1' } });
+    const pinned = await buildAppStoreReleasePlan({ appId: '1234567890', versionId: 'v-mac' });
+    expect(pinned).toContain('1.3.0 / MAC_OS');
+    expect(pinned).toContain('appstore_submit_for_review (versionId=v-mac)');
+    expect(mocks.checkAppStoreRisks).toHaveBeenCalledWith('1234567890', { versionId: 'v-mac' });
+    expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
+      'filter[id]': 'v-mac',
+      'filter[appStoreState]': expect.stringContaining('METADATA_REJECTED'),
+    }));
   });
 
   it('빌드가 안 붙어 있으면 위험이 0이어도 제출은 blocked', async () => {
@@ -174,6 +209,19 @@ describe('buildAppStoreReleasePlan', () => {
 
     expect(plan).toContain('⛔ 편집 가능한 9.9.9 버전 없음');
     expect(plan).toMatch(/⛔ 심사 제출/);
+  });
+
+  it('버전이 일치하고 빌드가 연결돼도 조회 미완료면 노트 적용과 제출을 막는다', async () => {
+    mocks.apiGet
+      .mockResolvedValueOnce(versionsResponse)
+      .mockResolvedValueOnce({ data: { id: 'build-1' } });
+    mocks.checkAppStoreRisks.mockResolvedValue([
+      { code: 'API_ERROR_SCREENSHOTS_en-US', level: 'warning', title: '스크린샷 조회 실패', detail: '403' },
+    ]);
+    const plan = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '1.3.0' });
+    expect(plan).toContain('점검 미완료');
+    expect(plan).toContain("⛔ What's New");
+    expect(plan).toContain('⛔ 심사 제출');
   });
 
   it('블로커가 있으면 빌드가 붙어 있어도 제출은 blocked', async () => {

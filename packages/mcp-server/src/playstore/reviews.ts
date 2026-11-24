@@ -12,10 +12,21 @@ import { publisher } from './edits.js';
 // (Play 는 리뷰당 답변 하나 — reply 는 교체다). developerComment 가 null 이면 미답변.
 // reviews.list 는 한 페이지씩 준다 — 첫 페이지만 보면 "미답변" 목록이 잘린다. 반복 토큰·과도한 페이지는 끊는다.
 // Reviews API 는 호출 할당량이 빡빡한 편이라 페이지 상한을 낮게 둔다 (한 번 조회에 최대 1,000건).
-const REVIEW_PAGE_SIZE = 100;
+export const REVIEW_PAGE_SIZE = 100;
+export const DEFAULT_REVIEW_LIMIT = 20;
 const REVIEW_MAX_PAGES = 10;
 
 type PlayReview = androidpublisher_v3.Schema$Review;
+
+async function fetchReviewPage(auth: OAuth2Client | JWT, packageName: string, maxResults: number, token?: string) {
+  const { data } = await publisher().reviews.list({
+    auth,
+    packageName,
+    maxResults,
+    ...(token ? { token } : {}),
+  });
+  return { reviews: data.reviews ?? [], nextPageToken: data.tokenPagination?.nextPageToken || null };
+}
 
 /**
  * 모든 페이지를 모은다. 첫 페이지 실패는 그대로 던진다(그땐 돌려줄 게 없다). 이후 페이지 실패나 페이지
@@ -30,22 +41,18 @@ async function fetchAllReviews(
   const seen = new Set<string>();
   let token: string | undefined;
   for (let page = 0; page < REVIEW_MAX_PAGES; page++) {
-    let res;
+    let result;
     try {
-      res = await publisher().reviews.list({
-        auth,
-        packageName,
-        maxResults: REVIEW_PAGE_SIZE,
-        ...(token ? { token } : {}),
-      });
+      result = await fetchReviewPage(auth, packageName, REVIEW_PAGE_SIZE, token);
     } catch (err) {
       if (page === 0) throw err;
       const reason = err instanceof Error ? err.message : String(err);
       return { reviews: all, truncated: `${page + 1}페이지 조회 실패로 ${all.length}건까지만 가져왔다 (${reason})` };
     }
-    all.push(...(res.data.reviews ?? []));
-    const next = res.data.tokenPagination?.nextPageToken ?? undefined;
-    if (!next || seen.has(next)) return { reviews: all, truncated: null };
+    all.push(...result.reviews);
+    const next = result.nextPageToken;
+    if (!next) return { reviews: all, truncated: null };
+    if (seen.has(next)) return { reviews: all, truncated: '같은 페이지 토큰이 반복되어 조회를 중단했습니다.' };
     seen.add(next);
     token = next;
   }
@@ -71,6 +78,24 @@ export async function listReviewsWithStatus(auth: OAuth2Client | JWT, packageNam
 
 export async function listReviews(auth: OAuth2Client | JWT, packageName: string) {
   return (await listReviewsWithStatus(auth, packageName)).reviews;
+}
+
+export async function listReviewsPage(
+  auth: OAuth2Client | JWT,
+  packageName: string,
+  { limit = DEFAULT_REVIEW_LIMIT, pageToken, unansweredOnly }: {
+    limit?: number;
+    pageToken?: string;
+    unansweredOnly?: boolean;
+  },
+) {
+  const page = await fetchReviewPage(auth, packageName, limit, pageToken);
+  const summaries = page.reviews.map(toReviewSummary);
+  const reviews = unansweredOnly ? summaries.filter((review) => review.developerComment === null) : summaries;
+  if (page.nextPageToken && page.nextPageToken === pageToken) {
+    return { reviews, nextPageToken: null, warning: '같은 페이지 토큰이 반복되어 조회를 중단했습니다.' };
+  }
+  return { reviews, nextPageToken: page.nextPageToken };
 }
 
 function toReviewSummary(r: PlayReview) {

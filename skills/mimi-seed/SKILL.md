@@ -10,7 +10,7 @@ mimi-seed MCP 서버의 150+ 도구로 앱 출시 운영과 영상 제작(상태
 ## 사전 조건
 
 1. MCP 클라이언트(Claude Code / Codex / Claude Desktop)에 `mimi-seed`가 등록되어 있어야 한다.
-2. 작업 대상 서비스 인증이 되어 있어야 한다 (`~/.mimi-seed/` 하위). `mimi_seed_status` 로 먼저 확인한다.
+2. 작업에 필요한 서비스 인증을 사용한다. 인증 도구나 도메인 도구가 미연결을 보고하면 해당 서비스 설정을 안내한다.
    미인증이면 사용자에게 **터미널에서** 이걸 실행하라고 안내한다 (모든 자격증명을 순서대로 연결하고,
    각 토큰을 어디서 발급받는지도 알려준다):
    ```bash
@@ -20,21 +20,20 @@ mimi-seed MCP 서버의 150+ 도구로 앱 출시 운영과 영상 제작(상태
    각 토큰의 발급 절차는 [`docs/credentials.md`](../../docs/credentials.md).
    ⚠️ 이 명령들은 **대화형**이라 네가 대신 실행하면 안 된다 — 사용자가 직접 터미널에서 돌려야 한다.
 
-## 도구 로딩 (가장 중요)
+## 도구 로딩
 
-Claude Code 등은 mimi-seed 도구를 **deferred**로 노출한다 — 이름은 보이지만 schema 미로드 상태라 **직접 호출하면 `InputValidationError`** 가 난다. **반드시 호출 전에 schema를 로드**한다:
+스키마가 이미 보이면 직접 호출한다. 지연 로딩 환경에서는 클라이언트의 도구 탐색을 사용한다. Claude Code 예시:
 
 ```
 ToolSearch(query="select:<tool>[,<tool>...]")
 ```
 
-- 한 작업에 필요한 도구를 한 번에 batch select (세션 동안 유지됨).
-- `select:`가 비면 키워드 검색으로 폴백. 그래도 없으면 그때만 미등록으로 판단하고, curl/fastlane로 우회하지 말 것.
-- 자주 쓰는 select 배치는 `docs/agent-guide.md` §0 표 참조.
+- 현재 단계에서 쓸 도구만 함께 로드한다.
+- 이름 검색이 실패하면 키워드 검색과 활성 도구 카탈로그를 확인한다. 도구 이름이 더 필요하면 [가이드의 탐색 표](../../docs/agent-guide.md#ready-made-select-batches)를 참고한다.
 
 ## 실행 흐름
 
-1. **`mimi_seed_status` 먼저 호출** — 서비스 연결을 ✅/❌로 스캔하고 미설정·만료 항목별 다음 명령을 알려준다. 인증 누락이면 위 auth 명령으로 안내.
+1. 앱이나 서비스가 지정된 단순 조회는 해당 도구부터 호출한다. 초기 설정, 연결 상태 확인, 인증 오류 진단에는 `mimi_seed_status`를 사용한다.
 2. 작업 의도를 파악해 분기:
    - 처음 설정 / "뭘 할 수 있어?" 탐색 → `mimi-seed-onboarding` 스킬
    - Play 스토어 출시/승격/리스팅 → `playstore-publish` 스킬

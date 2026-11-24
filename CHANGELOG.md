@@ -23,6 +23,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The `game-intro-short` skill turns real gameplay into a short video with verified results and
   localized game footage, captions and narration. Install it with the Mimi Seed plugin.
 
+- Google Play review lookups can return a bounded page of unanswered reviews with a continuation token.
+  Package-only calls still return the original review array.
+- Search App Store versions by version string and platform. Release checks and plans can target a specific
+  App Store version or Google Play track and version code.
+
+### Changed
+
+- MCP prompts use the active toolsets. For targeted reads, Mimi Seed starts with the relevant tool and loads
+  schemas as each step needs them. SDK-based AI drafting is available when requested.
+- Release workflows stop on blockers or incomplete checks. They use the confirmed version for notes and
+  show the exact target, locales, and text for approval before applying it.
+
+### Fixed
+
+- Google Play submission checks work with per-app service accounts.
+- App Store review drafts stay with the original store. Reviews with incomplete reply information are
+  skipped by the unanswered-review workflow.
+- Release Doctor's directory-link tests run without elevated symlink privileges on Windows.
+
+### Tool changes
+
+- None.
+
 ## [0.23.0] - 2026-11-22
 
 ### Changed

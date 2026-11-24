@@ -41,7 +41,8 @@ export async function generateReleaseNotesFromCommits(
   const client = await requireApiKey();
   const { appName = '앱', tones = [...RELEASE_NOTE_TONES], locales = [], maxTokens = RELEASE_NOTES_MAX_TOKENS } = opts;
 
-  const commitsText = commitsToText(commits.slice(0, 50));
+  const usedCommits = commits.slice(0, 50);
+  const commitsText = commitsToText(usedCommits);
   const localeList = locales.length > 0
     ? locales.map((l) => `"${l}": "${LOCALE_NAMES[l] ?? l}로 번역된 간결한 버전"`).join(',\n    ')
     : '';
@@ -74,7 +75,7 @@ ${commitsText}
   return {
     tones: parsed.tones ?? [],
     localized: parsed.localized ?? {},
-    rawCommitsUsed: commits.length,
+    rawCommitsUsed: usedCommits.length,
   };
 }
 

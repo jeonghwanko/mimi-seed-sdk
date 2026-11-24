@@ -10,7 +10,7 @@ export function registerCustomerReviewTools(server: ToolRegistrar) {
     'appstore_list_reviews',
     [
       'App Store 받은 고객 리뷰 조회 (최신순).',
-      'response 필드에 개발자 답변 존재 여부와 내용이 함께 포함됨 (없으면 null).',
+      'response가 null이면 미답변입니다. 답변이 있으면 객체를 반환하고, 답변 상태를 확인할 수 없으면 response 필드를 생략합니다.',
       'territory(예: KOR/USA — ISO 3166 alpha-3) / rating(1~5)으로 필터 가능.',
     ].join(' '),
     {

@@ -53,24 +53,22 @@ That active-process distinction is the main reason the `mimi-seed-update` skill 
 
 Exposed by the MCP server (`prompts.ts` / `resources.ts`, see [[architecture]]):
 
-- **Prompts → slash commands**: `/mimi-seed:getting-started`, `/mimi-seed:deploy`, `/mimi-seed:health`,
-  `/mimi-seed:review-inbox`.
+- **Server instructions** describe tool discovery, when to run connection diagnostics, and the preview-first write flow.
+- **Prompts** include `/mimi-seed:getting-started` and `/mimi-seed:health`. The server exposes `/mimi-seed:deploy`
+  and `/mimi-seed:review-inbox` when the active toolsets support the corresponding workflow.
 - **Resources**: `mimi-seed://auth/status` (Google OAuth freshness, JSON), `mimi-seed://agent/guide` (the full
   [`docs/agent-guide.md`](../agent-guide.md), served from the committed copy `packages/mcp-server/assets/agent-guide.md`
   — refreshed by `npm run plugin:sync`, drift-guarded by `prompts-resources.test.ts`), and
-  `mimi-seed://tools/catalog` (runtime capability index: every tool by domain with the credential each domain
-  needs, served verbatim from `tool-manifest.json` — the manifest carries the per-domain
-  `label`/`credential`/`summary` metadata, integrity-checked by `tool-manifest.test.ts`).
+  `mimi-seed://tools/catalog` (the active tools and their domain metadata from `tool-manifest.json`).
 
-These are available in **any** MCP client, independent of the skills (which are a Claude Code / Codex packaging
-concept).
+Clients surface these through their MCP prompt and resource support. Skills are packaged separately for Claude Code and Codex.
 
 ## Multi-client differences (matters for how tools appear)
 
 | Client | Tool exposure | Context file it reads |
 |---|---|---|
 | **Claude Code** | tools are **deferred** — names visible, schemas load on demand via `ToolSearch select:` | `.claude/` (and the root `CLAUDE.md` that imports this ontology) |
-| **Codex** | tools typically exposed **directly** | `AGENTS.md` |
+| **Codex** | use the active client’s discovery when the schema is deferred | `AGENTS.md` |
 | **Claude Desktop** | tools exposed directly | n/a (no project context) |
 
 The deferred-tool behavior in Claude Code is the single biggest source of "this tool doesn't exist" mistakes —

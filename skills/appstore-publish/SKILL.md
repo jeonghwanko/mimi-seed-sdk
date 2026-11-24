@@ -11,7 +11,7 @@ mimi-seed MCP 서버(`@yoonion/mimi-seed-mcp`)의 App Store 도구를 사용해 
 
 1. MCP 클라이언트(Claude Code / Codex 등)에 `mimi-seed`가 등록되어 있어야 한다.
 2. App Store Connect API 인증 파일 `~/.mimi-seed/appstore.json`이 있어야 한다.
-3. 대상 버전은 `PREPARE_FOR_SUBMISSION`, `DEVELOPER_REJECTED`, `METADATA_REJECTED`, `REJECTED` 중 하나여야 한다.
+3. 메타데이터를 수정하려면 대상 버전이 `PREPARE_FOR_SUBMISSION`, `DEVELOPER_REJECTED`, `METADATA_REJECTED`, `REJECTED` 중 하나여야 한다.
 
 미인증이면 사용자에게 **터미널에서** 아래를 실행하라고 안내한다 (대화형이라 네가 대신 실행할 수 없다):
 
@@ -25,38 +25,33 @@ App Store Connect 는 Issuer ID · Key ID · `.p8` 파일 3개가 필요하고, 
 
 ## 도구 로딩
 
-호출 전 schema 로드:
+스키마가 지연 로딩되면 현재 단계에 필요한 도구만 찾는다.
 
-```
-ToolSearch(query="select:appstore_list_apps,appstore_list_versions,appstore_create_version,appstore_update_version_string,appstore_get_metadata,appstore_update_whats_new,appstore_list_builds,appstore_attach_build,appstore_submit_for_review,appstore_check_submission_risks,appstore_plan_release,appstore_list_app_info_localizations,appstore_list_screenshots,appstore_upload_screenshot,appstore_delete_screenshot_set,screenshot_validate")
-```
+| 요청 | 시작 도구 | 후속 도구 |
+|---|---|---|
+| What's New 수정 | `appstore_list_versions` | `appstore_update_whats_new` |
+| 스크린샷 교체 | `appstore_list_screenshots`, `screenshot_validate` | 삭제 미리보기와 승인, `appstore_upload_screenshot` |
+| 심사 제출 | `appstore_list_versions` | 요청에 따라 빌드 확인·연결, 대상 버전 점검, `appstore_submit_for_review` |
+| 승인 후 출시 | `appstore_release_status` | 요청에 따라 `appstore_release_version`, `appstore_update_release_type`, `appstore_phased_release` |
+| 심사 묶음 복구 | `appstore_list_review_submissions` | 오류에 해당하는 복구 도구 |
 
-승인 이후 출시 제어까지 다룰 때 추가로:
-
-```
-ToolSearch(query="select:appstore_release_status,appstore_release_version,appstore_update_release_type,appstore_phased_release")
-```
-
-심사 묶음이나 인앱 상품까지 다룰 때 추가로:
-
-```
-ToolSearch(query="select:appstore_list_review_submissions,appstore_add_version_to_review_submission,appstore_remove_review_submission_item,appstore_cancel_review,appstore_list_products,appstore_update_product_review_note,appstore_upload_product_review_screenshot,appstore_add_product_to_review")
-```
+앱 ID를 확인해야 할 때만 `appstore_list_apps`를 추가한다. 버전 ID가 이미 확정된 단순 조회는 해당 조회 도구를 호출한다.
 
 ## 실행 흐름
 
 1. 프로젝트의 `AGENTS.md`를 먼저 읽고, 없으면 `CLAUDE.md`에서 iOS 매니페스트와 What's New 경로를 찾는다.
-2. 로컬 버전은 힌트로만 사용한다. 실제 업로드 대상은 App Store Connect의 버전 목록을 기준으로 정한다.
-3. 앱 목록에서 bundle id가 일치하는 앱을 찾는다.
-4. 편집 가능한 버전과 localization id를 확인한다.
-5. 사용자에게 `versionString`, `versionId`, `state`, `localizationId`, 업로드할 파일 목록을 보고하고 승인받는다.
-6. What's New를 업데이트한다.
-7. 스크린샷 교체 요청이 있으면 기존 screenshot set을 삭제한 뒤 매니페스트 순서대로 업로드한다.
-   삭제 도구(`appstore_delete_screenshot_set` 등)는 먼저 `confirm` 없이 호출해 dry-run preview 를 받고,
-   5단계 승인 범위에 그 셋이 포함돼 있을 때만 같은 인자 + `confirm: true` 로 다시 호출한다.
-8. 빌드 연결은 `appstore_attach_build` — `buildId` 를 생략하면 최신 VALID 빌드를 붙인다.
-9. 심사 제출(`appstore_submit_for_review`)도 같은 순서다: `confirm` 없이 호출 → preview(버전·빌드·whatsNew)를
-   사용자에게 보여 명시 승인 → `confirm: true` 로 재호출.
+2. 로컬 버전은 힌트로 사용한다. `appstore_list_versions`에서 요청 버전과 플랫폼을 검색해 실제 대상을 확정한다.
+3. 앱 ID가 필요하면 앱 목록에서 bundle id가 일치하는 앱을 찾는다.
+4. 편집 가능한 버전을 확인한다. 스크린샷 작업에서는 localization id도 확인한다.
+5. 사용자에게 대상 버전과 변경 내용을 보여주고 승인받는다. 스크린샷 작업에서는 localization id와 파일 목록도 보여준다.
+6. What's New 수정 요청이 있으면 승인된 문안을 적용한다.
+7. 스크린샷 교체 요청이 있으면 먼저 교체 파일 전체의 로캘, 기기 유형, 규격을 확인한다.
+   `appstore_delete_screenshot_set`을 `confirm` 없이 호출하고 해당 셋의 삭제 미리보기를 보여준다.
+   그 미리보기에 대해 명시 승인을 받은 뒤 같은 인자와 `confirm: true`로 삭제하고 매니페스트 순서대로 업로드한다.
+8. 빌드 연결 요청에는 확인한 버전과 빌드 ID를 `appstore_attach_build`에 넘긴다.
+9. 심사 제출 요청에는 대상 버전 ID로 `appstore_check_submission_risks`를 호출한다. 블로커나 점검 미완료가 있으면 중단하고 보고한다.
+   점검을 통과하면 `appstore_submit_for_review`를 `confirm` 없이 호출한다. 버전·빌드·What's New 미리보기를
+   보여주고 명시 승인을 받은 뒤 `confirm: true`로 재호출한다.
 10. 적용 결과와 실패 지점을 요약한다.
 
 ## 심사 제출 묶음 — 제출·재제출이 막힐 때
@@ -79,10 +74,6 @@ ASC는 버전을 바로 제출하지 않고 **심사 제출 묶음(reviewSubmiss
 
 내부 테스터는 처리 완료 즉시 받지만 외부 테스터는 Apple 베타 심사를 통과해야 한다. 심사 항목이 앱 단위와
 빌드 단위로 갈려 있어 하나라도 비면 막힌다. 순서는 항상 상태 조회부터다.
-
-```
-ToolSearch(query="select:appstore_beta_status,appstore_update_beta_review_detail,appstore_update_beta_test_info,appstore_update_whats_to_test,appstore_submit_beta_review,appstore_set_beta_group_build,appstore_add_beta_testers,appstore_notify_beta_testers,appstore_declare_encryption")
-```
 
 1. `appstore_beta_status`(buildId + appId) — 외부 상태와 빈 필드를 확인한다.
 2. 빈 것을 채운다: 심사 정보 → `appstore_update_beta_review_detail`(로그인 앱이면 데모 계정 필수),
