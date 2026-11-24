@@ -544,7 +544,7 @@ describe('checkAppStoreRisks', () => {
     ['API_ERROR_SCREENSHOTS_en-US', []],
   ] as const)('배치 상태만으로 통과시키지 않고 연결된 원본 상태를 확인한다 (%s)', async (code, assets) => {
     const loc = mediaLocale('en-US', 'placement-en');
-    const placement = screenshotPlacement('placement-en');
+    const placement = screenshotPlacement('placement-en', 'ACTIVE');
     mockReadinessResponse('/appStoreVersions/version-1/appStoreVersionLocalizations', {
       data: [{ ...loc, relationships: { placements: loc.relationships.placements } }],
       included: [placement],
@@ -563,7 +563,7 @@ describe('checkAppStoreRisks', () => {
       links: { next: 'https://example.com/localizations?page=2' },
     }, {
       '/appStoreVersionLocalizations/loc-en-US/placements': {
-        data: [screenshotPlacement('placement-en')], included: [screenshotAsset('placement-en')],
+        data: [screenshotPlacement('placement-en', 'ACTIVE')], included: [screenshotAsset('placement-en')],
       },
     });
 

@@ -56,7 +56,7 @@ export interface MediaPlacement {
 
 const screenshotTypes = ['APP_SCREENSHOT', 'IMESSAGE_APP_SCREENSHOT'];
 const readyPlacementStates = new Set([
-  'PARENT_PREPARE_FOR_SUBMISSION', 'PARENT_READY_FOR_REVIEW', 'PARENT_WAITING_FOR_REVIEW',
+  'ACTIVE', 'PARENT_PREPARE_FOR_SUBMISSION', 'PARENT_READY_FOR_REVIEW', 'PARENT_WAITING_FOR_REVIEW',
   'PARENT_IN_REVIEW', 'PARENT_APPROVED',
 ]);
 export const readyAssetStates: ReadonlySet<string> = new Set([
