@@ -4,7 +4,7 @@ import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { appStorePagination as pagination, getAppStoreResponse, pageIsIncomplete } from '../appstore/read-response.js';
 import { selectAppInfo } from '../appstore/app-info.js';
-import { listEditableAppStoreVersions, resolveAppStoreVersionBuild, type AppStoreBuildReadiness } from '../appstore/release-target.js';
+import { selectEditableAppStoreVersion, resolveAppStoreVersionBuild, type AppStoreBuildReadiness, type AppStoreVersionCandidate } from '../appstore/release-target.js';
 import { includedScreenshotReadiness, indexIncludedPlacements, listMediaPlacements, screenshotPlacementReadiness } from '../appstore/asset-library.js';
 import { checkLegacyScreenshotReadiness } from '../appstore/screenshots.js';
 import { readAppInfoAgeRatingForRelease, readAppInfoPrivacy } from '../appstore/app-info-policy.js';
@@ -154,7 +154,7 @@ const versionLocalizationPage = pagination.extend({
       whatsNew: z.string().trim().nullish(),
       keywords: z.string().trim().nullish(),
     }).nullish(),
-    relationships: z.object({ placements: z.unknown(), appScreenshotSets: z.unknown() }).nullish(),
+    relationships: z.object({ placements: z.unknown().optional(), appScreenshotSets: z.unknown().optional() }).nullish(),
   })),
   included: z.array(z.unknown()).nullish(),
 });
@@ -192,42 +192,41 @@ export async function checkAppStoreRisks(
   expected: AppStorePolicy & { versionId?: string } = {},
 ): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
-  const versions = await safeGet(
-    () => listEditableAppStoreVersions(appId, { versionId: expected.versionId }),
+  const selection = await safeGet(
+    () => selectEditableAppStoreVersion(appId, { versionId: expected.versionId }),
     risks,
     'VERSIONS',
     '편집 가능한 버전 목록',
   );
 
-  if (!versions) return risks;
-
-  const version = versions.candidates[0];
-  if (!version && versions.incomplete) {
+  if (!selection) return risks;
+  if (selection.status === 'incomplete' || selection.status === 'ambiguous') {
     risks.push({
       level: 'warning',
-      code: 'API_ERROR_VERSIONS_INCOMPLETE',
-      title: '편집 가능한 버전 목록이 불완전함',
-      detail: 'App Store Connect에서 대상 버전을 확인한 뒤 다시 점검하세요.',
+      code: selection.status === 'incomplete' ? 'API_ERROR_VERSIONS_INCOMPLETE' : 'API_ERROR_VERSIONS_AMBIGUOUS',
+      title: '편집 가능한 버전을 하나로 확인할 수 없음',
+      detail: 'App Store Connect에서 대상 플랫폼과 편집 상태를 확인한 뒤 해당 versionId로 다시 점검하세요.',
     });
     return risks;
   }
-  if (!version && expected.versionId) {
-    risks.push({
-      level: 'blocker',
-      code: 'TARGET_VERSION_UNVERIFIED',
-      title: '대상 버전을 점검할 수 없음',
-      detail: '대상 앱의 편집 가능한 버전 목록에서 요청한 버전을 확인하세요.',
-    });
-    return risks;
-  }
-  if (!version) {
-    risks.push({ level: 'blocker', code: 'NO_EDITABLE_VERSION', title: '편집 가능한 버전 없음', detail: 'App Store Connect에서 새 버전을 만드세요.', fixUrl: 'https://appstoreconnect.apple.com' });
+  if (selection.status === 'missing') {
+    if (expected.versionId) {
+      risks.push({
+        level: 'blocker',
+        code: 'TARGET_VERSION_UNVERIFIED',
+        title: '대상 버전을 점검할 수 없음',
+        detail: '대상 앱의 편집 가능한 버전 목록에서 요청한 버전을 확인하세요.',
+      });
+    } else {
+      risks.push({ level: 'blocker', code: 'NO_EDITABLE_VERSION', title: '편집 가능한 버전 없음', detail: 'App Store Connect에서 새 버전을 만드세요.', fixUrl: 'https://appstoreconnect.apple.com' });
+    }
     return risks;
   }
 
+  const { version } = selection;
   const [build, otherRisks] = await Promise.all([
     resolveAppStoreVersionBuild(version),
-    checkAppStoreVersionRisks(appId, version.id, expected),
+    checkAppStoreVersionRisks(appId, version, expected),
   ]);
   const buildRisk = appStoreBuildRisk(build);
   return buildRisk ? [buildRisk, ...otherRisks] : otherRisks;
@@ -235,7 +234,7 @@ export async function checkAppStoreRisks(
 
 export async function checkAppStoreVersionRisks(
   appId: string,
-  selectedVersionId: string,
+  { id: selectedVersionId, platform }: Pick<AppStoreVersionCandidate, 'id' | 'platform'>,
   expected: AppStorePolicy = {},
 ): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
@@ -257,7 +256,7 @@ export async function checkAppStoreVersionRisks(
       '버전 로컬라이제이션',
     ),
     safeGet(
-      () => selectAppInfo(appId, { includeReleasePolicy: true }),
+      () => selectAppInfo(appId, { privacyPlatform: platform }),
       risks,
       'APP_INFO',
       '앱 정보',
@@ -333,7 +332,7 @@ export async function checkAppStoreVersionRisks(
   const { target, policy } = appInfo;
   const [hasPrivacy, ageRating] = await Promise.all([
     policy.hasPrivacy ?? safeGet(
-      () => readAppInfoPrivacy(target.id),
+      () => readAppInfoPrivacy(target.id, platform),
       risks,
       'PRIVACY',
       '개인정보 로컬라이제이션',
@@ -346,7 +345,7 @@ export async function checkAppStoreVersionRisks(
     ),
   ]);
   if (hasPrivacy === false) {
-    risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 URL 없음', detail: 'App Store 가이드라인 5.1.1 — 필수 항목입니다. 모든 로컬라이제이션에서 privacyPolicyUrl 또는 privacyPolicyText 중 하나를 입력하세요.' });
+    risks.push({ level: 'blocker', code: 'NO_PRIVACY', title: '개인정보처리방침 없음', detail: platform === 'TV_OS' ? '대상 tvOS 앱의 개인정보처리방침 텍스트를 입력하세요.' : '대상 앱의 개인정보처리방침 URL을 입력하세요.' });
   }
 
   if (ageRating) {

@@ -8,7 +8,7 @@
 
 import type { OAuth2Client } from 'google-auth-library';
 import { publisher, withEdit } from '../playstore/tools.js';
-import { listEditableAppStoreVersions, resolveAppStoreVersionBuild, type AppStoreVersionCandidate } from '../appstore/release-target.js';
+import { selectEditableAppStoreVersion, resolveAppStoreVersionBuild, type AppStoreVersionCandidate } from '../appstore/release-target.js';
 import { appStoreBuildRisk, checkPlayStoreRisksInEdit, checkAppStoreVersionRisks, isRiskCheckIncomplete, type SubmissionRisk } from './risks.js';
 
 export type StepState = 'done' | 'pending' | 'blocked';
@@ -217,8 +217,8 @@ export async function buildAppStoreReleasePlan(opts: {
   // 1) 편집 가능한 버전과 포함된 빌드를 같은 응답에서 선택한다.
   let version: AppStoreVersionCandidate | undefined;
   try {
-    const { candidates, incomplete } = await listEditableAppStoreVersions(appId, { versionString, versionId: requestedVersionId });
-    if (candidates.length > 1 || (incomplete && (!requestedVersionId || candidates.length === 0))) {
+    const selection = await selectEditableAppStoreVersion(appId, { versionString, versionId: requestedVersionId });
+    if (selection.status === 'ambiguous' || selection.status === 'incomplete') {
       steps.push({
         state: 'blocked',
         title: 'App Store 버전 대상을 하나로 확정할 수 없음',
@@ -228,12 +228,12 @@ export async function buildAppStoreReleasePlan(opts: {
       return renderPlan(context, steps);
     }
 
-    version = candidates[0];
-    if (version) {
+    if (selection.status === 'selected') {
+      version = selection.version;
       context.version = [version.versionString ?? version.id, version.platform].filter(Boolean).join(' / ');
       steps.push({
         state: 'done',
-        title: `편집 가능한 버전 발견 (${version.versionString ?? version.id}, state=${version.state ?? 'unknown'})`,
+        title: `편집 가능한 버전 발견 (${version.versionString ?? version.id}, state=${version.state})`,
       });
     } else {
       steps.push({
@@ -261,7 +261,7 @@ export async function buildAppStoreReleasePlan(opts: {
   if (version) {
     const [build, versionRisks] = await Promise.all([
       resolveAppStoreVersionBuild(version),
-      checkAppStoreVersionRisks(appId, version.id),
+      checkAppStoreVersionRisks(appId, version),
     ]);
     buildReady = build.status === 'ready';
     risks = versionRisks;

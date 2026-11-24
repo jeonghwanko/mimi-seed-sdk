@@ -67,9 +67,17 @@ function mockUpload({
     { method: 'PUT', url: `https://${signedHost}/part-1`, offset: 0, length: 5, requestHeaders: [{ name: 'Content-Type', value: 'image/png' }] },
   ],
   failPlacement = false,
+  reusedState = 'PREPARE_FOR_SUBMISSION',
+  reuseResult = 'asset-example',
+  reusedSpec = 'image-spec',
+  versionId = 'example-version',
 }: {
   operations?: unknown[];
   failPlacement?: boolean;
+  reusedState?: string;
+  reuseResult?: string;
+  reusedSpec?: string;
+  versionId?: string;
 } = {}) {
   const requests: Array<{ method: string; url: URL; body?: unknown; init: RequestInit }> = [];
   const fetchMock = vi.fn(async (input: string, init: RequestInit = {}) => {
@@ -88,22 +96,29 @@ function mockUpload({
     }
     if (url.pathname === '/v1/appStoreVersions/example-version') {
       return response({ data: {
+        id: versionId, type: 'appStoreVersions',
         attributes: { platform: 'IOS' }, relationships: { app: relationship('apps', 'example-app') },
       } });
     }
     if (url.pathname === '/v1/apps/example-app/assetLibrary') return response(asset('appAssetLibraries', 'example-library'));
     if (url.pathname === `${location}/placements`) return response({ data: [] });
+    if (url.pathname === '/v1/appAssetLibraries/example-library/images') {
+      expect(url.searchParams.get('filter[id]')).toBe('asset-example');
+      return response({ data: [asset('appAssetLibraryImages', reuseResult, { state: reusedState, specId: reusedSpec }).data] });
+    }
     if (url.pathname === '/v1/appAssetLibraryPlacements' && method === 'POST') {
       if (failPlacement) {
         failPlacement = false;
         return response({ errors: [{ code: 'STATE_ERROR', detail: 'Apple placement not ready' }] }, 409);
       }
-      return response(asset('appAssetLibraryPlacements', 'placement-created', { state: 'ASSET_PROCESSING' }), 201);
+      return response(asset('appAssetLibraryPlacements', 'placement-created', { state: 'PARENT_PREPARE_FOR_SUBMISSION' }), 201);
     }
     const resource = url.pathname.split('/')[2];
     if (resource === 'appAssetLibraryImages' || resource === 'appAssetLibraryVideos') {
       if (method === 'POST') return response(asset(resource, 'asset-example', { uploadOperations: operations }), 201);
-      return response(asset(resource, 'asset-example', { state: 'UPLOAD_COMPLETE' }));
+      if (method === 'PATCH') return response(asset(resource, 'asset-example', { state: 'UPLOAD_COMPLETE' }));
+      const specId = resource === 'appAssetLibraryVideos' ? 'video-spec' : 'image-spec';
+      return response(asset(resource, 'asset-example', { state: 'PREPARE_FOR_SUBMISSION', specId }));
     }
     throw new Error(`Unexpected request: ${method} ${url.pathname}`);
   });
@@ -122,7 +137,7 @@ it.each([
     const result = await client.callTool({ name, arguments: args });
     expect(result.isError).toBeFalsy();
     expect(JSON.stringify(result.content)).toContain('placement-created');
-    expect(JSON.stringify(result.content)).toContain('ASSET_PROCESSING');
+    expect(JSON.stringify(result.content)).toContain('PARENT_PREPARE_FOR_SUBMISSION');
   }, { env: { MIMI_SEED_TOOLSETS: 'appstore' } });
 
   const reservation = requests.find(({ method, url }) => method === 'POST' && url.pathname === `/v1/${type}`);
@@ -139,6 +154,7 @@ it.each([
   expect(chunks.every(({ init }) => init.redirect === 'error' && !new Headers(init.headers).has('Authorization'))).toBe(true);
   const commit = requests.find(({ method }) => method === 'PATCH');
   expect(commit?.body).toEqual({ data: { type, id: 'asset-example', attributes: { uploaded: true } } });
+  expect(requests.at(-2)).toMatchObject({ method: 'GET', url: expect.objectContaining({ pathname: `/v1/${type}/asset-example` }) });
   expect(requests.at(-1)?.body).toEqual({ data: {
     type: 'appAssetLibraryPlacements',
     attributes: { placementType, placementGroup: target.placementGroup },
@@ -164,6 +180,41 @@ it('배치 실패 후 assetId로 다시 호출하면 파일을 재업로드하�
     .resolves.toMatchObject({ placementId: 'placement-created', assetId: 'asset-example' });
   expect(requests.slice(previousCalls).filter(({ method }) => method !== 'GET').map(({ url }) => url.pathname))
     .toEqual(['/v1/appAssetLibraryPlacements']);
+});
+
+it.each([
+  ['다른 앱 에셋', { reuseResult: 'foreign-asset' }, /대상 앱의 Asset Library/],
+  ['규격 불일치', { reusedSpec: 'different-spec' }, /배치 그룹의 규격/],
+  ['실패한 에셋', { reusedState: 'FAILED' }, /FAILED/],
+] as const)('%s는 배치 요청을 보내지 않는다', async (_label, options, message) => {
+  const requests = mockUpload(options);
+  await expect(uploadAndPlaceMedia({ ...target, placementType: 'APP_SCREENSHOT', assetId: 'asset-example' }))
+    .rejects.toThrow(message);
+  expect(requests.every(({ method }) => method === 'GET')).toBe(true);
+});
+
+it('처리 중인 에셋의 ID를 반환하고 배치를 만들지 않는다', async () => {
+  const requests = mockUpload({ reusedState: 'UPLOAD_COMPLETE' });
+  await expect(uploadAndPlaceMedia({ ...target, placementType: 'APP_SCREENSHOT', assetId: 'asset-example' }))
+    .resolves.toMatchObject({ status: 'processing', assetId: 'asset-example', assetState: 'UPLOAD_COMPLETE' });
+  expect(requests.every(({ method }) => method === 'GET')).toBe(true);
+});
+
+it('기존 배치의 에셋 관계가 빠지면 중복 생성 가능성을 확인할 때까지 중단한다', async () => {
+  const fetchMock = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(response(reference))
+    .mockResolvedValueOnce(response({ data: [{ ...placement('existing'), relationships: {} }] }));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(uploadAndPlaceMedia({ ...target, placementType: 'APP_SCREENSHOT', assetId: 'asset-example' }))
+    .rejects.toThrow(/기존 미디어 배치를 하나로 확인/);
+  expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['GET', 'GET']);
+});
+
+it('로케일이 가리키는 버전과 응답이 다르면 에셋 예약을 시작하지 않는다', async () => {
+  const requests = mockUpload({ versionId: 'another-version' });
+  await expect(uploadAndPlaceMedia({ ...target, placementType: 'APP_SCREENSHOT', filePath: screenshot }))
+    .rejects.toThrow(/버전 ID 확인/);
+  expect(requests.every(({ method }) => method === 'GET')).toBe(true);
 });
 
 it('이미 같은 그룹에 배치된 에셋은 읽기만 하고 기존 ID를 반환한다', async () => {

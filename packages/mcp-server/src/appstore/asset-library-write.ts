@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { apiGet, apiPatch, apiPost } from './client.js';
-import { listPlacementGroup } from './asset-library.js';
+import { listPlacementGroup, readyAssetStates } from './asset-library.js';
+import { appStorePagination, getAppStoreResponse, pageIsIncomplete } from './read-response.js';
 import { uploadFileParts } from './upload-parts.js';
 import { getVersionAppAndPlatform } from './versions.js';
 import { encodePathSegment } from '../lib/url-path.js';
@@ -19,7 +21,9 @@ const localizationDocument = z.object({
 });
 const idDocument = z.object({ data: resourceRef });
 const responseAttributes = z.object({ state: z.string().nullish(), specId: z.string().nullish() });
-const stateDocument = z.object({ data: resourceRef.extend({ attributes: responseAttributes.nullish() }) });
+const stateRecord = resourceRef.extend({ attributes: responseAttributes.nullish() });
+const stateDocument = z.object({ data: stateRecord });
+const statePage = appStorePagination.extend({ data: z.array(stateRecord) });
 const uploadPlan = z.array(z.object({
   method: z.literal('PUT'),
   url: z.url({ protocol: /^https$/ }),
@@ -47,10 +51,10 @@ const referenceData = z.object({ data: z.array(z.object({
 })) });
 
 type PlacementType = 'APP_SCREENSHOT' | 'APP_PREVIEW';
-const assetTypes: Record<PlacementType, { resource: 'appAssetLibraryImages' | 'appAssetLibraryVideos'; relation: 'image' | 'video'; specs: 'imageSpecs' | 'videoSpecs' }> = {
-  APP_SCREENSHOT: { resource: 'appAssetLibraryImages', relation: 'image', specs: 'imageSpecs' },
-  APP_PREVIEW: { resource: 'appAssetLibraryVideos', relation: 'video', specs: 'videoSpecs' },
-};
+const assetTypes = {
+  APP_SCREENSHOT: { resource: 'appAssetLibraryImages', relation: 'image', specs: 'imageSpecs', collection: 'images' },
+  APP_PREVIEW: { resource: 'appAssetLibraryVideos', relation: 'video', specs: 'videoSpecs', collection: 'videos' },
+} as const;
 type PlacementTarget = { localizationId: string; placementGroup: string };
 
 function checked<T>(schema: z.ZodType<T>, received: unknown, label: string): T {
@@ -118,14 +122,35 @@ function checkUploadPlan(value: unknown, fileSize: number) {
   return operations;
 }
 
-type UploadedMedia = {
-  assetId: string;
-  placementId: string;
-  placementGroup: string;
-  reusedPlacement: boolean;
-  assetState?: string;
-  placementState?: string;
-};
+type UploadedMedia = { assetId: string; placementGroup: string } & (
+  | { status: 'processing'; assetState: 'UPLOAD_COMPLETE'; message: string }
+  | { status: 'placed'; placementId: string; reusedPlacement: boolean; assetState?: string; placementState?: string }
+);
+
+async function readAssetState(resource: string, assetId: string) {
+  const response = await getAppStoreResponse(stateDocument, `/${encodePathSegment(resource)}/${encodePathSegment(assetId)}`, {
+    [`fields[${resource}]`]: 'state,specId',
+  });
+  if (response.data.id !== assetId || response.data.type !== resource) {
+    throw new Error('대상 에셋 유형 또는 ID가 일치하지 않습니다.');
+  }
+  return response.data.attributes;
+}
+
+async function readLibraryAsset(localizationId: string, placementType: PlacementType, assetId: string) {
+  const libraryId = await libraryForLocalization(localizationId);
+  const { resource, collection } = assetTypes[placementType];
+  const page = await getAppStoreResponse(
+    statePage,
+    `/appAssetLibraries/${encodePathSegment(libraryId)}/${encodePathSegment(collection)}`,
+    { 'filter[id]': assetId, [`fields[${resource}]`]: 'state,specId', limit: '1' },
+  );
+  const [asset] = page.data;
+  if (pageIsIncomplete(page, page.data.length) || page.data.length !== 1 || asset.id !== assetId || asset.type !== resource) {
+    throw new Error('대상 앱의 Asset Library에서 해당 에셋을 확인할 수 없습니다.');
+  }
+  return asset.attributes;
+}
 
 export async function uploadAndPlaceMedia(args: PlacementTarget & {
   placementType: PlacementType;
@@ -145,8 +170,8 @@ export async function uploadAndPlaceMedia(args: PlacementTarget & {
   const { resource, relation } = assetTypes[placementType];
   const specs = await supportsPlacement(placementGroup, placementType);
   let assetId = args.assetId;
-  let assetState: string | undefined;
-  let assetSpecId: string | undefined;
+  let asset: z.infer<typeof responseAttributes> | null | undefined;
+  let stage: 'upload' | 'commit' | 'placement' = 'placement';
 
   try {
     if (filePath && file) {
@@ -165,39 +190,52 @@ export async function uploadAndPlaceMedia(args: PlacementTarget & {
       }), '미디어 예약').data;
       if (reserved.type !== resource) throw new Error('예약된 에셋 유형을 확인할 수 없습니다.');
       assetId = reserved.id;
+      stage = 'upload';
       const operations = checkUploadPlan(reserved.attributes?.uploadOperations, file.size);
       await uploadFileParts(filePath, operations, 'error');
       const afterUpload = await stat(filePath);
       if (afterUpload.size !== file.size || afterUpload.mtimeMs !== file.mtimeMs || afterUpload.ino !== file.ino) {
         throw new Error('업로드 중 로컬 파일이 변경되어 완료 요청을 중단했습니다.');
       }
+      stage = 'commit';
       const commit = checked(stateDocument, await apiPatch<unknown>(`/${encodePathSegment(resource)}/${encodePathSegment(assetId)}`, {
         data: { type: resource, id: assetId, attributes: { uploaded: true } },
       }), '미디어 업로드 완료').data;
       if (commit.id !== assetId || commit.type !== resource) throw new Error('업로드 완료 응답의 에셋 ID를 확인할 수 없습니다.');
-      assetState = commit.attributes?.state ?? undefined;
-      assetSpecId = commit.attributes?.specId ?? undefined;
-    } else if (assetId) {
-      const existing = (await listPlacementGroup(localizationId, placementGroup))
-        .find((row) => row.assetId === assetId && row.placementType === placementType);
-      if (existing) {
-        return { assetId, placementGroup, placementId: existing.placementId, placementState: existing.placementState, reusedPlacement: true };
+      asset = commit.attributes;
+      stage = 'placement';
+      for (const waitMs of [0, 2_000, 4_000]) {
+        if (asset?.state && asset.state !== 'UPLOAD_COMPLETE' && (!readyAssetStates.has(asset.state) || asset.specId)) break;
+        if (waitMs) await delay(waitMs);
+        asset = await readAssetState(resource, assetId);
       }
-      const asset = checked(stateDocument, await apiGet<unknown>(`/${encodePathSegment(resource)}/${encodePathSegment(assetId)}`, {
-        [`fields[${resource}]`]: 'state,specId',
-      }), '미디어 에셋').data;
-      if (asset.id !== assetId || asset.type !== resource) throw new Error('대상 에셋 유형 또는 ID가 일치하지 않습니다.');
-      assetState = asset.attributes?.state ?? undefined;
-      assetSpecId = asset.attributes?.specId ?? undefined;
+    } else if (assetId) {
+      const related = (await listPlacementGroup(localizationId, placementGroup))
+        .filter((row) => row.placementType === placementType);
+      const existing = related.filter((row) => row.assetId === assetId);
+      if (existing.length === 1) {
+        return { status: 'placed', assetId, placementGroup, placementId: existing[0].placementId, placementState: existing[0].placementState, reusedPlacement: true };
+      }
+      if (existing.length > 1 || related.some((row) => !row.assetId)) {
+        throw new Error('대상 그룹의 기존 미디어 배치를 하나로 확인할 수 없습니다. 배치 목록을 확인하세요.');
+      }
+      asset = await readLibraryAsset(localizationId, placementType, assetId);
     }
 
-    if (assetSpecId && !specs.some(({ specId }) => specId === assetSpecId)) {
-      throw new Error('처리된 에셋 규격이 대상 배치 그룹과 호환되지 않습니다.');
-    }
     if (!assetId) throw new Error('App Store Connect 에셋 ID를 확인할 수 없습니다.');
-    if (!assetState || !['UPLOAD_COMPLETE', 'COMPLETE', 'PREPARE_FOR_SUBMISSION', 'READY_FOR_REVIEW',
-      'WAITING_FOR_REVIEW', 'IN_REVIEW', 'ACCEPTED', 'APPROVED'].includes(assetState)) {
+    const assetState = asset?.state ?? undefined;
+    if (assetState === 'UPLOAD_COMPLETE') {
+      return {
+        status: 'processing', assetId, assetState, placementGroup,
+        message: 'Apple에서 에셋을 처리 중입니다. 처리 완료 후 같은 assetId로 배치를 다시 요청하세요.',
+      };
+    }
+    if (!assetState || !readyAssetStates.has(assetState)) {
       throw new Error(`배치할 수 있는 에셋 상태를 확인할 수 없습니다 (${assetState ?? '상태 미상'}).`);
+    }
+    const assetSpecId = asset?.specId;
+    if (!assetSpecId || !specs.some(({ specId }) => specId === assetSpecId)) {
+      throw new Error('처리된 에셋이 대상 배치 그룹의 규격에 맞는지 확인할 수 없습니다.');
     }
     const placement = checked(stateDocument, await apiPost<unknown>('/appAssetLibraryPlacements', {
       data: {
@@ -211,13 +249,18 @@ export async function uploadAndPlaceMedia(args: PlacementTarget & {
     }), '미디어 배치').data;
     if (placement.type !== 'appAssetLibraryPlacements') throw new Error('App Store Connect의 배치 ID를 확인할 수 없습니다.');
     return {
-      assetId, placementGroup, placementId: placement.id, assetState,
+      status: 'placed', assetId, placementGroup, placementId: placement.id, assetState,
       placementState: placement.attributes?.state ?? undefined, reusedPlacement: false,
     };
   } catch (error) {
     if (!assetId) throw error;
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Asset Library 에셋 ${assetId}: ${detail} 에셋 상태를 확인한 뒤 기존 assetId로 배치를 다시 시도할 수 있습니다.`, { cause: error });
+    const recovery = stage === 'upload'
+      ? '파일 전송을 완료하지 못했습니다. 남은 예약을 확인한 뒤 파일 업로드를 다시 시작하세요.'
+      : stage === 'commit'
+        ? '업로드 완료 요청의 결과를 확인하세요. 처리가 시작됐다면 기존 assetId로 이어갈 수 있습니다.'
+        : '에셋 상태와 대상 그룹의 현재 배치를 확인하세요.';
+    throw new Error(`Asset Library 에셋 ${assetId}: ${detail} ${recovery}`, { cause: error });
   }
 }
 

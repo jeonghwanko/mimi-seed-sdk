@@ -250,7 +250,10 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 ### App Store product page media
 
 Use the screenshot or preview listing to identify the version localization and its existing placements.
-For Asset Library uploads, use the placement group and check the reported processing state before submission.
+For Asset Library uploads, use the placement group. When the result reports `status: "processing"`, wait for
+Apple to finish processing and call the same upload tool with the returned `assetId` and the same target to
+create the placement. A `status: "placed"` result identifies the saved placement. Run the submission risk
+check before submitting.
 If the upload committed but placement failed, reuse the returned asset ID. To reorder a group, include all
 of its placement IDs in the requested sequence, including both screenshots and previews when present.
 

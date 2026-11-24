@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { encodePathSegment } from '../lib/url-path.js';
 import { appInfoReleasePolicyQuery, readIncludedAppInfoPolicy, type IncludedAppInfoPolicy } from './app-info-policy.js';
+import type { AppStorePlatform } from './release-target.js';
 import { appStorePagination, getAppStoreResponse, pageIsIncomplete } from './read-response.js';
 
 const appInfoPage = appStorePagination.extend({
@@ -51,10 +52,13 @@ export async function listAppInfoRecords(appId: string): Promise<AppInfoRecord[]
 
 type AppInfoSelection = { target: AppInfoRecord; policy: IncludedAppInfoPolicy } | { reason: string };
 
-export async function selectAppInfo(appId: string, options: { includeReleasePolicy?: boolean } = {}): Promise<AppInfoSelection> {
-  const { includeReleasePolicy } = options;
-  const page = await readAppInfoPage(appId, includeReleasePolicy ? appInfoReleasePolicyQuery : {});
-  if (pageIsIncomplete(page, page.data.length)) return { reason: 'App Store Connect의 앱 정보 목록이 불완전합니다.' };
+export async function selectAppInfo(appId: string, options: { privacyPlatform?: AppStorePlatform } = {}): Promise<AppInfoSelection> {
+  const { privacyPlatform } = options;
+  const page = await readAppInfoPage(appId, privacyPlatform ? appInfoReleasePolicyQuery : {});
+  const ids = new Set(page.data.map(({ id }) => id));
+  if (ids.size !== page.data.length || pageIsIncomplete(page, page.data.length)) {
+    return { reason: 'App Store Connect의 앱 정보 목록이 불완전합니다.' };
+  }
 
   const records = page.data.map((row) => ({ record: toAppInfoRecord(row), relationships: row.relationships }));
   const current = records.filter(({ record: { state } }) => !state || !replacedStates.has(state));
@@ -70,7 +74,7 @@ export async function selectAppInfo(appId: string, options: { includeReleasePoli
   if (candidates.length !== 1) return { reason: '대상 앱 정보 레코드를 하나로 확정할 수 없습니다.' };
 
   const { record: target, relationships } = candidates[0];
-  const policy = includeReleasePolicy ? readIncludedAppInfoPolicy(relationships, page.included) : {};
+  const policy = privacyPlatform ? readIncludedAppInfoPolicy(relationships, page.included, privacyPlatform) : {};
   return { target, policy };
 }
 

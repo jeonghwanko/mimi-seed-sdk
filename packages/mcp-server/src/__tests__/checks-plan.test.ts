@@ -162,7 +162,7 @@ describe('buildAppStoreReleasePlan', () => {
   const validBuild = { ...linkedBuild, attributes: { processingState: 'VALID' } };
   const versionRow = {
     id: 'v-1',
-    attributes: { versionString: '1.3.0', appVersionState: 'PREPARE_FOR_SUBMISSION' },
+    attributes: { versionString: '1.3.0', appVersionState: 'PREPARE_FOR_SUBMISSION', platform: 'IOS' },
     relationships: { build: { data: linkedBuild } },
   };
   const versionsResponse = { data: [versionRow], included: [validBuild] };
@@ -176,7 +176,7 @@ describe('buildAppStoreReleasePlan', () => {
     expect(plan).toContain('☑︎ 버전에 빌드 연결됨');
     expect(plan).toMatch(/◻︎ 심사 제출 \(reviewSubmissions v2\) ⚠️ 비가역/);
     expect(plan).toContain('appstore_submit_for_review (versionId=v-1)');
-    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', 'v-1');
+    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-1', platform: 'IOS' }));
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       include: 'build',
@@ -185,7 +185,7 @@ describe('buildAppStoreReleasePlan', () => {
   });
 
   it('같은 버전 문자열이 여러 플랫폼에 있으면 대상 ID가 필요하다', async () => {
-    const ios = { id: 'v-ios', attributes: { versionString: '1.3.0', platform: 'IOS' } };
+    const ios = { id: 'v-ios', attributes: { ...versionRow.attributes } };
     const mac = { id: 'v-mac', attributes: { versionString: '1.3.0', platform: 'MAC_OS', appStoreState: 'METADATA_REJECTED' } };
     mocks.apiGet.mockResolvedValueOnce({ data: [ios, mac] });
     const ambiguous = await buildAppStoreReleasePlan({ appId: '1234567890', versionString: '1.3.0' });
@@ -197,7 +197,7 @@ describe('buildAppStoreReleasePlan', () => {
     const pinned = await buildAppStoreReleasePlan({ appId: '1234567890', versionId: 'v-mac' });
     expect(pinned).toContain('1.3.0 / MAC_OS');
     expect(pinned).toContain('appstore_submit_for_review (versionId=v-mac)');
-    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', 'v-mac');
+    expect(mocks.checkAppStoreVersionRisks).toHaveBeenCalledWith('1234567890', expect.objectContaining({ id: 'v-mac', platform: 'MAC_OS' }));
     expect(mocks.apiGet).toHaveBeenCalledWith('/appStoreVersions/v-mac/build', { 'fields[builds]': 'processingState' });
     expect(mocks.apiGet).toHaveBeenCalledWith('/apps/1234567890/appStoreVersions', expect.objectContaining({
       'filter[id]': 'v-mac',

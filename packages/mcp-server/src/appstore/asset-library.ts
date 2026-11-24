@@ -35,7 +35,7 @@ const includedResource = resourceRef.extend({
 const placementPage = z.object({
   ...paging,
   data: z.array(placementRecord),
-  included: z.array(includedResource).nullish(),
+  included: z.array(z.unknown()).nullish(),
 });
 const placementLinkage = z.object({ ...paging, data: z.array(resourceRef) });
 
@@ -59,19 +59,20 @@ const readyPlacementStates = new Set([
   'PARENT_PREPARE_FOR_SUBMISSION', 'PARENT_READY_FOR_REVIEW', 'PARENT_WAITING_FOR_REVIEW',
   'PARENT_IN_REVIEW', 'PARENT_APPROVED',
 ]);
-const readyAssetStates = new Set([
-  'COMPLETE', 'PREPARE_FOR_SUBMISSION', 'READY_FOR_REVIEW', 'WAITING_FOR_REVIEW', 'IN_REVIEW', 'ACCEPTED', 'APPROVED',
+export const readyAssetStates: ReadonlySet<string> = new Set([
+  'PREPARE_FOR_SUBMISSION', 'READY_FOR_REVIEW', 'WAITING_FOR_REVIEW', 'IN_REVIEW', 'ACCEPTED', 'APPROVED',
 ]);
 const blockedAssetStates = new Set(['AWAITING_UPLOAD', 'UPLOAD_COMPLETE', 'FAILED', 'REJECTED', 'ARCHIVED']);
 
 function toPlacement(
   row: z.infer<typeof placementRecord>,
-  assets?: ReadonlyMap<string, z.infer<typeof includedResource>>,
+  assets?: ReadonlyMap<string, unknown>,
 ): MediaPlacement {
   const video = row.attributes.placementType === 'APP_PREVIEW';
   const ref = video ? row.relationships?.video?.data : row.relationships?.image?.data;
   const assetId = ref?.type === (video ? 'appAssetLibraryVideos' : 'appAssetLibraryImages') ? ref.id : undefined;
-  const asset = ref && assetId ? assets?.get(`${ref.type}:${assetId}`)?.attributes : undefined;
+  const included = ref && assetId ? includedResource.safeParse(assets?.get(`${ref.type}:${assetId}`)) : undefined;
+  const asset = included?.success ? included.data.attributes : undefined;
   return {
     placementId: row.id,
     placementType: row.attributes.placementType,
@@ -97,17 +98,32 @@ export function screenshotPlacementReadiness(rows: readonly MediaPlacement[], co
       unknown = true;
       continue;
     }
-    if (!row.assetState || readyAssetStates.has(row.assetState)) return 'ready';
-    if (!blockedAssetStates.has(row.assetState)) unknown = true;
+    if (row.assetState && readyAssetStates.has(row.assetState)) return 'ready';
+    if (!row.assetState || !blockedAssetStates.has(row.assetState)) unknown = true;
   }
   return unknown ? 'unknown' : hasScreenshot ? 'not-ready' : 'missing';
 }
 
+function indexIncludedResources(included: readonly unknown[]): ReadonlyMap<string, unknown> {
+  const resources = new Map<string, unknown>();
+  for (const item of included) {
+    const ref = resourceRef.safeParse(item);
+    if (ref.success) {
+      const key = `${ref.data.type}:${ref.data.id}`;
+      resources.set(key, resources.has(key) ? undefined : item);
+    }
+  }
+  return resources;
+}
+
 export function indexIncludedPlacements(included: readonly unknown[]): ReadonlyMap<string, MediaPlacement> {
-  return new Map(included.flatMap((item) => {
-    const result = placementRecord.safeParse(item);
-    return result.success ? [[result.data.id, toPlacement(result.data)] as const] : [];
-  }));
+  const resources = indexIncludedResources(included);
+  const placements = new Map<string, MediaPlacement>();
+  for (const item of resources.values()) {
+    const row = placementRecord.safeParse(item);
+    if (row.success) placements.set(row.data.id, toPlacement(row.data, resources));
+  }
+  return placements;
 }
 
 /** Use the version localization's own linkage to attribute included placements. */
@@ -162,14 +178,17 @@ async function readPlacements(localizationId: string, filters: Record<string, st
     throw error;
   }
   const base = new URL(V1_BASE);
-  let count = 0;
+  const seen = new Set<string>();
   let total = 0;
   return collectPages(async (next) => {
     const page = placementPage.safeParse(next ? await apiGet<unknown>(next) : first);
     if (!page.success) throw new Error('App Store Connect의 미디어 배치 응답 형식이 올바르지 않습니다.');
     const { data, included, links, meta } = page.data;
-    const assets = new Map((included ?? []).map((asset) => [`${asset.type}:${asset.id}`, asset]));
-    count += data.length;
+    const assets = indexIncludedResources(included ?? []);
+    for (const row of data) {
+      if (seen.has(row.id)) throw new Error('App Store Connect의 미디어 배치 ID가 중복됩니다.');
+      seen.add(row.id);
+    }
     total = Math.max(total, meta?.paging?.total ?? 0);
     let nextPageToken: string | undefined;
     if (links?.next) {
@@ -178,7 +197,7 @@ async function readPlacements(localizationId: string, filters: Record<string, st
         throw new Error('App Store Connect의 미디어 배치 페이지 링크가 올바르지 않습니다.');
       }
       nextPageToken = `${path}${url.search}`;
-    } else if (meta?.paging?.nextCursor || total > count) {
+    } else if (meta?.paging?.nextCursor || total > seen.size) {
       throw new Error('App Store Connect의 미디어 배치 목록이 불완전합니다.');
     }
     return {

@@ -30,6 +30,7 @@ export function registerScreenshotTools(server: ToolRegistrar) {
     [
       'App Store 스크린샷을 업로드하거나 기존 Asset Library 에셋을 배치한다.',
       'Asset Library 방식은 placementGroup과 filePath 또는 assetId를 사용한다. 파일 경로는 로컬 절대경로다.',
+      'Asset Library 결과가 processing이면 처리 완료 후 같은 assetId로 배치를 요청한다.',
       '기존 세트 방식은 displayType과 filePath를 사용한다. displayType의 예:',
       "APP_IPHONE_69 (6.9\", 1290x2796) / APP_IPHONE_67 (6.7\", 1290x2796) /",
       "APP_IPHONE_65 (6.5\", 1242x2688) / APP_IPHONE_61 (6.1\", 1170x2532) /",
@@ -119,9 +120,10 @@ export function registerPreviewTools(server: ToolRegistrar) {
       if (placements.length > 0) {
         lines.push('App Asset Library 배치');
         for (const placement of placements) {
-          const { placementGroup, placementId, fileName, assetState, placementState, previewFrameTimeCode } = placement;
+          const { placementGroup, placementId, assetId, fileName, assetState, placementState, previewFrameTimeCode } = placement;
           lines.push(
             `${placementGroup ?? '?'} (placement ${placementId}): ${fileName ?? '?'} · ${assetState ?? '에셋 상태 미상'} · ${placementState ?? '배치 상태 미상'}` +
+              (assetId ? ` · assetId ${assetId}` : '') +
               (previewFrameTimeCode ? ` · 포스터 ${previewFrameTimeCode}` : ''),
           );
         }
@@ -135,7 +137,7 @@ export function registerPreviewTools(server: ToolRegistrar) {
     [
       '제품 페이지 미리보기 동영상을 업로드하거나 기존 Asset Library 동영상을 배치한다.',
       'Asset Library 방식은 placementGroup과 filePath 또는 assetId를 사용한다. 기존 세트 방식은 previewType과 filePath를 사용한다.',
-      '⚠️ 커밋 후 Apple 인코딩이 남는다 — 성공 응답이 곧 노출 가능은 아니다. appstore_list_previews 로 확인할 것.',
+      'Asset Library 결과가 processing이면 인코딩 완료 후 같은 assetId로 배치를 요청한다. 저장한 배치는 appstore_list_previews로 확인한다.',
       'Apple 제약: 길이 15~30초, previewType 별 해상도 고정, 로케일·타입당 최대 3개. 어기면 인코딩 단계에서 거부된다.',
       'previewFrameTimeCode(HH:MM:SS:FF)로 포스터 프레임을 지정할 수 있다.',
       '파일은 절대경로로 넘긴다 (대용량이라 조각 업로드하며, 동영상 바이트는 대화에 싣지 않는다).',

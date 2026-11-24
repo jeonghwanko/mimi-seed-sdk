@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { encodePathSegment } from '../lib/url-path.js';
 import { isNotFound } from './http.js';
+import type { AppStorePlatform } from './release-target.js';
 import { appStorePagination, getAppStoreResponse, pageIsIncomplete } from './read-response.js';
 
 const privacyFields = 'privacyPolicyUrl,privacyPolicyText';
@@ -53,11 +54,11 @@ export interface IncludedAppInfoPolicy {
   ageRating?: z.infer<typeof ageRatingResponse>;
 }
 
-function hasPrivacyPolicy(attributes?: z.infer<typeof privacyAttributes> | null): boolean {
-  return Boolean(attributes?.privacyPolicyUrl || attributes?.privacyPolicyText);
+function hasPrivacyPolicy(platform: AppStorePlatform, attributes?: z.infer<typeof privacyAttributes> | null): boolean {
+  return Boolean(platform === 'TV_OS' ? attributes?.privacyPolicyText : attributes?.privacyPolicyUrl);
 }
 
-export function readIncludedAppInfoPolicy(relationships: unknown, included: unknown): IncludedAppInfoPolicy {
+export function readIncludedAppInfoPolicy(relationships: unknown, included: unknown, platform: AppStorePlatform): IncludedAppInfoPolicy {
   const links = appInfoPolicyRelationships.safeParse(relationships);
   const resources = includedResources.safeParse(included);
   if (!links.success || !resources.success) return {};
@@ -75,7 +76,7 @@ export function readIncludedAppInfoPolicy(relationships: unknown, included: unkn
   const localizations = localizationLinks.safeParse(links.data.appInfoLocalizations);
   if (localizations.success && localizations.data.data.some(({ id }) => {
     const attributes = privacyAttributes.safeParse(byId.get(`appInfoLocalizations:${id}`));
-    return attributes.success && hasPrivacyPolicy(attributes.data);
+    return attributes.success && hasPrivacyPolicy(platform, attributes.data);
   })) {
     policy.hasPrivacy = true;
   }
@@ -93,13 +94,13 @@ export function readIncludedAppInfoPolicy(relationships: unknown, included: unkn
   return policy;
 }
 
-export async function readAppInfoPrivacy(appInfoId: string): Promise<boolean> {
+export async function readAppInfoPrivacy(appInfoId: string, platform: AppStorePlatform): Promise<boolean> {
   const localizations = await getAppStoreResponse(
     privacyLocalizationPage,
     `/appInfos/${encodePathSegment(appInfoId)}/appInfoLocalizations`,
     { 'fields[appInfoLocalizations]': privacyFields, limit: '200' },
   );
-  if (localizations.data.some(({ attributes }) => hasPrivacyPolicy(attributes))) return true;
+  if (localizations.data.some(({ attributes }) => hasPrivacyPolicy(platform, attributes))) return true;
   if (pageIsIncomplete(localizations, localizations.data.length)) {
     throw new Error('App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.');
   }

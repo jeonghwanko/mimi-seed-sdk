@@ -40,6 +40,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - GitHub Actions dispatch ignores malformed run entries when identifying the triggered build.
 - App Store submission stops if the existing review-submission list is missing from the API response.
 - App Store readiness checks flag malformed responses and incomplete lists for review before submission.
+- App Store risk checks and release plans require a verified version and platform, validate platform-specific privacy policies, and confirm that linked screenshot assets are ready.
+- App Asset Library uploads preserve the asset ID during processing. Placement waits for a compatible processed asset in the target app's library.
 
 ### Tool changes
 

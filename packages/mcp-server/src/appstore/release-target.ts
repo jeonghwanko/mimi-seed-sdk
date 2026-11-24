@@ -15,10 +15,13 @@ const versionPage = appStorePagination.extend({
       appStoreState: z.string().nullish(),
       platform: z.string().nullish(),
     }).nullish(),
-    relationships: z.object({ build: z.unknown() }).nullish(),
+    relationships: z.object({ build: z.unknown().optional() }).nullish(),
   })),
   included: z.array(z.unknown()).nullish(),
 });
+const platformSchema = z.enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS']);
+export type AppStorePlatform = z.infer<typeof platformSchema>;
+
 const buildReference = z.object({ id: z.string().min(1), type: z.literal('builds') });
 const buildRelationship = z.object({ data: buildReference.nullable() });
 const processingState = z.enum(['PROCESSING', 'FAILED', 'INVALID', 'VALID']);
@@ -35,8 +38,8 @@ export type AppStoreBuildReadiness =
 export interface AppStoreVersionCandidate {
   id: string;
   versionString?: string;
-  state?: string;
-  platform?: string;
+  state: string;
+  platform: AppStorePlatform;
   linkedBuildId?: string;
   build?: AppStoreBuildReadiness;
 }
@@ -47,10 +50,16 @@ function buildReadiness(build: z.infer<typeof buildResource>): AppStoreBuildRead
   return { status: state === 'VALID' ? 'ready' : 'not-ready', id: build.id, processingState: state };
 }
 
-export async function listEditableAppStoreVersions(
+type VersionSelection =
+  | { status: 'selected'; version: AppStoreVersionCandidate }
+  | { status: 'missing' }
+  | { status: 'ambiguous' }
+  | { status: 'incomplete' };
+
+export async function selectEditableAppStoreVersion(
   appId: string,
   filters: { versionId?: string; versionString?: string } = {},
-): Promise<{ candidates: AppStoreVersionCandidate[]; incomplete: boolean }> {
+): Promise<VersionSelection> {
   const { versionId, versionString } = filters;
   const page = await getAppStoreResponse(versionPage, `/apps/${encodePathSegment(appId)}/appStoreVersions`, {
     'filter[appVersionState]': editableStates.join(','),
@@ -61,32 +70,42 @@ export async function listEditableAppStoreVersions(
     include: 'build',
     limit: versionId ? '1' : '5',
   });
-  const included = new Map((page.included ?? []).flatMap((row) => {
-    const parsed = buildResource.safeParse(row);
-    return parsed.success ? [[parsed.data.id, parsed.data] as const] : [];
-  }));
   const candidates: AppStoreVersionCandidate[] = [];
+  let incomplete = pageIsIncomplete(page, page.data.length);
   for (const row of page.data) {
     const version = row.attributes?.versionString ?? undefined;
     const state = row.attributes?.appVersionState ?? row.attributes?.appStoreState ?? undefined;
-    if ((versionId && versionId !== row.id) || (versionString && versionString !== version)
+    if ((versionId && versionId !== row.id) || (versionString && version && versionString !== version)
         || (state && !editableStates.includes(state))) continue;
+
+    const platform = platformSchema.safeParse(row.attributes?.platform);
+    if (!state || !platform.success || (versionString && !version)) {
+      incomplete = true;
+      continue;
+    }
 
     const linkage = buildRelationship.safeParse(row.relationships?.build);
     const linkedBuildId = linkage.success ? linkage.data.data?.id : undefined;
-    const embedded = linkedBuildId ? included.get(linkedBuildId) : undefined;
+    const included = linkedBuildId ? (page.included ?? []).filter((item) => {
+      const ref = buildReference.safeParse(item);
+      return ref.success && ref.data.id === linkedBuildId;
+    }) : [];
+    const embedded = included.length === 1 ? buildResource.safeParse(included[0]) : undefined;
     candidates.push({
       id: row.id,
       versionString: version,
       state,
-      platform: row.attributes?.platform ?? undefined,
+      platform: platform.data,
       linkedBuildId,
       build: linkage.success && linkage.data.data === null
         ? { status: 'missing' }
-        : embedded ? buildReadiness(embedded) : undefined,
+        : embedded?.success ? buildReadiness(embedded.data) : undefined,
     });
   }
-  return { candidates, incomplete: pageIsIncomplete(page, page.data.length) };
+  if (candidates.length > 1) return { status: 'ambiguous' };
+  if (incomplete) return { status: 'incomplete' };
+  const version = candidates[0];
+  return version ? { status: 'selected', version } : { status: 'missing' };
 }
 
 /** Resolve the selected version's build without an API request when included data is complete. */

@@ -339,10 +339,12 @@ export async function getVersionAppAndPlatform(versionId: string): Promise<{ app
     `/appStoreVersions/${encodePathSegment(versionId)}`,
     { 'fields[appStoreVersions]': 'platform,app', include: 'app' },
   );
-  const platform = data?.data?.attributes?.platform;
-  const appId = data?.data?.relationships?.app?.data?.id;
-  if (!platform || !appId) {
+  const version = data?.data;
+  const platform = version?.attributes?.platform;
+  const app = version?.relationships?.app?.data;
+  if (version?.id !== versionId || version.type !== 'appStoreVersions' || app?.type !== 'apps'
+      || typeof app.id !== 'string' || !app.id || typeof platform !== 'string' || !platform) {
     throw new Error(`appStoreVersion ${versionId}에서 app 또는 platform을 찾지 못했어. 버전 ID 확인 필요.`);
   }
-  return { appId, platform };
+  return { appId: app.id, platform };
 }
