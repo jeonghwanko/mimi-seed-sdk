@@ -124,6 +124,8 @@ comment; `.github/dependabot.yml` keeps those pins and both packages' npm depend
 `playstore-release.test.ts` checks full rollout replacement even when a target draft already exists,
 preservation for draft updates, missing targets, commit failures, and manual-review commit fallback.
 `appstore-submit-for-review.test.ts` covers existing review item reuse and item discovery errors.
+`gsc-mcp.test.ts` checks Search Console request filters, paging, aggregate versus page metrics, profile-scoped
+OAuth, and sitemap responses through the live tool schemas with a mocked Google API.
 
 Everything else is ordinary unit coverage, named after what it protects — `appstore-*`, `playstore-*`,
 `firebase-tools`, `ga4-*`, `googleads`, `gsc-tools`, `admob-tools`, `jenkins-jobs`, `ci-github` / `ci-gitlab`,

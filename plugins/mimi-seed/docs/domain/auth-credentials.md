@@ -79,10 +79,12 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 
 The Google OAuth login no longer forces the full scope list. The SSOT for the **auth-domain → scope**
 mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `admob`, `playstore`,
-`googleads`, `gsc`, `ga4`, `youtube`, `youtube_analytics`, `drive`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
+`googleads`, `gsc`, `gsc_readonly`, `ga4`, `youtube`, `youtube_analytics`, `drive`) — least-privilege consent for the OAuth verification "minimum scopes" requirement:
 
 - `mimi-seed-auth --domains ga4,googleads` (CLI) and `mimi_seed_auth_start(domains=[…])` (MCP) request only
   the selected domains' scopes; omitting the option requests everything (old behavior).
+- Search Console reads accept either `gsc_readonly` or the existing `gsc` grant. Sitemap submission requires
+  `gsc`. A request that includes both domains uses the broader Search Console scope once.
 - The `youtube` domain unlocks video upload, processing/status reads, privacy changes, video management writes, and comment replies without introducing
   a second credential store.
 - The `youtube_analytics` domain adds `youtube.readonly` and `yt-analytics.readonly` for Analytics
@@ -100,7 +102,7 @@ mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `
   grant from the wrong account otherwise looks exactly like a healthy one.
 - `requireAuth(<scope>)` in `helpers.ts` pre-flights a tool's required scope against the stored grant and, on
   a miss, tells the user exactly which `--domains <id>` to add. Legacy tokens with no `scope` field are
-  assumed to hold every pre-tracking scope (only the GA4 scopes postdate scope tracking) so existing users
+  assumed to hold every pre-tracking scope so existing users
   are not forced into a pointless re-login.
 - `cloud-platform` is isolated in the `gcp` domain because the IAM API offers no narrower scope; the
   `firebase` domain alone cannot create projects (Cloud Resource Manager) or enable services (Service

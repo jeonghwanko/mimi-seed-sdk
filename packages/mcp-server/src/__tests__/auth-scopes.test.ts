@@ -4,6 +4,8 @@ import {
   ALL_SCOPES,
   DOMAIN_IDS,
   CLOUD_PLATFORM_SCOPE,
+  GSC_READONLY_SCOPE,
+  GSC_WRITE_SCOPE,
   scopesForDomains,
   domainsForScope,
   parseDomainList,
@@ -62,6 +64,8 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
     ]);
     // 중복 도메인은 dedupe
     expect(scopesForDomains(['gsc', 'gsc'])).toEqual(['https://www.googleapis.com/auth/webmasters']);
+    expect(scopesForDomains(['gsc_readonly'])).toEqual(['https://www.googleapis.com/auth/webmasters.readonly']);
+    expect(scopesForDomains(['gsc_readonly', 'gsc'])).toEqual([GSC_WRITE_SCOPE]);
     // playstore 는 androidpublisher + Developer Reporting(vitals) 두 개를 함께 요청해야 한다.
     expect(scopesForDomains(['playstore'])).toEqual([
       'https://www.googleapis.com/auth/androidpublisher',
@@ -79,6 +83,8 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
     expect(domainsForScope('https://www.googleapis.com/auth/youtube.force-ssl')).toEqual(['youtube']);
     expect(domainsForScope('https://www.googleapis.com/auth/yt-analytics.readonly')).toEqual(['youtube_analytics']);
     expect(domainsForScope('https://www.googleapis.com/auth/playdeveloperreporting')).toEqual(['playstore']);
+    expect(domainsForScope(GSC_READONLY_SCOPE)).toEqual(['gsc_readonly']);
+    expect(domainsForScope(GSC_WRITE_SCOPE)).toEqual(['gsc']);
     expect(domainsForScope('https://example.com/unknown')).toEqual([]);
   });
 
@@ -106,10 +112,13 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
     const partial = summarizeGrantedDomains(
       'https://www.googleapis.com/auth/admob.readonly https://www.googleapis.com/auth/webmasters',
     );
-    expect(partial.granted).toEqual(['gsc']);
+    expect(partial.granted).toEqual(['gsc', 'gsc_readonly']);
     expect(partial.missing).toContain('admob');
 
     expect(summarizeGrantedDomains(undefined)).toEqual({ known: false, granted: [], missing: [] });
+    const gscReadOnly = summarizeGrantedDomains(GSC_READONLY_SCOPE);
+    expect(gscReadOnly.granted).toEqual(['gsc_readonly']);
+    expect(gscReadOnly.missing).toContain('gsc');
   });
 
   it('isPreTrackingScope: 추적 이전 스코프만 true, GA4 및 미래 신규 스코프는 false (안전한 쪽 동결)', () => {
@@ -118,6 +127,8 @@ describe('auth/scopes — 도메인 → 스코프 매핑 SSOT', () => {
     expect(isPreTrackingScope('https://www.googleapis.com/auth/analytics.edit')).toBe(false);
     expect(isPreTrackingScope('https://www.googleapis.com/auth/analytics.readonly')).toBe(false);
     expect(isPreTrackingScope('https://www.googleapis.com/auth/youtube.force-ssl')).toBe(false);
+    expect(isPreTrackingScope(GSC_WRITE_SCOPE)).toBe(true);
+    expect(isPreTrackingScope(GSC_READONLY_SCOPE)).toBe(false);
     // Developer Reporting 은 추적 도입 이후 추가된 스코프 — 구 토큰은 미보유로 봐야
     // vitals 통계에서 재로그인을 정확히 안내한다.
     expect(isPreTrackingScope('https://www.googleapis.com/auth/playdeveloperreporting')).toBe(false);

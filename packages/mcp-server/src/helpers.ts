@@ -8,13 +8,20 @@ export { ensureFreshAccessToken };
 
 const REAUTH_CMD = '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth';
 
-function formatAuthError(p: AuthErrorPayload, profile?: string): string {
+function formatAuthError(p: AuthErrorPayload, profile?: string, scopes: readonly string[] = []): string {
+  // Scope alternatives are ordered by the caller. Recommend the first available domain.
+  const domain = scopes.flatMap(domainsForScope)[0];
+  const reauthCommand = [
+    REAUTH_CMD,
+    profile === undefined ? '' : ` --profile ${profile}`,
+    domain ? ` --domains ${domain}` : '',
+  ].join('');
   // 재로그인 안내는 needsReauth 인 경우에만 — CONFIG_FETCH_FAILED 처럼 재로그인이
   // 해법이 아닌 에러에 무조건 붙이면 같은 실패를 반복하게 만든다.
   return [
     `❌ [${p.code}] ${p.message}`,
     p.hint ? `→ ${p.hint}` : '',
-    ...(p.needsReauth ? ['', '터미널에서 재로그인:', profile === undefined ? REAUTH_CMD : `${REAUTH_CMD} --profile ${profile}`] : []),
+    ...(p.needsReauth ? ['', '터미널에서 재로그인:', reauthCommand] : []),
   ]
     .filter((l) => l !== '')
     .join('\n');
@@ -33,22 +40,18 @@ function formatAuthError(p: AuthErrorPayload, profile?: string): string {
  *
  * OAuth 토큰에만 적용된다 — SA JWT 는 자체 scopes 로 토큰을 받으므로 이 검사 대상이 아니다.
  */
-function assertStoredScope(requiredScope: string | readonly string[] | undefined, scopeStr: string | undefined, profile?: string): void {
-  if (!requiredScope) return;
-  const scopes = typeof requiredScope === 'string' ? [requiredScope] : requiredScope;
+function assertStoredScope(scopes: readonly string[], scopeStr: string | undefined, profile?: string): void {
+  if (scopes.length === 0) return;
   const grantedScopes = scopeStr?.split(/\s+/);
   if (scopes.some((scope) => grantedScopes ? grantedScopes.includes(scope) : isPreTrackingScope(scope))) return;
-  const domainArg = [...new Set(scopes.flatMap(domainsForScope))].join(',');
   throw new Error(
     formatAuthError({
       code: 'INSUFFICIENT_SCOPE',
       message: `이 도구는 추가 권한이 필요해 (${scopes.join(' 또는 ')}). 현재 로그인에 그 권한이 없어.`,
-      hint: domainArg
-        ? `mimi-seed-auth${profile === undefined ? '' : ` --profile ${profile}`} --domains ${domainArg} 로 재로그인하면 기존 권한은 유지한 채 이 권한만 추가돼.`
-        : 'mimi-seed-auth 로 재로그인하면 새 권한이 부여돼.',
+      hint: '아래 명령으로 로그인하면 기존 권한을 유지하면서 필요한 권한을 추가할 수 있어.',
       retriable: false,
       needsReauth: true,
-    }),
+    }, profile, scopes),
   );
 }
 
@@ -62,9 +65,10 @@ function assertStoredScope(requiredScope: string | readonly string[] | undefined
  * 스코프 배열을 넘기면 그중 하나만 부여되어 있어도 통과한다.
  */
 export async function requireAuth(requiredScope?: string | readonly string[], profile?: string) {
+  const scopes = typeof requiredScope === 'string' ? [requiredScope] : requiredScope ?? [];
   const result = await ensureFreshAccessToken(undefined, profile);
   if (result.status === 'unauthenticated' || result.status === 'expired_refresh_failed') {
-    throw new Error(formatAuthError(result.error, profile));
+    throw new Error(formatAuthError(result.error, profile, scopes));
   }
   const client = getAuthenticatedClient(profile, result.tokens);
   if (!client) {
@@ -75,11 +79,11 @@ export async function requireAuth(requiredScope?: string | readonly string[], pr
         hint: 'mimi-seed-auth 로 로그인하세요.',
         retriable: false,
         needsReauth: true,
-      }),
+      }, profile, scopes),
     );
   }
   // 같은 토큰으로 인증 클라이언트를 만든 뒤 해당 토큰의 스코프를 검사한다.
-  assertStoredScope(requiredScope, result.tokens.scope, profile);
+  assertStoredScope(scopes, result.tokens.scope, profile);
   return client;
 }
 
@@ -125,7 +129,7 @@ export async function requirePlayStoreAuth(packageName?: string, requiredScope?:
   if (!oauth) throw new Error(PLAY_AUTH_HINT);
   // OAuth 폴백일 때만 스코프 pre-flight — SA JWT 는 자체 scopes 로 토큰을 받으므로
   // (getServiceAccountClient 가 reporting 스코프를 이미 싣는다) 해당 없음.
-  assertStoredScope(requiredScope, result.tokens.scope);
+  assertStoredScope(requiredScope ? [requiredScope] : [], result.tokens.scope);
   return oauth;
 }
 

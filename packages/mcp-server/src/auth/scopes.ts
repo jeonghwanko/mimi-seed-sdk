@@ -66,6 +66,11 @@ export const AUTH_DOMAINS = {
     scopes: ['https://www.googleapis.com/auth/webmasters'],
     summary: 'gsc_* — 사이트·사이트맵·검색 성과 (사이트맵 제출 포함)',
   },
+  gsc_readonly: {
+    label: 'Search Console (read-only)',
+    scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+    summary: '사이트·사이트맵·URL 색인 상태·검색 성과 조회',
+  },
   ga4: {
     label: 'Google Analytics (GA4)',
     scopes: [
@@ -107,6 +112,9 @@ export type AuthDomainId = keyof typeof AUTH_DOMAINS;
 export const DOMAIN_IDS = Object.keys(AUTH_DOMAINS) as [AuthDomainId, ...AuthDomainId[]];
 
 export const CLOUD_PLATFORM_SCOPE = AUTH_DOMAINS.gcp.scopes[0];
+export const GSC_WRITE_SCOPE = AUTH_DOMAINS.gsc.scopes[0];
+export const GSC_READONLY_SCOPE = AUTH_DOMAINS.gsc_readonly.scopes[0];
+export const GSC_READ_SCOPES = [GSC_READONLY_SCOPE, GSC_WRITE_SCOPE] as const;
 
 /** Drive OAuth 경로가 pre-flight 하는 스코프. 도메인 정의에서 파생한다(리터럴 중복 금지). */
 export const DRIVE_FILE_SCOPE = AUTH_DOMAINS.drive.scopes[0];
@@ -122,8 +130,10 @@ export const DRIVE_FILE_SCOPE = AUTH_DOMAINS.drive.scopes[0];
  */
 export const PLAY_DEVELOPER_REPORTING_SCOPE = AUTH_DOMAINS.playstore.scopes[1];
 
-function dedupe(scopes: readonly string[]): string[] {
-  return [...new Set(scopes)];
+function requestedScopes(domains: readonly AuthDomainId[]): string[] {
+  const scopes = [...new Set(domains.flatMap((id) => AUTH_DOMAINS[id].scopes))];
+  // webmasters already authorizes all Search Console reads.
+  return scopes.includes(GSC_WRITE_SCOPE) ? scopes.filter((scope) => scope !== GSC_READONLY_SCOPE) : scopes;
 }
 
 /**
@@ -144,9 +154,7 @@ export function mergeScopeStrings(...parts: Array<string | undefined>): string {
  * 도메인 미지정 로그인의 기본값이자, 선택형 도입 전 full-scope 목록과 동일해야 한다
  * (auth-scopes.test.ts 가 고정한다 — 스코프가 소리 없이 빠지면 기존 사용자 도구가 죽는다).
  */
-export const ALL_SCOPES: readonly string[] = dedupe(
-  DOMAIN_IDS.flatMap((id) => AUTH_DOMAINS[id].scopes),
-);
+export const ALL_SCOPES: readonly string[] = requestedScopes(DOMAIN_IDS);
 
 /**
  * 모든 로그인에 함께 싣는 계정 식별 스코프 (비민감 — 동의 화면에 "이메일 주소 보기"만 추가).
@@ -162,7 +170,7 @@ export const IDENTITY_SCOPES: readonly string[] = ['openid', 'https://www.google
 /** 도메인 서브셋 → 요청할 스코프 목록. 미지정/빈 배열이면 전체(기존 동작). */
 export function scopesForDomains(domains?: readonly AuthDomainId[]): string[] {
   if (!domains || domains.length === 0) return [...ALL_SCOPES];
-  return dedupe(domains.flatMap((id) => AUTH_DOMAINS[id].scopes));
+  return requestedScopes(domains);
 }
 
 /** 스코프 하나를 요구하는 도메인들 (INSUFFICIENT_SCOPE 안내에서 "--domains X" 를 채울 때 사용). */
@@ -198,6 +206,7 @@ export interface GrantedDomainSummary {
 export function summarizeGrantedDomains(scopeStr: string | undefined): GrantedDomainSummary {
   if (scopeStr === undefined) return { known: false, granted: [], missing: [] };
   const grantedScopes = new Set(scopeStr.split(' ').filter(Boolean));
+  if (grantedScopes.has(GSC_WRITE_SCOPE)) grantedScopes.add(GSC_READONLY_SCOPE);
   const granted: AuthDomainId[] = [];
   const missing: AuthDomainId[] = [];
   for (const id of DOMAIN_IDS) {
