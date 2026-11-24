@@ -41,6 +41,12 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   const server = new McpServer({
     name: 'mimi-seed-local',
     version,
+  }, {
+    instructions: [
+      'Mimi Seed manages app stores, cloud services, CI, social publishing, and media. Use the client’s tool discovery to load only the active tools needed for the current step.',
+      'For a targeted read, start with the domain tool. Use mimi_seed_status for onboarding, connection diagnostics, or unresolved authentication errors.',
+      'For preview-gated writes, get the preview and explicit approval before confirming the same operation.',
+    ].join(' '),
   });
 
   // 도구는 McpServer 에 직접이 아니라 레지스트라를 거쳐 등록한다 — manifest(SSOT)에서
@@ -75,7 +81,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv 
   registerYouTubeTools(registrar);
   registerTikTokBusinessTools(registrar);
   registerDriveTools(registrar);
-  registerPrompts(server);
+  registerPrompts(server, toolsets);
   registerResources(server, { manifest, toolsets });
 
   return server;

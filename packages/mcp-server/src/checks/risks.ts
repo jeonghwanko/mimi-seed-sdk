@@ -2,6 +2,9 @@ import type { OAuth2Client } from 'google-auth-library';
 import { publisher, withEdit } from '../playstore/tools.js';
 import { apiGet } from '../appstore/tools.js';
 import { isNotFound } from '../appstore/http.js';
+import type { AscListDocument } from '../appstore/types.js';
+import { encodePathSegment } from '../lib/url-path.js';
+import { extractHttpStatus } from '../lib/google-errors.js';
 
 export type RiskLevel = 'blocker' | 'warning' | 'info';
 
@@ -13,28 +16,52 @@ export interface SubmissionRisk {
   fixUrl?: string;
 }
 
-const APPSTORE_EDITABLE_STATES =
+export function isRiskCheckIncomplete(risk: SubmissionRisk): boolean {
+  return risk.code.startsWith('API_ERROR_');
+}
+
+export const APPSTORE_EDITABLE_STATES =
   'PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,METADATA_REJECTED,REJECTED';
 
 export async function checkPlayStoreRisks(
   auth: OAuth2Client,
   packageName: string,
   language = 'ko-KR',
+  target?: { track: string; versionCode: string },
 ): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
 
   await withEdit(auth, packageName, async (editId) => {
     const [listing, phoneScreenshots, icons, details, tracks] = await Promise.all([
-      publisher().edits.listings.get({ auth, packageName, editId, language }).catch(() => null),
-      publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'phoneScreenshots' }).catch(() => null),
-      publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'icon' }).catch(() => null),
-      publisher().edits.details.get({ auth, packageName, editId }).catch(() => null),
-      publisher().edits.tracks.list({ auth, packageName, editId }).catch(() => null),
+      safeGet(async () => {
+        try {
+          return await publisher().edits.listings.get({ auth, packageName, editId, language });
+        } catch (error) {
+          if (extractHttpStatus(error) === 404) return { data: null };
+          throw error;
+        }
+      }, risks, 'LISTING', `${language} 리스팅`),
+      safeGet(
+        () => publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'phoneScreenshots' }),
+        risks, 'SCREENSHOTS', '전화 스크린샷',
+      ),
+      safeGet(
+        () => publisher().edits.images.list({ auth, packageName, editId, language, imageType: 'icon' }),
+        risks, 'ICON', '앱 아이콘',
+      ),
+      safeGet(
+        () => publisher().edits.details.get({ auth, packageName, editId }),
+        risks, 'DETAILS', '앱 연락처',
+      ),
+      safeGet(
+        () => publisher().edits.tracks.list({ auth, packageName, editId }),
+        risks, 'TRACKS', '릴리스 트랙',
+      ),
     ]);
 
-    if (!listing?.data) {
+    if (listing && !listing.data) {
       risks.push({ level: 'blocker', code: 'NO_LISTING', title: `${language} 리스팅 없음`, detail: 'Play Console에서 스토어 정보를 입력하세요.', fixUrl: 'https://play.google.com/console/developers' });
-    } else {
+    } else if (listing?.data) {
       const { title, shortDescription, fullDescription } = listing.data;
       if (!title || title.length < 2) {
         risks.push({ level: 'blocker', code: 'NO_TITLE', title: '앱 이름 없음', detail: '제목은 필수 항목입니다.' });
@@ -52,25 +79,35 @@ export async function checkPlayStoreRisks(
     }
 
     const screenCount = phoneScreenshots?.data?.images?.length ?? 0;
-    if (screenCount === 0) {
+    if (phoneScreenshots && screenCount === 0) {
       risks.push({ level: 'blocker', code: 'NO_SCREENSHOTS', title: '전화 스크린샷 없음', detail: '최소 2장 이상의 스크린샷이 필요합니다.' });
-    } else if (screenCount < 2) {
+    } else if (phoneScreenshots && screenCount < 2) {
       risks.push({ level: 'warning', code: 'FEW_SCREENSHOTS', title: `스크린샷 ${screenCount}장 (권장: 4~8장)`, detail: '더 많은 스크린샷이 전환율을 높입니다.' });
     }
 
-    if (!icons?.data?.images?.length) {
+    if (icons && !icons.data?.images?.length) {
       risks.push({ level: 'blocker', code: 'NO_ICON', title: '앱 아이콘 없음', detail: '512×512px PNG 아이콘이 필요합니다.' });
     }
 
-    if (!details?.data?.contactEmail) {
+    if (details && !details.data?.contactEmail) {
       risks.push({ level: 'warning', code: 'NO_CONTACT_EMAIL', title: '개발자 이메일 없음', detail: 'Play Console에서 개발자 연락처를 설정하세요.' });
     }
 
-    const hasBuild = (tracks?.data?.tracks ?? []).some(
-      (t) => (t.releases ?? []).some((r) => r.versionCodes && r.versionCodes.length > 0),
-    );
-    if (!hasBuild) {
-      risks.push({ level: 'blocker', code: 'NO_BUILD', title: '업로드된 빌드 없음', detail: '내부 테스트 트랙에 APK/AAB를 먼저 업로드하세요.' });
+    if (tracks) {
+      const releaseTracks = tracks.data.tracks ?? [];
+      if (target) {
+        const targetTrack = releaseTracks.find((track) => track.track === target.track);
+        if (!targetTrack?.releases?.some((release) => release.versionCodes?.includes(target.versionCode))) {
+          risks.push({
+            level: 'blocker',
+            code: 'TARGET_BUILD_NOT_FOUND',
+            title: '대상 트랙에서 빌드를 찾을 수 없음',
+            detail: `${target.track} 트랙에 versionCode ${target.versionCode}가 있는지 확인하세요.`,
+          });
+        }
+      } else if (!releaseTracks.some((track) => track.releases?.some((release) => release.versionCodes?.length))) {
+        risks.push({ level: 'blocker', code: 'NO_BUILD', title: '업로드된 빌드 없음', detail: '내부 테스트 트랙에 APK/AAB를 먼저 업로드하세요.' });
+      }
     }
 
     return null;
@@ -79,10 +116,7 @@ export async function checkPlayStoreRisks(
   return risks;
 }
 
-// Apple의 ASC API 호출은 권한·필드명·deprecated endpoint 등으로 실패할 수 있다.
-// 실패를 silent하게 null로 만들면 후속 check가 false-positive blocker를 토해낸다 —
-// 이 헬퍼는 실패 사실을 risks 배열에 warning으로 기록해 사용자에게 노출시키되,
-// 호출부는 null을 받아 blocker 분기를 건너뛸 수 있게 해준다.
+// 조회 실패는 리소스가 없다는 응답과 구분한다. 결과를 표시할 때 API_ERROR_ 항목은 점검 미완료로 취급한다.
 async function safeGet<T>(
   call: () => Promise<T>,
   risks: SubmissionRisk[],
@@ -95,7 +129,7 @@ async function safeGet<T>(
     risks.push({
       level: 'warning',
       code: `API_ERROR_${code}`,
-      title: `App Store Connect 조회 실패 — ${title}`,
+      title: `조회 실패 — ${title}`,
       detail: `이 항목은 위험 분석에서 제외됨. 원인: ${e instanceof Error ? e.message : String(e)}`,
     });
     return null;
@@ -128,26 +162,41 @@ interface BuildRelationshipResponse {
 
 export async function checkAppStoreRisks(
   appId: string,
-  expected: { socialMedia?: boolean; socialMediaAgeRestricted?: boolean } = {},
+  expected: { versionId?: string; socialMedia?: boolean; socialMediaAgeRestricted?: boolean } = {},
 ): Promise<SubmissionRisk[]> {
   const risks: SubmissionRisk[] = [];
 
-  const versions = await safeGet(
-    () => apiGet(`/apps/${appId}/appStoreVersions`, {
+  const appPath = `/apps/${encodePathSegment(appId)}`;
+  const versions = await safeGet<AscListDocument>(
+    () => apiGet(`${appPath}/appStoreVersions`, {
       'filter[appStoreState]': APPSTORE_EDITABLE_STATES,
-      'limit': '5',
+      ...(expected.versionId ? { 'filter[id]': expected.versionId, limit: '1' } : { limit: '5' }),
     }),
     risks,
     'VERSIONS',
     '편집 가능한 버전 목록',
   );
 
-  if (!versions?.data?.length) {
-    risks.push({ level: 'warning', code: 'NO_EDITABLE_VERSION', title: '편집 가능한 버전 없음', detail: 'App Store Connect에서 새 버전을 만드세요.', fixUrl: 'https://appstoreconnect.apple.com' });
+  if (!versions) return risks;
+
+  const version = expected.versionId
+    ? versions.data?.find(({ id }) => id === expected.versionId)
+    : versions.data?.[0];
+  if (!version && expected.versionId) {
+    risks.push({
+      level: 'blocker',
+      code: 'TARGET_VERSION_UNVERIFIED',
+      title: '대상 버전을 점검할 수 없음',
+      detail: '대상 앱의 편집 가능한 버전 목록에서 요청한 버전을 확인하세요.',
+    });
+    return risks;
+  }
+  if (!version) {
+    risks.push({ level: 'blocker', code: 'NO_EDITABLE_VERSION', title: '편집 가능한 버전 없음', detail: 'App Store Connect에서 새 버전을 만드세요.', fixUrl: 'https://appstoreconnect.apple.com' });
     return risks;
   }
 
-  const versionId = versions.data[0].id;
+  const versionId = encodePathSegment(version.id);
 
   // 1) 메타데이터·스크린샷·버전 첨부 빌드는 versionId 기반으로 조회.
   // 2) 개인정보 URL은 appInfoLocalization 단위(앱 단위)로 조회.
@@ -165,16 +214,16 @@ export async function checkAppStoreRisks(
       '버전 첨부 빌드',
     ),
     safeGet(
-      () => apiGet(`/apps/${appId}/appInfos`, { 'fields[appInfos]': 'state', 'limit': '10' }),
+      () => apiGet(`${appPath}/appInfos`, { 'fields[appInfos]': 'state', 'limit': '10' }),
       risks,
       'APP_INFO',
       '앱 정보',
     ),
   ]);
 
-  if (!locs?.data?.length) {
+  if (locs && !locs.data?.length) {
     risks.push({ level: 'blocker', code: 'NO_LOCALIZATIONS', title: '로컬라이제이션 없음', detail: '메타데이터를 입력하세요.' });
-  } else {
+  } else if (locs?.data) {
     for (const loc of locs.data) {
       const { locale: rawLocale, description, whatsNew, keywords } = loc.attributes ?? {};
       const locale = rawLocale ?? loc.id;
@@ -199,13 +248,20 @@ export async function checkAppStoreRisks(
     }
   }
 
-  // 빌드 — 1차: 버전에 첨부된 빌드. 2차 폴백: 앱 전체 빌드 (예전 동작).
-  // attachedBuildRel?.data가 null이면 "관계 조회 성공 + 첨부 안 됨" 의미.
-  // attachedBuildRel 자체가 null이면 safeGet 실패 — fall back.
-  let buildVerdict: 'present' | 'missing' | 'unknown';
-  if (attachedBuildRel) {
-    buildVerdict = attachedBuildRel.data ? 'present' : 'missing';
-  } else {
+  // 명시한 버전의 첨부 상태는 다른 버전의 빌드로 확인할 수 없다.
+  let buildVerdict: 'present' | 'missing' | 'unknown' = 'unknown';
+  if (attachedBuildRel?.data?.id) {
+    buildVerdict = 'present';
+  } else if (attachedBuildRel?.data === null) {
+    buildVerdict = 'missing';
+  } else if (attachedBuildRel) {
+    risks.push({
+      level: 'warning',
+      code: 'API_ERROR_BUILD_LINKAGE',
+      title: '버전 첨부 빌드 확인 실패',
+      detail: 'App Store Connect의 빌드 관계 응답에 데이터가 없습니다.',
+    });
+  } else if (!expected.versionId) {
     const fallbackBuilds = await safeGet(
       () => apiGet(`/builds`, {
         'filter[app]': appId,
@@ -220,7 +276,7 @@ export async function checkAppStoreRisks(
     buildVerdict = fallbackBuilds?.data?.length ? 'present' : fallbackBuilds ? 'missing' : 'unknown';
   }
   if (buildVerdict === 'missing') {
-    risks.push({ level: 'blocker', code: 'NO_BUILD', title: 'TestFlight 빌드 없음', detail: 'Xcode 또는 Fastlane으로 빌드를 업로드하세요.' });
+    risks.push({ level: 'blocker', code: 'NO_BUILD', title: '버전에 연결된 빌드 없음', detail: '대상 버전에 사용할 빌드를 업로드하고 연결하세요.' });
   }
 
   // 개인정보처리방침 — appInfoLocalization 어디 한 곳이라도 URL 또는 in-app 텍스트가 있으면 OK.
@@ -230,7 +286,14 @@ export async function checkAppStoreRisks(
     const stateOf = (i: AppInfoRecord) => i.attributes?.state ?? i.attributes?.appStoreState ?? '';
     const editable = infos.find((i) => stateOf(i) !== APP_INFO_LIVE_STATE) ?? infos[0];
 
-    if (editable) {
+    if (!editable) {
+      risks.push({
+        level: 'warning',
+        code: 'API_ERROR_APP_INFO_LINKAGE',
+        title: '앱 정보 레코드를 확인할 수 없음',
+        detail: '앱 정보 레코드가 없어 개인정보 처리방침과 연령등급 점검을 완료할 수 없습니다.',
+      });
+    } else {
       const [localizations, ageRating] = await Promise.all([
         safeGet(
           () => apiGet(`/appInfos/${editable.id}/appInfoLocalizations`, {
@@ -355,7 +418,11 @@ export function formatRisks(risks: SubmissionRisk[], platform: string): string {
     }
     lines.push('');
   }
-  if (blockers.length === 0) lines.push('✅ 블로커 없음 — 경고 항목 검토 후 제출 가능');
+  if (risks.some(isRiskCheckIncomplete)) {
+    lines.push('⛔ 점검 미완료 — 조회 실패를 해결한 뒤 다시 점검하세요.');
+  } else if (blockers.length === 0) {
+    lines.push('✅ 블로커 없음 — 경고 항목 검토 후 제출 가능');
+  }
 
   return lines.join('\n');
 }

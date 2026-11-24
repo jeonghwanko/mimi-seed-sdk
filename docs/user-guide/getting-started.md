@@ -85,7 +85,7 @@ Ask Claude/Codex:
 Check my Mimi Seed connection and give me the exact command for anything missing.
 ```
 
-For Local MCP, the agent should call `mimi_seed_status` first.
+For this connection check, the Local MCP agent calls `mimi_seed_status`. For a targeted read, it starts with the relevant tool.
 
 ## 5. Run the first safe test
 

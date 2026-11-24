@@ -83,7 +83,7 @@ Claude/Codex에는 다음처럼 요청한다.
 Mimi Seed 연결 상태를 확인하고, 빠진 설정은 정확한 명령으로 알려줘.
 ```
 
-Local MCP에서는 에이전트가 `mimi_seed_status`를 먼저 호출해야 한다.
+Local MCP에서 연결을 확인할 때는 에이전트가 `mimi_seed_status`를 호출한다. 대상을 지정한 조회에는 해당 도구를 먼저 호출한다.
 
 ## 5. 첫 안전 테스트
 

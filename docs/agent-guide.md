@@ -29,22 +29,18 @@ loaded"), and it is easy to wrongly conclude "this tool doesn't exist."
 ToolSearch(query="select:<tool_name>[,<tool_name>...]")
 ```
 
-- Batch every tool you expect to use in one `select:` call — schemas stay loaded for
-  the rest of the session.
+- Batch only the schemas needed for the current step. Load write, recovery, and auxiliary tools when that step comes up.
 - If `select:` returns no match, fall back to a keyword search
   (`ToolSearch(query="playstore release promote")`) — exact names sometimes differ.
 - Only if a tool is absent from the deferred list **and** unsearchable is it truly
   unregistered. Then check the MCP server is connected (see §2), do **not** silently
   pivot to raw `curl` / `fastlane`.
 
-Other harnesses (Codex with the bundled plugin, Claude Desktop) typically expose the
-tools directly — but the *call order* and *safety rules* below still apply.
+Use the MCP client's native discovery when tools are deferred. If the required schema is already visible, call the tool directly.
 
 ### Ready-made `select:` batches
 
-Every registered tool appears in at least one batch below (the table is generated from the tool manifest, and a
-new tool lands in its domain's batch automatically), so a task you can name is a batch you can paste. Pick the
-row for the job; batching two rows in one `select:` call is fine.
+Use the table to find tool names, then select only the active tools needed for the current step. The table is generated from the full manifest. Check the runtime catalog if this server limits its toolsets.
 
 <!-- generated:select-batches:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
 | Goal | `ToolSearch` query |
@@ -96,12 +92,11 @@ row for the job; batching two rows in one `select:` call is fine.
 
 ---
 
-## 1. Always start with `mimi_seed_status`
+## 1. Connection diagnostics
 
-Before any task, call **`mimi_seed_status`** — the setup doctor. It scans your service
-credentials (Google OAuth · Play SA · App Store · Jenkins · CI · Google Ads · Facebook · Instagram ·
-Threads · TikTok Business · BigQuery) and returns a ✅/❌ report plus the exact next tool to call for anything
-missing. This avoids a late `401`/`403` deep into a workflow.
+Start a targeted read with the relevant domain tool. For first-time setup or an explicit connection check,
+call **`mimi_seed_status`** to scan service configuration. If the domain tool returns an authentication
+problem, follow its recovery guidance and use `mimi_seed_status` when further diagnosis is needed.
 
 > If the repo has a **`.mimi-seed.json`** manifest at its root, `mimi_seed_status` (and
 > `mimi-seed doctor`) additionally report **which project-required services this teammate is
@@ -241,18 +236,16 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 
 ### Play Store release / promote
 1. `playstore_list_tracks` — see current track/version state.
-2. `playstore_check_submission_risks` (or `playstore_plan_release`) — surface blockers.
-3. Write missing listing/notes (`playstore_update_listing`, `playstore_update_release_notes` — omit `versionCode` for the latest
-   release; `syncTracks` only works without `versionCode` — `playstore_upload_image`).
+2. Check the selected track and version code with `playstore_check_submission_risks`. Report blockers or incomplete checks and stop the release workflow.
+3. Show the exact target, locales, and note text for approval before `playstore_update_release_notes`. Apply to the approved version code in the approved track.
 4. `playstore_promote_release` / `playstore_submit_release` **without** `confirm` → show the returned dry-run preview to the user →
    after an explicit go-ahead, call again with the same arguments plus `confirm: true` (see §5). This applies to every status, including `draft`.
 
 ### App Store TestFlight → review
-1. `appstore_list_apps` → `appstore_list_versions` (or `appstore_create_version`).
-2. `appstore_list_builds` → `appstore_attach_build` (omit `buildId` to attach the latest `processingState=VALID` build).
-3. `appstore_update_whats_new`, screenshots if needed.
-4. `appstore_check_submission_risks` → `appstore_submit_for_review` without `confirm` (dry-run preview) → user approves →
-   same call with `confirm: true`.
+1. Resolve the app and exact platform/version with `appstore_list_versions`. Use the requested version and platform filters when known.
+2. When a build attachment is requested, verify and obtain approval for the exact build and version before `appstore_attach_build`.
+3. Run `appstore_check_submission_risks` for the selected version. Report blockers or incomplete checks and stop. If requested, apply approved release notes to the same version.
+4. For requested submissions, show the `appstore_submit_for_review` preview and get explicit approval before confirming with the same arguments.
 
 ### Service account key → Play / Jenkins (secrets stay on disk)
 1. `iam_create_service_account` (or reuse one) → `iam_create_key`. The key is written to
@@ -271,8 +264,8 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
    `~/.mimi-seed/keystores/` only**. Never read `signing.json` into the chat to copy a value.
 
 ### Release notes from git
-`generate_release_notes_from_commits` (pass commit array + locales) → review with user →
-`playstore_update_release_notes` / `appstore_update_whats_new`.
+Draft from the relevant commits. Load `generate_release_notes_from_commits` when the user asks for SDK generation.
+For an application request, show the exact target version, locales, and draft. Apply the approved text with the corresponding store tool.
 
 ### YouTube content insights → one experiment
 Use `youtube_get_content_insights` for a bounded evidence brief: current and equal-length preceding
@@ -416,12 +409,12 @@ General rules:
 
 ## 7. Slash commands & MCP resources
 
-Available in any MCP client as native slash commands:
+MCP clients that surface prompts can expose these as slash commands. The deploy and review prompts appear when the server enables a matching workflow.
 
-- `/mimi-seed:getting-started` — first-run onboarding: status scan → capability tour → first read-only action
+- `/mimi-seed:getting-started` — connection scan and a first read aligned with the user's goal
 - `/mimi-seed:deploy` — blockers → release notes → apply to stores
 - `/mimi-seed:health` — auth status + readiness summary
-- `/mimi-seed:review-inbox` — fetch unanswered reviews → draft replies
+- `/mimi-seed:review-inbox` — fetch recent reviews in a bounded page and draft replies for unanswered reviews
 
 MCP resources: `mimi-seed://auth/status` (live token state) · `mimi-seed://agent/guide`
 (this guide, served over MCP) · `mimi-seed://tools/catalog` (the tools this server registered,

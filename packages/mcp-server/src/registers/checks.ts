@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { androidPackageName } from '../lib/package-name.js';
 import { checkPlayStoreRisks, checkAppStoreRisks, formatRisks } from '../checks/risks.js';
 import { validateAppStoreScreenshots, validatePlayStoreScreenshots, formatValidationResults } from '../checks/screenshots.js';
-import { requireAuth, requirePlayStoreAuth } from '../helpers.js';
+import { requirePlayStoreAuth } from '../helpers.js';
 import * as appstore from '../appstore/tools.js';
 import * as playstore from '../playstore/tools.js';
-import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { errorResult, jsonResult, textResult } from '../lib/mcp-response.js';
 import { checkBillingCompliance } from '#core/checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
 
@@ -38,11 +38,18 @@ export function registerChecksTools(server: ToolRegistrar) {
     {
       packageName: androidPackageName.describe('Android 패키지명 (예: com.example.myapp)'),
       language: z.string().optional().describe('언어 코드 (기본: ko-KR)'),
+      track: z.string().trim().min(1).optional().describe('대상 트랙 (versionCode와 함께 전달)'),
+      versionCode: z.string().regex(/^\d+$/).optional().describe('대상 버전 코드 (track과 함께 전달)'),
     },
-    async ({ packageName, language }) => {
-      const auth = await requireAuth();
-      const risks = await checkPlayStoreRisks(auth, packageName, language ?? 'ko-KR');
-      const text = formatRisks(risks, 'Google Play');
+    async ({ packageName, language, track, versionCode }) => {
+      if (Boolean(track) !== Boolean(versionCode)) {
+        return errorResult('대상 릴리스를 점검하려면 track과 versionCode를 함께 전달하세요.');
+      }
+      const auth = await requirePlayStoreAuth(packageName);
+      const target = track && versionCode ? { track, versionCode } : undefined;
+      const risks = await checkPlayStoreRisks(auth, packageName, language, target);
+      const label = target ? `Google Play ${packageName} (${target.track}/${target.versionCode})` : 'Google Play';
+      const text = formatRisks(risks, label);
       return textResult(text);
     },
   );
@@ -58,15 +65,18 @@ export function registerChecksTools(server: ToolRegistrar) {
     ].join(' '),
     {
       appId: z.string().describe('App Store 앱 ID (appstore_list_apps 결과의 id 필드)'),
+      versionId: z.string().min(1).optional().describe('대상 App Store 버전 ID (appstore_list_versions 결과)'),
       socialMediaCapability: z.boolean().optional().describe('앱이 소셜 피드·UGC 확산 기능을 제공하는지에 대한 프로젝트 사실'),
       socialMediaAgeRestricted: z.boolean().optional().describe('소셜 미디어 기능이 13세 미만에게 비활성화되는지에 대한 프로젝트 사실'),
     },
-    async ({ appId, socialMediaCapability, socialMediaAgeRestricted }) => {
+    async ({ appId, versionId, socialMediaCapability, socialMediaAgeRestricted }) => {
       const risks = await checkAppStoreRisks(appId, {
+        versionId,
         socialMedia: socialMediaCapability,
         socialMediaAgeRestricted,
       });
-      const text = formatRisks(risks, 'App Store');
+      const label = versionId ? `App Store ${appId} (${versionId})` : 'App Store';
+      const text = formatRisks(risks, label);
       return textResult(text);
     },
   );

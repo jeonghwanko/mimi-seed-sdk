@@ -19,6 +19,30 @@ describe('listCustomerReviews', () => {
     expect(params.include).toBe('response');
   });
 
+  it('include 본문 없이 답변 관계만 있어도 미답변으로 표시하지 않는다', async () => {
+    api.apiGet.mockResolvedValue({
+      data: [{
+        id: 'review-1',
+        relationships: { response: { data: { id: 'reply-1', type: 'customerReviewResponses' } } },
+      }],
+    });
+
+    const [review] = await listCustomerReviews('123');
+    expect(JSON.parse(JSON.stringify(review))).toMatchObject({ id: 'review-1', response: {} });
+  });
+
+  it('관계 데이터가 생략된 리뷰는 답변 여부를 미확인으로 둔다', async () => {
+    api.apiGet.mockResolvedValue({ data: [
+      { id: 'missing' },
+      { id: 'links-only', relationships: { response: { links: { related: '/response' } } } },
+      { id: 'unanswered', relationships: { response: { data: null } } },
+    ] });
+    const reviews = await listCustomerReviews('123');
+
+    expect(reviews.filter((review) => review.response === null).map((review) => review.id)).toEqual(['unanswered']);
+    expect(JSON.stringify(reviews)).not.toMatch(/"id":"(?:missing|links-only)","response":/);
+  });
+
   it('include 된 답변을 리뷰에 붙이고, 답변 없는 리뷰는 response: null', async () => {
     api.apiGet.mockResolvedValue({
       data: [

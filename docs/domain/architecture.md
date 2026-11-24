@@ -52,8 +52,8 @@ mcp-server/src/server.ts   buildServer(version, { env })   ← the single assemb
 
 - **`server.ts`** — not `index.ts` — constructs the one `McpServer({ name: 'mimi-seed-local', version })`
   (version read at runtime from `package.json` so it never drifts), wraps it in the **tool registrar**, and
-  calls every `registerXxxTools(registrar)` plus `registerPrompts(server)` and `registerResources(server)`
-  (prompts/resources use `McpServer` directly). A **new register module must be added here**; `index.ts` only
+  calls every `registerXxxTools(registrar)`. Prompts and resources use `McpServer` directly and receive the
+  active toolset selection. A **new register module must be added here**; `index.ts` only
   picks a run mode and hands `buildServer()` a transport. `tool-manifest.test.ts` boots this same function, so
   a module that never got wired shows up as missing tools rather than silence.
 - Each `registers/<domain>.ts` (App Store: `registers/appstore/<part>.ts`) declares tools with

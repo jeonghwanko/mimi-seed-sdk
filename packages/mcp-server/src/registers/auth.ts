@@ -141,7 +141,7 @@ export function registerAuthTools(server: ToolRegistrar) {
   server.tool(
     'mimi_seed_status',
     [
-      '⭐ 새 세션을 시작하거나 "뭐가 연결됐지?" 라는 질문엔 이 도구를 먼저 호출하세요.',
+      '초기 설정, 전체 연결 확인 또는 인증 문제 진단에 사용합니다.',
       '전체 서비스(Google OAuth / Play SA / App Store / Jenkins / CI / Google Ads / Facebook / Instagram / Threads / TikTok Business / BigQuery)',
       '설정 상태를 한 번에 스캔해 ✅ / ❌ 트래픽 라이트 리포트와 번호 매긴 다음 단계를 반환합니다.',
       '미설정 서비스마다 어떤 도구를 호출하면 되는지 구체적으로 알려줍니다.',

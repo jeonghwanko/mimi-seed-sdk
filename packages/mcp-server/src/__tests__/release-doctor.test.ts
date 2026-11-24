@@ -94,6 +94,15 @@ async function fixture(files: Record<string, string>): Promise<string> {
   return root;
 }
 
+async function linkDirectory(target: string, link: string): Promise<void> {
+  if (process.platform === 'win32') {
+    // Junctions preserve directory-link resolution without requiring symlink privileges.
+    await fs.symlink(path.resolve(path.dirname(link), target), link, 'junction');
+    return;
+  }
+  await fs.symlink(target, link);
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
@@ -2727,7 +2736,7 @@ describe('Release Doctor local scan', () => {
           'packages/android-config/android/sdk.gradle': 'android { defaultConfig { targetSdkVersion 33 } }',
         }));
         await fs.mkdir(path.join(root, 'apps/mobile/node_modules/@acme'), { recursive: true });
-        await fs.symlink('../../../../packages/android-config', path.join(root, 'apps/mobile/node_modules/@acme/android-config'));
+        await linkDirectory('../../../../packages/android-config', path.join(root, 'apps/mobile/node_modules/@acme/android-config'));
         const report = await scanReleaseDoctor(path.join(root, 'apps/mobile'), at);
 
         notOk(report);
@@ -2949,7 +2958,7 @@ describe('Release Doctor local scan', () => {
       });
       const link = `${root}-link`;
       roots.push(link);
-      await fs.symlink(root, link);
+      await linkDirectory(root, link);
       const direct = await scanReleaseDoctor(root, at);
       const viaLink = await scanReleaseDoctor(link, at);
 
@@ -2967,7 +2976,7 @@ describe('Release Doctor local scan', () => {
         'android/app/build.gradle': `${app36}\napply from: "../../node_modules/linked-cfg/android/config.gradle"`,
       });
       await fs.mkdir(path.join(root, 'node_modules'), { recursive: true });
-      await fs.symlink(outside, path.join(root, 'node_modules/linked-cfg'));
+      await linkDirectory(outside, path.join(root, 'node_modules/linked-cfg'));
       const report = await scanReleaseDoctor(root, at);
 
       expect(below(report)).toMatchObject({ title: expect.stringContaining('33') });

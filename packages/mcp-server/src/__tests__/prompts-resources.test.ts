@@ -21,6 +21,86 @@ describe('prompts & resources (boot smoke test)', () => {
     });
   });
 
+  it.each([undefined, 'store', 'appstore', 'playstore', 'media'])(
+    'toolset %s의 프롬프트는 활성 도구만 안내한다',
+    async (toolset) => {
+      await withClient(async (client) => {
+        const activeTools = new Set((await client.listTools()).tools.map((tool) => tool.name));
+        const { prompts } = await client.listPrompts();
+        const names = prompts.map((prompt) => prompt.name).sort();
+        expect(names).toEqual(toolset === 'media'
+          ? ['getting-started', 'health']
+          : ['deploy', 'getting-started', 'health', 'review-inbox']);
+        expect(client.getInstructions()).toContain('For a targeted read, start with the domain tool.');
+
+        for (const name of names) {
+          const { messages } = await client.getPrompt({ name });
+          const text = messages.map(({ content }) => content.type === 'text' ? content.text : '').join('\n');
+          const referenced = text.match(/\b(?:mimi_seed|playstore|appstore|generate)_[a-z0-9_]+\b/g) ?? [];
+          expect(referenced.filter((tool) => !activeTools.has(tool))).toEqual([]);
+        }
+      }, { env: { MIMI_SEED_TOOLSETS: toolset } });
+    },
+  );
+
+  it('출시 프롬프트는 지정한 스토어만 사용하고 도구가 없는 대상은 건너뛴다', async () => {
+    await withClient(async (client) => {
+      const { messages } = await client.getPrompt({ name: 'deploy', arguments: { appId: '12345' } });
+      const content = messages[0].content;
+      expect(content).toMatchObject({ type: 'text', text: expect.stringContaining('appstore_list_versions') });
+      expect(content).not.toMatchObject({ text: expect.stringContaining('playstore_') });
+      expect(content).not.toMatchObject({ text: expect.stringContaining('generate_release_notes_from_commits') });
+      expect(content).toMatchObject({ text: expect.stringContaining('관련 커밋을 근거로') });
+      expect(content).toMatchObject({ text: expect.stringContaining('점검, 승인, 적용에 같은 versionId') });
+      expect(content).toMatchObject({ text: expect.stringContaining('적용 로캘은 ko,en-US') });
+
+      const unavailable = await client.getPrompt({ name: 'deploy', arguments: { packageName: 'com.example.app' } });
+      expect(unavailable.messages[0].content).toMatchObject({ text: expect.stringContaining('비활성 상태') });
+      expect(unavailable.messages[0].content).not.toMatchObject({ text: expect.stringContaining('appstore_') });
+    }, { env: { MIMI_SEED_TOOLSETS: 'appstore' } });
+  });
+
+  it('Play 리뷰 프롬프트는 한 페이지부터 읽고 게시 미리보기를 먼저 요청한다', async () => {
+    await withClient(async (client) => {
+      const { messages } = await client.getPrompt({ name: 'review-inbox', arguments: { packageName: 'com.example.app' } });
+      const content = messages[0].content;
+      expect(content).toMatchObject({ text: expect.stringContaining('unansweredOnly=true와 limit=20') });
+      expect(content).toMatchObject({ text: expect.stringContaining('playstore_reply_review를 confirm 없이') });
+      expect(content).toMatchObject({ text: expect.stringContaining('이전에 사용한 토큰이 다시 나오면 중단') });
+      expect(content).not.toMatchObject({ text: expect.stringContaining('appstore_') });
+    }, { env: {} });
+  });
+
+  it('잘못된 대상 인자를 받으면 다른 스토어의 워크플로를 제시하지 않는다', async () => {
+    await withClient(async (client) => {
+      await expect(client.getPrompt({ name: 'deploy', arguments: { appId: ' ' } })).rejects.toThrow();
+      await expect(client.getPrompt({
+        name: 'deploy', arguments: { packageName: 'com.example.app', version: '1.0\n2.0' },
+      })).rejects.toThrow();
+    }, { env: {} });
+  });
+
+  it('스토어별 릴리스 대상을 고정하고 SDK AI 호출 없이 초안을 작성할 수 있다', async () => {
+    await withClient(async (client) => {
+      const play = await client.getPrompt({ name: 'deploy', arguments: { packageName: 'com.example.app', version: '1.0' } });
+      expect(play.messages[0].content).toMatchObject({ text: expect.stringContaining('versionCode를 항상 넘긴다') });
+      expect(play.messages[0].content).toMatchObject({ text: expect.stringContaining('ko-KR,en-US') });
+      expect(play.messages[0].content).toMatchObject({ text: expect.stringContaining('블로커가 있으면 적용을 멈추고 보고한다') });
+      expect(play.messages[0].content).toMatchObject({ text: expect.stringContaining('사용자가 SDK 생성을 지정하면') });
+      expect(play.messages[0].content).not.toMatchObject({ text: expect.stringContaining('appstore_') });
+
+      const ios = await client.getPrompt({ name: 'review-inbox', arguments: { appId: '12345' } });
+      expect(ios.messages[0].content).toMatchObject({ text: expect.stringContaining('appstore_reply_review를 confirm 없이') });
+      expect(ios.messages[0].content).toMatchObject({ text: expect.stringContaining('response가 명시적으로 null') });
+      expect(ios.messages[0].content).toMatchObject({ text: expect.stringContaining('키가 없거나 도구를 사용할 수 없으면 직접 작성') });
+      expect(ios.messages[0].content).not.toMatchObject({ text: expect.stringContaining('playstore_') });
+
+      const generator = (await client.listTools()).tools.find(({ name }) => name === 'generate_review_reply');
+      expect(generator?.description).toContain('해당 리뷰가 속한 스토어');
+      expect(generator?.description).not.toMatch(/(?:playstore|appstore)_reply_review/);
+    }, { env: {} });
+  });
+
   it('리소스 3종이 등록되어 있다', async () => {
     await withClient(async (client) => {
       const { resources } = await client.listResources();

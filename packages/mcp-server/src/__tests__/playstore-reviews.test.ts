@@ -7,11 +7,74 @@ vi.mock('../lib/googleapis-lite.js', () => ({
   google: { androidpublisher: () => ({ reviews: { list: api.list } }) },
 }));
 
-import { listReviews, listReviewsWithStatus } from '../playstore/tools.js';
+vi.mock('../helpers.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../helpers.js')>()),
+  requirePlayStoreAuth: () => ({}),
+}));
+
+import { listReviews, listReviewsPage, listReviewsWithStatus } from '../playstore/tools.js';
+import { withClient } from './helpers.js';
 
 const auth = {} as OAuth2Client;
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('playstore_list_reviews MCP', () => {
+  it('옵션 없이 호출하면 여러 페이지를 조회하고 기존 JSON 배열을 반환한다', async () => {
+    api.list
+      .mockResolvedValueOnce({ data: { reviews: [{ reviewId: 'a' }], tokenPagination: { nextPageToken: 't1' } } })
+      .mockResolvedValueOnce({ data: { reviews: [{ reviewId: 'b' }] } });
+
+    await withClient(async (client) => {
+      const result = await client.callTool({
+        name: 'playstore_list_reviews',
+        arguments: { packageName: 'com.example.app' },
+      });
+      const [content] = result.content as Array<{ text: string }>;
+      expect(result.isError).toBeFalsy();
+      expect(JSON.parse(content.text)).toMatchObject([{ reviewId: 'a' }, { reviewId: 'b' }]);
+    }, { env: { MIMI_SEED_TOOLSETS: 'playstore' } });
+    expect(api.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('한 페이지만 조회하며 미답변이 없더라도 다음 페이지 토큰을 보존한다', async () => {
+    const answered = { reviewId: 'answered', comments: [{ developerComment: { text: 'Thanks' } }] };
+    const unanswered = { reviewId: 'unanswered', comments: [{ userComment: { text: 'Bug', starRating: 2 } }] };
+    api.list
+      .mockResolvedValueOnce({ data: { reviews: [answered], tokenPagination: { nextPageToken: 't1' } } })
+      .mockResolvedValueOnce({ data: { reviews: [answered, unanswered] } });
+
+    await withClient(async (client) => {
+      const args = { packageName: 'com.example.app', unansweredOnly: true, limit: 2 };
+      const first = await client.callTool({ name: 'playstore_list_reviews', arguments: args });
+      const [firstContent] = first.content as Array<{ text: string }>;
+      expect(api.list).toHaveBeenCalledTimes(1);
+      expect(api.list).toHaveBeenLastCalledWith({ auth, packageName: args.packageName, maxResults: 2 });
+      const page = JSON.parse(firstContent.text) as { reviews: unknown[]; nextPageToken: string };
+      expect(page).toEqual({ reviews: [], nextPageToken: 't1' });
+
+      const next = await client.callTool({
+        name: 'playstore_list_reviews',
+        arguments: { ...args, pageToken: page.nextPageToken },
+      });
+      const [nextContent] = next.content as Array<{ text: string }>;
+      expect(JSON.parse(nextContent.text)).toMatchObject({
+        reviews: [{ reviewId: 'unanswered', developerComment: null }],
+        nextPageToken: null,
+      });
+      expect(api.list).toHaveBeenLastCalledWith({ auth, packageName: args.packageName, maxResults: 2, token: 't1' });
+    }, { env: { MIMI_SEED_TOOLSETS: 'playstore' } });
+  });
+});
+
+describe('listReviewsPage', () => {
+  it('제공업체가 현재 토큰을 반복하면 경고와 함께 다음 토큰을 비운다', async () => {
+    api.list.mockResolvedValue({ data: { reviews: [], tokenPagination: { nextPageToken: 'same' } } });
+    const page = await listReviewsPage(auth, 'com.example.app', { pageToken: 'same' });
+    expect(page).toMatchObject({ nextPageToken: null, warning: expect.stringContaining('반복') });
+    expect(api.list).toHaveBeenCalledWith({ auth, packageName: 'com.example.app', maxResults: 20, token: 'same' });
+  });
+});
 
 describe('listReviews', () => {
   it('게시된 개발자 답변을 조회 결과에 보존한다', async () => {
@@ -63,8 +126,9 @@ describe('listReviews', () => {
   it('같은 토큰이 반복되면 멈춘다', async () => {
     api.list.mockResolvedValue({ data: { reviews: [{ reviewId: 'x' }], tokenPagination: { nextPageToken: 'same' } } });
 
-    await listReviews(auth, 'com.example.app');
+    const result = await listReviewsWithStatus(auth, 'com.example.app');
     expect(api.list).toHaveBeenCalledTimes(2);
+    expect(result.truncated).toMatch(/반복/);
   });
 
   it('전부 가져오면 truncated 는 null', async () => {

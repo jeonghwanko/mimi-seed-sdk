@@ -159,9 +159,8 @@ CI build (ci-providers.ts)  →  check (readiness)  →  notes (git → AI)  →
 - CI execution IDs are **never** store artifact versions. The server's `buildNumber` is the actual Jenkins
   execution ID, while `versionCode` is an explicitly supplied store artifact version. Automatic artifact-version
   discovery is not implemented; verify the version uploaded to the store independently.
-- The same outcome is reachable as an **MCP tool sequence** (the `deploy` skill / `/mimi-seed:deploy` prompt) —
-  see [[skills-plugins]] and [`../agent-guide.md`](../agent-guide.md) §4. Keep the two paths behaviorally in
-  sync.
+- The `deploy` skill describes the full CI-to-store MCP tool sequence. The MCP `/mimi-seed:deploy` prompt covers
+  readiness and release notes. See [[skills-plugins]] and [`../agent-guide.md`](../agent-guide.md) §4.
 
 ## Security note (public repo)
 

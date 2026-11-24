@@ -6,14 +6,20 @@ import * as appstoreRelease from '../../appstore/release.js';
 import { jsonResult, textResult, errorResult } from '../../lib/mcp-response.js';
 import { releaseStatusText } from '../../appstore/messages.js';
 
+const applePlatform = z.enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS']);
+
 /** appstore_list_versions · appstore_create_version · appstore_attach_build */
 export function registerVersionTools(server: ToolRegistrar) {
   server.tool(
     'appstore_list_versions',
-    'App Store 버전 목록 (심사 상태 포함)',
-    { appId: z.string().describe('앱 ID') },
-    async ({ appId }) => {
-      const versions = await appstore.listVersions(appId);
+    'App Store 버전 목록 (플랫폼과 심사 상태 포함). 버전 문자열과 플랫폼으로 검색할 수 있습니다.',
+    {
+      appId: z.string().describe('앱 ID'),
+      versionString: z.string().trim().min(1).optional().describe('찾을 버전 문자열'),
+      platform: applePlatform.optional().describe('찾을 플랫폼'),
+    },
+    async ({ appId, versionString, platform }) => {
+      const versions = await appstore.listVersions(appId, { versionString, platform });
       return jsonResult(versions);
     },
   );
@@ -29,8 +35,7 @@ export function registerVersionTools(server: ToolRegistrar) {
     {
       appId: z.string().describe('App Store 앱 ID (appstore_list_apps 결과의 id, 숫자형)'),
       versionString: z.string().describe('버전 문자열 (예: "1.2.3")'),
-      platform: z
-        .enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS'])
+      platform: applePlatform
         .default('IOS')
         .describe('플랫폼 (기본 IOS)'),
       copyright: z.string().optional().describe('저작권 표기 (예: "© 2026 Foo Inc.")'),

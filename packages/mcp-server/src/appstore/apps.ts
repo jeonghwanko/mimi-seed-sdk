@@ -198,7 +198,7 @@ export async function listCustomerReviews(
 ) {
   // `fields[customerReviews]` 는 JSON:API sparse fieldset 이라 관계에도 적용된다 — `response` 를 빼면
   // relationships.response 가 응답에서 사라져 include 된 답변을 리뷰에 붙일 수 없고, 모든 리뷰가 미답변
-  // (response: null)으로 보인다. 그러면 "미답변에만 답하기" 흐름이 기존 답변을 교체한다.
+  // 으로 오판할 수 있다. 응답에서는 명시적인 null만 미답변으로 표시한다.
   const params: Record<string, string> = {
     'sort': '-createdDate',
     'limit': String(opts.limit ?? 50),
@@ -225,7 +225,8 @@ export async function listCustomerReviews(
   }
 
   return (data.data ?? []).map((r) => {
-    const respId = r.relationships?.response?.data?.id;
+    const responseLinkage = r.relationships?.response?.data;
+    const respId = responseLinkage?.id;
     const resp = respId ? responses.get(respId) : null;
     return {
       id: r.id,
@@ -235,13 +236,14 @@ export async function listCustomerReviews(
       nickname: r.attributes?.reviewerNickname,
       createdDate: r.attributes?.createdDate,
       territory: r.attributes?.territory,
-      response: resp
+      // 관계가 있으면 included 본문이 누락돼도 미답변으로 분류하지 않는다.
+      response: respId
         ? {
-            body: resp.responseBody,
-            lastModifiedDate: resp.lastModifiedDate,
-            state: resp.state,
+            body: resp?.responseBody,
+            lastModifiedDate: resp?.lastModifiedDate,
+            state: resp?.state,
           }
-        : null,
+        : responseLinkage === null ? null : undefined,
     };
   });
 }

@@ -7,14 +7,23 @@ import { encodePathSegment } from '../lib/url-path.js';
 
 // ─── 버전 ───
 
-export async function listVersions(appId: string) {
+export async function listVersions(appId: string, filters: { versionString?: string; platform?: ApplePlatform } = {}) {
   const data = (await apiGet(`/apps/${encodePathSegment(appId)}/appStoreVersions`, {
-    'fields[appStoreVersions]': 'versionString,appStoreState,releaseType,createdDate',
+    'fields[appStoreVersions]': 'versionString,platform,appStoreState,releaseType,createdDate',
     'limit': '10',
-  })) as AscListDocument<{ versionString?: string; appStoreState?: string; releaseType?: string; createdDate?: string }>;
+    ...(filters.versionString ? { 'filter[versionString]': filters.versionString } : {}),
+    ...(filters.platform ? { 'filter[platform]': filters.platform } : {}),
+  })) as AscListDocument<{
+    versionString?: string;
+    platform?: ApplePlatform;
+    appStoreState?: string;
+    releaseType?: string;
+    createdDate?: string;
+  }>;
   return (data.data ?? []).map((v) => ({
     id: v.id,
     version: v.attributes?.versionString,
+    platform: v.attributes?.platform,
     state: v.attributes?.appStoreState,
     releaseType: v.attributes?.releaseType,
     createdDate: v.attributes?.createdDate,
