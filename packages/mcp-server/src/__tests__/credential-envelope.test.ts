@@ -268,7 +268,10 @@ describe('OS 키 저장소', () => {
     const source = fs.readFileSync(new URL('../../../core/src/credential-keystore.ts', import.meta.url), 'utf8');
     expect(source).not.toMatch(/['"]inherit['"]/);
     expect(source).toMatch(/stdio: \['pipe', 'pipe', 'pipe'\]/);
-    // 비밀은 명령줄 인자로 넘기지 않는다 (ps 에 보인다) — find-generic-password 의 -w 는 출력 플래그다
-    expect(source).not.toMatch(/add-generic-password/);
+    // 비밀은 명령줄 인자로 넘기지 않는다 (ps 에 보인다) — 키 추가는 `security -i` 의 stdin 으로만 보낸다.
+    // find-generic-password 의 -w 는 출력 플래그다.
+    expect(source).not.toMatch(/\[[^\]]*add-generic-password/);
+    expect(source).toMatch(/run\('\/usr\/bin\/security', \['-i'\], command\)/);
+    expect(source).toMatch(/run\('secret-tool', \['store'[^\n]*\n\s*randomBytes/);
   });
 });

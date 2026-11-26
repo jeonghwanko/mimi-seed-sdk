@@ -34,6 +34,7 @@ const ALLOWED: Record<string, string> = {
   'mcp-server/src/jenkins/builds.ts': '빌드 요청 영수증과 HMAC 키 — 비밀 자격증명이 아니다 (§6)',
   'cli/src/telemetry.ts': '사용량 측정 동의 파일 — 비밀이 아니다 (§6)',
   'core/src/credential-read.ts': '봉투를 여는 구현 그 자체',
+  'core/src/credential-store.ts': 'settings.json(모드)과 .data-key.id(kid 표식)를 읽는다 — 둘 다 비밀이 아니다',
   'core/src/credential-keystore.ts': 'Windows DPAPI 로 보호된 데이터 키 파일 — 자격증명이 아니라 키 저장소다',
   'cli/src/mcp-config.ts': 'MCP 클라이언트 설정 파일을 읽는다. config.json 은 안내 문구에만 나온다',
   'cli/src/jenkins-project.ts': '프로젝트의 .mimi-seed.json 을 읽는다. jenkins.json 은 출처 표시 문자열이다',

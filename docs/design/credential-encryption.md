@@ -1,9 +1,14 @@
 # Design: encrypt `~/.mimi-seed/` credentials at rest with an OS-held key
 
-> **Status: stage 1 done — readers only.** Every credential loader reads through core and understands envelopes
-> (`core/src/credential-{envelope,keystore,read}.ts`; `credential-reader-guard.test.ts` keeps it that way), and
-> diagnostics report `locked`. Nothing writes envelopes yet, so every credential is still a plaintext JSON file
-> written `0600` ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)). Next: stage 2 (§5).
+> **Status: stage 2 in progress.**
+> - Stage 1 is done. Every credential loader reads through core and understands envelopes
+>   (`core/src/credential-{envelope,keystore,read}.ts`; `credential-reader-guard.test.ts` keeps it that way).
+>   Diagnostics report `locked`.
+> - In stage 2 so far, writers encrypt only when `MIMI_SEED_CREDENTIAL_STORE` (or `settings.json`
+>   `credentialStore`) is `keychain` or `auto` (`core/src/credential-store.ts`). The default stays `file`, which is
+>   plaintext `0600` ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)).
+> - Still to do in stage 2: the `mimi-seed credentials` command, the `doctor` / `mimi_seed_status` lines, the
+>   version-skew check, and the user docs.
 > This document describes structure only and contains no secret values.
 
 ## 1. Problem
@@ -196,6 +201,10 @@ and stored in `settings.json` next to `lang`.
   happened. **Once `.data-key.id` exists, `auto` behaves like `keychain`.** It never downgrades a machine
   that already encrypts, so a locked keychain over SSH makes the write fail with "unlock the keychain"
   instead of leaving a plaintext token beside encrypted ones.
+- The same rule covers a **missing** mode. If `settings.json` is deleted or corrupted and its `credentialStore`
+  goes with it, a machine with `.data-key.id` keeps encrypting. Only an explicit `file`, from the environment
+  variable or `mimi-seed credentials mode file`, returns to plaintext. (`core/src/credential-store.ts`
+  `effectiveStoreMode`.)
 
 `doctor` and `mimi_seed_status` gain one line: the storage mode, the backend found, and how many files are
 still plaintext.
