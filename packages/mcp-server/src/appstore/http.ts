@@ -67,7 +67,17 @@ export async function apiRequest<T>(
  * 권한 오류가 조용히 빈 결과로 둔갑한다. 상태를 못 읽는 경우에만 문자열로 폴백한다.
  */
 export function isNotFound(err: unknown): boolean {
-  const cause = (err as { cause?: { status?: number } })?.cause;
-  if (typeof cause?.status === 'number') return cause.status === 404;
+  const status = appStoreErrorStatus(err);
+  if (status !== undefined) return status === 404;
   return /App Store API 404\b/.test((err as Error)?.message ?? '');
+}
+
+/**
+ * App Store 오류에 붙은 실제 HTTP 상태 (`cause.status`). 없으면 undefined.
+ *
+ * 분기는 이 값으로 한다 — 메시지 문구는 언어(ko/en)에 따라 바뀌므로 판정 근거가 될 수 없다.
+ */
+export function appStoreErrorStatus(err: unknown): number | undefined {
+  const status = (err as { cause?: { status?: unknown } })?.cause?.status;
+  return typeof status === 'number' ? status : undefined;
 }

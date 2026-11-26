@@ -75,3 +75,34 @@ describe('App Store 매출 병렬 조회 실패 처리', () => {
     vi.doUnmock('../appstore/auth.js');
   });
 });
+
+describe('App Store 매출 리포트 권한 프로브', () => {
+  // 판정은 HTTP 상태로 한다 — 메시지 문구는 출력 언어에 따라 바뀌므로 근거가 될 수 없다.
+  async function loadProbe() {
+    vi.resetModules();
+    vi.doMock('../appstore/auth.js', async (original) => ({
+      ...(await original<typeof import('../appstore/auth.js')>()),
+      getAppStoreCredentials: () => ({ vendorNumber: '123' }),
+      getReportsAuthHeaders: async () => ({ headers: { Authorization: 'Bearer t' }, source: 'default' }),
+    }));
+    return (await import('../appstore/sales.js')).probeReportsAccess;
+  }
+
+  it('403 응답은 forbidden 으로 판정한다', async () => {
+    const probe = await loadProbe();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 403 }));
+    expect((await probe()).status).toBe('forbidden');
+    fetchSpy.mockRestore();
+    vi.doUnmock('../appstore/auth.js');
+  });
+
+  it('본문에 "403" 이 섞인 다른 상태 오류는 forbidden 으로 오진하지 않는다', async () => {
+    const probe = await loadProbe();
+    const body = JSON.stringify({ errors: [{ status: '409', code: 'CONFLICT', detail: 'request 403 conflicted' }] });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(body, { status: 409 }));
+    // 옛 구현(message.includes('403'))은 여기서 forbidden 을 돌려줬다.
+    expect((await probe()).status).toBe('error');
+    fetchSpy.mockRestore();
+    vi.doUnmock('../appstore/auth.js');
+  });
+});
