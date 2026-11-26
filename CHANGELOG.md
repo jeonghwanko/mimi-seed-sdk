@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- `android_generate_keystore` runs `keytool` without blocking the MCP server, so other requests keep being answered while the key is generated. It now stops after 60 seconds with a message instead of hanging the server, and writes the temporary keystore to a private, randomly named folder.
+- Keystore setup no longer reports `keytool` as available on a Mac without a JDK, where `/usr/bin/keytool` is only a stub. It checks for a JDK first, so the macOS "install a JDK" dialog does not appear.
 - A credential file that exists but cannot be read (empty after an interrupted write, broken JSON, or no permission) is no longer reported as "not configured". The error now names the file and where it is broken, and `mimi_seed_status` lists every unreadable file under `~/.mimi-seed`. File contents are never included in the message.
 - A sign-in error that was already classified (for example `CALLBACK_PORT_IN_USE`) keeps its code instead of being re-classified as `CODE_EXCHANGE_FAILED`.
 
