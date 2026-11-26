@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-11-27
+
 ### Fixed
 
 - `mimi-seed credentials mode keychain` failed on macOS with an unexplained "security exited with status 36" when run over SSH, including VS Code's Remote-SSH terminal. macOS keeps the login keychain locked in an SSH session and can't show its unlock dialog there.
