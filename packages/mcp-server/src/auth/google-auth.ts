@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getMcpOAuthClient } from './constants.js';
-import { AuthError, classifyError, type AuthErrorPayload } from './errors.js';
+import { AuthError, authText, classifyError, type AuthErrorPayload } from './errors.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
 import { scopesForDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.js';
@@ -161,20 +161,12 @@ export const OAUTH_CALLBACK_HOSTS = ['127.0.0.1', '::1'] as const;
 /** ::1 을 못 여는 머신(IPv6 비활성)에서 나는 에러 — 무시하고 127.0.0.1 만 쓴다. */
 const IPV6_UNAVAILABLE_CODES = new Set(['EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EINVAL']);
 
-/** 콜백 포트가 한 루프백 주소에서 점유됐을 때의 안내 (한/영). */
+/** 콜백 포트가 한 루프백 주소에서 점유됐을 때의 안내 (현재 언어). */
 export function callbackPortInUse(host: string, err: Error): AuthErrorPayload {
   const address = host.includes(':') ? `[${host}]:${OAUTH_CALLBACK_PORT}` : `${host}:${OAUTH_CALLBACK_PORT}`;
   return {
     code: 'CALLBACK_PORT_IN_USE',
-    message:
-      `OAuth 콜백 주소 ${address} 를 다른 프로세스가 사용 중입니다. `
-      + `/ The OAuth callback address ${address} is already in use by another process.`,
-    hint:
-      `localhost 는 127.0.0.1 과 ::1 어느 쪽으로도 풀릴 수 있어 로그인은 두 주소의 ${OAUTH_CALLBACK_PORT} 포트를 모두 엽니다. `
-      + `점유 프로세스를 찾아 종료한 뒤 다시 시도하세요 — macOS/Linux: \`lsof -nP -i :${OAUTH_CALLBACK_PORT}\`, `
-      + `Windows: \`netstat -ano | findstr :${OAUTH_CALLBACK_PORT}\`. 중단된 이전 로그인이면 잠시 후 재시도해도 됩니다. `
-      + `/ Login listens on port ${OAUTH_CALLBACK_PORT} on both 127.0.0.1 and ::1 because localhost can resolve to either. `
-      + 'Find and stop the process holding it (commands above), or wait for an abandoned earlier login to time out, then retry.',
+    ...authText().callbackAddressInUse(address, OAUTH_CALLBACK_PORT),
     retriable: true,
     needsReauth: false,
     cause: err.message,
@@ -333,8 +325,7 @@ export function startAuth(
           attempt.status = 'failed';
           reject(new AuthError({
             code: 'TOKEN_RESPONSE_INVALID',
-            message: 'Google 응답에 access_token 또는 refresh_token이 누락되었습니다.',
-            hint: 'OAuth 동의 화면에서 모든 권한에 동의했는지 확인하세요.',
+            ...authText().tokenResponseInvalid,
             retriable: true,
             needsReauth: true,
             cause: JSON.stringify({ has_access: !!tokens.access_token, has_refresh: !!tokens.refresh_token }),
@@ -359,12 +350,13 @@ export function startAuth(
         if (attempt.status !== 'pending') throw new Error('Login cancelled or timed out; credentials were not saved.');
         saveTokens(stored, profile, { clientId, clientSecret });
 
+        const page = authText().callbackPage;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`
-          <html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
+          <html lang="${page.lang}"><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
             <div style="text-align:center">
-              <h1>✅ Mimi Seed 인증 완료!</h1>
-              <p>이 창을 닫고 Claude Code 또는 Codex로 돌아가세요.</p>
+              <h1>${page.title}</h1>
+              <p>${page.body}</p>
             </div>
           </body></html>
         `);
@@ -473,8 +465,7 @@ async function ensureFreshAccessTokenOnce(marginMs: number, profile?: string): P
       status: 'unauthenticated',
       error: {
         code: 'UNAUTHENTICATED',
-        message: '저장된 인증 토큰이 없습니다.',
-        hint: 'mimi-seed-auth 로 로그인하세요.',
+        ...authText().unauthenticated,
         retriable: false,
         needsReauth: true,
       },
@@ -493,8 +484,7 @@ async function ensureFreshAccessTokenOnce(marginMs: number, profile?: string): P
       tokens,
       error: {
         code: 'NO_REFRESH_TOKEN',
-        message: '저장된 토큰에 refresh_token이 없습니다 (offline_access 미발급).',
-        hint: 'mimi-seed-auth 로 재로그인하면 prompt=consent로 새 refresh_token이 발급됩니다.',
+        ...authText().noRefreshToken,
         retriable: false,
         needsReauth: true,
       },

@@ -10,7 +10,9 @@
 // 한국어 보고서를 받지 않도록. 로캘이 없거나 C/POSIX 면 영어다.
 //
 // MCP 도구의 description / 도구 출력 텍스트는 여기 대상이 아니다 — 그건 사람이 아니라 LLM 이
-// 읽는 인터페이스다. settings.json 의 **쓰기**는 CLI(settings.ts)가 소유한다.
+// 읽는 인터페이스다. 예외는 사람이 직접 따라 하는 복구 안내: 인증 에러 문구(mcp-server
+// auth/errors.ts 의 authText())와 OAuth 콜백 페이지, 도구 메뉴 리소스는 이 함수로 언어를 고른다.
+// settings.json 의 **쓰기**는 CLI(settings.ts)가 소유한다.
 
 import fs from 'node:fs';
 import os from 'node:os';
