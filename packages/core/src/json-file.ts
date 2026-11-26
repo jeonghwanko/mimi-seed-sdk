@@ -1,7 +1,7 @@
 // JSON 설정 · 자격증명 파일을 "없음 / 정상 / 깨짐(이유)" 으로 읽는다 — CLI 와 mcp-server 가 공유한다.
 // mcp-server 의 lib/json-file.ts 가 이걸 다시 내보내고 MCP 전용 안내(assertCredentialFileReadable · 디렉터리 스캔)를 더한다.
-import fs from 'node:fs';
 import { catalog } from './lang.js';
+import { readCredentialText } from './credential-read.js';
 
 /**
  * JSON 설정·자격증명 파일 읽기의 세 가지 결과.
@@ -15,19 +15,19 @@ import { catalog } from './lang.js';
 export type JsonFileRead =
   | { state: 'missing' }
   | { state: 'ok'; value: unknown }
-  | { state: 'invalid'; reason: string };
+  | { state: 'invalid'; reason: string }
+  /** 암호화된 자격증명인데 이 컴퓨터에서 키를 얻지 못했다 (credential-read.ts). 복구는 다시 로그인. */
+  | { state: 'locked'; reason: string };
 
 // 이유 문구는 두 패키지의 안내(MCP 인증 에러 · CLI doctor)에 끼워 들어가므로 같은 언어 규칙(resolveLang)을 따른다.
 const REASON = catalog(
   {
-    unreadable: (c: string) => `읽을 수 없음 (${c})`,
     empty: '빈 파일 (쓰기가 중간에 끊겼을 수 있음)',
     syntax: (at: string | null) => `JSON 형식 오류${at ? ` — ${at}` : ''}`,
     at: (line: string, col: string) => `${line}행 ${col}열`,
     pos: (p: string) => `${p}번째 문자`,
   },
   {
-    unreadable: (c: string) => `unreadable (${c})`,
     empty: 'empty file (a write may have been interrupted)',
     syntax: (at: string | null) => `invalid JSON${at ? ` at ${at}` : ''}`,
     at: (line: string, col: string) => `line ${line}, column ${col}`,
@@ -47,20 +47,15 @@ function syntaxLocation(message: string, R: ReturnType<typeof REASON>): string |
   return pos ? R.pos(pos[1]) : null;
 }
 
-/** 없다고 봐도 되는 오류 — 파일이나 상위 경로가 존재하지 않음. */
-const MISSING_CODES = new Set(['ENOENT', 'ENOTDIR']);
-
+/**
+ * 평문 JSON 이든 암호화 봉투든 읽는다 — 파일 읽기·봉투 해독은 readCredentialText 가, JSON 판정은 여기서.
+ * 권한 오류(EACCES 등)는 '깨짐', 없는 파일만 '없음' — "없음"으로 뭉개면 권한 문제를 영영 못 찾는다.
+ */
 export function readJsonFile(file: string): JsonFileRead {
   const R = REASON();
-  let text: string;
-  try {
-    text = fs.readFileSync(file, 'utf-8');
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code && MISSING_CODES.has(code)) return { state: 'missing' };
-    // EACCES · EISDIR · EPERM 등 — 파일은 있는데 못 읽는다. "없음"으로 뭉개면 권한 문제를 영영 못 찾는다.
-    return { state: 'invalid', reason: R.unreadable(code ?? String(e)) };
-  }
+  const read = readCredentialText(file);
+  if (read.state !== 'ok') return read;
+  const text = read.text;
   // 빈 파일은 거의 항상 중단된 쓰기다 — JSON.parse 의 "Unexpected end of JSON input" 보다 원인이 분명하게.
   if (text.trim() === '') return { state: 'invalid', reason: R.empty };
   try {
@@ -70,8 +65,8 @@ export function readJsonFile(file: string): JsonFileRead {
   }
 }
 
-/** 파일이 있는데 읽거나 파싱할 수 없으면 그 이유, 아니면(없음·정상) null. */
+/** 파일이 있는데 읽거나 파싱·해독할 수 없으면(깨짐·잠김) 그 이유, 아니면(없음·정상) null. */
 export function jsonFileProblem(file: string): string | null {
   const r = readJsonFile(file);
-  return r.state === 'invalid' ? r.reason : null;
+  return r.state === 'invalid' || r.state === 'locked' ? r.reason : null;
 }

@@ -1,7 +1,10 @@
 # Design: encrypt `~/.mimi-seed/` credentials at rest with an OS-held key
 
-> **Status: proposal.** This document has not been implemented. The code does not do any of this yet. Today
-> every credential is a plaintext JSON file written `0600` ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)).
+> **Status: stage 1 in progress.** Readers in core understand envelopes and report `locked`
+> (`core/src/credential-{envelope,keystore,read}.ts`, used by `readJsonFile`). Nothing writes envelopes yet, so
+> every credential is still a plaintext JSON file written `0600`
+> ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)). Still to do in stage 1: migrating the raw
+> readers and adding the reader guard (§4.4).
 > This document describes structure only and contains no secret values.
 
 ## 1. Problem

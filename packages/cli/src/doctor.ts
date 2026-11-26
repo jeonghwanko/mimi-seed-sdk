@@ -1,6 +1,6 @@
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
-import { credentialFileProblemMessage } from "./credentials.js";
+import { credentialFileProblemMessage, credentialProblemText } from "./credentials.js";
 import { mcpCall } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog } from "./git.js";
 import { detectHints } from "./detect.js";
@@ -189,7 +189,7 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
     const label = note ? `${base} (${note})` : base;
     // 깨진 파일은 "없음"과 같은 심각도(✗/⚠)로 두되, 안내는 원인(파일 · 이유)으로 바꾼다 — 선택 항목 하나가
     // 깨졌다고 doctor --strict 가 실패하면 안 되지만, 폴백으로 동작하는 경우에도 손상 사실은 숨기지 않는다.
-    const fix = d.invalid ? m.credCorrupt(d.invalid.file, d.invalid.reason, spec.fix) : `→ ${spec.fix}`;
+    const fix = d.invalid ? credentialProblemText(d.invalid, spec.fix) : `→ ${spec.fix}`;
     if (d.present) r.ok(base, d.detail);
     else if (isSatisfied(spec, detected)) r.warn(label, d.invalid ? fix : t().setup.fallbackWorking);
     else if (spec.requirement === "optional") r.warn(`${label}`, fix);

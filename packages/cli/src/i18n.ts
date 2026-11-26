@@ -123,6 +123,7 @@ const ko = {
       `${file} 을(를) 읽을 수 없어 요구사항을 점검하지 못했습니다 (${reason}) — 파일을 고친 뒤 다시 실행하세요`,
     manifestReason: { unreadable: "읽기 실패", "invalid-json": "JSON 형식 오류", "not-an-object": "객체가 아님" } as Record<ManifestInvalidReason, string>,
     credCorrupt: (file: string, reason: string, fix: string) => `파일이 손상됨: ${file} — ${reason}. 고치거나 지운 뒤 다시 연결: ${fix}`,
+    credLocked: (file: string, reason: string, fix: string) => `암호화된 파일을 열 수 없음: ${file} — ${reason}. 다시 연결: ${fix}`,
   },
 
   auth: {
@@ -252,6 +253,7 @@ MIMI_SEED_LANG takes precedence when set.`,
       `cannot read ${file}, so its requirements were not checked (${reason}) — fix the file and run again`,
     manifestReason: { unreadable: "unreadable", "invalid-json": "invalid JSON", "not-an-object": "not an object" },
     credCorrupt: (file: string, reason: string, fix: string) => `file is damaged: ${file} — ${reason}. Fix or delete it, then reconnect: ${fix}`,
+    credLocked: (file: string, reason: string, fix: string) => `cannot open encrypted file: ${file} — ${reason}. Reconnect: ${fix}`,
   },
 
   auth: {

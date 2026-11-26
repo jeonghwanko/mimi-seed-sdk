@@ -7,12 +7,16 @@ import {
   CREDENTIALS,
   credById,
   credentialFileProblemMessage,
+  credentialProblemText,
   detectAll,
   isSatisfied,
   missingRequired,
   planSetup,
 } from '../credentials.js';
 import { MCP_BINS } from '../mcp-bin.js';
+import { randomBytes } from 'node:crypto';
+import { sealCredential } from '#core/credential-envelope.js';
+import { setDataKeySourceForTests } from '#core/credential-keystore.js';
 
 // 픽스처 홈 — detect 는 순수 fs 검사라 임시 디렉토리로 완전히 통제된다.
 let home: string;
@@ -376,6 +380,22 @@ describe('깨진 자격증명 파일', () => {
     // 읽을 수 있는 패키지별 키가 하나라도 있으면 연결됨
     fs.writeFileSync(path.join(home, '.mimi-seed', 'play-service-accounts', 'com.example.other.json'), '{"type":"service_account"}');
     expect(detectAll(home).get('playstore')?.present).toBe(true);
+  });
+
+  it('키가 없는 암호화 파일은 "손상"이 아니라 잠김으로 보인다', () => {
+    const key = randomBytes(32);
+    setDataKeySourceForTests(() => ({ state: 'absent', backend: 'Test Keychain' }));
+    try {
+      writeRaw('tokens.json', JSON.stringify(sealCredential('{"refresh_token":"x"}', key, 'tokens.json')));
+      const oauth = detectAll(home).get('oauth');
+      expect(oauth).toMatchObject({ present: false, invalid: { locked: true, reason: expect.stringContaining('Test Keychain') } });
+      expect(credentialProblemText(oauth!.invalid!, 'mimi-seed auth login')).toMatch(/^(암호화된 파일을 열 수 없음|cannot open encrypted file): .*tokens\.json/);
+      // 키가 있으면 연결됨
+      setDataKeySourceForTests(() => ({ state: 'ok', key, backend: 'Test Keychain' }));
+      expect(detectAll(home).get('oauth')?.present).toBe(true);
+    } finally {
+      setDataKeySourceForTests();
+    }
   });
 
   it('원인에는 파일 내용(토큰 조각)이 실리지 않는다', () => {

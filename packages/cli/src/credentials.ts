@@ -77,7 +77,8 @@ export interface Detected {
    * 파일은 있는데 읽거나 파싱할 수 없다 (`present: false`). "없음"과 구분해 원인을 보여준다 — 예전엔 깨진 파일도
    * "미설정"으로만 보여 사용자가 원인을 모른 채 setup 을 다시 했다. reason 은 내용을 싣지 않는다(위치만).
    */
-  invalid?: { file: string; reason: string };
+  /** 파일이 있는데 쓸 수 없다 — 깨짐(JSON·권한) 또는 잠김(암호화됐는데 이 컴퓨터에 키가 없음, `locked`). */
+  invalid?: { file: string; reason: string; locked?: boolean };
 }
 
 export interface CredSpec {
@@ -242,7 +243,7 @@ function playSaDetect(home: string): Detected {
     const file = path.join(dir, name);
     const read = readJsonFile(file);
     if (read.state === "ok") return { present: true };
-    if (read.state === "invalid" && !invalid) invalid = { file, reason: read.reason };
+    if ((read.state === "invalid" || read.state === "locked") && !invalid) invalid = unusable(file, read);
   }
   // 기본 키가 깨졌으면 detectAll 이 spec.file 로 따로 짚는다 — 여기선 패키지별 키의 손상만 싣는다.
   return invalid ? { present: false, invalid } : { present: false };
@@ -778,9 +779,19 @@ export function credentialFileProblemMessage(displayFile: string, home: string =
   if (!displayFile.startsWith("~/")) return null;
   const file = path.join(home, displayFile.slice(2));
   const read = readJsonFile(file);
-  if (read.state !== "invalid") return null;
+  if (read.state !== "invalid" && read.state !== "locked") return null;
   const fix = CREDENTIALS.find((spec) => spec.file === displayFile)?.fix ?? "mimi-seed setup";
-  return t().doctor.credCorrupt(file, read.reason, fix);
+  return credentialProblemText(unusable(file, read), fix);
+}
+
+function unusable(file: string, read: { state: "invalid" | "locked"; reason: string }): NonNullable<Detected["invalid"]> {
+  return read.state === "locked" ? { file, reason: read.reason, locked: true } : { file, reason: read.reason };
+}
+
+/** Detected.invalid 를 사용자 문구로 — 잠김(암호화·키 없음)은 "손상"이라 부르지 않는다. 복구는 둘 다 다시 연결. */
+export function credentialProblemText(invalid: NonNullable<Detected["invalid"]>, fix: string): string {
+  const m = t().doctor;
+  return invalid.locked ? m.credLocked(invalid.file, invalid.reason, fix) : m.credCorrupt(invalid.file, invalid.reason, fix);
 }
 
 /**
@@ -792,7 +803,7 @@ function detectWithFileCheck(spec: CredSpec, home: string, startDir: string): De
   if (detected.present || detected.invalid || !spec.file?.endsWith(".json") || !spec.file.startsWith("~/")) return detected;
   const file = path.join(home, spec.file.slice(2));
   const read = readJsonFile(file);
-  return read.state === "invalid" ? { ...detected, invalid: { file, reason: read.reason } } : detected;
+  return read.state === "invalid" || read.state === "locked" ? { ...detected, invalid: unusable(file, read) } : detected;
 }
 
 /** fallback 을 감안한 "동작하는가" 판정 — 예: Play SA 가 없어도 OAuth 가 있으면 동작한다. */
