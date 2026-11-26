@@ -30,6 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Release Doctor tells you when it could not read part of the project. A folder or Gradle file it cannot open (permissions, another user's volume) now gives a `SCAN_PATHS_NOT_READ` warning naming the paths, and the report is no longer called clear; the apps it did read keep their verdicts. The Billing check (`android_check_billing_compliance` and Release Doctor) returns the paths in `unreadPaths` and reports `unresolved` instead of `pass` or `not_used`, and an unreadable Gradle file no longer aborts the whole Billing check.
+- Release Doctor reads `eas.json` files with comments or trailing commas, as EAS CLI does, so their `ios.image` Xcode pins are checked. An `eas.json` that still can't be parsed keeps the iOS Xcode verdict at `IOS_XCODE_UNRESOLVED` instead of `IOS_XCODE_OK`.
 - `mimi-seed doctor`, `setup`, and `deploy` show a corrupt credential or settings file as damaged, with the file and where it is broken, instead of "not set up" or "not logged in". `doctor` and `setup` no longer show a corrupt `tokens.json` or service account key as connected (✓) just because the file exists.
 - `mimi-seed notes --from/--to` with a ref that doesn't exist (a typo, a missing tag) now stops with an error naming the ref and exits 1. It used to report "No commits found" and exit 0.
 - The Google sign-in callback page decides which error to show by error type, not by whether the message starts with "YouTube". Channel-verification problems (mismatch, ambiguous channel) are still shown so you can fix them; other failures stay hidden. Its error response is now plain text with `nosniff`, so a channel title is never interpreted as HTML.

@@ -183,6 +183,47 @@ describe('Google Play Billing compliance', () => {
     expect(result.status).toBe('not_used');
   });
 
+  describe.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('읽지 못한 경로', () => {
+    async function locked<T>(target: string, run: () => Promise<T>): Promise<T> {
+      await fs.chmod(target, 0o000);
+      try {
+        return await run();
+      } finally {
+        await fs.chmod(target, 0o755);
+      }
+    }
+
+    it('통과 판정이라도 읽지 못한 폴더가 있으면 unresolved로 낮추고 경로를 싣는다', async () => {
+      const root = await fixture({
+        'app/build.gradle': 'dependencies { implementation "com.android.billingclient:billing:9.0.0" }',
+        'legacy/build.gradle': 'dependencies { implementation "com.android.billingclient:billing:6.0.0" }',
+      });
+      const result = await locked(path.join(root, 'legacy'), () => checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z')));
+      expect(result.status).toBe('unresolved');
+      expect(result.unreadPaths).toEqual(['legacy']);
+      expect(result.detectedVersions).toEqual(['9.0.0']);
+      expect(result.summary).toContain('legacy');
+    });
+
+    it('근거가 없어도 읽지 못한 폴더가 있으면 not_used로 단정하지 않는다', async () => {
+      const root = await fixture({ 'app/build.gradle': 'dependencies { }', 'secret/build.gradle': 'dependencies { }' });
+      const result = await locked(path.join(root, 'secret'), () => checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z')));
+      expect(result.status).toBe('unresolved');
+      expect(result.unreadPaths).toEqual(['secret']);
+    });
+
+    it('읽지 못한 Gradle 파일은 검사 전체를 죽이지 않고 미독 경로로 남긴다', async () => {
+      const root = await fixture({
+        'app/build.gradle': 'dependencies { implementation "com.android.billingclient:billing:6.0.0" }',
+        'lib/build.gradle': 'dependencies { }',
+      });
+      const result = await locked(path.join(root, 'lib/build.gradle'), () => checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z')));
+      // 찾은 근거로 확정된 blocker 는 그대로 blocker 다
+      expect(result.status).toBe('blocker');
+      expect(result.unreadPaths).toEqual(['lib/build.gradle']);
+    });
+  });
+
   it('Billing 의존성이 없으면 not_used로 끝낸다', async () => {
     const root = await fixture({ 'app/build.gradle': 'dependencies { implementation "androidx.core:core:1.0.0" }' });
     const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));

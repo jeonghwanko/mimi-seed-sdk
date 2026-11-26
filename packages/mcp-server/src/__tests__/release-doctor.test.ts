@@ -501,6 +501,57 @@ describe('Release Doctor local scan', () => {
       expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_OK', file }));
     });
 
+    it('주석과 끝 쉼표가 있는 eas.json의 Xcode 고정값도 읽는다 (EAS CLI가 받는 형식)', async () => {
+      const root = await fixture({
+        ...iosProject,
+        'eas.json': [
+          '{',
+          '  // production builds',
+          '  "build": {',
+          '    "production": {',
+          '      "env": { "URL": "https://example.com/a//b", "GLOB": "src/*/x" }, /* old image */',
+          '      "ios": { "image": "macos-sonoma-14.6-xcode-16.1", },',
+          '    },',
+          '  },',
+          '}',
+        ].join('\n'),
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_BELOW_MINIMUM', file: 'eas.json' }));
+    });
+
+    it('해석하지 못한 eas.json이 있으면 다른 고정값이 기준을 넘어도 OK로 판정하지 않는다', async () => {
+      const root = await fixture({
+        ...iosProject,
+        '.xcode-version': '26.2\n',
+        'eas.json': '{ "build": { "production": { "ios": { "image": "macos-sonoma-14.6-xcode-16.1" ',
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+      const finding = report.findings.find((row) => row.code === 'IOS_XCODE_UNRESOLVED');
+
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_OK' }));
+      expect(finding).toMatchObject({ file: 'eas.json' });
+      expect(finding?.detail).toContain('could not be parsed');
+      expect(finding?.ko?.detail).toContain('eas.json');
+      expect(report.coverage.unresolved).toContain('IOS_XCODE_UNRESOLVED');
+    });
+
+    it('해석하지 못한 eas.json 옆의 낮은 고정값은 확정 블로커가 아니라 혼재 경고다', async () => {
+      const root = await fixture({
+        ...iosProject,
+        '.xcode-version': '16.4\n',
+        'eas.json': '{ not json',
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_MIXED_PINS' }));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'IOS_XCODE_BELOW_MINIMUM' }));
+    });
+
     it('베타 Xcode는 기준을 충족해도 App Store 제출에는 정식/RC가 필요함을 알린다', async () => {
       const root = await fixture({
         ...iosProject,
@@ -3319,6 +3370,69 @@ describe('Release Doctor local scan', () => {
 
         expect(below(report)).toMatchObject({ title: expect.stringContaining('33') });
       });
+    });
+  });
+
+  // chmod 로 읽기를 막는 시나리오 — Windows 는 POSIX 권한이 없고, root 는 권한을 무시한다.
+  // 래퍼(scanReleaseDoctor)의 그물 검사는 트리를 직접 readdir 하므로 못 읽는 폴더에서 죽는다 — 여기선 원본 스캐너를 부른다.
+  const unreadable = process.platform !== 'win32' && process.getuid?.() !== 0;
+  describe.skipIf(!unreadable)('읽지 못한 경로 — 판정에서 빠진 근거를 알린다', () => {
+    async function withLocked<T>(dir: string, run: () => Promise<T>): Promise<T> {
+      await fs.chmod(dir, 0o000);
+      try {
+        return await run();
+      } finally {
+        await fs.chmod(dir, 0o755);
+      }
+    }
+
+    it('읽지 못한 폴더가 있으면 SCAN_PATHS_NOT_READ 경고를 내고 보고서를 확인 필요로 둔다', async () => {
+      const root = await fixture({
+        'app/build.gradle': 'android { defaultConfig { applicationId "com.example.app"; targetSdkVersion 36 } }',
+        'wear/build.gradle': 'android { defaultConfig { applicationId "com.example.wear"; targetSdkVersion 33 } }',
+      });
+
+      const report = await withLocked(path.join(root, 'wear'), () => scanRepository(root, new Date('2026-09-04T00:00:00Z')));
+      const finding = report.findings.find((row) => row.code === 'SCAN_PATHS_NOT_READ');
+
+      expect(finding).toMatchObject({ severity: 'warning', file: 'wear' });
+      expect(finding?.detail).toContain('wear');
+      expect(finding?.ko?.detail).toContain('wear');
+      expect(report.coverage.unresolved).toContain('SCAN_PATHS_NOT_READ');
+      // 읽은 앱의 판정은 그대로 남는다 — 미독 폴더 하나로 흔한 저장소가 영영 OK 를 못 받으면 안 된다
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_OK' }));
+      // Billing 근거가 하나도 없으면 같은 이유의 BILLING_UNRESOLVED 를 겹쳐 내지 않는다
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'BILLING_UNRESOLVED' }));
+      expect(renderReleaseDoctor(report, 'ko')).toContain('SCAN_PATHS_NOT_READ');
+    });
+
+    it('통과하는 Billing 옆에 읽지 못한 폴더가 있으면 Billing 도 확인 필요로 낮춘다', async () => {
+      const root = await fixture({
+        'app/build.gradle': [
+          'android { defaultConfig { applicationId "com.example.app"; targetSdkVersion 36 } }',
+          'dependencies { implementation "com.android.billingclient:billing:9.0.0" }',
+        ].join('\n'),
+        'feature/build.gradle': 'dependencies { implementation "com.android.billingclient:billing:6.0.0" }',
+      });
+
+      const report = await withLocked(path.join(root, 'feature'), () => scanRepository(root, new Date('2026-09-04T00:00:00Z')));
+      const billing = report.findings.find((row) => row.code.startsWith('BILLING_'));
+
+      expect(billing).toMatchObject({ code: 'BILLING_UNRESOLVED', severity: 'warning' });
+      expect(billing?.detail).toContain('feature');
+      expect(billing?.ko?.title).toContain('일부 폴더');
+      expect(billing?.ko?.detail).toContain('9.0.0');
+    });
+
+    it('읽지 못한 Gradle 파일도 미독 경로로 알린다', async () => {
+      const root = await fixture({
+        'app/build.gradle': 'android { defaultConfig { applicationId "com.example.app"; targetSdkVersion 36 } }',
+        'lib/build.gradle': 'dependencies { }',
+      });
+
+      const report = await withLocked(path.join(root, 'lib/build.gradle'), () => scanRepository(root, new Date('2026-09-04T00:00:00Z')));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'SCAN_PATHS_NOT_READ', file: 'lib/build.gradle' }));
     });
   });
 

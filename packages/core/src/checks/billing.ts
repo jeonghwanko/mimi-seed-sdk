@@ -110,6 +110,11 @@ export interface BillingComplianceResult {
   status: BillingComplianceStatus;
   detectedVersions: string[];
   evidence: BillingEvidence[];
+  /**
+   * Folders and Gradle/package files under the project that could not be read (relative). A Billing dependency may
+   * sit in them, so a result that would otherwise be `pass` or `not_used` is `unresolved` while this is non-empty.
+   */
+  unreadPaths: string[];
   policy: {
     minimumSupportedMajor: number | null;
     submissionDeadline: string;
@@ -138,15 +143,17 @@ interface CatalogInfo {
   bundles: Map<string, string[]>;
 }
 
-async function walk(root: string, maxDepth = 7): Promise<string[]> {
+async function walk(root: string, maxDepth = 7): Promise<{ files: string[]; unread: string[] }> {
   const result: string[] = [];
+  const unread: string[] = [];
   async function visit(dir: string, depth: number): Promise<void> {
     if (depth > maxDepth) return;
     let entries;
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
-      // TODO-risk: 읽지 못한 하위 폴더의 Billing 의존성은 근거에서 빠진다(루트는 위에서 stat 으로 확인) — 막으려면 결과에 미독 폴더를 싣는 설계가 필요하다
+      // 읽지 못한 폴더의 Billing 의존성은 근거에서 빠진다 — unreadPaths 로 돌려줘 pass/not_used 를 unresolved 로 낮춘다
+      unread.push(path.relative(root, dir).replace(/\\/g, '/') || '.');
       return;
     }
     for (const entry of entries) {
@@ -167,7 +174,7 @@ async function walk(root: string, maxDepth = 7): Promise<string[]> {
     }
   }
   await visit(root, 0);
-  return result;
+  return { files: result, unread };
 }
 
 function parseCatalog(text: string): CatalogInfo {
@@ -609,9 +616,19 @@ export async function checkBillingCompliance(
     throw new Error(`Android project path does not exist or is not readable: ${root}`);
   }
   if (!rootStat.isDirectory()) throw new Error(`Android project path is not a directory: ${root}`);
-  const files = await walk(root);
+  const walked = await walk(root);
+  const unreadPaths = walked.unread;
   const texts = new Map<string, string>();
-  for (const file of files) texts.set(file, await fs.readFile(file, 'utf8'));
+  for (const file of walked.files) {
+    try {
+      texts.set(file, await fs.readFile(file, 'utf8'));
+    } catch {
+      // 못 읽은 Gradle/package 파일도 미독 폴더와 같다 — 검사 전체를 죽이지 않고 unreadPaths 로 알린다
+      unreadPaths.push(path.relative(root, file).replace(/\\/g, '/'));
+    }
+  }
+  unreadPaths.sort();
+  const files = walked.files.filter((file) => texts.has(file));
 
   const catalogs = files
     .filter((file) => path.basename(file) === 'libs.versions.toml')
@@ -779,12 +796,21 @@ export async function checkBillingCompliance(
     summary = `Billing Library ${detectedVersions.join(', ')} satisfies the current submission policy.`;
   }
 
+  if (unreadPaths.length > 0) {
+    const listed = unreadPaths.length > 3 ? `${unreadPaths.slice(0, 3).join(', ')}, +${unreadPaths.length - 3}` : unreadPaths.join(', ');
+    // A clear result needs the whole tree: a Billing dependency in an unread folder could be below the minimum.
+    if (status === 'pass' || status === 'not_used') status = 'unresolved';
+    summary = `${summary} Some paths could not be read, so a Billing dependency in them was not checked: ${listed}.`;
+    actions.push('Fix the permissions on the unread paths (or narrow the project path to the app) and run the check again.');
+  }
+
   return {
     projectPath: root,
     checkedAt: now.toISOString(),
     status,
     detectedVersions,
     evidence,
+    unreadPaths,
     policy,
     summary,
     actions,

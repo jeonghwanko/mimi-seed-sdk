@@ -15,6 +15,10 @@ import { isWithin, moduleDir, unique } from './release-doctor/util.js';
 export type { TargetSdkModuleVerdict, TargetSdkToken } from './release-doctor/target-sdk.js';
 export type { ReleaseDoctorSeverity, ReleaseDoctorFinding, ReleaseDoctorReport } from './release-doctor/types.js';
 
+function unreadList(paths: string[]): string {
+  return paths.length > 3 ? `${paths.slice(0, 3).join(', ')}, +${paths.length - 3}` : paths.join(', ');
+}
+
 /** Evidence rows with the ones below the submission minimum first (they are what a blocker is about). */
 function billingEvidenceRows(billing: BillingComplianceResult) {
   const minimum = billing.policy.minimumSupportedMajor;
@@ -40,6 +44,8 @@ function billingFinding(billing: BillingComplianceResult): ReleaseDoctorFinding 
   const minimum = billing.policy.minimumSupportedMajor;
   const schedule = (major: number | null) => billing.policy.knownSchedule.find((row) => row.major === major);
   const status = billing.status as Exclude<BillingComplianceResult['status'], 'not_used'>;
+  const unreadOnly = status === 'unresolved' && billing.unreadPaths.length > 0
+    && (billing.evidence.length === 0 || (billing.policy.scheduleCurrent && billing.evidence.every((row) => Number.isFinite(Number.parseInt(row.version ?? '', 10)))));
   const iapTarget = minimum === null ? undefined : reactNativeIapUpgradeTarget(minimum);
   const iapBelow = minimum !== null && billing.evidence.some((row) => row.wrapper?.name === 'react-native-iap'
     && row.version !== undefined && Number.parseInt(row.version, 10) < minimum);
@@ -77,35 +83,70 @@ function billingFinding(billing: BillingComplianceResult): ReleaseDoctorFinding 
           : `Billing Library ${major}: 마감일이 내장된 공식 표보다 이르므로 유효한 연장이 있다고 가정하지 마세요.`),
       ].filter(Boolean).join(' '),
     },
-    unresolved: billing.policy.scheduleCurrent
+    // Nothing found, or every version resolved: the result is unresolved only because part of the tree was not read.
+    unresolved: unreadOnly
       ? {
-        title: 'Google Play Billing version could not be resolved locally',
-        koTitle: 'Google Play Billing 버전을 로컬에서 확정하지 못함',
-        koDetail: 'Billing 의존성은 찾았지만 버전을 정적으로 확정하지 못했습니다.',
+        title: 'Google Play Billing could not be checked in every folder',
+        koTitle: '일부 폴더의 Google Play Billing 의존성을 확인하지 못함',
+        koDetail: billing.detectedVersions.length > 0
+          ? `감지된 Billing Library ${versions}은 현재 제출 기준을 충족하지만, 읽지 못한 경로가 있어 전체를 확인하지 못했습니다.`
+          : '읽지 못한 경로가 있어 Billing 의존성 전체를 확인하지 못했습니다.',
         action: billing.actions.join(' '),
-        koAction: '보고된 Gradle/version catalog 표현식을 확인하거나 선언된 IAP 패키지를 설치한 뒤 다시 검사하세요.',
+        koAction: '읽지 못한 경로의 권한을 고치거나(또는 프로젝트 경로를 앱으로 좁혀) 다시 검사하세요.',
       }
-      : {
+      : !billing.policy.scheduleCurrent
+      ? {
         title: 'Google Play Billing policy table needs a refresh',
         koTitle: 'Google Play Billing 정책표 갱신 필요',
         koDetail: `내장된 공식 일정은 Billing Library ${billing.policy.latestKnownMajor}에서 끝나므로 현재 정책을 출처에서 다시 확인해야 합니다.`,
         action: billing.actions.join(' '),
         koAction: '공식 Billing 지원 중단 표를 확인하고, 이 결과를 믿기 전에 Mimi Seed를 업데이트하세요.',
+      }
+      : {
+        title: 'Google Play Billing version could not be resolved locally',
+        koTitle: 'Google Play Billing 버전을 로컬에서 확정하지 못함',
+        koDetail: 'Billing 의존성은 찾았지만 버전을 정적으로 확정하지 못했습니다.',
+        action: billing.actions.join(' '),
+        koAction: '보고된 Gradle/version catalog 표현식을 확인하거나 선언된 IAP 패키지를 설치한 뒤 다시 검사하세요.',
       },
   }[status];
+  const unreadKo = billing.unreadPaths.length === 0 ? ''
+    : unreadOnly ? ` 읽지 못한 경로: ${unreadList(billing.unreadPaths)}.`
+    : ` 읽지 못한 경로가 있어 그 안의 Billing 의존성은 확인하지 못했습니다: ${unreadList(billing.unreadPaths)}.`;
 
   return {
     code: `BILLING_${status.toUpperCase()}`,
     severity: status === 'blocker' ? 'blocker' : status === 'pass' ? 'info' : 'warning',
     title: copy.title,
-    detail: `${billing.summary} Evidence: ${evidence}.`,
+    detail: evidence ? `${billing.summary} Evidence: ${evidence}.` : billing.summary,
     action: copy.action,
     file: billingEvidenceRows(billing)[0]?.file,
     sourceUrl: billing.policy.sourceUrl,
     ko: {
       title: copy.koTitle,
-      detail: `${copy.koDetail} 근거: ${evidence}.`,
+      detail: `${copy.koDetail}${unreadKo}${evidence ? ` 근거: ${evidence}.` : ''}`,
       action: copy.koAction,
+    },
+  };
+}
+
+/**
+ * Folders or files the project walk could not read (permissions, another user's volume). App modules, Billing
+ * dependencies, and Xcode pins inside them are missing from every verdict, so the report must not read as clear.
+ */
+function unreadFinding(unread: string[]): ReleaseDoctorFinding {
+  const listed = unreadList(unread);
+  return {
+    code: 'SCAN_PATHS_NOT_READ',
+    severity: 'warning',
+    title: 'Some folders or files in the project could not be read',
+    detail: `Release Doctor could not read: ${listed}. App modules, Billing dependencies, and Xcode pins inside them are not part of any verdict above.`,
+    action: 'Fix the permissions and re-run, or scan the app on its own with --path if those paths do not belong to it.',
+    file: unread[0],
+    ko: {
+      title: '프로젝트의 일부 폴더나 파일을 읽지 못함',
+      detail: `Release Doctor가 다음을 읽지 못했습니다: ${listed}. 그 안의 앱 모듈, Billing 의존성, Xcode 고정값은 위 판정에 들어가지 않았습니다.`,
+      action: '권한을 고친 뒤 다시 실행하거나, 그 경로가 앱과 무관하면 --path로 앱만 따로 검사하세요.',
     },
   };
 }
@@ -130,7 +171,7 @@ export async function scanReleaseDoctor(
   }
   if (!stat.isDirectory()) throw new Error(`Project path is not a directory: ${root}`);
 
-  const { files, fcmSources, sourceScanTruncated, conventionTruncated } = await walk(root, maxSourceFiles);
+  const { files, fcmSources, sourceScanTruncated, conventionTruncated, unread } = await walk(root, maxSourceFiles);
   const reactNativeCatalog = path.join(root, 'node_modules', 'react-native', 'gradle', 'libs.versions.toml');
   try {
     files.push({
@@ -385,7 +426,9 @@ export async function scanReleaseDoctor(
     }
 
     const billing = await checkBillingCompliance(root, now);
-    if (billing.status !== 'not_used') findings.push(billingFinding(billing));
+    // With nothing found, an unresolved Billing result only repeats SCAN_PATHS_NOT_READ (same tree, same reason).
+    const onlyUnread = billing.evidence.length === 0 && unread.length > 0;
+    if (billing.status !== 'not_used' && !onlyUnread) findings.push(billingFinding(billing));
   }
 
   if (detected.ios) {
@@ -441,6 +484,8 @@ export async function scanReleaseDoctor(
   }
 
   findings.push(...await fcmFindings(files, detected.hasAppOutsideDemo ? fcmSources.filter((file) => !file.demo) : fcmSources, root, now));
+
+  if (unread.length > 0) findings.push(unreadFinding(unread));
 
   const counts = findings.reduce<Record<ReleaseDoctorSeverity, number>>(
     (result, finding) => ({ ...result, [finding.severity]: result[finding.severity] + 1 }),

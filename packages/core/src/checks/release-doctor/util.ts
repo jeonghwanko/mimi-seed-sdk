@@ -94,3 +94,51 @@ export function packageDir(file: string): string | undefined {
   const match = file.replace(/\\/g, '/').match(/^(.*\/node_modules\/(?:@[^/]+\/)?[^/]+)/);
   return match?.[1];
 }
+
+/**
+ * JSON with `//` and `/* *\/` comments and trailing commas (what EAS CLI accepts in eas.json). Comments and commas
+ * inside strings are kept. Throws like JSON.parse when the text is still not JSON.
+ */
+export function parseJsonWithComments(text: string): unknown {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j + 1;
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+    } else if (ch === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      if (end < 0) throw new SyntaxError('Unterminated comment');
+      out += ' ';
+      i = end + 2;
+    } else {
+      out += ch;
+      i++;
+    }
+  }
+  // Trailing commas: a comma followed only by whitespace before `}` or `]` (strings were copied verbatim above, so
+  // re-scan to skip them here too).
+  let result = '';
+  for (let k = 0; k < out.length; k++) {
+    const ch = out[k];
+    if (ch === '"') {
+      let j = k + 1;
+      while (j < out.length && out[j] !== '"') j += out[j] === '\\' ? 2 : 1;
+      result += out.slice(k, j + 1);
+      k = j;
+      continue;
+    }
+    if (ch === ',') {
+      let j = k + 1;
+      while (j < out.length && /\s/.test(out[j])) j++;
+      if (out[j] === '}' || out[j] === ']') continue;
+    }
+    result += ch;
+  }
+  return JSON.parse(result);
+}
