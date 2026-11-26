@@ -9,9 +9,9 @@
 // 마지막 단계가 시스템 로캘인 이유: 설정 없이 `npx mimi-seed check --local` 을 처음 돌린 영어권 사용자가
 // 한국어 보고서를 받지 않도록. 로캘이 없거나 C/POSIX 면 영어다.
 //
-// MCP 도구의 description / 도구 출력 텍스트는 여기 대상이 아니다 — 그건 사람이 아니라 LLM 이
-// 읽는 인터페이스다. 예외는 사람이 직접 따라 하는 복구 안내: 인증 에러 문구(mcp-server
-// auth/errors.ts 의 authText())와 OAuth 콜백 페이지, 도구 메뉴 리소스는 이 함수로 언어를 고른다.
+// mcp-server 도 이 함수로 언어를 고른다: 도구 · 파라미터 설명(lib/tool-text.ts — 원문 한국어, en 이면
+// i18n/tools-en 번역표), 도구 메뉴 리소스, 인증 에러 문구(auth/errors.ts 의 authText())와 OAuth 콜백 페이지.
+// 도구가 **돌려주는** 안내 · 에러 텍스트는 아직 대부분 한국어다(도메인별로 옮기는 중).
 // settings.json 의 **쓰기**는 CLI(settings.ts)가 소유한다.
 
 import fs from 'node:fs';

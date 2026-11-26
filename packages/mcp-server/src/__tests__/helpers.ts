@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { buildServer } from '../server.js';
 import { vi } from 'vitest';
+import type { Lang } from '#core/lang.js';
 
 /**
  * 실제 서버를 InMemoryTransport 로 부팅해 client 를 넘겨주고, 끝나면 정리한다.
@@ -10,9 +11,11 @@ import { vi } from 'vitest';
  */
 export async function withClient<T>(
   fn: (client: Client) => Promise<T>,
-  options: { env?: NodeJS.ProcessEnv } = {},
+  options: { env?: NodeJS.ProcessEnv; lang?: Lang } = {},
 ): Promise<T> {
-  const server = buildServer('0.0.0-test', options);
+  // 도구 설명 언어는 기본 한국어(원문)로 고정한다 — 그러지 않으면 실행 머신의 로캘(CI 러너는 영어)에 따라
+  // tools/list 설명이 바뀐다. 영어 모드는 tool-text-en.test.ts 가 따로 검증한다.
+  const server = buildServer('0.0.0-test', { lang: 'ko', ...options });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'boot-smoke-test', version: '0.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
