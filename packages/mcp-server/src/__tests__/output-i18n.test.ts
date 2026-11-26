@@ -144,7 +144,8 @@ function sourceFiles(dir = srcDir): string[] {
 
 /** 파일에서 ko 블록 밖 · 설명 원문이 아닌 한글 리터럴. */
 function strayLiterals(file: string): string[] {
-  const code = stripComments(fs.readFileSync(path.join(srcDir, file), 'utf8'));
+  // CRLF → LF: Windows 체크아웃(core.autocrlf)은 여러 줄 템플릿 리터럴에 \r 을 넣는다 — ALLOW 의 원문과 어긋나지 않게.
+  const code = stripComments(fs.readFileSync(path.join(srcDir, file), 'utf8').replace(/\r\n/g, '\n'));
   const ranges = koBlockRanges(code);
   return hangulLiterals(code)
     .filter((lit) => !ranges.some(([s, e]) => lit.index >= s && lit.index < e))
