@@ -9,6 +9,9 @@
 // (#core/lang.js)으로 i18n/tools-en 번역표를 적용한다.
 
 import { resolveLang, type Lang } from "#core/lang.js";
+import type { ManifestLookup } from "#core/project-manifest.js";
+
+type ManifestInvalidReason = Extract<ManifestLookup, { state: "invalid" }>["reason"];
 
 // 파일별 로컬 카탈로그 — 구현은 두 패키지가 공유하는 core 에 있다 (#core/lang.js). 온보딩 공통 문구
 // (setup/doctor/auth/lang)는 아래 `t()` 의 전역 카탈로그에, 명령마다 자기만 쓰는 문구는 그 파일의 catalog 에 둔다.
@@ -115,6 +118,10 @@ const ko = {
     unnamed: "(이름 미상)",
     requirements: (proj: string) => `${proj} 요구사항 (.mimi-seed.json)`,
     thisProject: "이 프로젝트",
+    manifestInvalid: "프로젝트 요구사항 (.mimi-seed.json)",
+    manifestInvalidDetail: (file: string, reason: string) =>
+      `${file} 을(를) 읽을 수 없어 요구사항을 점검하지 못했습니다 (${reason}) — 파일을 고친 뒤 다시 실행하세요`,
+    manifestReason: { unreadable: "읽기 실패", "invalid-json": "JSON 형식 오류", "not-an-object": "객체가 아님" } as Record<ManifestInvalidReason, string>,
   },
 
   auth: {
@@ -239,6 +246,10 @@ MIMI_SEED_LANG takes precedence when set.`,
     unnamed: "(unnamed)",
     requirements: (proj: string) => `${proj} requirements (.mimi-seed.json)`,
     thisProject: "This project",
+    manifestInvalid: "Project requirements (.mimi-seed.json)",
+    manifestInvalidDetail: (file: string, reason: string) =>
+      `cannot read ${file}, so its requirements were not checked (${reason}) — fix the file and run again`,
+    manifestReason: { unreadable: "unreadable", "invalid-json": "invalid JSON", "not-an-object": "not an object" },
   },
 
   auth: {

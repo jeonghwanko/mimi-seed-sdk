@@ -59,6 +59,7 @@ function easXcodeEvidence(file: ProjectFile): XcodeEvidence[] {
   try {
     json = JSON.parse(file.text);
   } catch {
+    // TODO-risk: JSON.parse 로 못 읽는 eas.json(주석 등)의 ios.image 고정값은 근거에서 빠진다 — 다른 Xcode 고정값만으로 판정될 수 있다
     return [];
   }
   const build = (json as { build?: unknown })?.build;

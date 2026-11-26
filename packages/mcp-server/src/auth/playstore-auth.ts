@@ -9,8 +9,16 @@ import { assertAndroidPackageName, isValidAndroidPackageName } from '../lib/pack
 import { catalog } from '#core/lang.js';
 
 const M = catalog(
-  { outside: (dir: string) => `서비스 계정 경로가 ${dir} 밖을 가리킵니다.` },
-  { outside: (dir: string) => `The service account path points outside ${dir}.` },
+  {
+    outside: (dir: string) => `서비스 계정 경로가 ${dir} 밖을 가리킵니다.`,
+    unreadable: (file: string) =>
+      `❌ 서비스 계정 키 파일을 읽을 수 없습니다: ${file}\n   → 파일을 고치거나 지운 뒤 playstore_register_service_account 로 다시 등록하세요.`,
+  },
+  {
+    outside: (dir: string) => `The service account path points outside ${dir}.`,
+    unreadable: (file: string) =>
+      `❌ The service account key file cannot be read: ${file}\n   → Fix or delete the file, then register it again with playstore_register_service_account.`,
+  },
 );
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
@@ -36,6 +44,7 @@ function safeReadFile(p: string): string | null {
   try {
     return fs.readFileSync(p, 'utf-8');
   } catch {
+    // 못 읽는 파일을 어떻게 다룰지는 호출자가 정한다 — getServiceAccountJson 은 등록된 패키지별 SA 면 throw, 목록은 이메일 '모름'
     return null;
   }
 }
@@ -43,13 +52,17 @@ function safeReadFile(p: string): string | null {
 /**
  * 패키지별 → 레거시(default) 순으로 SA JSON을 로드.
  * 여러 앱이 다른 GCP 프로젝트의 SA를 쓰는 환경 지원.
+ * 패키지별 SA 파일이 있는데 읽을 수 없거나 비었으면 레거시로 넘어가지 않고 throw.
  */
 export function getServiceAccountJson(packageName?: string): string | null {
   if (packageName) {
     const perPkg = serviceAccountPathForPackage(packageName);
     if (fs.existsSync(perPkg)) {
       const json = safeReadFile(perPkg);
-      if (json) return json;
+      if (json?.trim()) return json;
+      // 패키지별 SA 가 등록돼 있는데 못 읽으면 레거시 SA(다른 GCP 프로젝트일 수 있다)로 넘어가지 않는다 —
+      // 원격 동기화가 그 키를 이 패키지의 SA 로 보내거나, Play 호출이 엉뚱한 계정으로 나간다.
+      throw new Error(M().unreadable(perPkg));
     }
   }
   if (fs.existsSync(LEGACY_SA_PATH)) {
@@ -133,19 +146,25 @@ export function deleteServiceAccountJsonForPackage(packageName: string): boolean
 export function getServiceAccountClient(packageName?: string): JWT | null {
   const json = getServiceAccountJson(packageName);
   if (!json) return null;
+  let parsed: { client_email?: string; private_key?: string };
   try {
-    const parsed = JSON.parse(json);
-    return newJWT({
-      email: parsed.client_email,
-      key: parsed.private_key,
-      // androidpublisher(edits/리스팅 등) + Developer Reporting(vitals 통계). 통계 도구가
-      // Reporting API 를 쓰므로 이 스코프가 없으면 SA 경로에서도 통계만 403 으로 죽는다.
-      scopes: [
-        'https://www.googleapis.com/auth/androidpublisher',
-        PLAY_DEVELOPER_REPORTING_SCOPE,
-      ],
-    });
+    parsed = JSON.parse(json);
   } catch {
-    return null;
+    // 깨진 SA 를 null 로 돌려주면 requirePlayStoreAuth 가 사용자 OAuth 로 조용히 넘어간다 (다른 주체로 호출).
+    // cause 는 싣지 않는다 — JSON.parse 메시지는 입력(개인키) 조각을 인용한다.
+    const file = packageName && fs.existsSync(serviceAccountPathForPackage(packageName))
+      ? serviceAccountPathForPackage(packageName)
+      : LEGACY_SA_PATH;
+    throw new Error(M().unreadable(file));
   }
+  return newJWT({
+    email: parsed.client_email,
+    key: parsed.private_key,
+    // androidpublisher(edits/리스팅 등) + Developer Reporting(vitals 통계). 통계 도구가
+    // Reporting API 를 쓰므로 이 스코프가 없으면 SA 경로에서도 통계만 403 으로 죽는다.
+    scopes: [
+      'https://www.googleapis.com/auth/androidpublisher',
+      PLAY_DEVELOPER_REPORTING_SCOPE,
+    ],
+  });
 }

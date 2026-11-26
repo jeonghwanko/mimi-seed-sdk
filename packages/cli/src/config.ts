@@ -34,6 +34,7 @@ export async function readConfig(): Promise<MimiSeedConfig | null> {
     const txt = await fs.readFile(CONFIG_PATH, "utf8");
     return JSON.parse(txt) as MimiSeedConfig;
   } catch {
+    // TODO-risk: 깨진 config.json 도 '로그인 안 됨'으로 보인다 — doctor/deploy 가 init 을 권하고, init 은 새 PAT 로 통째로 다시 쓴다(PAT 는 재발급 가능, 잃는 것은 깨진 파일뿐)
     return null;
   }
 }

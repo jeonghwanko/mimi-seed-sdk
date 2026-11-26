@@ -41,7 +41,7 @@ type OAuthCredentials = { clientId: string; clientSecret: string };
 type GoogleProfile = { credentials: OAuthCredentials; tokens: StoredTokens };
 function readProfile(profile: string): GoogleProfile | null {
   const file = googleProfilePath(profile);
-  try { return JSON.parse(fs.readFileSync(file, 'utf-8')) as GoogleProfile; } catch { return null; }
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')) as GoogleProfile; } catch { return null; } // 깨진 프로필은 '로그인 안 됨' — ensureFreshAccessToken 이 jsonFileProblem 으로 원인을 따로 알린다
 }
 
 /** Only safe metadata; never return tokens or OAuth client secrets to MCP callers. */
@@ -87,6 +87,7 @@ export function emailFromIdToken(idToken: string | null | undefined): string | u
     const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { email?: unknown };
     return typeof json.email === 'string' && json.email ? json.email : undefined;
   } catch {
+    // 표시용 email 일 뿐 — 형식이 다른 id_token 은 '모름'으로 둔다
     return undefined;
   }
 }
@@ -98,6 +99,7 @@ export function getStoredCredentials(profile?: string): { clientId: string; clie
     const data = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, 'utf-8'));
     return { clientId: data.clientId, clientSecret: data.clientSecret };
   } catch {
+    // 읽을 수 없으면 '미설정' — 깨진 파일은 mimi_seed_status 가 json-file 로 따로 보고한다
     return null;
   }
 }
@@ -124,6 +126,7 @@ export function getStoredTokens(profile?: string): StoredTokens | null {
   try {
     return JSON.parse(fs.readFileSync(pathToRead, 'utf-8'));
   } catch {
+    // 깨진 토큰은 '로그인 안 됨' — ensureFreshAccessToken 이 jsonFileProblem 으로 원인을 따로 알린다
     return null;
   }
 }
@@ -137,7 +140,7 @@ export function getStoredTokens(profile?: string): StoredTokens | null {
 export function getTokensLastRefreshMs(profile?: string): number | null {
   if (profile !== undefined) {
     const file = googleProfilePath(profile);
-    try { return fs.statSync(file).mtimeMs; } catch { return null; }
+    try { return fs.statSync(file).mtimeMs; } catch { return null; } // 파일이 없으면 갱신 시각도 없다 — auth_status 표시용 부가 정보
   }
   const pathToRead = fs.existsSync(TOKEN_PATH)
     ? TOKEN_PATH
@@ -148,6 +151,7 @@ export function getTokensLastRefreshMs(profile?: string): number | null {
   try {
     return fs.statSync(pathToRead).mtimeMs;
   } catch {
+    // 파일이 없으면 갱신 시각도 없다 — auth_status 표시용 부가 정보
     return null;
   }
 }
@@ -592,6 +596,7 @@ export async function resolveAccountEmail(profile?: string): Promise<string | nu
     }
     return email;
   } catch {
+    // 상태 표시용 이메일 조회 — 네트워크·응답 실패는 '모름'으로 두며 인증 자체에는 영향이 없다
     return null;
   }
 }

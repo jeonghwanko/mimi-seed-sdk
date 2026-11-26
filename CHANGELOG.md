@@ -30,6 +30,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- A corrupt `.mimi-seed.json` is no longer treated as "no manifest". `mimi_seed_status` and `mimi-seed doctor` say the project's requirements could not be checked. Social posting refuses to fall back to the default account, because the manifest may have named another profile; pass `profile` explicitly to override.
+- A broken service account key no longer silently switches identity. Drive, BigQuery, and Google Play stop with the file path instead of falling back to your OAuth account, and a broken per-package Play key no longer falls back to the legacy key. `mimi_seed_status` shows unreadable Play keys with ⚠️ and a broken BigQuery key with the reason.
+- TikTok publishing blocks the post when its duplicate-prevention audit file is unreadable, instead of treating it as "no previous post".
+- `mimi-seed mcp codex --write` no longer overwrites a `~/.codex/config.toml` that exists but cannot be read.
+- Release Doctor no longer reports a pass when it could not read the evidence. A malformed `package.json` that mentions react-native-iap gives `BILLING_UNRESOLVED`, and an unreadable convention plugin source blocks `TARGET_SDK_OK`.
 - `android_generate_keystore` runs `keytool` without blocking the MCP server, so other requests keep being answered while the key is generated. It now stops after 60 seconds with a message instead of hanging the server, and writes the temporary keystore to a private, randomly named folder.
 - Keystore setup no longer reports `keytool` as available on a Mac without a JDK, where `/usr/bin/keytool` is only a stub. It checks for a JDK first, so the macOS "install a JDK" dialog does not appear.
 - A credential file that exists but cannot be read (empty after an interrupted write, broken JSON, or no permission) is no longer reported as "not configured". The error now names the file and where it is broken, and `mimi_seed_status` lists every unreadable file under `~/.mimi-seed`. File contents are never included in the message.

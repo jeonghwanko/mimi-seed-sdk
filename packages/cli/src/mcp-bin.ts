@@ -96,6 +96,7 @@ function windowsNodeTarget(command: string, shimPath: string | null): string | n
     const target = resolveWindowsShimTarget(shimPath, readFileSync(shimPath, 'utf8'));
     return target && existsSync(target) ? target : null;
   } catch {
+    // shim 을 못 읽으면 JS 진입점을 모르는 것 — 호출부가 null 을 받아 npxFailed 로 알리고 실행하지 않는다
     return null;
   }
 }
@@ -141,6 +142,7 @@ export function runningFromSource(moduleUrl: string = import.meta.url): boolean 
     const segments = fileURLToPath(moduleUrl).split(/[\\/]+/);
     return !segments.includes("node_modules");
   } catch {
+    // file: URL 이 아니면 체크아웃 경로를 알 수 없다 — npm 설치본으로 보고 이 CLI 버전에 고정한다(@latest 보다 보수적)
     return false;
   }
 }

@@ -91,6 +91,7 @@ function readJson(filePath: string): Record<string, unknown> {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
   } catch {
+    // 없거나 깨진 설정은 MCP 클라이언트도 읽지 못한다 — 거기서 뜬 서버가 없으므로 다음 출처로 넘어가는 것이 클라이언트와 같은 결과다
     return {};
   }
 }
@@ -361,6 +362,7 @@ function readPackageJsonFile(dir: string): PackageJson | null {
     const parsed: unknown = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
+    // package.json 을 못 읽으면 그 패키지의 bin 인지 확인할 수 없다 — 일치하지 않는 것으로 보아 죽이지 않는다(안전 쪽)
     return null;
   }
 }
@@ -496,6 +498,7 @@ function listPosixProcesses(): ProcessEntry[] {
   try {
     out = execSync('ps -eo pid=,uid=,args=', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
   } catch {
+    // ps 를 못 돌리면 아무 프로세스도 죽이지 않는다(안전 쪽) — noProcess 안내와 수동 재시작 방법이 그대로 나간다
     return [];
   }
   const list: ProcessEntry[] = [];
@@ -523,7 +526,7 @@ const WINDOWS_PROCESS_QUERY =
 /** ConvertTo-Json 은 결과가 하나면 배열이 아니라 객체를 낸다 — 둘 다 받는다. */
 function parseWindowsProcesses(json: string): ProcessEntry[] {
   let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { return []; }
+  try { parsed = JSON.parse(json); } catch { return []; } // PowerShell 출력이 JSON 이 아니면 대상이 없는 것으로 본다 — 아무것도 죽이지 않고 수동 재시작을 안내한다
   const list: ProcessEntry[] = [];
   for (const row of Array.isArray(parsed) ? parsed : [parsed]) {
     if (!row || typeof row !== 'object') continue;
@@ -544,6 +547,7 @@ function listWindowsProcesses(): ProcessEntry[] {
     );
     return parseWindowsProcesses(out);
   } catch {
+    // PowerShell 을 못 돌리면 아무 프로세스도 죽이지 않는다(안전 쪽) — noProcess 안내와 수동 재시작 방법이 그대로 나간다
     return [];
   }
 }

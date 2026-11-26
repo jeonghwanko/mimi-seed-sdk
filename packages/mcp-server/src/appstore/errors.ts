@@ -119,6 +119,7 @@ function parseAppleErrorBody(body: string): AppleError[] | null {
     }
     return null;
   } catch {
+    // JSON 이 아닌 본문(게이트웨이 HTML 등)은 Apple 형식이 아닐 뿐 — 호출자가 상태 코드와 본문 그대로 안내한다
     return null;
   }
 }

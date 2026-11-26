@@ -106,7 +106,7 @@ export interface DriveServiceAccount {
 /**
  * 설정된 Drive 서비스 계정. 환경 변수가 있으면 그것이 이긴다.
  * 환경 변수가 있는데 형식이 틀리면 조용히 파일로 넘어가지 않고 throw — 잘못된 키를 쓰는 줄
- * 모른 채 다른 계정으로 올라가는 일을 막는다.
+ * 모른 채 다른 계정으로 올라가는 일을 막는다. 파일도 같다 — 있는데 깨졌으면 OAuth 로 넘어가지 않고 throw.
  */
 export function getDriveServiceAccount(env: NodeJS.ProcessEnv = process.env): DriveServiceAccount | null {
   const fromEnv = env[DRIVE_SA_ENV];
@@ -120,8 +120,10 @@ export function getDriveServiceAccount(env: NodeJS.ProcessEnv = process.env): Dr
   if (!fs.existsSync(DRIVE_SA_PATH)) return null;
   try {
     return { key: parseDriveServiceAccountJson(fs.readFileSync(DRIVE_SA_PATH, 'utf-8')), source: 'service-account' };
-  } catch {
-    return null;
+  } catch (e) {
+    // 깨진 키 파일을 null 로 돌려주면 resolveDriveAuth 가 사용자 OAuth 로 조용히 넘어가 다른 계정으로 올라간다.
+    const reason = (e as NodeJS.ErrnoException).code ?? (e instanceof Error ? e.message : String(e));
+    throw new Error(`${DRIVE_SA_PATH}: ${reason}`, { cause: e });
   }
 }
 

@@ -12,8 +12,9 @@ import path from "node:path";
 import type { McpBin } from "./mcp-bin.js";
 import type { Lang } from "#core/lang.js";
 import { resolveLang } from "#core/lang.js";
+import { t } from "./i18n.js";
 import {
-  findProjectManifest,
+  lookupProjectManifest,
   MANIFEST_FILENAME,
   manifestSocialProfile,
   type SocialPlatform,
@@ -122,6 +123,7 @@ function anyFileStarting(home: string, prefix: string): boolean {
   try {
     return fs.readdirSync(credDir(home)).some((f) => f.startsWith(prefix));
   } catch {
+    // ~/.mimi-seed 가 없거나 못 읽으면 MCP 서버도 그 자격증명을 쓸 수 없다 — 미설정으로 본다
     return false;
   }
 }
@@ -130,6 +132,7 @@ function readJson<T>(home: string, name: string): T | null {
   try {
     return JSON.parse(fs.readFileSync(path.join(credDir(home), name), "utf-8")) as T;
   } catch {
+    // TODO-risk: 깨진 자격증명 파일도 '없음'으로 보인다 — doctor 가 setup 을 권하고 setup 이 검증된 새 값으로 덮어쓴다. 손상을 따로 짚으려면 Detected 에 상태를 더하는 설계가 필요하다(mcp-server 는 json-file 로 진단)
     return null;
   }
 }
@@ -185,7 +188,10 @@ function detectProjectSocialToken(
 ): Detected {
   const idKey = "userId" as const;
   const tokenKey = "accessToken" as const;
-  const loaded = findProjectManifest(startDir ?? process.cwd());
+  // 깨진 매니페스트면 기본 토큰으로 폴백하지 않는다 — 그 파일이 다른 프로필을 지정했을 수 있다 (MCP 게시 경로와 같은 규칙).
+  const lookup = lookupProjectManifest(startDir ?? process.cwd());
+  if (lookup.state === "invalid") return { present: false, detail: `${MANIFEST_FILENAME}: ${t().doctor.manifestReason[lookup.reason]}` };
+  const loaded = lookup.state === "ok" ? lookup.loaded : null;
   if (!loaded) return detectSocialToken(home, `${platform}.json`, idKey, tokenKey);
 
   let profile: string | null;
@@ -217,6 +223,7 @@ function hasPlaySa(home: string): boolean {
       .readdirSync(path.join(credDir(home), "play-service-accounts"))
       .some((f) => f.endsWith(".json"));
   } catch {
+    // 패키지별 SA 폴더가 없으면(또는 못 읽으면) MCP 서버도 거기서 SA 를 찾지 못한다 — 기본 파일만으로 판정한다
     return false;
   }
 }

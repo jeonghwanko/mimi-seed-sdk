@@ -29,6 +29,7 @@ export function loadJenkinsConfig(home = os.homedir()): JenkinsConfig | null {
     const p = path.join(home, ".mimi-seed", "jenkins.json");
     return JSON.parse(fs.readFileSync(p, "utf-8")) as JenkinsConfig;
   } catch {
+    // TODO-risk: 깨진 jenkins.json 도 '미설정'으로 보인다 — deploy 가 Jenkins 설정 없음으로 안내한다. 이 파일의 쓰기·검증은 mcp-server 의 jenkins 설정 도구가 소유한다
     return null;
   }
 }
@@ -52,6 +53,7 @@ export function migrateLegacyJenkins(home = os.homedir()): boolean {
   try {
     legacy = JSON.parse(fs.readFileSync(legacyPath, "utf-8")) as Record<string, unknown>;
   } catch {
+    // config.json 이 없거나 깨졌으면 이관할 레거시 값을 읽을 수 없다 — 원본을 건드리지 않고 이관하지 않는다
     return false;
   }
 

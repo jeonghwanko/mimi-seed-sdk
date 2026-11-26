@@ -168,6 +168,21 @@ describe('Google Play Billing compliance', () => {
     }));
   });
 
+  it('react-native-iap를 언급하는 깨진 package.json은 not_used가 아니라 unresolved다', async () => {
+    const root = await fixture({
+      'package.json': '{ "dependencies": { "react-native-iap": "^12.16.2", } ',
+    });
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+    expect(result.status).toBe('unresolved');
+    expect(result.evidence).toEqual([expect.objectContaining({ file: 'package.json', source: 'unresolved' })]);
+  });
+
+  it('react-native-iap를 언급하지 않는 깨진 package.json은 Billing 근거가 아니다', async () => {
+    const root = await fixture({ 'package.json': '{ "dependencies": { "left-pad": "1.0.0", } ' });
+    const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));
+    expect(result.status).toBe('not_used');
+  });
+
   it('Billing 의존성이 없으면 not_used로 끝낸다', async () => {
     const root = await fixture({ 'app/build.gradle': 'dependencies { implementation "androidx.core:core:1.0.0" }' });
     const result = await checkBillingCompliance(root, new Date('2026-09-04T00:00:00Z'));

@@ -207,6 +207,7 @@ function replay(dir: string, file: string, fingerprint: string, base: string, re
     try {
       since = statSync(dir).mtimeMs;
     } catch {
+      // 예약 폴더 나이를 모르면 'unknown' 으로 답한다 — 어느 쪽이든 재전송은 하지 않는다
       since = undefined;
     }
   }

@@ -10,6 +10,9 @@ import { catalog } from '#core/lang.js';
 const M = catalog(
   {
     badJson: 'JSON 파싱 실패 — 올바른 서비스 계정 키 파일이 아닙니다.',
+    saFileInvalid: (file: string) =>
+      `BigQuery 서비스 계정 키 파일을 쓸 수 없습니다: ${file} (JSON 오류 또는 서비스 계정 키 형식이 아님). ` +
+      '사용자 OAuth 로 대신 쿼리하지 않습니다 — 다른 주체(권한 · 과금)로 실행되기 때문. mimi-seed-bigquery-auth 로 다시 등록하거나 파일을 지우세요.',
     notSaKey: '서비스 계정 키 형식이 아닙니다 (type="service_account", client_email, private_key 필요).',
     hint: [
       '❌ BigQuery 인증이 설정되지 않았어.',
@@ -25,6 +28,9 @@ const M = catalog(
   },
   {
     badJson: 'JSON parse failed — this is not a valid service account key file.',
+    saFileInvalid: (file: string) =>
+      `Cannot use the BigQuery service account key file: ${file} (invalid JSON or not a service account key). ` +
+      'Not querying as your user OAuth instead — that would run as a different identity (permissions, billing). Re-register with mimi-seed-bigquery-auth or delete the file.',
     notSaKey: 'Not a service account key (needs type="service_account", client_email, private_key).',
     hint: [
       '❌ BigQuery authentication is not set up.',
@@ -67,6 +73,7 @@ function safeReadSa(p: string): ServiceAccountKey | null {
     }
     return null;
   } catch {
+    // 깨진 파일은 '쓸 수 있는 키 없음'(null). 있는데 못 쓰는 경우는 resolveBigQueryAuth 가 OAuth 로 넘어가지 않고 막는다.
     return null;
   }
 }
@@ -124,6 +131,9 @@ export interface BigQueryAuth {
  */
 export function resolveBigQueryAuth(): BigQueryAuth | null {
   const sa = getBigQueryServiceAccountKey();
+  // 키 파일이 **있는데** 쓸 수 없으면(JSON 오류 · SA 형식 아님) 사용자 OAuth 로 넘어가지 않는다 — 사용자가 서비스 계정으로
+  // 쿼리하려고 등록한 것이고, OAuth 로 돌면 다른 주체의 권한 · 과금으로 실행된다(Drive · Play SA 와 같은 규칙).
+  if (!sa && fs.existsSync(BQ_SA_PATH)) throw new Error(M().saFileInvalid(BQ_SA_PATH));
   if (sa) {
     return {
       client: makeJwt(sa),

@@ -812,7 +812,7 @@ export function targetSdkFindings(
     netScripts.set(entry.file.absolute, file ? { ...entry, file, excluded: undefined } : entry);
   }
   for (const file of used.values()) if (!netScripts.has(file.absolute)) netScripts.set(file.absolute, { file });
-  const netIssues: string[] = unreadConventionRoots.map((dir) => `${dir} (a convention build too large to read completely)`);
+  const netIssues: string[] = unreadConventionRoots.map((dir) => `${dir} (a convention build that could not be read completely)`);
   for (const { file: script, excluded: scriptExcluded, inherited } of netScripts.values()) {
     const masked = maskStrings(script.text);
     for (const token of tokensOf(script)) {

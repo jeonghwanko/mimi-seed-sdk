@@ -35,6 +35,7 @@ export function loadJenkinsConfig(): JenkinsConfig | null {
   try {
     return JSON.parse(fs.readFileSync(JENKINS_CONFIG_PATH, 'utf-8')) as JenkinsConfig;
   } catch {
+    // 읽을 수 없으면 '미설정' — 깨진 파일은 requireJenkinsConfig · jenkinsConfigProblem 이 json-file 로 따로 진단한다
     return null;
   }
 }
@@ -87,6 +88,7 @@ export function jenkinsUrlWarning(url: string): string | null {
   try {
     parsed = new URL(url);
   } catch {
+    // URL 형식은 저장 스키마(z.string().url())가 이미 거른다 — 여기선 경고 문구만 만들므로 파싱 실패는 '경고 없음'
     return null;
   }
   if (parsed.protocol !== 'http:' || isPrivateHost(parsed.hostname)) return null;

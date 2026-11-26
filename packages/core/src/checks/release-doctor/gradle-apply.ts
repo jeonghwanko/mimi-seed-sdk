@@ -167,6 +167,7 @@ async function workspacePackage(name: string, context: ApplyContext): Promise<st
     try {
       return text === undefined ? undefined : JSON.parse(text) as Record<string, unknown>;
     } catch {
+      // 깨진 package.json 은 패키지 매니저도 workspace 멤버로 인식하지 못한다 — 이름을 대조할 근거가 없다
       return undefined;
     }
   };

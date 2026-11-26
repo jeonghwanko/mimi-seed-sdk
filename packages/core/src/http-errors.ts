@@ -17,6 +17,7 @@ export function endpointLabel(input: string | URL, fallback: string): string {
     const url = new URL(String(input));
     return `${url.host}${url.pathname}`;
   } catch {
+    // URL 로 해석되지 않는 입력은 라벨을 만들 수 없다 — 호출부가 준 fallback("외부 서버")을 쓴다
     return fallback;
   }
 }

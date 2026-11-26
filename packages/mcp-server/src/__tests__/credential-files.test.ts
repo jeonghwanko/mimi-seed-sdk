@@ -223,6 +223,38 @@ describe('도구 호출 — 깨진 파일을 밝히는 진단·상태 도구', (
     expect(await call('drive_list_files')).toContain(file);
   });
 
+  // 깨진 .mimi-seed.json — 상태 리포트는 죽지 않고, 요구사항을 점검하지 못했다고 밝히며, 소셜 줄은 원인을 보인다.
+  it('깨진 프로젝트 매니페스트를 "없음"으로 넘기지 않는다', async () => {
+    const project = path.join(h.home, 'project');
+    mkdirSync(project, { recursive: true });
+    writeFileSync(path.join(project, '.mimi-seed.json'), '{"services": {"jenkins": {}');
+    const cwd = process.cwd();
+    process.chdir(project);
+    try {
+      const text = await call('mimi_seed_status');
+      expect(text).toContain('프로젝트 매니페스트를 읽을 수 없어 요구사항을 점검하지 못했습니다');
+      expect(text).toContain('JSON 형식 오류');
+      expect(text).toMatch(/❌ Instagram\s+— .*기본 계정으로 대신 게시하지 않습니다/);
+      expect(text).toContain('TikTok Business'); // 소셜 다음 줄들도 계속 출력됐다 (리포트가 중간에 죽지 않음)
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  // 파일이 있다는 이유로 ✅ 로 보이면 안 된다 — 그 키로 부르는 순간 실패한다.
+  it('깨진 Play SA 키는 ⚠️ 로, 깨진 BigQuery SA 키는 원인과 함께 ❌ 로 보인다', async () => {
+    write('play-service-accounts/com.example.app.json', '{"type":"service_account",');
+    write('bigquery-service-account.json', '{"type":"service_account"}');
+    const text = await call('mimi_seed_status');
+    expect(text).toMatch(/⚠️ {2}Play Store SA {5}— 1개 중 1개를 읽을 수 없음 \(com\.example\.app\)/);
+    expect(text).not.toMatch(/✅ Play Store SA/);
+    expect(text).toMatch(/❌ BigQuery {10}— BigQuery 서비스 계정 키 파일을 쓸 수 없습니다/);
+    expect(JSON.parse(await call('bigquery_auth_status'))).toMatchObject({
+      authenticated: false,
+      problem: expect.stringContaining('bigquery-service-account.json'),
+    });
+  });
+
   it('깨진 파일이 없으면 섹션도 없다', async () => {
     write('ci.json', JSON.stringify({ provider: 'github', token: 'x', owner: 'o', repo: 'r' }));
     expect(await call('mimi_seed_status')).not.toContain('읽을 수 없는 설정 파일');

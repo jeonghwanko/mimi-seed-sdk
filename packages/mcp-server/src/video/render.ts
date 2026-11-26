@@ -276,6 +276,7 @@ function acquireOutputLock(lockPath: string, projectDir: string, jobId: string):
       active = queuedRecently || (existing.status === 'running' && processAlive(existing.pid));
     }
   } catch {
+    // 잠금·작업 파일을 못 읽으면 살아 있는 렌더를 증명할 수 없어 오래된 잠금으로 본다 (작업 파일은 원자적 쓰기)
     active = false;
   }
   if (active) throw new Error(M().renderRunning(lockPath));

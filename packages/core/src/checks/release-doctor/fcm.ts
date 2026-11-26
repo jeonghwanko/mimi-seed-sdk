@@ -119,6 +119,7 @@ async function firebaseAdminEvidence(files: ProjectFile[], root: string): Promis
     try {
       manifest = JSON.parse(file.text) as Record<string, unknown>;
     } catch {
+      // 깨진 package.json 은 npm 도 설치하지 못한다 — FCM 검사는 경고만 내고 통과(OK) 판정이 없어, 빠져도 거짓 통과가 되지 않는다
       continue;
     }
     const declared = ['dependencies', 'devDependencies']

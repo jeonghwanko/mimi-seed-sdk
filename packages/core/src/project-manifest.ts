@@ -60,38 +60,62 @@ export interface LoadedManifest {
 }
 
 /**
+ * `.mimi-seed.json` 탐색 결과 — 없음 / 정상 / **깨짐**.
+ *
+ * 예전엔 깨진 파일(JSON 문법 오류 · 객체 아님 · 읽기 실패)도 null 이 되어 "매니페스트 없음"과 구분되지 않았다.
+ * 그러면 팀이 선언한 요구사항 점검이 조용히 사라지고, 소셜 게시는 매니페스트가 지정한 프로필 대신 기본 계정으로
+ * 폴백한다(다른 계정에 게시). 사람에게 보이는 쪽은 `invalid` 를 알리고, 게시 경로는 막아야 한다.
+ * `reason` 은 언어 중립 코드다 — 문구는 각 패키지가 자기 언어로 만든다.
+ */
+export type ManifestLookup =
+  | { state: 'missing' }
+  | { state: 'ok'; loaded: LoadedManifest }
+  | { state: 'invalid'; filePath: string; reason: 'unreadable' | 'invalid-json' | 'not-an-object' };
+
+/**
  * startDir 에서 위로 올라가며 첫 번째 `.mimi-seed.json` 을 찾는다.
  * MCP stdio 서버의 cwd 는 보통 프로젝트 루트지만, 하위 폴더에서 실행돼도 잡히게 상향 탐색한다.
- * maxDepth 로 홈 디렉터리 밖까지 무한 상승하는 것을 방지.
+ * maxDepth 로 홈 디렉터리 밖까지 무한 상승하는 것을 방지. 깨진 파일을 만나면 상위로 더 올라가지 않는다 —
+ * 그 파일이 이 프로젝트의 의도이므로, 상위 폴더의 다른 매니페스트로 대신하지 않는다.
+ */
+export function lookupProjectManifest(startDir: string = process.cwd(), maxDepth = 8): ManifestLookup {
+  let dir = path.resolve(startDir);
+  for (let i = 0; i <= maxDepth; i++) {
+    const candidate = path.join(dir, MANIFEST_FILENAME);
+    if (fs.existsSync(candidate)) return parseManifest(candidate);
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // 루트 도달
+    dir = parent;
+  }
+  return { state: 'missing' };
+}
+
+/**
+ * 정상 매니페스트만 돌려준다 (없음 · 깨짐은 null). 깨짐을 알려야 하는 호출자는 lookupProjectManifest 를 쓴다.
  */
 export function findProjectManifest(
   startDir: string = process.cwd(),
   maxDepth = 8,
 ): LoadedManifest | null {
-  let dir = path.resolve(startDir);
-  for (let i = 0; i <= maxDepth; i++) {
-    const candidate = path.join(dir, MANIFEST_FILENAME);
-    if (fs.existsSync(candidate)) {
-      const parsed = safeParse(candidate);
-      if (parsed) return { manifest: parsed, filePath: candidate };
-      return null; // 파일은 있으나 형식 오류 — 상위로 더 올라가지 않는다(의도 명확).
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break; // 루트 도달
-    dir = parent;
-  }
-  return null;
+  const result = lookupProjectManifest(startDir, maxDepth);
+  return result.state === 'ok' ? result.loaded : null;
 }
 
-function safeParse(filePath: string): ProjectManifest | null {
+function parseManifest(filePath: string): ManifestLookup {
+  let raw: string;
   try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const obj = JSON.parse(raw) as ProjectManifest;
-    if (obj && typeof obj === 'object') return obj;
-    return null;
+    raw = fs.readFileSync(filePath, 'utf-8');
   } catch {
-    return null;
+    return { state: 'invalid', filePath, reason: 'unreadable' };
   }
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return { state: 'invalid', filePath, reason: 'invalid-json' };
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return { state: 'invalid', filePath, reason: 'not-an-object' };
+  return { state: 'ok', loaded: { manifest: obj, filePath } };
 }
 
 /** 매니페스트 services 를 [id, service] 배열로. 없으면 빈 배열. */

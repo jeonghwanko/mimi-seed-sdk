@@ -86,6 +86,7 @@ function declaresDevEngines(projectPath: string): boolean {
     const manifest = JSON.parse(fs.readFileSync(path.join(projectPath, "package.json"), "utf8")) as { devEngines?: unknown };
     return Boolean(manifest.devEngines) && typeof manifest.devEngines === "object";
   } catch {
+    // devEngines 를 확인할 수 없으면 일반 npx 명령을 제안한다 — package.json 이 깨졌다면 npm 이 먼저 EJSONPARSE 로 알린다
     return false;
   }
 }

@@ -172,6 +172,19 @@ describe('detectAll', () => {
       detail: expect.stringContaining('must be an object'),
     });
   });
+
+  // 파일 자체가 깨진 경우도 같다 — 예전엔 "매니페스트 없음"으로 보고 기본 토큰을 연결된 것으로 표시했다.
+  it('깨진 .mimi-seed.json 이면 기본 토큰을 연결로 보지 않는다', () => {
+    writeCred('instagram.json', { accessToken: 'IGAA_LEGACY_EXAMPLE', userId: 'legacy' });
+    const project = path.join(home, 'project');
+    fs.mkdirSync(project);
+    fs.writeFileSync(path.join(project, '.mimi-seed.json'), '{"socialProfiles": {"instagram": "weather"');
+
+    expect(detectAll(home, project).get('instagram')).toMatchObject({
+      present: false,
+      detail: expect.stringContaining('.mimi-seed.json'),
+    });
+  });
 });
 
 describe('isSatisfied — fallback', () => {

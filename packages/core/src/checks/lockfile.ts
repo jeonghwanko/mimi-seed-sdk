@@ -8,6 +8,7 @@ export async function readText(file: string): Promise<string | undefined> {
   try {
     return await fs.readFile(file, 'utf8');
   } catch {
+    // 없는 파일과 못 읽는 파일은 같은 '근거 없음' — 호출부가 undefined 를 다음 후보 · null catalog(판정 불가) · missed apply 로 처리한다
     return undefined;
   }
 }
@@ -17,6 +18,7 @@ async function exists(file: string): Promise<boolean> {
     await fs.stat(file);
     return true;
   } catch {
+    // 존재 여부만 본다 — 접근할 수 없는 .git 은 저장소 루트 근거로 쓰지 않고 상위로 계속 찾는다
     return false;
   }
 }
