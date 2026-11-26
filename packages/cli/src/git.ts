@@ -52,6 +52,22 @@ export function getLatestTag(cwd: string): string | null {
   }
 }
 
+/**
+ * ref 가 실제 커밋을 가리키는가 (`git rev-parse --verify --quiet <ref>^{commit}`). 사용자가 입력한 `--from`/`--to` 를
+ * getGitLog 전에 확인한다 — getGitLog 는 실패를 빈 목록으로 돌려주므로, 오타 난 ref 가 "커밋 없음"으로 보였다.
+ * `-` 로 시작하는 값은 git 이 옵션으로 읽으니 거부한다 (getGitLog 와 같은 규칙).
+ */
+export function isCommitRef(cwd: string, ref: string): boolean {
+  if (ref.startsWith("-")) return false;
+  try {
+    git(cwd, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+    return true;
+  } catch {
+    // rev-parse 가 실패하면(없는 ref · 커밋이 아닌 객체) '커밋 아님'이 곧 답이다
+    return false;
+  }
+}
+
 export function getGitLog(
   cwd: string,
   opts: { from?: string; to?: string; limit?: number } = {},
@@ -68,7 +84,7 @@ export function getGitLog(
   try {
     out = git(cwd, ["log", `--max-count=${limit}`, `--format=${format}`, range, "--"]);
   } catch {
-    // TODO-risk: 잘못된 --from/--to ref 도 '커밋 없음'으로 보인다 — notes 는 noCommits 로 멈추고(exit 0) 아무것도 만들지 않아 틀린 결과물은 없다
+    // 로그를 못 읽으면 빈 목록 — notes 는 사용자가 준 ref 를 isCommitRef 로 먼저 확인하고, doctor 는 미리보기라 비어도 된다
     return [];
   }
 

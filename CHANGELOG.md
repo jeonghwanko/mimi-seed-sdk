@@ -30,6 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- `mimi-seed notes --from/--to` with a ref that doesn't exist (a typo, a missing tag) now stops with an error naming the ref and exits 1. It used to report "No commits found" and exit 0.
+- The Google sign-in callback page decides which error to show by error type, not by whether the message starts with "YouTube". Channel-verification problems (mismatch, ambiguous channel) are still shown so you can fix them; other failures stay hidden. Its error response is now plain text with `nosniff`, so a channel title is never interpreted as HTML.
 - A corrupt `.mimi-seed.json` is no longer treated as "no manifest". `mimi_seed_status` and `mimi-seed doctor` say the project's requirements could not be checked. Social posting refuses to fall back to the default account, because the manifest may have named another profile; pass `profile` explicitly to override.
 - A broken service account key no longer silently switches identity. Drive, BigQuery, and Google Play stop with the file path instead of falling back to your OAuth account, and a broken per-package Play key no longer falls back to the legacy key. `mimi_seed_status` shows unreadable Play keys with ⚠️ and a broken BigQuery key with the reason.
 - TikTok publishing blocks the post when its duplicate-prevention audit file is unreadable, instead of treating it as "no previous post".

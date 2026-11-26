@@ -76,6 +76,38 @@ async function login(profile?: string, expectedChannelId?: string) {
   if (error) throw error instanceof Error ? error : new Error(String(error));
 }
 
+// OAuth 콜백 페이지가 무엇을 보여주는지 — 판단은 에러 **종류**(YouTubeChannelError)로 한다, 메시지 문구가 아니라.
+describe('OAuth callback error page', () => {
+  async function failingCallback(expectedChannelId: string) {
+    const flow = auth.startAuth('example-client', 'example-secret', { profile: 'channel-a', expectedChannelId, domains: ['youtube'] });
+    const settled = flow.wait.then(() => null, (error: unknown) => error);
+    const res = await callback(flow.url);
+    return { res, error: await settled };
+  }
+
+  it('shows a channel mismatch as plain text the user can act on', async () => {
+    const { res, error } = await failingCallback(channelB);
+    expect(error).toBeInstanceOf(Error);
+    expect(res.writeHead).toHaveBeenCalledWith(500, expect.objectContaining({
+      'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff',
+    }));
+    expect(String(res.end.mock.calls[0][0])).toContain('YouTube channel mismatch');
+  });
+
+  it('hides other failures even when their message starts with "YouTube"', async () => {
+    h.channelList.mockRejectedValue(new Error('YouTube Data API internal detail: quota project 123'));
+    const { res } = await failingCallback(channelA);
+    expect(res.end).toHaveBeenCalledWith('Auth error. Check the MCP/CLI login status.');
+  });
+
+  it('never serves a channel title as HTML', async () => {
+    h.channelList.mockResolvedValue({ data: { items: [{ id: channelB, snippet: { title: '<img src=x onerror=alert(1)>' } }] } });
+    const { res } = await failingCallback(channelA);
+    expect(res.writeHead).toHaveBeenCalledWith(500, expect.objectContaining({ 'Content-Type': 'text/plain; charset=utf-8' }));
+    expect(String(res.end.mock.calls[0][0])).toContain('<img src=x onerror=alert(1)>'); // 텍스트 그대로 — 브라우저는 실행하지 않는다
+  });
+});
+
 describe('Google account/channel profiles', () => {
   it('analytics-only channel login requests read scopes without publishing permission', async () => {
     h.tokenResponse.scope = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly';
@@ -204,6 +236,43 @@ describe('Google account/channel profiles', () => {
     expect(result.channelId).toBe(channelA);
     expect(result.authenticatedChannel.id).toBe(channelA);
     expect(h.insert).toHaveBeenCalledOnce();
+  });
+
+  // try 는 업로드 호출만 감싼다 — 예전엔 응답 검사까지 같은 try 에 두고 catch 에서 message.includes('videoId') 로
+  // 구분했다. 그러면 Google 오류 문구에 'videoId' 가 들어 있으면 친절한 변환 없이 원문이 그대로 나갔다.
+  async function uploadWith(insert: () => unknown) {
+    const { validateVideo } = await import('../video/render.js');
+    vi.mocked(validateVideo).mockResolvedValue({ streams: [{ codec_type: 'video', width: 1080, height: 1920 }],
+      format: { duration: '28' }, issues: [] } as unknown as Awaited<ReturnType<typeof validateVideo>>);
+    const { uploadYouTubeVideo } = await import('../video/youtube-publish.js');
+    const filePath = path.join(h.home, 'example.mp4');
+    writeFileSync(filePath, 'example video');
+    const uploaded: { stream?: ReadStream } = {};
+    h.insert.mockImplementation((request: { media: { body: ReadStream } }) => {
+      uploaded.stream = request.media.body;
+      request.media.body.destroy();
+      return insert();
+    });
+    try {
+      return await uploadYouTubeVideo(auth.createOAuth2Client('example-client', 'example-secret'), {
+        filePath, title: 'Example', expectedChannelId: channelA,
+      });
+    } finally {
+      // 스트림이 닫히기 전에 afterEach 가 임시 폴더를 지우면 늦은 open 이 처리되지 않은 오류가 된다.
+      if (uploaded.stream && !uploaded.stream.closed) await once(uploaded.stream, 'close');
+    }
+  }
+
+  it('응답에 videoId 가 없으면 그 사실을 그대로 알린다', async () => {
+    await expect(uploadWith(() => ({ data: { snippet: { channelId: channelA } } }))).rejects.toThrow(/videoId/);
+  });
+
+  it('업로드 API 오류는 문구와 상관없이 친절한 오류로 바꾼다', async () => {
+    const google = await import('../lib/google-errors.js');
+    const friendly = vi.spyOn(google, 'friendlyGoogleError');
+    await expect(uploadWith(() => { throw new Error('Invalid videoId in request'); })).rejects.toThrow();
+    expect(friendly).toHaveBeenCalledOnce();
+    friendly.mockRestore();
   });
 
   it('대상 채널 불일치 또는 여러 채널이면 파일 전송을 시작하지 않는다', async () => {

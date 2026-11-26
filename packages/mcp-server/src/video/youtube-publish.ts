@@ -148,18 +148,19 @@ function safeStatus(video: youtube_v3.Schema$Video) {
 
 export async function getYouTubeVideoStatus(auth: OAuth2Client, videoId: string) {
   const youtube = google.youtube({ version: 'v3', auth });
+  // try 는 API 호출만 감싼다 — 우리 검사(영상 없음)를 같은 try 에 두면 catch 에서 메시지 문구로 구분해야 한다.
+  let response;
   try {
-    const response = await youtube.videos.list({
+    response = await youtube.videos.list({
       part: ['snippet', 'status', 'processingDetails'],
       id: [videoId],
     });
-    const video = response.data.items?.[0];
-    if (!video) throw new Error(M().notFound(videoId));
-    return safeStatus(video);
   } catch (error) {
-    if (error instanceof Error && error.message === M().notFound(videoId)) throw error;
     throw friendlyGoogleError(error);
   }
+  const video = response.data.items?.[0];
+  if (!video) throw new Error(M().notFound(videoId));
+  return safeStatus(video);
 }
 
 export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTubeVideoInput) {
@@ -181,8 +182,10 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
   if (input.shortsOnly) assertShortsCompatible(facts);
 
   const youtube = google.youtube({ version: 'v3', auth });
+  // try 는 업로드 호출만 감싼다 — 응답 검사(videoId 없음)를 같은 try 에 두면 catch 에서 메시지 문구로 구분해야 했다.
+  let response;
   try {
-    const response = await youtube.videos.insert({
+    response = await youtube.videos.insert({
       part: ['snippet', 'status'],
       notifySubscribers: input.notifySubscribers ?? false,
       requestBody: {
@@ -207,19 +210,18 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
         body: createReadStream(input.filePath),
       },
     }, mediaUploadOptions());
-    const videoId = response.data.id;
-    if (!videoId) throw new Error(M().noVideoId);
-    return {
-      ...safeStatus(response.data),
-      authenticatedChannel: channel,
-      requestedPrivacyStatus: privacyStatus,
-      file: { path: input.filePath, size: file.size, ...facts },
-      validationWarnings: validation.issues,
-    };
   } catch (error) {
-    if (error instanceof Error && error.message.includes('videoId')) throw error;
     throw friendlyGoogleError(error);
   }
+  const videoId = response.data.id;
+  if (!videoId) throw new Error(M().noVideoId);
+  return {
+    ...safeStatus(response.data),
+    authenticatedChannel: channel,
+    requestedPrivacyStatus: privacyStatus,
+    file: { path: input.filePath, size: file.size, ...facts },
+    validationWarnings: validation.issues,
+  };
 }
 
 export async function updateYouTubeVideoPrivacy(auth: OAuth2Client, input: UpdateYouTubePrivacyInput) {

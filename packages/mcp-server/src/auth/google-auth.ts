@@ -1,7 +1,7 @@
 import { google } from '../lib/googleapis-lite.js';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from './youtube-channel.js';
+import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID, YouTubeChannelError } from './youtube-channel.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -383,8 +383,10 @@ export function startAuth(
         resolve(stored);
       } catch (err) {
         try {
-          res.writeHead(500);
-          res.end(err instanceof Error && err.message.startsWith('YouTube') ? err.message : 'Auth error. Check the MCP/CLI login status.');
+          // 사용자가 고칠 수 있는 채널 검증 실패만 그대로 보여주고, 나머지는 일반 문구로 가린다 — 판단은 문구가 아니라
+          // 에러 종류로 한다. 메시지에는 채널 제목(사용자 입력)이 들어가므로 text/plain + nosniff 로 HTML 해석을 막는다.
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
+          res.end(err instanceof YouTubeChannelError ? err.message : 'Auth error. Check the MCP/CLI login status.');
         } catch { /* noop — already responded */ }
         try { server.close(); } catch { /* noop */ }
         rejectAuth(err);

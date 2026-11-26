@@ -2,6 +2,7 @@
 // appstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import { apiGet, apiPatch, apiPost } from './client.js';
+import { isNotFound } from './http.js';
 import type { AscListDocument, AscResource, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { catalog } from '#core/lang.js';
@@ -263,13 +264,10 @@ export async function updateVersionWhatsNew(
 // ─── 리뷰어 노트 (appStoreReviewDetail.notes) ───
 
 /**
- * apiGet이 throw한 에러가 404(리소스 없음)인지 판별.
- * apiGet은 `App Store API ${status}: ${body}` 형식으로 throw하므로 prefix로 판별.
+ * apiGet이 throw한 에러가 404(리소스 없음)인지 — http.ts 의 isNotFound 로 판별한다(cause.status 우선, 메시지는 폴백).
  * 404 외(401/403/500 등)는 마스킹하지 않고 그대로 throw해야 디버깅 가능.
  */
-function isNotFoundError(err: unknown): boolean {
-  return err instanceof Error && /^App Store API 404:/.test(err.message);
-}
+const isNotFoundError = isNotFound;
 
 export async function updateReviewNotes(
   versionId: string,
