@@ -21,6 +21,7 @@ import {
   type SocialPlatform,
   type SocialProfileMessages,
 } from "#core/project-manifest.js";
+import { readCredentialFileSync } from "#core/credential-read.js";
 
 // .mimi-seed.json socialProfiles 검증 문구 — 규칙은 core 한 곳, 문구는 CLI 가 예전부터 쓰던 영어 그대로.
 const SOCIAL_PROFILE_MESSAGES: SocialProfileMessages = {
@@ -141,7 +142,7 @@ function anyFileStarting(home: string, prefix: string): boolean {
 
 function readJson<T>(home: string, name: string): T | null {
   try {
-    return JSON.parse(fs.readFileSync(path.join(credDir(home), name), "utf-8")) as T;
+    return JSON.parse(readCredentialFileSync(path.join(credDir(home), name))) as T;
   } catch {
     // 개별 탐지는 '없음'(null)으로 본다 — 깨진 파일은 detectAll 이 #core/json-file.js 로 따로 짚어 Detected.invalid 에 싣는다
     return null;

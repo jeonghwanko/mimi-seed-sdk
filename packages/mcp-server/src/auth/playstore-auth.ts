@@ -7,6 +7,7 @@ import { PLAY_DEVELOPER_REPORTING_SCOPE } from './scopes.js';
 import { writeCredentialFile } from '#core/atomic-write.js';
 import { assertAndroidPackageName, isValidAndroidPackageName } from '../lib/package-name.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   {
@@ -42,7 +43,7 @@ export function serviceAccountPathForPackage(packageName: string): string {
 
 function safeReadFile(p: string): string | null {
   try {
-    return fs.readFileSync(p, 'utf-8');
+    return readCredentialFileSync(p);
   } catch {
     // 못 읽는 파일을 어떻게 다룰지는 호출자가 정한다 — getServiceAccountJson 은 등록된 패키지별 SA 면 throw, 목록은 이메일 '모름'
     return null;

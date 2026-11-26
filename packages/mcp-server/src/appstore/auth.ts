@@ -7,6 +7,7 @@ import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   {
@@ -104,7 +105,7 @@ export function getAppStoreCredentials(): AppStoreCredentials | null {
       : null;
   if (!pathToRead) return null;
   try {
-    return JSON.parse(fs.readFileSync(pathToRead, 'utf-8'));
+    return JSON.parse(readCredentialFileSync(pathToRead));
   } catch {
     // 읽을 수 없으면 '미설정' — 깨진 파일은 assertAppStoreFileReadable · mimi_seed_status 가 json-file 로 따로 진단한다
     return null;

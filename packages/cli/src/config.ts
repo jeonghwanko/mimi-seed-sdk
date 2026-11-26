@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { writeCredentialJson } from "#core/atomic-write.js";
+import { readCredentialFile } from "#core/credential-read.js";
 
 /**
  * @deprecated Jenkins 설정의 정본은 `~/.mimi-seed/jenkins.json` 이다 (`jenkins-config.ts`).
@@ -31,7 +32,7 @@ const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 
 export async function readConfig(): Promise<MimiSeedConfig | null> {
   try {
-    const txt = await fs.readFile(CONFIG_PATH, "utf8");
+    const txt = await readCredentialFile(CONFIG_PATH);
     return JSON.parse(txt) as MimiSeedConfig;
   } catch {
     // 로더는 '없음'(null) — 깨진 파일은 doctor · deploy 가 credentialFileProblemMessage 로 원인을 따로 보여준다

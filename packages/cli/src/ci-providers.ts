@@ -1,10 +1,10 @@
-import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { catalog } from "./i18n.js";
 import { fetchWithTimeout } from "./lib/http.js";
 import { writeCredentialJson } from "#core/atomic-write.js";
 import { githubApiBase, githubHeaders, gitlabApiBase, gitlabProjectId, type CiConfig } from "#core/ci.js";
+import { readCredentialFileSync } from "#core/credential-read.js";
 
 const CI_CONFIG_PATH = path.join(os.homedir(), ".mimi-seed", "ci.json");
 
@@ -35,7 +35,7 @@ export type CiProviderConfig = CiConfig;
 
 export function loadCiProviderConfig(): CiProviderConfig | null {
   try {
-    const cfg = JSON.parse(fs.readFileSync(CI_CONFIG_PATH, "utf-8")) as CiProviderConfig;
+    const cfg = JSON.parse(readCredentialFileSync(CI_CONFIG_PATH)) as CiProviderConfig;
     // 읽을 때도 정규화한다 — 손으로 적었거나 구버전이 저장한 host 도 githubApiBase/gitlabApiBase 가
     // 항상 유효한 URL 을 만들 수 있게 (write 경로에만 의존하지 않는다).
     const host = normalizeHost(cfg.host);

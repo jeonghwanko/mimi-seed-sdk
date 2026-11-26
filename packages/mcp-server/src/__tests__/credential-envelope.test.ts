@@ -183,6 +183,25 @@ describe('readCredentialText / readJsonFile', () => {
   });
 });
 
+describe('readCredentialFileSync', () => {
+  it('평문·봉투를 읽고, 못 열면 경로와 이유만 담아 던진다', async () => {
+    const { readCredentialFileSync } = await import('#core/credential-read.js');
+    const file = writeSealed('tokens.json', { refresh_token: MARKER });
+    expect(readCredentialFileSync(file)).toBe(JSON.stringify({ refresh_token: MARKER }));
+    setDataKeySourceForTests(() => ({ state: 'absent', backend: 'Test Keychain' }));
+    let message = '';
+    try { readCredentialFileSync(file); } catch (e) { message = (e as Error).message; }
+    expect(message).toContain(file);
+    expect(message).toContain('Test Keychain');
+    expect(message).not.toContain(MARKER);
+  });
+
+  it('없는 파일은 fs 의 ENOENT 를 그대로 던진다 — 로더의 "없음" 판정이 유지된다', async () => {
+    const { readCredentialFileSync } = await import('#core/credential-read.js');
+    expect(() => readCredentialFileSync(path.join(home, '.mimi-seed', 'nope.json'))).toThrow(expect.objectContaining({ code: 'ENOENT' }));
+  });
+});
+
 describe('MCP 안내 · 진단', () => {
   it('잠긴 파일은 "손상"이 아니라 "암호화된 파일을 열 수 없음"으로 안내한다', () => {
     setDataKeySourceForTests(() => ({ state: 'absent', backend: 'Test Keychain' }));

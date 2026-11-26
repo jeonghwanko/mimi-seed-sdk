@@ -91,3 +91,24 @@ export function readCredentialText(file: string): CredentialTextRead {
   }
   return decodeCredentialText(file, text);
 }
+
+/**
+ * `fs.readFileSync(file, 'utf-8')` 의 자격증명판 — 기존 로더의 try/catch 계약을 그대로 두고 바꿔 끼우는 용도.
+ * 평문이면 그대로, 봉투면 연 평문을 돌려준다. 없는 파일·권한 오류는 fs 의 오류를 그대로 던지고(ENOENT 판정이 유지된다),
+ * 깨진 봉투·잠김은 이유를 담은 Error 를 던진다 — 로더는 지금처럼 '없음'으로 받고, 원인 안내는 readJsonFile 쪽
+ * (assertCredentialFileReadable · mimi_seed_status · CLI doctor)이 맡는다. 평문·키는 오류에 싣지 않는다.
+ */
+export function readCredentialFileSync(file: string): string {
+  const read = decodeCredentialText(file, fs.readFileSync(file, 'utf-8'));
+  if (read.state === 'ok') return read.text;
+  // 경로는 비밀이 아니고, 오류가 사용자에게 그대로 닿는 곳(Jenkins 업로드 등)에서 어느 파일인지 알려야 한다
+  throw new Error(`${file}: ${read.state === 'missing' ? 'missing' : read.reason}`);
+}
+
+/** readCredentialFileSync 의 비동기판 — CLI 의 config.json 처럼 fs/promises 로 읽던 곳용. */
+export async function readCredentialFile(file: string): Promise<string> {
+  const read = decodeCredentialText(file, await fs.promises.readFile(file, 'utf-8'));
+  if (read.state === 'ok') return read.text;
+  // 경로는 비밀이 아니고, 오류가 사용자에게 그대로 닿는 곳(Jenkins 업로드 등)에서 어느 파일인지 알려야 한다
+  throw new Error(`${file}: ${read.state === 'missing' ? 'missing' : read.reason}`);
+}

@@ -14,6 +14,7 @@ import { scopesForDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.j
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   { changed: '요청을 준비하는 동안 Google 인증이 변경됐습니다. 같은 프로필로 다시 시도하세요.' },
@@ -41,7 +42,7 @@ type OAuthCredentials = { clientId: string; clientSecret: string };
 type GoogleProfile = { credentials: OAuthCredentials; tokens: StoredTokens };
 function readProfile(profile: string): GoogleProfile | null {
   const file = googleProfilePath(profile);
-  try { return JSON.parse(fs.readFileSync(file, 'utf-8')) as GoogleProfile; } catch { return null; } // 깨진 프로필은 '로그인 안 됨' — ensureFreshAccessToken 이 jsonFileProblem 으로 원인을 따로 알린다
+  try { return JSON.parse(readCredentialFileSync(file)) as GoogleProfile; } catch { return null; } // 깨진 프로필은 '로그인 안 됨' — ensureFreshAccessToken 이 jsonFileProblem 으로 원인을 따로 알린다
 }
 
 /** Only safe metadata; never return tokens or OAuth client secrets to MCP callers. */
@@ -96,7 +97,7 @@ export function getStoredCredentials(profile?: string): { clientId: string; clie
   if (profile !== undefined) return readProfile(profile)?.credentials ?? null;
   if (!fs.existsSync(CREDENTIALS_PATH)) return null;
   try {
-    const data = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, 'utf-8'));
+    const data = JSON.parse(readCredentialFileSync(CREDENTIALS_PATH));
     return { clientId: data.clientId, clientSecret: data.clientSecret };
   } catch {
     // 읽을 수 없으면 '미설정' — 깨진 파일은 mimi_seed_status 가 json-file 로 따로 보고한다
@@ -124,7 +125,7 @@ export function getStoredTokens(profile?: string): StoredTokens | null {
       : null;
   if (!pathToRead) return null;
   try {
-    return JSON.parse(fs.readFileSync(pathToRead, 'utf-8'));
+    return JSON.parse(readCredentialFileSync(pathToRead));
   } catch {
     // 깨진 토큰은 '로그인 안 됨' — ensureFreshAccessToken 이 jsonFileProblem 으로 원인을 따로 알린다
     return null;

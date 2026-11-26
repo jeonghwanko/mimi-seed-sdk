@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { writeCredentialJson } from "#core/atomic-write.js";
 import type { JenkinsConfig } from "#core/jenkins.js";
+import { readCredentialFileSync } from "#core/credential-read.js";
 
 const CONFIG_DIR = path.join(os.homedir(), ".mimi-seed");
 const JENKINS_PATH = path.join(CONFIG_DIR, "jenkins.json");
@@ -27,7 +28,7 @@ export type { JenkinsConfig } from "#core/jenkins.js";
 export function loadJenkinsConfig(home = os.homedir()): JenkinsConfig | null {
   try {
     const p = path.join(home, ".mimi-seed", "jenkins.json");
-    return JSON.parse(fs.readFileSync(p, "utf-8")) as JenkinsConfig;
+    return JSON.parse(readCredentialFileSync(p)) as JenkinsConfig;
   } catch {
     // 로더는 '없음'(null) — 깨진 파일은 deploy 가 credentialFileProblemMessage 로, doctor 는 Detected.invalid 로 따로 보여준다
     return null;
@@ -51,7 +52,7 @@ export function migrateLegacyJenkins(home = os.homedir()): boolean {
 
   let legacy: Record<string, unknown>;
   try {
-    legacy = JSON.parse(fs.readFileSync(legacyPath, "utf-8")) as Record<string, unknown>;
+    legacy = JSON.parse(readCredentialFileSync(legacyPath)) as Record<string, unknown>;
   } catch {
     // config.json 이 없거나 깨졌으면 이관할 레거시 값을 읽을 수 없다 — 원본을 건드리지 않고 이관하지 않는다
     return false;

@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { serviceAccountPathForPackage } from '../auth/playstore-auth.js';
 import { readServiceAccountKeyFile } from '../iam/key-files.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog({ parseFailed: '(파싱 실패)' }, { parseFailed: '(parse failed)' });
 
@@ -25,7 +26,7 @@ export function loadPlayServiceAccountForUpload(
   const saPath = explicitPath ?? serviceAccountPathForPackage(packageName);
   if (!explicitPath && !existsSync(saPath)) return { found: false, path: saPath };
 
-  const raw = explicitPath ? readServiceAccountKeyFile(explicitPath) : readFileSync(saPath, 'utf-8');
+  const raw = explicitPath ? readServiceAccountKeyFile(explicitPath) : readCredentialFileSync(saPath);
   let clientEmail = M().parseFailed;
   try {
     clientEmail = (JSON.parse(raw) as { client_email?: string }).client_email ?? clientEmail;
