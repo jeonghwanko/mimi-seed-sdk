@@ -31,7 +31,7 @@ import { resolveBigQueryAuth } from '../auth/bigquery-auth.js';
 import { syncRemoteCredentials } from '../remote-sync.js';
 import { resolveSocialConfigTarget } from '../social/profile-store.js';
 import {
-  findProjectManifest,
+  lookupProjectManifest,
   manifestServiceEntries,
   type ManifestServiceId,
   type ManifestService,
@@ -87,6 +87,8 @@ const A = catalog(
       youtubeRead: '✅ YouTube           — 채널·영상·성과 읽기 권한 연결됨',
       youtubeMissing: '❌ YouTube           — 미연결 → mimi_seed_auth_start(domains=["youtube"])  (선택)',
       playOk: (count: number, detail: string) => `✅ Play Store SA     — ${count}개 등록 (${detail})`,
+      playBroken: (broken: number, total: number, names: string) =>
+        `⚠️  Play Store SA     — ${total}개 중 ${broken}개를 읽을 수 없음 (${names}) — 그 패키지는 SA 로 동작하지 않는다. setup_playstore_connection 으로 다시 등록`,
       playMissing: '⚠️  Play Store SA     — 미설정 (선택 — 로컬은 OAuth 로 가능, CI/헤드리스는 필수) → setup_playstore_connection',
       ascOk: (keyId: string) => `✅ App Store Connect — 연결됨 (keyId: ${keyId})`,
       ascMissing: '❌ App Store Connect — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
@@ -188,6 +190,8 @@ const A = catalog(
       youtubeRead: '✅ YouTube           — channel, video, and performance read permission connected',
       youtubeMissing: '❌ YouTube           — not connected → mimi_seed_auth_start(domains=["youtube"])  (optional)',
       playOk: (count: number, detail: string) => `✅ Play Store SA     — ${count} registered (${detail})`,
+      playBroken: (broken: number, total: number, names: string) =>
+        `⚠️  Play Store SA     — ${broken} of ${total} cannot be read (${names}) — those packages won't work with an SA. Re-register with setup_playstore_connection`,
       playMissing: '⚠️  Play Store SA     — not set up (optional — OAuth works locally; required for CI/headless) → setup_playstore_connection',
       ascOk: (keyId: string) => `✅ App Store Connect — connected (keyId: ${keyId})`,
       ascMissing: '❌ App Store Connect — not set up → npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
@@ -338,6 +342,22 @@ function renderManifestLine(
   return m.missing(label, detailSuffix, fix, noteLine);
 }
 
+/** 깨진 프로젝트 매니페스트 안내 — reason 은 core 의 언어 중립 코드. */
+const MF = catalog(
+  {
+    invalid: (file: string, reason: 'unreadable' | 'invalid-json' | 'not-an-object') =>
+      `❌ 프로젝트 매니페스트를 읽을 수 없어 요구사항을 점검하지 못했습니다: ${file} (${
+        { unreadable: '읽기 실패', 'invalid-json': 'JSON 형식 오류', 'not-an-object': '객체가 아님' }[reason]
+      }) — 파일을 고친 뒤 다시 확인하세요.`,
+  },
+  {
+    invalid: (file: string, reason: 'unreadable' | 'invalid-json' | 'not-an-object') =>
+      `❌ Cannot read the project manifest, so its requirements were not checked: ${file} (${
+        { unreadable: 'unreadable', 'invalid-json': 'invalid JSON', 'not-an-object': 'not an object' }[reason]
+      }) — fix the file and check again.`,
+  },
+);
+
 export function registerAuthTools(server: ToolRegistrar) {
   // ── 전체 연결 상태 진단 ────────────────────────────────────────────────────
   server.tool(
@@ -384,7 +404,15 @@ export function registerAuthTools(server: ToolRegistrar) {
       // 2. Play Store SA
       const saInfo = listRegisteredServiceAccounts();
       const saCount = saInfo.perPackage.length + (saInfo.default ? 1 : 0);
-      if (saCount > 0) {
+      // listRegisteredServiceAccounts 는 읽을 수 없는 키 파일을 clientEmail: null 로 준다 — 파일이 있다고 ✅ 로 보이면
+      // 그 패키지의 SA 호출이 실패할 때까지 모른다. 깨진 것을 세어 따로 밝힌다.
+      const brokenSa = [
+        ...saInfo.perPackage.filter((p) => !p.clientEmail).map((p) => p.packageName),
+        ...(saInfo.default && !saInfo.default.clientEmail ? ['(default)'] : []),
+      ];
+      if (brokenSa.length > 0) {
+        lines.push(m.playBroken(brokenSa.length, saCount, brokenSa.join(', ')));
+      } else if (saCount > 0) {
         const pkgs = saInfo.perPackage.map((p) => p.packageName).join(', ');
         const detail = pkgs || saInfo.default?.clientEmail || '(default)';
         lines.push(m.playOk(saCount, detail));
@@ -426,29 +454,39 @@ export function registerAuthTools(server: ToolRegistrar) {
         lines.push(m.gadsMissing);
       }
 
-      // 7. Facebook
-      const fb = loadFacebookConfig();
-      lines.push(renderMetaConnection('Facebook', fb, `pageId: ${fb?.pageId ?? ''}`, 'mimi-seed auth facebook'));
-
-      // 8. Instagram
-      const igTarget = resolveSocialConfigTarget('instagram');
-      const ig = loadInstagramConfig();
-      lines.push(renderMetaConnection(
-        'Instagram',
-        ig,
-        `${igTarget.profile ? `profile: ${igTarget.profile}, ` : ''}userId: ${ig?.userId ?? ''}`,
-        `mimi-seed auth instagram${igTarget.profile ? ` --profile ${igTarget.profile}` : ''}`,
-      ));
-
-      // 9. Threads
-      const threadsTarget = resolveSocialConfigTarget('threads');
-      const threads = loadThreadsConfig();
-      lines.push(renderMetaConnection(
-        'Threads',
-        threads,
-        `${threadsTarget.profile ? `profile: ${threadsTarget.profile}, ` : ''}userId: ${threads?.userId ?? ''}`,
-        `mimi-seed auth threads${threadsTarget.profile ? ` --profile ${threadsTarget.profile}` : ''}`,
-      ));
+      // 7–9. Meta 소셜 — 프로필 결정이 throw 하면(깨진 .mimi-seed.json · 잘못된 socialProfiles) 상태 리포트 전체를
+      // 죽이지 않고 그 줄에 원인을 보인다. 게시 도구는 같은 경우에 실패한다(기본 계정으로 폴백하지 않는다).
+      const socialLine = (label: string, render: () => string) => {
+        try {
+          lines.push(render());
+        } catch (error) {
+          lines.push(`❌ ${label.padEnd(17)} — ${error instanceof Error ? error.message : String(error)}`);
+        }
+      };
+      socialLine('Facebook', () => {
+        const fb = loadFacebookConfig();
+        return renderMetaConnection('Facebook', fb, `pageId: ${fb?.pageId ?? ''}`, 'mimi-seed auth facebook');
+      });
+      socialLine('Instagram', () => {
+        const igTarget = resolveSocialConfigTarget('instagram');
+        const ig = loadInstagramConfig();
+        return renderMetaConnection(
+          'Instagram',
+          ig,
+          `${igTarget.profile ? `profile: ${igTarget.profile}, ` : ''}userId: ${ig?.userId ?? ''}`,
+          `mimi-seed auth instagram${igTarget.profile ? ` --profile ${igTarget.profile}` : ''}`,
+        );
+      });
+      socialLine('Threads', () => {
+        const threadsTarget = resolveSocialConfigTarget('threads');
+        const threads = loadThreadsConfig();
+        return renderMetaConnection(
+          'Threads',
+          threads,
+          `${threadsTarget.profile ? `profile: ${threadsTarget.profile}, ` : ''}userId: ${threads?.userId ?? ''}`,
+          `mimi-seed auth threads${threadsTarget.profile ? ` --profile ${threadsTarget.profile}` : ''}`,
+        );
+      });
 
       // 10. TikTok Business — 네트워크 없이 refresh token 만료 상태까지 판정.
       const tiktok = loadTikTokBusinessConfig();
@@ -465,8 +503,16 @@ export function registerAuthTools(server: ToolRegistrar) {
 
       // 11. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
       // 이전엔 SA 파일만 검사해 OAuth fallback 이 살아있어도 ❌ 로 오표기했다.
-      const bqAuth = resolveBigQueryAuth();
-      if (bqAuth?.source === 'service-account') {
+      let bqAuth: ReturnType<typeof resolveBigQueryAuth> = null;
+      let bqProblem: string | null = null;
+      try {
+        bqAuth = resolveBigQueryAuth();
+      } catch (error) {
+        bqProblem = error instanceof Error ? error.message : String(error);
+      }
+      if (bqProblem) {
+        lines.push(`❌ BigQuery          — ${bqProblem}`);
+      } else if (bqAuth?.source === 'service-account') {
         lines.push(m.bqSa(bqAuth.clientEmail ?? ''));
       } else if (bqAuth?.source === 'user-oauth') {
         lines.push(m.bqOauth);
@@ -503,7 +549,12 @@ export function registerAuthTools(server: ToolRegistrar) {
       // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ────────────────────
       // 이 저장소가 "무엇을 필요로 하는가"를 선언해두면, 범용 스캔 대신
       // "이 프로젝트에서 너한테 빠진 것 + 정확한 셋업 명령"을 팀원별로 보여준다.
-      const loaded = findProjectManifest();
+      const manifestLookup = lookupProjectManifest();
+      if (manifestLookup.state === 'invalid') {
+        // 깨진 매니페스트를 "없음"으로 보면 팀 요구사항 점검이 조용히 사라진다 — 점검하지 못했다고 밝힌다.
+        lines.push('', MF().invalid(manifestLookup.filePath, manifestLookup.reason));
+      }
+      const loaded = manifestLookup.state === 'ok' ? manifestLookup.loaded : null;
       if (loaded) {
         const oauthOk = oauthResult.status === 'fresh' || oauthResult.status === 'refreshed';
         const playstoreCovers = (pkg?: string) =>

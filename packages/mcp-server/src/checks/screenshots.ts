@@ -96,7 +96,7 @@ function readPngDimensions(filePath: string): { width: number; height: number } 
     fs.closeSync(fd);
     if (PNG_SIGNATURE.some((b, i) => buf[i] !== b)) return null;
     return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
-  } catch { return null; }
+  } catch { return null; } // 치수를 못 읽으면 null — 호출자가 valid:false(unreadable)로 보고하므로 통과로 새지 않는다
 }
 
 function readJpegDimensions(filePath: string): { width: number; height: number } | null {
@@ -119,7 +119,7 @@ function readJpegDimensions(filePath: string): { width: number; height: number }
       i += 2 + length;
     }
     return null;
-  } catch { return null; }
+  } catch { return null; } // 치수를 못 읽으면 null — 호출자가 valid:false(unreadable)로 보고하므로 통과로 새지 않는다
 }
 
 function getImageDimensions(filePath: string): { width: number; height: number } | null {

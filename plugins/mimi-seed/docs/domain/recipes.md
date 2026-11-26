@@ -42,6 +42,10 @@
    block anywhere in `src/` fails `output-i18n.test.ts`. If the Korean is genuinely not output (e.g. a prompt sent
    to Claude whose reply language a parameter picks), add the exact literal and a reason to that test's `ALLOW`.
    Don't branch on output text; use a flag or code.
+   **Error fallbacks**: a `catch` that returns a default value must say why that is safe, in one specific comment.
+   `silent-catch.test.ts` enforces this. If it isn't safe, return a distinguishable result (see
+   `lookupProjectManifest`, `lib/json-file.ts`) or throw. Never fall back to a *different* account or key: a broken
+   SA file must not turn into the user's OAuth identity.
    *New domain?* also add `registerXxxTools(registrar)` to **`src/server.ts`** — `index.ts` is only the stdio entry
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
 3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then

@@ -21,6 +21,7 @@ export function loadCiConfig(): CiConfig | null {
   try {
     return JSON.parse(fs.readFileSync(CI_CONFIG_PATH, 'utf-8')) as CiConfig;
   } catch {
+    // 읽을 수 없으면 '미설정' — 깨진 파일은 requireCiConfig · mimi_seed_status 가 json-file 로 따로 진단한다
     return null;
   }
 }

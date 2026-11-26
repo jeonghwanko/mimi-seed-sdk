@@ -15,6 +15,7 @@ async function readIfExists(p: string): Promise<string | null> {
   try {
     return await fs.readFile(p, "utf8");
   } catch {
+    // 없거나 못 읽는 파일은 앱 힌트가 아니다 — init 이 감지 결과를 그대로 보여 주므로 빠진 힌트는 사용자가 본다
     return null;
   }
 }
@@ -24,6 +25,7 @@ async function pathExists(p: string): Promise<boolean> {
     await fs.access(p);
     return true;
   } catch {
+    // 접근할 수 없는 경로는 감지 근거로 쓰지 않는다 — 존재 여부만 묻는 헬퍼다
     return false;
   }
 }
@@ -94,6 +96,7 @@ async function walk(
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
+      // 권한 없는 하위 폴더는 탐색에서 건너뛴다 (다른 폴더의 근거로 감지하고, 결과는 init 이 보여 준다)
       return;
     }
     for (const e of entries) {

@@ -140,6 +140,8 @@ async function conventionFiles(root: string, files: ProjectFile[], found: Conven
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch {
+        // 읽지 못한 컨벤션 폴더에 targetSdk 설정이 있을 수 있다 — 건너뛰되 미완독으로 표시해 TARGET_SDK_OK 를 막는다
+        incomplete = true;
         return;
       }
       for (const entry of entries) {
@@ -161,6 +163,8 @@ async function conventionFiles(root: string, files: ProjectFile[], found: Conven
         const relative = path.relative(root, absolute).replace(/\\/g, '/');
         return { absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: owner.sample, demo: owner.demo, convention: true };
       } catch {
+        // 읽지 못한 플러그인 소스가 targetSdk 를 덮어쓸 수 있다 — 미완독으로 표시해 TARGET_SDK_OK 를 막는다
+        incomplete = true;
         return undefined;
       }
     };
@@ -186,7 +190,7 @@ export async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxD
   files: ProjectFile[];
   fcmSources: ProjectFile[];
   sourceScanTruncated: boolean;
-  /** Convention-build roots that could not be read completely. */
+  /** Convention-build roots that could not be read completely (over the walk bounds, or unreadable). */
   conventionTruncated: string[];
 }> {
   const files: ProjectFile[] = [];
@@ -201,6 +205,8 @@ export async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxD
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
+      // TODO-risk: 읽지 못한 폴더(다른 사용자 소유의 볼륨 등)는 건너뛴다 — 그 안의 앱 모듈은 판정에서 빠진다.
+      // 모든 미독 폴더로 TARGET_SDK_OK 를 막으면 흔한 저장소가 영영 OK 를 못 받으므로, 막으려면 별도 finding 설계가 필요하다
       return;
     }
     const nestedRepository = depth > 0 && entries.some((entry) => entry.name === '.git');

@@ -106,6 +106,7 @@ export function getAppStoreCredentials(): AppStoreCredentials | null {
   try {
     return JSON.parse(fs.readFileSync(pathToRead, 'utf-8'));
   } catch {
+    // 읽을 수 없으면 '미설정' — 깨진 파일은 assertAppStoreFileReadable · mimi_seed_status 가 json-file 로 따로 진단한다
     return null;
   }
 }

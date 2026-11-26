@@ -17,7 +17,7 @@ import { migrateLegacyJenkins } from "./jenkins-config.js";
 import { findProjectLink } from "./project-link.js";
 import { t } from "./i18n.js";
 import {
-  findProjectManifest,
+  lookupProjectManifest,
   manifestServiceEntries,
   type ManifestServiceId,
   type ManifestService,
@@ -131,6 +131,7 @@ export async function remoteConfigured(cwd: string, env: NodeJS.ProcessEnv = pro
   try {
     return (await findProjectLink(cwd)) !== null;
   } catch {
+    // 연결 파일이 깨져 있어도 원격을 쓰려던 흔적이다 — 토큰 부재를 경고가 아닌 실패로 띄워 사용자가 보게 한다
     return true;
   }
 }
@@ -197,7 +198,12 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
   // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ──
   // 저장소가 필요로 하는 서비스를 선언해두면, 로컬 자격증명 보유 여부와 대조해
   // "이 프로젝트에서 너한테 빠진 것"을 정확히 짚어준다.
-  const loaded = findProjectManifest(cwd);
+  // 깨진 매니페스트를 "없음"으로 보면 팀 요구사항 점검이 조용히 사라진다 — 점검하지 못했다고 밝힌다(✗).
+  const manifestLookup = lookupProjectManifest(cwd);
+  if (manifestLookup.state === "invalid") {
+    r.fail(m.manifestInvalid, m.manifestInvalidDetail(manifestLookup.filePath, m.manifestReason[manifestLookup.reason]));
+  }
+  const loaded = manifestLookup.state === "ok" ? manifestLookup.loaded : null;
   if (loaded) {
     const projName = loaded.manifest.displayName ?? loaded.manifest.project ?? m.thisProject;
     r.section("project", m.requirements(projName));

@@ -46,6 +46,7 @@ export function systemLang(env: NodeJS.ProcessEnv = process.env): Lang {
   try {
     return /^ko(?:-|$)/i.test(Intl.DateTimeFormat().resolvedOptions().locale) ? 'ko' : 'en';
   } catch {
+    // Intl 이 로캘을 못 내면(ICU 없는 빌드 등) 기본 언어로 — 언어는 문구 선택일 뿐이다
     return DEFAULT_LANG;
   }
 }

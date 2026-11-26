@@ -159,6 +159,7 @@ async function fetchPermalink(cfg: InstagramConfig, mediaId: string): Promise<st
     );
     return meta.permalink;
   } catch {
+    // 게시는 이미 끝났다 — permalink 조회 실패로 성공을 오류로 바꾸면 재시도가 중복 게시를 만든다
     return undefined;
   }
 }

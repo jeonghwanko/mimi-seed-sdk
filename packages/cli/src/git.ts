@@ -38,6 +38,7 @@ export function isGitRepo(cwd: string): boolean {
     git(cwd, ["rev-parse", "--git-dir"]);
     return true;
   } catch {
+    // git 이 없거나 저장소가 아니면 false — notes 가 notGitRepo 로 안내하고 멈춘다
     return false;
   }
 }
@@ -46,6 +47,7 @@ export function getLatestTag(cwd: string): string | null {
   try {
     return git(cwd, ["describe", "--tags", "--abbrev=0"]).trim();
   } catch {
+    // 태그가 하나도 없으면 describe 가 실패한다 — 호출부가 최근 N 커밋 범위로 대신한다
     return null;
   }
 }
@@ -66,6 +68,7 @@ export function getGitLog(
   try {
     out = git(cwd, ["log", `--max-count=${limit}`, `--format=${format}`, range, "--"]);
   } catch {
+    // TODO-risk: 잘못된 --from/--to ref 도 '커밋 없음'으로 보인다 — notes 는 noCommits 로 멈추고(exit 0) 아무것도 만들지 않아 틀린 결과물은 없다
     return [];
   }
 

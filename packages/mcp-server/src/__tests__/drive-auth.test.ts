@@ -1,4 +1,4 @@
-import { rmSync, statSync } from 'node:fs';
+import { rmSync, statSync, writeFileSync } from 'node:fs';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 // import 보다 먼저 임시 홈을 만든다 — drive-auth 는 로드 시점에 경로를 고정한다.
@@ -60,6 +60,16 @@ describe('Drive 서비스 계정 키', () => {
 
   it('환경 변수 형식이 틀리면 파일로 조용히 넘어가지 않고 throw', () => {
     expect(() => getDriveServiceAccount({ [DRIVE_SA_ENV]: '{"type":"x"}' })).toThrow(DRIVE_SA_ENV);
+  });
+
+  it('키 파일이 깨졌으면 OAuth 로 조용히 넘어가지 않고 경로와 함께 throw (키 본문은 싣지 않는다)', () => {
+    writeFileSync(DRIVE_SA_PATH, '{"type":"service_account","private_key":"SECRET-BODY"');
+    expect(() => getDriveServiceAccount({})).toThrow(DRIVE_SA_PATH);
+    try {
+      getDriveServiceAccount({});
+    } catch (e) {
+      expect(String(e)).not.toContain('SECRET-BODY');
+    }
   });
 
   it('삭제하면 null, 다시 삭제하면 false', () => {

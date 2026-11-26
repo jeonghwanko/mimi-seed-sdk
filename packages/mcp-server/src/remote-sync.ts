@@ -117,6 +117,7 @@ function getRemoteConfig(): RemoteConfig | null {
     const webBase = parsed.webBase ?? parsed.endpoint.replace(/\/api\/mcp\/?$/, '');
     return { token: parsed.token, endpoint: parsed.endpoint, webBase };
   } catch {
+    // config.json 을 못 읽으면 '원격 연결 없음' — 복구(mimi-seed init)가 같고, 깨진 파일은 mimi_seed_status 가 json-file 로 보고한다
     return null;
   }
 }

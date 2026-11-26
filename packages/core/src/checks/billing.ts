@@ -146,6 +146,7 @@ async function walk(root: string, maxDepth = 7): Promise<string[]> {
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
+      // TODO-risk: 읽지 못한 하위 폴더의 Billing 의존성은 근거에서 빠진다(루트는 위에서 stat 으로 확인) — 막으려면 결과에 미독 폴더를 싣는 설계가 필요하다
       return;
     }
     for (const entry of entries) {
@@ -322,7 +323,15 @@ async function reactNativeIapEvidence(
   try {
     manifest = JSON.parse(manifestText) as Record<string, unknown>;
   } catch {
-    return null;
+    // 깨진 package.json 이 react-native-iap 를 언급하면 판정 불가(unresolved) — not_used 로 위장하지 않는다.
+    // 언급조차 없으면 이 파일은 Billing 근거가 아니다.
+    if (!manifestText.includes('react-native-iap')) return null;
+    return {
+      file: displayPath(root, manifestFile),
+      module: 'com.android.billingclient:billing',
+      expression: 'package.json mentions react-native-iap but is not valid JSON; transitive Billing version is unresolved',
+      source: 'unresolved',
+    };
   }
   const dependencyGroups = ['dependencies', 'devDependencies', 'optionalDependencies']
     .map((key) => manifest[key])

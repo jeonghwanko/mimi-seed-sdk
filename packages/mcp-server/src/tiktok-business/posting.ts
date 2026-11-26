@@ -18,6 +18,7 @@ import { TikTokApiError, getPublishStatus, getVideoSettings, publishVideo } from
 import { ensureTikTokPublishConfig } from './auth.js';
 import type { TikTokPostInfo, TikTokPublishRequest, TikTokVideoSettings } from './types.js';
 import { catalog } from '#core/lang.js';
+import { readJsonFile } from '../lib/json-file.js';
 
 const M = catalog(
   {
@@ -52,6 +53,8 @@ const M = catalog(
     confirmRequired: '공개 게시에는 같은 턴의 명시 승인 후 confirmPublish=true가 필요합니다.',
     accountMismatch: '게시 계획을 만든 TikTok 계정과 현재 연결 계정이 다릅니다.',
     duplicateBlocked: (state: string) => `중복 게시 차단: 기존 기록 state=${state}.`,
+    auditUnreadable: (file: string, reason: string) =>
+      `중복 게시 차단: 이 영상의 감사 기록을 읽을 수 없습니다 (${reason}): ${file}. 이미 게시됐는지 TikTok 에서 확인한 뒤 파일을 고치거나 지우세요.`,
     outcomeUnknown: (error: string) => `${error} 게시 결과가 불명확하므로 자동 재시도하지 마세요.`,
     noShareId: 'TikTok 성공 응답에 share_id/publish_id가 없어 게시 결과를 확인할 수 없습니다.',
     noRetry: (error: string) => `${error} 자동 재시도하지 마세요.`,
@@ -89,6 +92,8 @@ const M = catalog(
     confirmRequired: 'A public post requires confirmPublish=true after the user\'s explicit approval in the same turn.',
     accountMismatch: 'The TikTok account that created the publish plan differs from the currently connected account.',
     duplicateBlocked: (state: string) => `Duplicate publish blocked: existing record state=${state}.`,
+    auditUnreadable: (file: string, reason: string) =>
+      `Duplicate publish blocked: the audit record for this video cannot be read (${reason}): ${file}. Check on TikTok whether it was already posted, then fix or delete the file.`,
     outcomeUnknown: (error: string) => `${error} The publish outcome is unknown, so do not retry automatically.`,
     noShareId: 'The TikTok success response has no share_id/publish_id, so the publish outcome cannot be confirmed.',
     noRetry: (error: string) => `${error} Do not retry automatically.`,
@@ -305,12 +310,24 @@ function readJson<T>(filePath: string): T | null {
   try {
     return JSON.parse(readFileSync(filePath, 'utf8')) as T;
   } catch {
+    // 계획·감사 목록용 — 깨진 파일은 '없음'. 중복 게시 판정만은 existingBlockingAudit 가 readJsonFile 로 따로 막는다
     return null;
   }
 }
 
-function existingBlockingAudit(openId: string, contentHash: string): TikTokPublishAudit | null {
-  const audit = readJson<TikTokPublishAudit>(auditPath(openId, contentHash));
+/**
+ * 같은 계정·영상의 막아야 할 기존 기록. 기록 파일이 있는데 읽을 수 없으면 "기록 없음"으로 보지 않고 throw —
+ * 그 파일이 published 였을 수 있고, 잠금 파일까지 지워진 상태라면 공개 게시가 두 번 나간다.
+ */
+function existingBlockingAudit(
+  openId: string,
+  contentHash: string,
+  file = auditPath(openId, contentHash),
+): TikTokPublishAudit | null {
+  const read = readJsonFile(file);
+  if (read.state === 'missing') return null;
+  if (read.state === 'invalid') throw new Error(M().auditUnreadable(file, read.reason));
+  const audit = read.value as TikTokPublishAudit | null;
   return audit && ['pending', 'published', 'unknown'].includes(audit.state) ? audit : null;
 }
 
@@ -465,6 +482,7 @@ function findAuditByPublishId(publishId: string): TikTokPublishAudit | null {
       if (audit?.publishId === publishId) return audit;
     }
   } catch {
+    // 감사 폴더가 없으면 기록도 없다 — 상태 조회는 TikTok 응답만으로 돌려준다
     return null;
   }
   return null;
@@ -514,6 +532,7 @@ export function listPublishAudits(limit = 20): TikTokPublishAudit[] {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, limit);
   } catch {
+    // 감사 폴더가 없으면 게시 기록이 아직 없다
     return [];
   }
 }
@@ -524,6 +543,7 @@ export const __testing = {
   assertVideoFacts,
   acquirePublishLock,
   countMentions,
+  existingBlockingAudit,
   fpsValue,
   releasePublishLock,
   safeUrl,

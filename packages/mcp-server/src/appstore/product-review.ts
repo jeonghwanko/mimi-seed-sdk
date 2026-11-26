@@ -158,6 +158,7 @@ async function findExistingReviewScreenshotId(
     );
     return res?.data?.id ?? null;
   } catch {
+    // 조회 실패는 '기존 없음'으로 보고 POST 로 간다 — 결과에 replacedId 가 없어 교체되지 않았음이 드러나고, 남은 스크린샷이 있으면 상품당 1장 제약으로 POST 가 거절된다
     return null;
   }
 }

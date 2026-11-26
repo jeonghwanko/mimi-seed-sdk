@@ -109,7 +109,10 @@ export async function writeCodexMcpConfig(cfg: MimiSeedConfig): Promise<string> 
   let current: string;
   try {
     current = await fs.readFile(configPath, "utf8");
-  } catch {
+  } catch (error) {
+    // 없는 파일만 빈 설정으로 본다. 있는데 못 읽은 파일을 ""로 두면 아래 writeFile 이 사용자의 Codex 설정
+    // 전체를 우리 블록 하나로 덮어쓴다 — 그 오류는 그대로 올려 아무것도 쓰지 않는다.
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     current = "";
   }
 

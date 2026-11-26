@@ -179,7 +179,13 @@ export function registerBigqueryTools(server: ToolRegistrar) {
     '현재 BigQuery 인증 상태 조회 — 어떤 인증(서비스 계정/OAuth)이 사용되는지 확인',
     {},
     async () => {
-      const auth = resolveBigQueryAuth();
+      let auth: BigQueryAuth | null;
+      try {
+        auth = resolveBigQueryAuth();
+      } catch (error) {
+        // 상태 도구는 실패를 "인증 안 됨 + 원인"으로 보고한다 (쿼리 도구는 같은 경우 에러로 멈춘다).
+        return jsonResult({ authenticated: false, problem: error instanceof Error ? error.message : String(error) });
+      }
       if (!auth) {
         return jsonResult({
           authenticated: false,

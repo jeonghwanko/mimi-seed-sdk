@@ -6,6 +6,7 @@ import { loadInstagramConfig, saveInstagramConfig } from '../instagram/config.js
 import { loadThreadsConfig, saveThreadsConfig } from '../threads/config.js';
 import { loadFacebookConfig, saveFacebookConfig } from '../facebook/config.js';
 import { resolveSocialConfigTarget } from '../social/profile-store.js';
+import { findProjectManifest, lookupProjectManifest } from '#core/project-manifest.js';
 
 let root: string;
 let homeDir: string;
@@ -130,5 +131,44 @@ describe('social profile config', () => {
       { profile: 'brand', homeDir, startDir: projectDir },
     )).toThrow(/덮어쓰지 않았습니다/);
     expect(fs.readFileSync(filePath, 'utf-8')).toBe('{broken');
+  });
+});
+
+// 깨진 .mimi-seed.json 을 "매니페스트 없음"으로 보면, 매니페스트가 지정한 브랜드 프로필 대신 **기본 계정으로 게시**된다.
+describe('깨진 프로젝트 매니페스트', () => {
+  const writeRaw = (text: string) => fs.writeFileSync(path.join(projectDir, '.mimi-seed.json'), text);
+
+  it('lookupProjectManifest 는 없음 / 정상 / 깨짐(이유)을 구분한다', () => {
+    expect(lookupProjectManifest(projectDir, 0)).toEqual({ state: 'missing' });
+    writeRaw('{"socialProfiles": {"instagram": "ig-brand"}');
+    expect(lookupProjectManifest(projectDir, 0)).toMatchObject({ state: 'invalid', reason: 'invalid-json' });
+    writeRaw('["not", "an", "object"]');
+    expect(lookupProjectManifest(projectDir, 0)).toMatchObject({ state: 'invalid', reason: 'not-an-object' });
+    writeRaw('{"project": "ok"}');
+    expect(lookupProjectManifest(projectDir, 0)).toMatchObject({ state: 'ok', loaded: { manifest: { project: 'ok' } } });
+  });
+
+  it('findProjectManifest 의 계약은 그대로 — 정상만 값, 깨짐은 null', () => {
+    writeRaw('{ broken');
+    expect(findProjectManifest(projectDir, 0)).toBeNull();
+  });
+
+  it('깨진 파일을 만나면 상위 폴더의 다른 매니페스트로 대신하지 않는다', () => {
+    fs.writeFileSync(path.join(root, '.mimi-seed.json'), JSON.stringify({ project: 'parent' }));
+    writeRaw('{ broken');
+    expect(lookupProjectManifest(projectDir)).toMatchObject({ state: 'invalid', filePath: path.join(projectDir, '.mimi-seed.json') });
+  });
+
+  it('소셜 프로필 결정은 기본 계정으로 폴백하지 않고 실패한다 (fail-closed)', () => {
+    saveInstagramConfig({ accessToken: 'IGAA_DEFAULT_EXAMPLE', userId: 'ig-default' }, { homeDir, startDir: root });
+    writeRaw('{"socialProfiles": {"instagram": "ig-brand"');
+    const options = { homeDir, startDir: projectDir };
+    expect(() => resolveSocialConfigTarget('instagram', options)).toThrow(/default account|기본 계정/);
+    expect(() => loadInstagramConfig(options)).toThrow();
+  });
+
+  it('profile 인자로 직접 지정하면 매니페스트를 보지 않으므로 그대로 동작한다', () => {
+    writeRaw('{ broken');
+    expect(resolveSocialConfigTarget('instagram', { profile: 'ig-brand', homeDir, startDir: projectDir }).profile).toBe('ig-brand');
   });
 });

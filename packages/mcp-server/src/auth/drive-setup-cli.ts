@@ -121,6 +121,7 @@ async function main() {
     try {
       existing = getDriveServiceAccount();
     } catch {
+      // 기존 키가 깨졌으면(getDriveServiceAccount 가 throw) '기존 없음'으로 보고 새로 설정받는다 — 저장이 파일을 통째로 덮어쓴다
       existing = null;
     }
     if (existing) {

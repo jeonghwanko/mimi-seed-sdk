@@ -73,6 +73,7 @@ export function loadConfig(): GoogleAdsConfig | null {
     if (loginCustomerId === null) return null;
     return { ...cfg, developerToken: cfg.developerToken, customerId, loginCustomerId };
   } catch {
+    // 읽을 수 없으면 '미설정' — 깨진 파일은 requireConfig · mimi_seed_status 가 json-file 로 따로 진단한다
     return null;
   }
 }

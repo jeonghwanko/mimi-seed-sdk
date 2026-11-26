@@ -2606,8 +2606,27 @@ describe('Release Doctor local scan', () => {
           'app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.n2'; targetSdk 36 } }",
         }), at);
 
-        expect(unresolved(report)?.detail).toContain('buildSrc (a convention build too large to read completely)');
+        expect(unresolved(report)?.detail).toContain('buildSrc (a convention build that could not be read completely)');
       }, 60_000);
+
+      // chmod 로 읽기 권한을 뺄 수 없는 환경(root, Windows)에서는 건너뛴다.
+      const unreadableSupported = process.platform !== 'win32' && process.getuid?.() !== 0;
+      it.runIf(unreadableSupported)('읽지 못한 컨벤션 플러그인 소스가 있으면 OK가 아니다', async () => {
+        const root = await fixture({
+          'settings.gradle': "include ':app'",
+          'buildSrc/src/main/kotlin/AppConv.kt': 'class AppConv { fun apply(e: ApplicationExtension) { e.defaultConfig.targetSdk = 33 } }',
+          'app/build.gradle': "apply plugin: 'com.android.application'\nandroid { defaultConfig { applicationId 'com.example.n2u'; targetSdk 36 } }",
+        });
+        const source = path.join(root, 'buildSrc/src/main/kotlin/AppConv.kt');
+        await fs.chmod(source, 0o000);
+        try {
+          const report = await scanReleaseDoctor(root, at);
+          expect(report.findings.map((row) => row.code)).not.toContain('TARGET_SDK_OK');
+          expect(unresolved(report)?.detail).toContain('buildSrc (a convention build that could not be read completely)');
+        } finally {
+          await fs.chmod(source, 0o644);
+        }
+      });
     });
 
     it("N7: subprojects { apply from } 스크립트의 withId('com.android.library') 값은 앱의 값이 아니다 (P13)", async () => {

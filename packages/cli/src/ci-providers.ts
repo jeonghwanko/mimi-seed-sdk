@@ -41,6 +41,7 @@ export function loadCiProviderConfig(): CiProviderConfig | null {
     const host = normalizeHost(cfg.host);
     return host ? { ...cfg, host } : { ...cfg, host: undefined };
   } catch {
+    // TODO-risk: 깨진 ci.json 도 '미설정'으로 보인다 — deploy 는 CI 없음으로 안내하고, doctor 는 credentials.ts 가 같은 한계로 판정한다(손상 진단 없음)
     return null;
   }
 }

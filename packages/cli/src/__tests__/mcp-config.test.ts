@@ -90,4 +90,18 @@ describe("writeCodexMcpConfig", () => {
     const out = fs.readFileSync(configPath, "utf8");
     expect(out.match(/\[mcp_servers\.mimi-seed-remote\]/g)?.length).toBe(1);
   });
+
+  // 있는데 읽지 못한 config.toml 을 빈 파일로 보면 사용자의 Codex 설정 전체를 덮어쓴다.
+  it.runIf(process.platform !== "win32" && process.getuid?.() !== 0)("읽지 못한 config.toml 은 덮어쓰지 않고 실패한다", async () => {
+    const existing = '[mcp_servers.other]\ncommand = "other"\n';
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, existing);
+    fs.chmodSync(configPath, 0o200); // 쓰기만 되고 읽기는 안 되는 파일
+    try {
+      await expect(writeCodexMcpConfig(cfg)).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      fs.chmodSync(configPath, 0o600);
+    }
+    expect(fs.readFileSync(configPath, "utf8")).toBe(existing);
+  });
 });

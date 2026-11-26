@@ -35,6 +35,7 @@ export function loadTikTokBusinessConfig(): TikTokBusinessConfig | null {
     if (required.some((key) => typeof value[key] !== 'string' || !value[key])) return null;
     return value as TikTokBusinessConfig;
   } catch {
+    // 읽을 수 없으면 '미설정' — 깨진 파일은 requireTikTokBusinessConfig · mimi_seed_status 가 json-file 로 따로 진단한다
     return null;
   }
 }

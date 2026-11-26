@@ -19,6 +19,7 @@ export function readSettings(home: string = os.homedir()): Settings {
   try {
     return JSON.parse(fs.readFileSync(settingsPath(home), "utf-8")) as Settings;
   } catch {
+    // 없거나 깨진 settings.json 은 '언어 미선택' — 담는 것이 lang 하나라, 다음 writeSettings 가 새 선택으로 덮어써도 잃는 값이 없다(복구가 된다)
     return {};
   }
 }

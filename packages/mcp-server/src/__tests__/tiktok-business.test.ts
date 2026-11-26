@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -160,6 +160,22 @@ describe('token lifetime and local validation', () => {
       expect(() => posting.acquirePublishLock('open-id', 'content-hash', lockDir)).not.toThrow();
     } finally {
       rmSync(lockDir, { recursive: true, force: true });
+    }
+  });
+
+  it('감사 기록이 깨졌으면 "기록 없음"으로 보지 않고 게시를 막는다 (중복 공개 게시 방지)', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'mimi-seed-tiktok-audit-'));
+    const file = path.join(dir, 'audit.json');
+    try {
+      expect(posting.existingBlockingAudit('open-id', 'content-hash', file)).toBeNull();
+      writeFileSync(file, '{"state":"published","publishId":"p-1"');
+      expect(() => posting.existingBlockingAudit('open-id', 'content-hash', file)).toThrow(/감사 기록을 읽을 수 없습니다/);
+      writeFileSync(file, JSON.stringify({ state: 'published', publishId: 'p-1' }));
+      expect(posting.existingBlockingAudit('open-id', 'content-hash', file)).toMatchObject({ state: 'published' });
+      writeFileSync(file, JSON.stringify({ state: 'failed' }));
+      expect(posting.existingBlockingAudit('open-id', 'content-hash', file)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

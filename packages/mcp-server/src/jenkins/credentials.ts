@@ -160,6 +160,7 @@ async function classFromConfigXml(cfg: JenkinsConfig, id: string): Promise<strin
     const cls = match?.[1];
     return cls && !cls.includes(WRAPPER_MARKER) ? cls : null;
   } catch {
+    // 권한·플러그인·네트워크 차이로 못 읽으면 판정 불가(null) — 호출자가 '클래스 미확인'으로 다룬다
     return null;
   }
 }
