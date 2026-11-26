@@ -2,7 +2,7 @@ import { getAuthenticatedClient, ensureFreshAccessToken } from './auth/google-au
 import { domainsForScope, isPreTrackingScope } from './auth/scopes.js';
 import { getServiceAccountClient, getServiceAccountJson } from './auth/playstore-auth.js';
 import { getAppStoreCredentials } from './appstore/auth.js';
-import type { AuthErrorPayload } from './auth/errors.js';
+import { authText, type AuthErrorPayload } from './auth/errors.js';
 
 export { ensureFreshAccessToken };
 
@@ -21,7 +21,7 @@ function formatAuthError(p: AuthErrorPayload, profile?: string, scopes: readonly
   return [
     `❌ [${p.code}] ${p.message}`,
     p.hint ? `→ ${p.hint}` : '',
-    ...(p.needsReauth ? ['', '터미널에서 재로그인:', reauthCommand] : []),
+    ...(p.needsReauth ? ['', authText().reloginInTerminal, reauthCommand] : []),
   ]
     .filter((l) => l !== '')
     .join('\n');
@@ -47,8 +47,7 @@ function assertStoredScope(scopes: readonly string[], scopeStr: string | undefin
   throw new Error(
     formatAuthError({
       code: 'INSUFFICIENT_SCOPE',
-      message: `이 도구는 추가 권한이 필요해 (${scopes.join(' 또는 ')}). 현재 로그인에 그 권한이 없어.`,
-      hint: '아래 명령으로 로그인하면 기존 권한을 유지하면서 필요한 권한을 추가할 수 있어.',
+      ...authText().insufficientScope(scopes),
       retriable: false,
       needsReauth: true,
     }, profile, scopes),

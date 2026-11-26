@@ -23,7 +23,7 @@ import { resolveLang } from '#core/lang.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
 // 여기 있는 건 전부 **터미널에 찍히는 사람용 문자열**이다. errors.ts 가 만드는
-// code/message/hint 는 라이브러리 텍스트라 그대로 출력한다.
+// message/hint 는 errors.ts 의 authText() 가 같은 resolveLang() 으로 언어를 고른다.
 const ko = {
   help: `
   ☕ mimi-seed-auth — Google OAuth 인증 CLI
@@ -98,6 +98,7 @@ const ko = {
   nextExample2: '    "새 Android 앱 등록해줘"',
   nextExample3: '    "google-services.json 다운로드해줘"',
   fatal: (msg: string) => `  ❌ 예외: ${msg}`,
+  noValue: '(값 없음)',
 };
 
 const en: typeof ko = {
@@ -174,6 +175,7 @@ const en: typeof ko = {
   nextExample2: '    "Register a new Android app"',
   nextExample3: '    "Download google-services.json"',
   fatal: (msg: string) => `  ❌ Exception: ${msg}`,
+  noValue: '(no value)',
 };
 
 const M = resolveLang() === 'en' ? en : ko;
@@ -318,7 +320,7 @@ async function cmdLogin(): Promise<number> {
     const parsed = domainsRaw ? parseDomainList(domainsRaw) : { domains: [], invalid: [] };
     if (parsed.invalid.length > 0 || parsed.domains.length === 0) {
       err('');
-      err(M.invalidDomains(parsed.invalid.join(', ') || domainsRaw || '(값 없음)', DOMAIN_IDS.join(', ')));
+      err(M.invalidDomains(parsed.invalid.join(', ') || domainsRaw || M.noValue, DOMAIN_IDS.join(', ')));
       err('');
       return 1;
     }
