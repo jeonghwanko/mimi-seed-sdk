@@ -13,6 +13,7 @@ import type { McpBin } from "./mcp-bin.js";
 import type { Lang } from "#core/lang.js";
 import { resolveLang } from "#core/lang.js";
 import { t } from "./i18n.js";
+import { readJsonFile } from "#core/json-file.js";
 import {
   lookupProjectManifest,
   MANIFEST_FILENAME,
@@ -72,6 +73,11 @@ export interface Detected {
   freshness?: "fresh" | "expiring" | "expired";
   /** 상태표 표시용 남은 일수. expired 면 0. */
   daysRemaining?: number;
+  /**
+   * 파일은 있는데 읽거나 파싱할 수 없다 (`present: false`). "없음"과 구분해 원인을 보여준다 — 예전엔 깨진 파일도
+   * "미설정"으로만 보여 사용자가 원인을 모른 채 setup 을 다시 했다. reason 은 내용을 싣지 않는다(위치만).
+   */
+  invalid?: { file: string; reason: string };
 }
 
 export interface CredSpec {
@@ -115,8 +121,12 @@ function credDir(home: string): string {
   return path.join(home, ".mimi-seed");
 }
 
+/**
+ * 그 파일이 있고 **JSON 으로 읽히는가**. 예전엔 존재만 봐서, 깨진 tokens.json · SA 키도 "연결됨"(✓)으로 보였다 —
+ * MCP 서버는 그 파일을 쓰지 못하는데. 깨진 파일은 없음(false)이고, detectAll 이 Detected.invalid 로 원인을 싣는다.
+ */
 function hasFile(home: string, name: string): boolean {
-  return fs.existsSync(path.join(credDir(home), name));
+  return readJsonFile(path.join(credDir(home), name)).state === "ok";
 }
 
 function anyFileStarting(home: string, prefix: string): boolean {
@@ -132,7 +142,7 @@ function readJson<T>(home: string, name: string): T | null {
   try {
     return JSON.parse(fs.readFileSync(path.join(credDir(home), name), "utf-8")) as T;
   } catch {
-    // TODO-risk: 깨진 자격증명 파일도 '없음'으로 보인다 — doctor 가 setup 을 권하고 setup 이 검증된 새 값으로 덮어쓴다. 손상을 따로 짚으려면 Detected 에 상태를 더하는 설계가 필요하다(mcp-server 는 json-file 로 진단)
+    // 개별 탐지는 '없음'(null)으로 본다 — 깨진 파일은 detectAll 이 #core/json-file.js 로 따로 짚어 Detected.invalid 에 싣는다
     return null;
   }
 }
@@ -216,16 +226,26 @@ function detectProjectSocialToken(
 }
 
 /** Play SA 는 기본 파일과 패키지별 디렉토리 **양쪽**을 봐야 한다. */
-function hasPlaySa(home: string): boolean {
-  if (hasFile(home, "play-service-account.json")) return true;
+/** 읽을 수 있는 패키지별 SA 키가 있으면 connected, 없고 깨진 키가 있으면 그 첫 파일의 손상 정보. */
+function playSaDetect(home: string): Detected {
+  if (hasFile(home, "play-service-account.json")) return { present: true };
+  const dir = path.join(credDir(home), "play-service-accounts");
+  let names: string[];
   try {
-    return fs
-      .readdirSync(path.join(credDir(home), "play-service-accounts"))
-      .some((f) => f.endsWith(".json"));
+    names = fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
   } catch {
     // 패키지별 SA 폴더가 없으면(또는 못 읽으면) MCP 서버도 거기서 SA 를 찾지 못한다 — 기본 파일만으로 판정한다
-    return false;
+    return { present: false };
   }
+  let invalid: Detected["invalid"];
+  for (const name of names) {
+    const file = path.join(dir, name);
+    const read = readJsonFile(file);
+    if (read.state === "ok") return { present: true };
+    if (read.state === "invalid" && !invalid) invalid = { file, reason: read.reason };
+  }
+  // 기본 키가 깨졌으면 detectAll 이 spec.file 로 따로 짚는다 — 여기선 패키지별 키의 손상만 싣는다.
+  return invalid ? { present: false, invalid } : { present: false };
 }
 
 function ciDetect(home: string, want: "github" | "gitlab"): Detected {
@@ -373,7 +393,7 @@ export const CREDENTIALS: readonly CredSpec[] = [
       ko: "선택 — 로컬은 OAuth 로 가능, CI/헤드리스는 필수",
       en: "optional — OAuth covers local; required for CI / headless",
     },
-    detect: (home) => ({ present: hasPlaySa(home) }),
+    detect: (home) => playSaDetect(home),
   },
   {
     id: "bigquery",
@@ -746,7 +766,33 @@ export function detectAll(
   home: string = os.homedir(),
   startDir: string = process.cwd(),
 ): Map<CredId, Detected> {
-  return new Map(CREDENTIALS.map((c) => [c.id, c.detect(home, startDir)]));
+  return new Map(CREDENTIALS.map((c) => [c.id, detectWithFileCheck(c, home, startDir)]));
+}
+
+/**
+ * `~/.mimi-seed/<file>` 이 있는데 읽거나 파싱할 수 없으면 "손상: 경로 · 원인 → 복구 명령" 문구, 아니면 null.
+ * doctor 계정 섹션 · deploy 처럼 탐지 표 밖에서 그 파일을 "없음"으로 안내하기 직전에 부른다. 복구 명령은 그 파일을
+ * 가진 자격증명 명세의 fix 를 쓴다 — 탐지 표(Detected.invalid)와 같은 안내가 나오게.
+ */
+export function credentialFileProblemMessage(displayFile: string, home: string = os.homedir()): string | null {
+  if (!displayFile.startsWith("~/")) return null;
+  const file = path.join(home, displayFile.slice(2));
+  const read = readJsonFile(file);
+  if (read.state !== "invalid") return null;
+  const fix = CREDENTIALS.find((spec) => spec.file === displayFile)?.fix ?? "mimi-seed setup";
+  return t().doctor.credCorrupt(file, read.reason, fix);
+}
+
+/**
+ * 탐지 결과가 "없음"인데 그 자격증명의 JSON 파일이 실제로는 있고 깨져 있으면, 그 사실을 Detected.invalid 로 싣는다.
+ * 개별 detect() 를 하나하나 고치지 않고 한 곳에서 한다 — spec.file 이 곧 그 자격증명의 파일이다.
+ */
+function detectWithFileCheck(spec: CredSpec, home: string, startDir: string): Detected {
+  const detected = spec.detect(home, startDir);
+  if (detected.present || detected.invalid || !spec.file?.endsWith(".json") || !spec.file.startsWith("~/")) return detected;
+  const file = path.join(home, spec.file.slice(2));
+  const read = readJsonFile(file);
+  return read.state === "invalid" ? { ...detected, invalid: { file, reason: read.reason } } : detected;
 }
 
 /** fallback 을 감안한 "동작하는가" 판정 — 예: Play SA 가 없어도 OAuth 가 있으면 동작한다. */

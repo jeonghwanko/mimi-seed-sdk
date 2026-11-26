@@ -242,3 +242,59 @@ describe("doctor 플랫폼 자격증명", () => {
     expect(platformsFromHints([])).toEqual([]);
   });
 });
+
+// 깨진 파일은 "없음"과 같은 심각도(✗/⚠)를 유지하되 안내는 원인으로 바꾼다 — 폴백으로 동작해도 손상은 숨기지 않는다.
+describe("doctor: 깨진 자격증명 파일", () => {
+  let cwd: string;
+  let home: string;
+  beforeEach(() => {
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "mimi-doctor-corrupt-"));
+    home = fs.mkdtempSync(path.join(os.tmpdir(), "mimi-doctor-home-"));
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.stubEnv("MIMI_SEED_LANG", "en");
+    vi.stubEnv("MIMI_SEED_TOKEN", "");
+    vi.stubEnv("MIMI_SEED_WEB_BASE", "");
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    mocks.config.mockResolvedValue(null);
+    mocks.detectHints.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  const invalid = { file: "/home/example/.mimi-seed/tokens.json", reason: "invalid JSON at line 1, column 30" };
+
+  it("필수 자격증명이 깨졌으면 ✗ 이고 원인을 보여준다", async () => {
+    mocks.detectAll.mockReturnValue(new Map(CREDENTIALS.map((spec) => [spec.id,
+      spec.id === "oauth" ? { present: false, invalid } : { present: spec.id !== "mimiseed" }])));
+    const report = await runDoctor({ cwd, print: false });
+    const row = report.checks.find((c) => c.section === "credentials" && c.label.startsWith("Google"));
+    expect(row?.status).toBe("fail");
+    expect(row?.detail).toContain("file is damaged: /home/example/.mimi-seed/tokens.json — invalid JSON at line 1, column 30. Fix or delete it, then reconnect:");
+  });
+
+  it("폴백으로 동작해도 손상 사실은 숨기지 않는다 (⚠)", async () => {
+    const playFile = { file: "/home/example/.mimi-seed/play-service-account.json", reason: "empty file" };
+    mocks.detectAll.mockReturnValue(new Map(CREDENTIALS.map((spec) => [spec.id,
+      spec.id === "playstore" ? { present: false, invalid: playFile } : { present: spec.id === "oauth" }])));
+    const report = await runDoctor({ cwd, print: false });
+    const row = report.checks.find((c) => c.section === "credentials" && /Play/.test(c.label));
+    expect(row?.status).toBe("warn");
+    expect(row?.detail).toContain("file is damaged");
+  });
+
+  it("계정 섹션: 깨진 config.json 은 '토큰 없음' 대신 손상 원인", async () => {
+    mocks.detectAll.mockReturnValue(new Map(CREDENTIALS.map((spec) => [spec.id, { present: spec.id !== "mimiseed" }])));
+    fs.mkdirSync(path.join(home, ".mimi-seed"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".mimi-seed", "config.json"), "{\"token\": ");
+    const report = await runDoctor({ cwd, print: false });
+    const account = report.checks.find((c) => c.section === "account");
+    expect(account?.status).toBe("fail");
+    expect(account?.detail).toContain(path.join(home, ".mimi-seed", "config.json"));
+  });
+});
+

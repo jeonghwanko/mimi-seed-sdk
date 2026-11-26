@@ -1,5 +1,6 @@
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
+import { credentialFileProblemMessage } from "./credentials.js";
 import { mcpCall } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog } from "./git.js";
 import { detectHints } from "./detect.js";
@@ -147,7 +148,10 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
   const cfg = await getEffectiveConfig();
   const remote = cfg !== null || (await remoteConfigured(cwd));
   if (!cfg) {
-    if (remote) r.fail(m.noToken, m.noTokenFix);
+    // 깨진 config.json 은 "토큰 없음"이 아니다 — 원인을 보여준다 (init 이 새 PAT 로 통째로 다시 쓴다).
+    const corrupt = credentialFileProblemMessage("~/.mimi-seed/config.json");
+    if (corrupt) r.fail(m.noToken, corrupt);
+    else if (remote) r.fail(m.noToken, m.noTokenFix);
     else r.warn(m.noTokenLocal, m.noTokenLocalDetail);
   } else {
     r.ok(m.tokenSaved, `${cfg.prefix}…  (${cfg.createdAt.slice(0, 10)})`);
@@ -183,15 +187,18 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
     const base = credLabel(spec);
     const note = credNote(spec);
     const label = note ? `${base} (${note})` : base;
+    // 깨진 파일은 "없음"과 같은 심각도(✗/⚠)로 두되, 안내는 원인(파일 · 이유)으로 바꾼다 — 선택 항목 하나가
+    // 깨졌다고 doctor --strict 가 실패하면 안 되지만, 폴백으로 동작하는 경우에도 손상 사실은 숨기지 않는다.
+    const fix = d.invalid ? m.credCorrupt(d.invalid.file, d.invalid.reason, spec.fix) : `→ ${spec.fix}`;
     if (d.present) r.ok(base, d.detail);
-    else if (isSatisfied(spec, detected)) r.warn(label, t().setup.fallbackWorking);
-    else if (spec.requirement === "optional") r.warn(`${label}`, `→ ${spec.fix}`);
+    else if (isSatisfied(spec, detected)) r.warn(label, d.invalid ? fix : t().setup.fallbackWorking);
+    else if (spec.requirement === "optional") r.warn(`${label}`, fix);
     // 플랫폼 자격증명(App Store 등)은 이 프로젝트가 그 플랫폼일 때만 필수다 — missingRequired() 와 같은
     // 규칙. 안 그러면 Android 전용 사용자가 App Store 키 때문에 영원히 exit 1 을 받는다.
     else if (spec.requirement === "platform" && !platforms.includes(spec.platform!)) {
-      r.warn(label, `${t().setup.neededFor(spec.platform!)}  → ${spec.fix}`);
+      r.warn(label, d.invalid ? fix : `${t().setup.neededFor(spec.platform!)}  → ${spec.fix}`);
     }
-    else r.fail(base, `→ ${spec.fix}`);
+    else r.fail(base, fix);
   }
   r.text(kleur.dim(m.credsHint));
 

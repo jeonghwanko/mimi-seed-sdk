@@ -191,8 +191,10 @@ never `npm install`ed, and has no build of its own.
 | `#core/…` module | What both packages share |
 |---|---|
 | `checks/{billing,release-doctor,release-doctor-render,lockfile,gradle-text}.ts` | Release Doctor — the MCP bin/tools and `mimi-seed check --local` run the same scanner in-process (`lockfile.ts`: npm/pnpm/Yarn lockfile and repository-root lookups; `gradle-text.ts`: string-aware Gradle comment removal) |
-| `project-manifest.ts` | the `.mimi-seed.json` schema + reader (wording of validation errors is passed in by the caller) |
-| `lang.ts` | the `MIMI_SEED_LANG` > `settings.json` > system locale (`ko*` → `ko`, else `en`) rule, so the wizard and the setup bins it spawns agree |
+| `project-manifest.ts` | the `.mimi-seed.json` schema + reader. `lookupProjectManifest` returns missing / ok / invalid(reason), so a corrupt file is never read as "no manifest"; the caller passes in the wording of validation errors |
+| `lang.ts` | the `MIMI_SEED_LANG` > `settings.json` > system locale (`ko*` → `ko`, else `en`) rule, so the wizard and the setup bins it spawns agree, plus `catalog(ko, en)`, the per-file string catalog both packages use (the language is read at call time) |
+| `json-file.ts` | reads a JSON settings or credential file as missing / ok / invalid(reason). The reason carries only a location, never content, because V8's `JSON.parse` message quotes the input. The MCP server re-exports it (`lib/json-file.ts`), and the CLI uses it so `doctor` / `setup` / `deploy` show a corrupt file as damaged, not missing |
+| `i18n-scan.ts`, `catch-scan.ts` | source scanners behind the guards: Korean literals outside `ko` catalogs (`i18n-coverage` / `output-i18n`), and fallback-only `catch` blocks without a stated reason (`silent-catch`) |
 | `atomic-write.ts` | temp + rename credential writes, incl. the Windows rename-retry schedule |
 | `ai.ts` | the Claude model id and the AI generators' language-independent contract (classifier keywords, tone / sentiment keys, `max_tokens`) |
 | `http-errors.ts` | the fetch wrappers' token-stripping endpoint label and timeout detection |
