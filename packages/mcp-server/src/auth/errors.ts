@@ -98,6 +98,10 @@ const ko = {
     message: '저장된 인증 토큰이 없습니다.',
     hint: 'mimi-seed-auth 로 로그인하세요.',
   },
+  tokenFileInvalid: (file: string, reason: string): AuthText => ({
+    message: `저장된 인증 토큰 파일을 읽을 수 없습니다: ${file} (${reason}).`,
+    hint: 'mimi-seed-auth 로 다시 로그인하면 파일을 새로 씁니다.',
+  }),
   noRefreshToken: {
     message: '저장된 토큰에 refresh_token이 없습니다 (offline_access 미발급).',
     hint: 'mimi-seed-auth 로 재로그인하면 prompt=consent로 새 refresh_token이 발급됩니다.',
@@ -183,6 +187,10 @@ const en: typeof ko = {
     message: 'No stored auth token.',
     hint: 'Log in with mimi-seed-auth.',
   },
+  tokenFileInvalid: (file: string, reason: string): AuthText => ({
+    message: `The stored auth token file cannot be read: ${file} (${reason}).`,
+    hint: 'Log in again with mimi-seed-auth; it rewrites the file.',
+  }),
   noRefreshToken: {
     message: 'The stored token has no refresh_token (offline_access was not granted).',
     hint: 'Log in again with mimi-seed-auth; prompt=consent issues a new refresh_token.',

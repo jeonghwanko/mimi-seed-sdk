@@ -1,7 +1,7 @@
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import {
-  jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig, type JenkinsConfig,
+  jenkinsConfigProblem, jenkinsUrlWarning, loadJenkinsConfig, requireJenkinsConfig, saveJenkinsConfig, type JenkinsConfig,
 } from '../jenkins/config.js';
 import * as creds from '../jenkins/credentials.js';
 import * as jobs from '../jenkins/jobs.js';
@@ -34,7 +34,10 @@ export function registerJenkinsTools(server: ToolRegistrar) {
     async () => {
       const cfg = loadJenkinsConfig();
       if (!cfg) {
-        return textResult(jenkinsNotConfiguredLines());
+        const problem = jenkinsConfigProblem();
+        // 깨진 파일은 "설정 없음"이 아니다 — 원인을 먼저 밝히고, 복구 절차(다시 저장)는 같은 안내를 쓴다.
+        const head = problem ? [`❌ ${problem.file} 이 손상되어 읽을 수 없습니다 (${problem.reason}). 다시 저장하면 새로 씁니다.`, ''] : [];
+        return textResult([...head, ...jenkinsNotConfiguredLines()]);
       }
       return textResult(jenkinsConfiguredLines(cfg));
     },

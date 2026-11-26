@@ -1,6 +1,7 @@
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
-import { GOOGLE_PROFILE_ID, getStoredTokens } from '../auth/google-auth.js';
+import { GOOGLE_PROFILE_ID, getStoredTokens, googleTokenFilePath } from '../auth/google-auth.js';
+import { assertCredentialFileReadable } from '../lib/json-file.js';
 import { DRIVE_FILE_SCOPE } from '../auth/scopes.js';
 import { DRIVE_AUTH_HINT, driveJwt, getDriveServiceAccount, type DriveAuthSource } from '../auth/drive-auth.js';
 import { requireAuth } from '../helpers.js';
@@ -21,7 +22,10 @@ interface DriveAuth {
 async function resolveDriveAuth(profile?: string): Promise<DriveAuth> {
   const sa = getDriveServiceAccount();
   if (sa) return { client: driveJwt(sa.key), source: sa.source, clientEmail: sa.key.client_email ?? null };
-  if (!getStoredTokens(profile)) throw new Error(DRIVE_AUTH_HINT);
+  if (!getStoredTokens(profile)) {
+    assertCredentialFileReadable(googleTokenFilePath(profile), `mimi-seed-auth${profile === undefined ? '' : ` --profile ${profile}`}`);
+    throw new Error(DRIVE_AUTH_HINT);
+  }
   return { client: await requireAuth(DRIVE_FILE_SCOPE, profile), source: 'user-oauth', clientEmail: null };
 }
 

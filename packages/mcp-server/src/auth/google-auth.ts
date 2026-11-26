@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getMcpOAuthClient } from './constants.js';
+import { jsonFileProblem } from '../lib/json-file.js';
 import { AuthError, authText, classifyError, type AuthErrorPayload } from './errors.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
@@ -97,6 +98,12 @@ export function getStoredCredentials(profile?: string): { clientId: string; clie
 
 export function saveCredentials(clientId: string, clientSecret: string) {
   writeCredentialJson(CREDENTIALS_PATH, { clientId, clientSecret });
+}
+
+/** getStoredTokens 가 읽는 파일 — 프로필이면 그 파일, 아니면 tokens.json (없으면 레거시 경로). */
+export function googleTokenFilePath(profile?: string): string {
+  if (profile !== undefined) return googleProfilePath(profile);
+  return !fs.existsSync(TOKEN_PATH) && fs.existsSync(LEGACY_TOKEN_PATH) ? LEGACY_TOKEN_PATH : TOKEN_PATH;
 }
 
 export function getStoredTokens(profile?: string): StoredTokens | null {
@@ -461,11 +468,14 @@ async function ensureFreshAccessTokenOnce(marginMs: number, profile?: string): P
   const grant = profile === undefined ? undefined : readProfile(profile);
   const tokens = profile === undefined ? getStoredTokens() : grant?.tokens;
   if (!tokens) {
+    // "토큰 없음"과 "토큰 파일이 깨짐"은 복구 명령은 같아도(재로그인) 원인은 다르다 — 깨졌으면 그렇다고 말한다.
+    const file = googleTokenFilePath(profile);
+    const problem = jsonFileProblem(file);
     return {
       status: 'unauthenticated',
       error: {
         code: 'UNAUTHENTICATED',
-        ...authText().unauthenticated,
+        ...(problem ? authText().tokenFileInvalid(file, problem) : authText().unauthenticated),
         retriable: false,
         needsReauth: true,
       },

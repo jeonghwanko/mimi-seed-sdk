@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import type { JenkinsConfig } from '#core/jenkins.js';
+import { assertCredentialFileReadable, jsonFileProblem } from '../lib/json-file.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const JENKINS_CONFIG_PATH = path.join(CONFIG_DIR, 'jenkins.json');
@@ -72,9 +73,16 @@ export function jenkinsUrlWarning(url: string): string | null {
   return `⚠️ ${parsed.host} 는 사설망 주소가 아닌데 http 입니다 — API 토큰이 암호화 없이 전송됩니다. 가능하면 https URL 을 쓰세요.`;
 }
 
+/** jenkins.json 이 있는데 읽을 수 없으면 그 이유 (없음·정상이면 null). */
+export function jenkinsConfigProblem(): { file: string; reason: string } | null {
+  const reason = jsonFileProblem(JENKINS_CONFIG_PATH);
+  return reason ? { file: JENKINS_CONFIG_PATH, reason } : null;
+}
+
 export function requireJenkinsConfig(): JenkinsConfig {
   const cfg = loadJenkinsConfig();
   if (!cfg) {
+    assertCredentialFileReadable(JENKINS_CONFIG_PATH, 'jenkins_save_config');
     throw new Error(
       'Jenkins 설정이 없습니다.\n' +
       'jenkins_save_config 도구로 먼저 설정해주세요.\n' +
