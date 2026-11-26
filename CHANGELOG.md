@@ -20,6 +20,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The `pdf-design-quality` skill guides readers through Korean font selection and embedding, page hierarchy, and desktop and mobile PDF render checks.
 - English tool descriptions: in English mode (`MIMI_SEED_LANG=en`, `mimi-seed lang en`, or a non-Korean system locale), every MCP tool and parameter description the agent sees is in English. Korean mode is unchanged. A machine with a non-Korean locale now gets English descriptions by default; set `MIMI_SEED_LANG=ko` (or `mimi-seed lang ko`) to keep Korean. Still Korean for now and moving over domain by domain: the text tools return, MCP prompts, and the `mimi-seed://tools/catalog` and agent-guide fallback resource text.
 
 ### Changed
