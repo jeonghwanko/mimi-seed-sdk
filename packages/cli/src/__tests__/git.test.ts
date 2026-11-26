@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getGitLog, getLatestTag, gitBinary, isGitRepo } from '../git.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getGitLog, getLatestTag, gitBinary, isCommitRef, isGitRepo } from '../git.js';
 import { absoluteWindowsPathDirs } from '../lib/windows-path.js';
 
 let root: string;
@@ -84,3 +84,43 @@ describe('absoluteWindowsPathDirs', () => {
     expect(absoluteWindowsPathDirs({ PATH: 'C:\\x;"C:\\unterminated;C:\\Git\\cmd' })).toEqual(['C:\\x', 'C:\\unterminated', 'C:\\Git\\cmd']);
   });
 });
+
+// notes 는 사용자가 준 --from/--to 를 이걸로 먼저 확인한다 — getGitLog 는 실패를 빈 목록으로 돌려줘서,
+// 오타 난 ref 가 "커밋 없음"(exit 0)으로 보였다.
+describe('isCommitRef', () => {
+  it('accepts tags, branches, and commit hashes', () => {
+    git('tag', 'v1.0.0');
+    const head = git('rev-parse', 'HEAD').toString().trim();
+    expect(isCommitRef(repo, 'v1.0.0')).toBe(true);
+    expect(isCommitRef(repo, 'HEAD')).toBe(true);
+    expect(isCommitRef(repo, head.slice(0, 8))).toBe(true);
+  });
+
+  it('rejects a typo, an option-looking value, and a non-commit object', () => {
+    const tree = git('rev-parse', 'HEAD^{tree}').toString().trim();
+    expect(isCommitRef(repo, 'v1.0.O')).toBe(false);
+    expect(isCommitRef(repo, '--output=/tmp/x')).toBe(false);
+    expect(isCommitRef(repo, tree)).toBe(false);
+  });
+});
+
+describe('mimi-seed notes with a bad ref', () => {
+  it('exits 1 with the reason instead of reporting "no commits"', async () => {
+    const cwd = process.cwd();
+    process.chdir(repo);
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`exit ${code}`); }) as never);
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const { cmdNotes } = await import('../notes.js');
+      await expect(cmdNotes(['--from', 'v9.9.9-typo'])).rejects.toThrow('exit 1');
+      const printed = out.mock.calls.map((c) => String(c[0])).join('');
+      expect(printed).toMatch(/--from v9\.9\.9-typo/);
+      expect(printed).not.toMatch(/No commits found|커밋을 찾을 수 없습니다/);
+    } finally {
+      exit.mockRestore();
+      out.mockRestore();
+      process.chdir(cwd);
+    }
+  });
+});
+

@@ -3,7 +3,7 @@ import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { catalog } from "./i18n.js";
 import { mcpCall, MCP_WRITE_TIMEOUT_MS } from "./mcp-client.js";
-import { isGitRepo, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
+import { isGitRepo, isCommitRef, getLatestTag, getGitLog, formatCommitsForPrompt } from "./git.js";
 import { AI_MODEL, RELEASE_NOTES_MAX_TOKENS, RELEASE_NOTE_TONES, type ReleaseNoteTone } from "#core/ai.js";
 import { loadAnthropic } from "./lib/anthropic.js";
 
@@ -36,6 +36,7 @@ const M = catalog(
     range: (from: string, to: string) => `범위: ${from} → ${to}\n`,
     recentCommits: (limit: number) => `최근 ${limit}개 커밋\n`,
     noCommits: "커밋을 찾을 수 없습니다.\n",
+    badRef: (flag: string, ref: string) => `${flag} ${ref} 은(는) 이 저장소의 커밋을 가리키지 않습니다 — 브랜치 · 태그 · 커밋 이름을 확인하세요.\n`,
     invalidLimit: (value: string) => `--limit 은 1~10000 사이의 정수여야 합니다: ${value || "(값 없음)"}\n`,
     invalidRef: (ref: string) => `'-' 로 시작하는 ref 는 쓸 수 없습니다 (git 옵션으로 읽힘): ${ref}\n`,
     analyzing: (n: number) => `커밋 ${n}개 분석 중...\n\n`,
@@ -81,6 +82,7 @@ const M = catalog(
     range: (from: string, to: string) => `Range: ${from} → ${to}\n`,
     recentCommits: (limit: number) => `Last ${limit} commit(s)\n`,
     noCommits: "No commits found.\n",
+    badRef: (flag: string, ref: string) => `${flag} ${ref} does not point to a commit in this repository — check the branch, tag, or commit name.\n`,
     invalidLimit: (value: string) => `--limit must be an integer from 1 to 10000: ${value || "(missing)"}\n`,
     invalidRef: (ref: string) => `A ref cannot start with '-' (git would read it as an option): ${ref}\n`,
     analyzing: (n: number) => `Analyzing ${n} commit(s)...\n\n`,
@@ -219,6 +221,15 @@ export async function cmdNotes(argv: string[]): Promise<void> {
   if (!isGitRepo(cwd)) {
     process.stdout.write(kleur.red(M().notGitRepo));
     process.exit(1);
+  }
+
+  // 사용자가 준 ref 는 먼저 확인한다 — 오타 난 ref 를 "커밋 없음"(exit 0)으로 넘기면 잘못 입력했다는 걸 모른다.
+  // --to 의 기본값 HEAD 는 빼고 본다: 커밋이 아직 없는 새 저장소는 "잘못된 ref" 가 아니라 "커밋 없음"으로 안내한다.
+  for (const [flag, ref] of [["--from", args.from], ["--to", args.to === "HEAD" ? undefined : args.to]] as const) {
+    if (ref !== undefined && !isCommitRef(cwd, ref)) {
+      process.stdout.write(kleur.red(M().badRef(flag, ref)));
+      process.exit(1);
+    }
   }
 
   const latestTag = getLatestTag(cwd);
