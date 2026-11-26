@@ -236,4 +236,22 @@ describe('도구 호출 — 깨진 파일을 밝히는 진단·상태 도구', (
     // 위쪽 상태 줄은 여전히 미설정 — 로더의 null 계약은 바뀌지 않았다.
     expect(text).toMatch(/❌ Jenkins\s+— 미설정/);
   });
+
+  it('영어 모드: mimi_seed_status 출력에 한글이 없다 (깨진 파일 섹션 포함)', async () => {
+    vi.stubEnv('MIMI_SEED_LANG', 'en');
+    const file = write('jenkins.json', '{"url":');
+    const text = await call('mimi_seed_status');
+    expect(text).toContain('Mimi Seed connection status');
+    expect(text).toContain('Unreadable config files');
+    expect(text).toContain(file);
+    expect(text).toMatch(/❌ Jenkins\s+— not set up/);
+    expect(text).not.toMatch(/[가-힣]/);
+  });
+
+  it('영어 모드: mimi_seed_auth_status 미인증 안내에 한글이 없다', async () => {
+    vi.stubEnv('MIMI_SEED_LANG', 'en');
+    const text = await call('mimi_seed_auth_status');
+    expect(text).toContain('Run in a terminal');
+    expect(text).not.toMatch(/[가-힣]/);
+  });
 });

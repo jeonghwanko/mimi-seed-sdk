@@ -12,6 +12,8 @@
  * 비표준 body (HTML, plain text, 빈 응답 등) 는 폴백으로 원본 보존.
  */
 
+import { catalog } from '#core/lang.js';
+
 /** Apple JSON Error response 구조 (단일 errors 배열). */
 interface AppleError {
   id?: string;
@@ -26,49 +28,86 @@ interface AppleErrorPayload {
   errors?: AppleError[];
 }
 
+/** 코드로 찾아보는 표 — 키를 string 으로 넓혀 둔다. */
+const hintTable = (hints: Record<string, string>) => hints;
+
 /** Apple 에러 코드 → 친절한 hint (실측 거부 사례 기반). */
-const CODE_HINTS: Record<string, string> = {
-  // What's New / localization 텍스트 검증 실패
-  INVALID_CHARACTERS:
-    'HTML 태그·금지 문자가 포함됐어요. 제출 전 lib/text-validators.ts 로 사전 검증 권장.',
-  // 버전 상태가 편집 불가 (READY_FOR_SALE / WAITING_FOR_REVIEW 등)
-  ENTITY_STATE_INVALID:
-    '버전 상태가 편집 가능 단계가 아니에요 (이미 심사중/출시됨). 새 versionString 으로 appstore_create_version 필요할 수 있어요.',
-  // 필수 필드 누락
-  // ⚠️ Apple 이 실제로 보내는 코드는 점 표기다 (ENTITY_ERROR.ATTRIBUTE.REQUIRED).
-  // 아래 언더스코어 키들은 오래 매칭된 적이 없었다 — 점 표기를 정본으로 두고
-  // 언더스코어 변형은 혹시 모를 옛 응답용으로 남긴다 (2026-07-21 실측으로 발견).
-  'ENTITY_ERROR.ATTRIBUTE.REQUIRED':
-    '필수 필드가 빠졌어요 — source.pointer 위치 확인.',
-  ENTITY_ERROR_ATTRIBUTE_REQUIRED:
-    '필수 필드가 빠졌어요 — source.pointer 위치 확인.',
-  // 길이 초과 — detail 에 실제 상한이 숫자로 들어온다 ("Max number of characters is (55)").
-  'ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG':
-    '길이 초과 — detail 의 괄호 숫자가 Apple 이 강제하는 실제 상한이에요. 그 값에 맞춰 줄이세요.',
-  // 심사 중이라 필드가 잠김. 상품이 WAITING_FOR_REVIEW/IN_REVIEW 면 현지화를 못 고친다.
-  'ENTITY_ERROR.ATTRIBUTE.INVALID.UNMODIFIABLE':
-    '지금 상태에선 못 고치는 필드예요 — 상품이 심사 중이면 현지화가 잠깁니다. '
-    + '심사 결과를 기다리거나 appstore_cancel_review 로 철회한 뒤 수정하세요.',
-  'ENTITY_ERROR.ATTRIBUTE.INVALID':
-    '필드 값이 정책 위반(길이/형식). source.pointer 위치 확인.',
-  ENTITY_ERROR_ATTRIBUTE_INVALID:
-    '필드 값이 정책 위반(길이/형식). source.pointer 위치 확인.',
-  // 빌드 attach 시 빌드를 못 찾음
-  NOT_FOUND:
-    '대상 리소스를 찾을 수 없어요 — id/versionId/buildId 가 유효한지, 동일 앱 소속인지 확인.',
-  // 권한 부족 (API Key role 문제)
-  FORBIDDEN_ERROR:
-    'API Key 권한 부족 — App Store Connect > Users and Access 에서 키 role 확인.',
-  // 상태 전이 거부. cancel 은 WAITING_FOR_REVIEW 까지 되고, IN_REVIEW 이후만 막힌다.
-  // (예전 문구는 "큐 진입 후라 불가"였는데, 그건 cancel 이 submitted:false 를 보내
-  //  항상 실패하던 버그의 증상을 상태 탓으로 오해한 것이었다 — 2026-07-25 정정.)
-  STATE_ERROR:
-    '현재 상태에서 허용되지 않는 작업. 제출된 묶음은 항목 제거(removed)가 막히니 '
-    + 'appstore_cancel_review 로 묶음째 취소하세요. IN_REVIEW 이후면 그마저도 불가 — 심사 결과를 기다립니다.',
-  // JWT 거부 — 잘못된 자격증명
-  NOT_AUTHORIZED:
-    'API 키가 거부됐어요 — issuerId/keyId/.p8 조합 불일치 가능. appstore_verify_credentials 로 진단하고 mimi-seed auth appstore 로 재등록.',
-};
+const M = catalog(
+  {
+    hints: hintTable({
+      // What's New / localization 텍스트 검증 실패
+      INVALID_CHARACTERS:
+        'HTML 태그·금지 문자가 포함됐어요. 제출 전 lib/text-validators.ts 로 사전 검증 권장.',
+      // 버전 상태가 편집 불가 (READY_FOR_SALE / WAITING_FOR_REVIEW 등)
+      ENTITY_STATE_INVALID:
+        '버전 상태가 편집 가능 단계가 아니에요 (이미 심사중/출시됨). 새 versionString 으로 appstore_create_version 필요할 수 있어요.',
+      // 필수 필드 누락
+      // ⚠️ Apple 이 실제로 보내는 코드는 점 표기다 (ENTITY_ERROR.ATTRIBUTE.REQUIRED).
+      // 아래 언더스코어 키들은 오래 매칭된 적이 없었다 — 점 표기를 정본으로 두고
+      // 언더스코어 변형은 혹시 모를 옛 응답용으로 남긴다 (2026-07-21 실측으로 발견).
+      'ENTITY_ERROR.ATTRIBUTE.REQUIRED':
+        '필수 필드가 빠졌어요 — source.pointer 위치 확인.',
+      ENTITY_ERROR_ATTRIBUTE_REQUIRED:
+        '필수 필드가 빠졌어요 — source.pointer 위치 확인.',
+      // 길이 초과 — detail 에 실제 상한이 숫자로 들어온다 ("Max number of characters is (55)").
+      'ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG':
+        '길이 초과 — detail 의 괄호 숫자가 Apple 이 강제하는 실제 상한이에요. 그 값에 맞춰 줄이세요.',
+      // 심사 중이라 필드가 잠김. 상품이 WAITING_FOR_REVIEW/IN_REVIEW 면 현지화를 못 고친다.
+      'ENTITY_ERROR.ATTRIBUTE.INVALID.UNMODIFIABLE':
+        '지금 상태에선 못 고치는 필드예요 — 상품이 심사 중이면 현지화가 잠깁니다. '
+        + '심사 결과를 기다리거나 appstore_cancel_review 로 철회한 뒤 수정하세요.',
+      'ENTITY_ERROR.ATTRIBUTE.INVALID':
+        '필드 값이 정책 위반(길이/형식). source.pointer 위치 확인.',
+      ENTITY_ERROR_ATTRIBUTE_INVALID:
+        '필드 값이 정책 위반(길이/형식). source.pointer 위치 확인.',
+      // 빌드 attach 시 빌드를 못 찾음
+      NOT_FOUND:
+        '대상 리소스를 찾을 수 없어요 — id/versionId/buildId 가 유효한지, 동일 앱 소속인지 확인.',
+      // 권한 부족 (API Key role 문제)
+      FORBIDDEN_ERROR:
+        'API Key 권한 부족 — App Store Connect > Users and Access 에서 키 role 확인.',
+      // 상태 전이 거부. cancel 은 WAITING_FOR_REVIEW 까지 되고, IN_REVIEW 이후만 막힌다.
+      // (예전 문구는 "큐 진입 후라 불가"였는데, 그건 cancel 이 submitted:false 를 보내
+      //  항상 실패하던 버그의 증상을 상태 탓으로 오해한 것이었다 — 2026-07-25 정정.)
+      STATE_ERROR:
+        '현재 상태에서 허용되지 않는 작업. 제출된 묶음은 항목 제거(removed)가 막히니 '
+        + 'appstore_cancel_review 로 묶음째 취소하세요. IN_REVIEW 이후면 그마저도 불가 — 심사 결과를 기다립니다.',
+      // JWT 거부 — 잘못된 자격증명
+      NOT_AUTHORIZED:
+        'API 키가 거부됐어요 — issuerId/keyId/.p8 조합 불일치 가능. appstore_verify_credentials 로 진단하고 mimi-seed auth appstore 로 재등록.',
+    }),
+  },
+  {
+    hints: hintTable({
+      INVALID_CHARACTERS:
+        'Contains HTML tags or forbidden characters. Pre-validate with lib/text-validators.ts before submitting.',
+      ENTITY_STATE_INVALID:
+        'The version state is not editable (already in review/released). You may need appstore_create_version with a new versionString.',
+      'ENTITY_ERROR.ATTRIBUTE.REQUIRED':
+        'A required field is missing — check the source.pointer location.',
+      ENTITY_ERROR_ATTRIBUTE_REQUIRED:
+        'A required field is missing — check the source.pointer location.',
+      'ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG':
+        'Too long — the number in parentheses in detail is the actual limit Apple enforces. Shorten the value to fit it.',
+      'ENTITY_ERROR.ATTRIBUTE.INVALID.UNMODIFIABLE':
+        'This field cannot be changed in the current state — localizations are locked while the product is in review. '
+        + 'Wait for the review result, or withdraw it with appstore_cancel_review, then edit.',
+      'ENTITY_ERROR.ATTRIBUTE.INVALID':
+        'The field value violates a policy (length/format). Check the source.pointer location.',
+      ENTITY_ERROR_ATTRIBUTE_INVALID:
+        'The field value violates a policy (length/format). Check the source.pointer location.',
+      NOT_FOUND:
+        'Target resource not found — check that id/versionId/buildId is valid and belongs to the same app.',
+      FORBIDDEN_ERROR:
+        'Insufficient API Key permissions — check the key role in App Store Connect > Users and Access.',
+      STATE_ERROR:
+        'Operation not allowed in the current state. Items cannot be removed from a submitted batch, so '
+        + 'cancel the whole batch with appstore_cancel_review. After IN_REVIEW even that is not possible — wait for the review result.',
+      NOT_AUTHORIZED:
+        'The API key was rejected — the issuerId/keyId/.p8 combination may not match. Diagnose with appstore_verify_credentials and re-register with mimi-seed auth appstore.',
+    }),
+  },
+);
 
 /** Apple 표준 에러 응답 파싱 시도. 실패하면 null 반환. */
 function parseAppleErrorBody(body: string): AppleError[] | null {
@@ -91,10 +130,11 @@ function parseAppleErrorBody(body: string): AppleError[] | null {
  */
 function resolveHint(code: string | undefined): string | undefined {
   if (!code) return undefined;
-  if (CODE_HINTS[code]) return CODE_HINTS[code];
+  const hints = M().hints;
+  if (hints[code]) return hints[code];
   const parts = code.split('.');
   for (let i = parts.length - 1; i > 0; i -= 1) {
-    const hint = CODE_HINTS[parts.slice(0, i).join('.')];
+    const hint = hints[parts.slice(0, i).join('.')];
     if (hint) return hint;
   }
   return undefined;
@@ -138,7 +178,9 @@ export function friendlyAppStoreError(status: number, body: string): Error {
 
 // ── 테스트용 export ────────────────────────────────────────────
 export const __testing = {
-  CODE_HINTS,
+  get CODE_HINTS() {
+    return M().hints;
+  },
   parseAppleErrorBody,
   formatAppleError,
 };

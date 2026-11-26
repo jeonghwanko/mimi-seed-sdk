@@ -2,7 +2,34 @@
 // raw GaxiosError dump 대신 "무엇을 어떻게 고칠지"를 즉시 보여준다.
 // 인식 못 한 에러는 원본을 그대로 보존한다.
 
-const REAUTH = '터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    reauth: '터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+    authExpired: '❌ Google 인증이 만료됐거나 권한이 부족해요.',
+    apiDisabled: '❌ 필요한 Google API가 비활성화돼 있어요.',
+    activate: (url: string) => `→ 활성화: ${url}`,
+    activateInConsole: '→ Google Cloud Console에서 해당 API를 활성화한 뒤 다시 시도하세요.',
+    billingDisabled: '❌ 결제(billing)가 비활성화된 프로젝트예요.\n→ Google Cloud Console → 결제 에서 결제 계정을 연결하세요.',
+    alreadyExists:
+      '❌ 이미 사용 중인 ID예요 (GCP 프로젝트 ID는 전역에서 유일해야 함).\n→ 다른 projectId로 다시 시도하거나, firebase_get_project 로 소유권을 확인하세요.',
+    notFound: '❌ 프로젝트/리소스를 찾을 수 없어요.\n→ firebase_list_projects 로 유효한 projectId를 확인하세요.',
+    forbidden: '❌ 권한 부족 — 이 Google 계정이 해당 프로젝트에 접근 권한이 있는지 확인하세요.',
+  },
+  {
+    reauth: 'Sign in again in a terminal:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+    authExpired: '❌ Google authentication has expired or lacks the required permissions.',
+    apiDisabled: '❌ A required Google API is disabled.',
+    activate: (url: string) => `→ Enable it: ${url}`,
+    activateInConsole: '→ Enable the API in Google Cloud Console, then try again.',
+    billingDisabled: '❌ Billing is disabled for this project.\n→ Link a billing account in Google Cloud Console → Billing.',
+    alreadyExists:
+      '❌ This ID is already in use (GCP project IDs must be globally unique).\n→ Try again with a different projectId, or check ownership with firebase_get_project.',
+    notFound: '❌ Project/resource not found.\n→ Check for a valid projectId with firebase_list_projects.',
+    forbidden: '❌ Insufficient permissions — check that this Google account has access to the project.',
+  },
+);
 
 export function extractHttpStatus(e: unknown): number | undefined {
   if (e && typeof e === 'object') {
@@ -57,14 +84,15 @@ export function googleErrorDetail(e: unknown): string | undefined {
 /** invalid_grant / 만료 refresh_token / 부족 scope → 재로그인 안내 메시지. 아니면 null. */
 export function authReauthMessage(text: string): string | null {
   if (/invalid_grant|invalid_rapt|rapt_required|unauthorized_client|ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient.*scope/i.test(text)) {
-    return ['❌ Google 인증이 만료됐거나 권한이 부족해요.', '', REAUTH].join('\n');
+    return [M().authExpired, '', M().reauth].join('\n');
   }
   return null;
 }
 
 function extractActivationUrl(text: string): string | undefined {
   const m = text.match(/https?:\/\/console\.(?:developers|cloud)\.google\.com\/\S+/);
-  return m?.[0]?.replace(/[).,'"]+$/, '');
+  // 따옴표를 \u0027/\u0022 로 쓴 이유: i18n 스캐너(#core/i18n-scan.js)는 정규식 리터럴 안의 ' " 를 문자열 시작으로 읽는다.
+  return m?.[0]?.replace(/[).,\u0027\u0022]+$/, '');
 }
 
 export function withCause(err: Error, cause: unknown): Error {
@@ -100,8 +128,8 @@ export function friendlyGoogleError(e: unknown): Error {
         withPartialNote(
           e,
           [
-            '❌ 필요한 Google API가 비활성화돼 있어요.',
-            url ? `→ 활성화: ${url}` : '→ Google Cloud Console에서 해당 API를 활성화한 뒤 다시 시도하세요.',
+            M().apiDisabled,
+            url ? M().activate(url) : M().activateInConsole,
           ].join('\n'),
         ),
       ),
@@ -111,7 +139,7 @@ export function friendlyGoogleError(e: unknown): Error {
   if (/BILLING_DISABLED|billing.*(disabled|not enabled|required)/i.test(text)) {
     return withCause(
       new Error(
-        withPartialNote(e, '❌ 결제(billing)가 비활성화된 프로젝트예요.\n→ Google Cloud Console → 결제 에서 결제 계정을 연결하세요.'),
+        withPartialNote(e, M().billingDisabled),
       ),
       e,
     );
@@ -119,10 +147,7 @@ export function friendlyGoogleError(e: unknown): Error {
   if (/ALREADY_EXISTS|already exists|already in use/i.test(text)) {
     return withCause(
       new Error(
-        withPartialNote(
-          e,
-          '❌ 이미 사용 중인 ID예요 (GCP 프로젝트 ID는 전역에서 유일해야 함).\n→ 다른 projectId로 다시 시도하거나, firebase_get_project 로 소유권을 확인하세요.',
-        ),
+        withPartialNote(e, M().alreadyExists),
       ),
       e,
     );
@@ -130,14 +155,14 @@ export function friendlyGoogleError(e: unknown): Error {
   if (status === 404 || /NOT_FOUND|not found/i.test(text)) {
     return withCause(
       new Error(
-        withPartialNote(e, '❌ 프로젝트/리소스를 찾을 수 없어요.\n→ firebase_list_projects 로 유효한 projectId를 확인하세요.'),
+        withPartialNote(e, M().notFound),
       ),
       e,
     );
   }
   if (status === 403 || /PERMISSION_DENIED|forbidden|permission/i.test(text)) {
     return withCause(
-      new Error(withPartialNote(e, '❌ 권한 부족 — 이 Google 계정이 해당 프로젝트에 접근 권한이 있는지 확인하세요.')),
+      new Error(withPartialNote(e, M().forbidden)),
       e,
     );
   }
