@@ -9,6 +9,7 @@ import {
 } from '#core/project-manifest.js';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   {
@@ -91,7 +92,7 @@ export function loadSocialPlatformConfig<T>(
 ): T | null {
   const target = resolveSocialConfigTarget(platform, options);
   try {
-    const parsed = JSON.parse(fs.readFileSync(target.filePath, 'utf-8')) as unknown;
+    const parsed = JSON.parse(readCredentialFileSync(target.filePath)) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     if (target.profile) {
       return ((parsed as SocialProfileDocument)[platform] as T | undefined) ?? null;
@@ -115,7 +116,7 @@ export function saveSocialPlatformConfig<T extends object>(
     let existing: SocialProfileDocument = {};
     if (fs.existsSync(target.filePath)) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(target.filePath, 'utf-8')) as unknown;
+        const parsed = JSON.parse(readCredentialFileSync(target.filePath)) as unknown;
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           throw new Error(M().notObject);
         }

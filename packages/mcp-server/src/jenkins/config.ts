@@ -1,10 +1,10 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import type { JenkinsConfig } from '#core/jenkins.js';
 import { catalog } from '#core/lang.js';
 import { assertCredentialFileReadable, jsonFileProblem } from '../lib/json-file.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const JENKINS_CONFIG_PATH = path.join(CONFIG_DIR, 'jenkins.json');
@@ -33,7 +33,7 @@ export type { JenkinsConfig } from '#core/jenkins.js';
 
 export function loadJenkinsConfig(): JenkinsConfig | null {
   try {
-    return JSON.parse(fs.readFileSync(JENKINS_CONFIG_PATH, 'utf-8')) as JenkinsConfig;
+    return JSON.parse(readCredentialFileSync(JENKINS_CONFIG_PATH)) as JenkinsConfig;
   } catch {
     // 읽을 수 없으면 '미설정' — 깨진 파일은 requireJenkinsConfig · jenkinsConfigProblem 이 json-file 로 따로 진단한다
     return null;

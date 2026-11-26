@@ -1,10 +1,9 @@
 # Design: encrypt `~/.mimi-seed/` credentials at rest with an OS-held key
 
-> **Status: stage 1 in progress.** Readers in core understand envelopes and report `locked`
-> (`core/src/credential-{envelope,keystore,read}.ts`, used by `readJsonFile`). Nothing writes envelopes yet, so
-> every credential is still a plaintext JSON file written `0600`
-> ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)). Still to do in stage 1: migrating the raw
-> readers and adding the reader guard (§4.4).
+> **Status: stage 1 done — readers only.** Every credential loader reads through core and understands envelopes
+> (`core/src/credential-{envelope,keystore,read}.ts`; `credential-reader-guard.test.ts` keeps it that way), and
+> diagnostics report `locked`. Nothing writes envelopes yet, so every credential is still a plaintext JSON file
+> written `0600` ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)). Next: stage 2 (§5).
 > This document describes structure only and contains no secret values.
 
 ## 1. Problem

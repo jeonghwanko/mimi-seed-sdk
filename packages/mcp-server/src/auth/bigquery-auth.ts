@@ -6,6 +6,7 @@ import os from 'node:os';
 import { getAuthenticatedClient } from './google-auth.js';
 import { writeCredentialFile } from '#core/atomic-write.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   {
@@ -67,7 +68,7 @@ export interface ServiceAccountKey {
 
 function safeReadSa(p: string): ServiceAccountKey | null {
   try {
-    const parsed = JSON.parse(fs.readFileSync(p, 'utf-8')) as ServiceAccountKey;
+    const parsed = JSON.parse(readCredentialFileSync(p)) as ServiceAccountKey;
     if (parsed.type === 'service_account' && parsed.client_email && parsed.private_key) {
       return parsed;
     }

@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   { missing: 'TikTok Business 설정이 없습니다. 터미널에서 `mimi-seed auth tiktok`을 실행하세요.' },
@@ -27,7 +27,7 @@ export const TIKTOK_BUSINESS_CONFIG_PATH = path.join(os.homedir(), '.mimi-seed',
 
 export function loadTikTokBusinessConfig(): TikTokBusinessConfig | null {
   try {
-    const value = JSON.parse(readFileSync(TIKTOK_BUSINESS_CONFIG_PATH, 'utf8')) as Partial<TikTokBusinessConfig>;
+    const value = JSON.parse(readCredentialFileSync(TIKTOK_BUSINESS_CONFIG_PATH)) as Partial<TikTokBusinessConfig>;
     const required: Array<keyof TikTokBusinessConfig> = [
       'clientId', 'clientSecret', 'redirectUri', 'accessToken', 'refreshToken',
       'accessTokenExpiresAt', 'refreshTokenExpiresAt', 'openId', 'scope', 'tokenType',

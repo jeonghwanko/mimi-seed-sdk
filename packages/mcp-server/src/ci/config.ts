@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
@@ -15,11 +14,12 @@ const M = catalog(
 // ci.json 의 모양은 CLI 와 공유한다 — 두 패키지가 모두 쓰는 문서화된 예외다(pitfalls §12).
 import type { CiConfig } from '#core/ci.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 export type { CiConfig, CiProvider } from '#core/ci.js';
 
 export function loadCiConfig(): CiConfig | null {
   try {
-    return JSON.parse(fs.readFileSync(CI_CONFIG_PATH, 'utf-8')) as CiConfig;
+    return JSON.parse(readCredentialFileSync(CI_CONFIG_PATH)) as CiConfig;
   } catch {
     // 읽을 수 없으면 '미설정' — 깨진 파일은 requireCiConfig · mimi_seed_status 가 json-file 로 따로 진단한다
     return null;

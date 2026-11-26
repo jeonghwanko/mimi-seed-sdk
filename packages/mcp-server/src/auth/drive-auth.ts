@@ -6,6 +6,7 @@ import os from 'node:os';
 import { writeCredentialFile } from '#core/atomic-write.js';
 import type { ServiceAccountKey } from './bigquery-auth.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 const M = catalog(
   {
@@ -119,7 +120,7 @@ export function getDriveServiceAccount(env: NodeJS.ProcessEnv = process.env): Dr
   }
   if (!fs.existsSync(DRIVE_SA_PATH)) return null;
   try {
-    return { key: parseDriveServiceAccountJson(fs.readFileSync(DRIVE_SA_PATH, 'utf-8')), source: 'service-account' };
+    return { key: parseDriveServiceAccountJson(readCredentialFileSync(DRIVE_SA_PATH)), source: 'service-account' };
   } catch (e) {
     // 깨진 키 파일을 null 로 돌려주면 resolveDriveAuth 가 사용자 OAuth 로 조용히 넘어가 다른 계정으로 올라간다.
     const reason = (e as NodeJS.ErrnoException).code ?? (e instanceof Error ? e.message : String(e));

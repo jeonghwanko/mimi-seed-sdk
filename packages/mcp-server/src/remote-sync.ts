@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getAppStoreCredentials, type AppStoreCredentials } from './appstore/auth.js';
@@ -9,6 +8,7 @@ import {
 } from './auth/playstore-auth.js';
 import { isValidAndroidPackageName } from './lib/package-name.js';
 import { catalog } from '#core/lang.js';
+import { readCredentialFileSync } from '#core/credential-read.js';
 
 /** 동기화 미리보기·결과 문구 — 호출 시점에 언어를 읽는다. */
 const R = catalog(
@@ -112,7 +112,7 @@ function getRemoteConfig(): RemoteConfig | null {
   }
   try {
     const configPath = path.join(os.homedir(), '.mimi-seed', 'config.json');
-    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<RemoteConfig>;
+    const parsed = JSON.parse(readCredentialFileSync(configPath)) as Partial<RemoteConfig>;
     if (!parsed.token || !parsed.endpoint) return null;
     const webBase = parsed.webBase ?? parsed.endpoint.replace(/\/api\/mcp\/?$/, '');
     return { token: parsed.token, endpoint: parsed.endpoint, webBase };
