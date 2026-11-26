@@ -140,7 +140,7 @@ export const catalog = {
    * `parts`: register 가 하위 모듈로 나뉜 도메인의 실제 정의 위치 — 제목과 개수 표에 "→ `…`" 로 붙는다.
    */
   sections: {
-    playstore: { impl: 'playstore/*.ts' },
+    playstore: { impl: 'playstore/*.ts', parts: 'registers/playstore/*.ts' },
     appstore: {
       impl: 'appstore/*.ts',
       parts: 'registers/appstore/*.ts',

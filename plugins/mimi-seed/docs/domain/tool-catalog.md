@@ -28,7 +28,7 @@
 | Domain | Register file | Tools |
 |--------|---------------|------:|
 | App Store Connect | `registers/appstore.ts` → `registers/appstore/*.ts` | 64 |
-| Google Play | `registers/playstore.ts` | 38 |
+| Google Play | `registers/playstore.ts` → `registers/playstore/*.ts` | 38 |
 | Firebase | `registers/firebase.ts` | 21 |
 | AdMob | `registers/admob.ts` | 7 |
 | CI (GitHub Actions / GitLab) | `registers/ci.ts` | 6 |
@@ -55,7 +55,7 @@
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## Google Play — `registers/playstore.ts` (38) · impl `playstore/*.ts`
+## Google Play — `registers/playstore.ts` → `registers/playstore/*.ts` (38) · impl `playstore/*.ts`
 
 - Read: `playstore_get_app` · `playstore_get_listing` · `playstore_list_tracks` · `playstore_get_statistics` ·
   `playstore_list_images` · `playstore_list_reviews` · `playstore_list_inapp_products` ·
