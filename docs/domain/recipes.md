@@ -33,6 +33,10 @@
    *App Store / Google Play?* `registers/appstore.ts` and `registers/playstore.ts` are only entries — add the tool
    to the matching `registers/<store>/<part>.ts` function and to the order list in
    `<store>-register-order.test.ts` ([[architecture]]).
+   **English text**: every new or edited Korean description (tool or parameter) needs an entry in
+   `mcp-server/src/i18n/tools-en/<domain>.ts` (`'<Korean source>': '<English>'`); delete the entry of a source
+   you removed. `tool-text-en.test.ts` lists anything missing or stale. Keep tool and parameter names, `code`,
+   URLs, and safety wording ("irreversible", "explicit approval", `confirm`) intact.
    *New domain?* also add `registerXxxTools(registrar)` to **`src/server.ts`** — `index.ts` is only the stdio entry
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
 3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then

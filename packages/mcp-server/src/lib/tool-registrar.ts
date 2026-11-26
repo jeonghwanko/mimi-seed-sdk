@@ -170,8 +170,12 @@ export function confirmPreview(name: string, args: Record<string, unknown>): Cal
   return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
 
-const GUARD_DESCRIPTION =
+/** 레지스트라 가드를 받는 파괴적 도구의 설명 끝에 붙는 문구. 영어 번역은 i18n/tools-en/registrar.ts. */
+export const GUARD_DESCRIPTION =
   '⚠️ 안전 가드: confirm 생략/false 면 아무것도 바꾸지 않고 dry-run preview 만 반환한다. 사용자 명시 승인 후 confirm: true 로 재호출.';
+/** 레지스트라가 주입하는 `confirm` 파라미터 설명. 영어 번역은 i18n/tools-en/registrar.ts. */
+export const CONFIRM_PARAM_DESCRIPTION =
+  'true 명시 시에만 실제 실행. 생략/false 면 dry-run preview 만 반환 (비가역·공개 사고 차단).';
 
 // ── registrar ──────────────────────────────────────────────────────────────
 
@@ -193,9 +197,18 @@ type AnyHandler = (args: Record<string, unknown>, extra: unknown) => CallToolRes
 
 export function createToolRegistrar(
   server: McpServer,
-  options: { manifest: ToolManifest; toolsets: ToolsetSelection },
+  options: {
+    manifest: ToolManifest;
+    toolsets: ToolsetSelection;
+    /**
+     * 도구 설명 번역 (lib/tool-text.ts). 가드 문구를 덧붙이기 **전에** 원문과 문구를 각각 바꾼다 — 덧붙인 뒤의 문자열은
+     * 번역표의 키와 맞지 않는다. 파라미터 설명은 buildServer 가 tools/list 응답에서 바꾼다. 생략하면 원문 그대로.
+     */
+    translate?: (text: string) => string;
+  },
 ): ToolRegistrar {
   const { manifest, toolsets } = options;
+  const t = options.translate ?? ((text: string) => text);
   const index = buildToolIndex(manifest);
 
   const metaOf = (name: string): ToolMeta => {
@@ -235,7 +248,7 @@ export function createToolRegistrar(
       }
 
       let finalShape: ZodRawShapeCompat = shape;
-      let finalDescription = description;
+      let finalDescription = t(description);
       let finalHandler = handler as unknown as AnyHandler;
 
       // 파괴적 도구는 (a) 레지스트라 가드를 주입받거나 (b) manifest ownGate 로 "자기 confirm 이 모든
@@ -258,9 +271,9 @@ export function createToolRegistrar(
           confirm: z
             .boolean()
             .optional()
-            .describe('true 명시 시에만 실제 실행. 생략/false 면 dry-run preview 만 반환 (비가역·공개 사고 차단).'),
+            .describe(CONFIRM_PARAM_DESCRIPTION),
         };
-        finalDescription = `${description} ${GUARD_DESCRIPTION}`;
+        finalDescription = `${t(description)} ${t(GUARD_DESCRIPTION)}`;
         finalHandler = async (args, extra) => {
           if (args.confirm !== true) return confirmPreview(name, args);
           return run(args, extra);

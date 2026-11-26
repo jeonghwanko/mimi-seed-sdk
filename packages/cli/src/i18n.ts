@@ -5,8 +5,8 @@
 //  2. 문자열이 아니라 **함수**로 두면 파라미터를 받는다 (`t().setup.planCount(3)`).
 //  3. 언어는 호출 시점에 읽는다 (`t()`), 모듈 로드 시점이 아니다 — 마법사가 도중에 언어를 바꿔도 반영된다.
 //
-// MCP 도구의 description 은 여기서 다루지 않는다. 그건 사람이 아니라 LLM 이 읽는 인터페이스라,
-// 번역하면 도구 선택 품질이 흔들린다.
+// MCP 도구의 description 은 여기서 다루지 않는다 — mcp-server 의 lib/tool-text.ts 가 같은 언어 규칙
+// (#core/lang.js)으로 i18n/tools-en 번역표를 적용한다.
 
 import { resolveLang, type Lang } from "#core/lang.js";
 
