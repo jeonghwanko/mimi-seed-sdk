@@ -29,7 +29,7 @@ export function loadJenkinsConfig(home = os.homedir()): JenkinsConfig | null {
     const p = path.join(home, ".mimi-seed", "jenkins.json");
     return JSON.parse(fs.readFileSync(p, "utf-8")) as JenkinsConfig;
   } catch {
-    // TODO-risk: 깨진 jenkins.json 도 '미설정'으로 보인다 — deploy 가 Jenkins 설정 없음으로 안내한다. 이 파일의 쓰기·검증은 mcp-server 의 jenkins 설정 도구가 소유한다
+    // 로더는 '없음'(null) — 깨진 파일은 deploy 가 credentialFileProblemMessage 로, doctor 는 Detected.invalid 로 따로 보여준다
     return null;
   }
 }

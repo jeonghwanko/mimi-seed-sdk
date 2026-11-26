@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   CREDENTIALS,
   credById,
+  credentialFileProblemMessage,
   detectAll,
   isSatisfied,
   missingRequired,
@@ -335,3 +336,59 @@ describe('레지스트리 불변식', () => {
     expect(untyped, `McpBin 유니언에 없는 bin: ${untyped.join(', ')}`).toEqual([]);
   });
 });
+
+// 깨진 자격증명 파일은 "없음"과 구분한다 — 예전엔 둘 다 '미설정'으로만 보여 원인을 모른 채 setup 을 다시 했다.
+describe('깨진 자격증명 파일', () => {
+  const writeRaw = (name: string, text: string) => {
+    const dir = path.join(home, '.mimi-seed');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), text);
+  };
+
+  it('파일이 없으면 invalid 가 없다', () => {
+    expect(detectAll(home).get('oauth')).not.toHaveProperty('invalid');
+  });
+
+  it('깨진 파일은 present:false 이면서 invalid 에 경로와 원인을 싣는다', () => {
+    writeRaw('tokens.json', '{"access_token": "ya29.SECRETVALUE"');
+    writeRaw('ci.json', '');
+    const d = detectAll(home);
+    expect(d.get('oauth')).toMatchObject({
+      present: false,
+      invalid: { file: path.join(home, '.mimi-seed', 'tokens.json'), reason: expect.stringMatching(/JSON/) },
+    });
+    // ci.json 은 github · gitlab 두 명세가 같이 쓴다 — 둘 다 손상으로 보여야 한다.
+    expect(d.get('github')?.invalid?.reason).toMatch(/empty|빈 파일/);
+    expect(d.get('gitlab')?.invalid?.file).toBe(path.join(home, '.mimi-seed', 'ci.json'));
+  });
+
+  // 예전엔 존재만 봐서 깨진 키도 ✓ 였다 — MCP 서버는 그 키를 못 쓰는데.
+  it('깨진 키 파일은 "연결됨"이 아니다 (tokens.json · 패키지별 Play SA)', () => {
+    writeRaw('tokens.json', '');
+    fs.mkdirSync(path.join(home, '.mimi-seed', 'play-service-accounts'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.mimi-seed', 'play-service-accounts', 'com.example.app.json'), '{"type":');
+    const d = detectAll(home);
+    expect(d.get('oauth')?.present).toBe(false);
+    expect(d.get('playstore')).toMatchObject({
+      present: false,
+      invalid: { file: path.join(home, '.mimi-seed', 'play-service-accounts', 'com.example.app.json') },
+    });
+    // 읽을 수 있는 패키지별 키가 하나라도 있으면 연결됨
+    fs.writeFileSync(path.join(home, '.mimi-seed', 'play-service-accounts', 'com.example.other.json'), '{"type":"service_account"}');
+    expect(detectAll(home).get('playstore')?.present).toBe(true);
+  });
+
+  it('원인에는 파일 내용(토큰 조각)이 실리지 않는다', () => {
+    writeRaw('tokens.json', '{"refresh_token": LEAKMARKER_abc}');
+    expect(JSON.stringify(detectAll(home).get('oauth'))).not.toMatch(/LEAKMARKER/);
+  });
+
+  it('credentialFileProblemMessage 는 손상일 때만 원인과 그 자격증명의 복구 명령을 준다', () => {
+    expect(credentialFileProblemMessage('~/.mimi-seed/jenkins.json', home)).toBeNull();
+    writeRaw('jenkins.json', '{"url": ');
+    const message = credentialFileProblemMessage('~/.mimi-seed/jenkins.json', home);
+    expect(message).toContain(path.join(home, '.mimi-seed', 'jenkins.json'));
+    expect(message).toContain(credById('jenkins').fix);
+  });
+});
+

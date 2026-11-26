@@ -2,6 +2,7 @@ import kleur from "kleur";
 import * as readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { getEffectiveConfig } from "./config.js";
+import { credentialFileProblemMessage } from "./credentials.js";
 import { catalog } from "./i18n.js";
 import { consumeDeployStream, DeployStreamError } from "./deploy-stream.js";
 import { findProjectLink, resolveLinkedAppId, validateProjectIdentity } from "./project-link.js";
@@ -557,7 +558,7 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
   if (args.dryRun) {
     const jenkins = loadJenkinsConfig() ?? undefined;
     const ci = args.skipBuild ? null : resolveCi(args.ci, jenkins, loadCiProviderConfig());
-    if (ci === "jenkins" && !jenkins) throw new Error(M().noJenkinsConfig);
+    if (ci === "jenkins" && !jenkins) throw new Error(credentialFileProblemMessage("~/.mimi-seed/jenkins.json") ?? M().noJenkinsConfig);
     const plan = ci === "jenkins" && jenkins
       ? { ...resolveProjectJenkins(jenkins, args.platform), parameters: jenkinsBuildParameters(args.platform, args.ref, args.appId) }
       : undefined;
@@ -569,7 +570,8 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
   const cfg = await getEffectiveConfig();
 
   if (!cfg) {
-    log(kleur.red(M().noAccount));
+    // 깨진 config.json 이면 "계정 없음" 대신 손상 원인을 보여준다.
+    log(kleur.red(credentialFileProblemMessage("~/.mimi-seed/config.json") ?? M().noAccount));
     process.exit(1);
   }
 
@@ -627,11 +629,14 @@ export async function cmdDeploy(argv: string[]): Promise<void> {
     kind = resolveCi(args.ci, jenkinsCfg, ciProvider);
     if (!["jenkins", "github", "gitlab"].includes(kind)) throw new Error(M().invalidCi);
     if (kind === "jenkins") {
-      if (!jenkinsCfg?.url || !jenkinsCfg?.token) throw new Error(M().noJenkinsConfig);
+      if (!jenkinsCfg?.url || !jenkinsCfg?.token) {
+        throw new Error(credentialFileProblemMessage("~/.mimi-seed/jenkins.json") ?? M().noJenkinsConfig);
+      }
       jenkinsJobName = resolveProjectJenkins(jenkinsCfg, args.platform).job;
       jenkinsParams = jenkinsBuildParameters(args.platform, args.ref, appId);
     } else if (!ciProvider) {
-      throw new Error(M().noProviderConfig(kind));
+      // 깨진 ci.json 이면 "설정 없음" 대신 손상 원인 — 복구 명령은 ci.json 을 쓰는 자격증명 명세의 것.
+      throw new Error(credentialFileProblemMessage("~/.mimi-seed/ci.json") ?? M().noProviderConfig(kind));
     } else if (ciProvider.provider !== kind) {
       throw new Error(M().ciProviderMismatch);
     } else if (kind === "github" && !args.workflow) {

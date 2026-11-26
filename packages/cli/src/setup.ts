@@ -126,6 +126,8 @@ function statusLine(spec: CredSpec, detected: Map<CredId, Detected>, platforms: 
       ? kleur.yellow(`${t().setup.tokenExpiring(d.daysRemaining ?? 0)} → ${spec.fix}`)
     : d.present
       ? kleur.dim(d.detail ?? "")
+    : d.invalid
+      ? kleur.yellow(t().doctor.credCorrupt(d.invalid.file, d.invalid.reason, spec.fix))
     : isSatisfied(spec, detected)
       ? kleur.dim(`${credNote(spec) ?? t().setup.fallbackWorking}`)
       : kleur.dim(`→ ${spec.fix}`);
