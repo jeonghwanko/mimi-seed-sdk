@@ -466,6 +466,10 @@ mimi-seed credentials status          # 모드 · 키 저장소 · 파일별 상
 - 키는 OS 키 저장소에 둔다: macOS 키체인, Windows DPAPI, Linux Secret Service(`secret-tool` 과 데스크톱 세션
   필요). `MIMI_SEED_CREDENTIAL_STORE` 가 저장된 모드보다 우선한다.
 - Mimi Seed 사용법은 그대로다. 도구가 필요할 때 암호화된 파일을 메모리에서 연다.
+- **SSH(VS Code Remote-SSH 포함)로 접속한 경우** macOS 는 그 세션의 로그인 키체인을 화면 세션과 따로 잠가 두고,
+  잠금 해제 창도 띄우지 못한다. `mode` 와 `encrypt` 가 `security unlock-keychain ~/Library/Keychains/login.keychain-db`
+  실행을 제안하고, 그 명령이 키체인 비밀번호(보통 로그인 비밀번호)를 묻는다. 잠금 해제는 그 SSH 세션에서만
+  유지되므로, 다음 세션에서는 다시 풀기 전까지 파일이 잠긴 것으로 보인다. 주로 원격으로 쓰는 컴퓨터라면 `file` 을 쓰자.
 - **무엇을 막아 주나:** `~/.mimi-seed/` 복사본만으로는 아무것도 드러나지 않는다. 홈 폴더 전체 복사본은 로그인
   비밀번호만큼만 안전하다(OS 키 저장소가 그 비밀번호로 보호되기 때문). 내 계정으로 도는 악성코드는 막지 **못한다**.
 - **키를 잃으면**(로그인 키체인 초기화, 홈 폴더를 다른 컴퓨터로 옮김) 암호화된 파일을 열 수 없다:

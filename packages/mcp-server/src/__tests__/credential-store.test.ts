@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
 import { keyId } from '#core/credential-envelope.js';
-import { osCreateDataKey, osDataKeySource, setDataKeySourceForTests } from '#core/credential-keystore.js';
+import { macosFailure, osCreateDataKey, osDataKeySource, setDataKeySourceForTests } from '#core/credential-keystore.js';
 import { readJsonFile } from '#core/json-file.js';
 import {
   configuredStoreMode, effectiveStoreMode, isEncryptableCredential, recordedKeyId,
@@ -164,6 +164,25 @@ describe('평문으로 몰래 내려가지 않는다', () => {
     writeCredentialJson(at('appstore.json'), { v: MARKER });
     expect(raw('appstore.json')).toContain(MARKER);
     expect(readJsonFile(at('tokens.json'))).toEqual({ state: 'ok', value: { refresh_token: MARKER } });
+  });
+});
+
+describe('macOS 키체인 실패 안내', () => {
+  // 36 = -25308 errSecInteractionNotAllowed. SSH(VS Code Remote-SSH 포함) 세션은 로그인 키체인이 따로 잠기고 창을 못 띄운다.
+  it('36 은 잠김 — SSH 세션이면 이 세션에서 푸는 명령과 file 모드를 안내한다', () => {
+    vi.stubEnv('SSH_CONNECTION', '203.0.113.1 5000 203.0.113.2 22');
+    const result = macosFailure(36, '/Users/example/Library/Keychains/login.keychain-db');
+    expect(result).toMatchObject({ state: 'unavailable', locked: true });
+    expect(result.reason).toContain('security unlock-keychain /Users/example/Library/Keychains/login.keychain-db');
+    expect(result.reason).toContain('mimi-seed credentials mode file');
+  });
+
+  it('다른 상태 코드는 원인별로 — 잠김이 아니면 locked 를 달지 않는다', () => {
+    expect(macosFailure(51, 'k').reason).toMatch(/비밀번호/);
+    expect(macosFailure(50, 'k').reason).toMatch(/기본 키체인/);
+    expect(macosFailure(128, 'k').reason).toMatch(/취소/);
+    expect(macosFailure(99, 'k')).toEqual({ state: 'unavailable', backend: 'macOS Keychain', reason: expect.stringContaining('99') });
+    expect(macosFailure(51, 'k').locked).toBeUndefined();
   });
 });
 

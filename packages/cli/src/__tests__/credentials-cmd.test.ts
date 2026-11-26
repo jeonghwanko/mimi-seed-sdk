@@ -94,6 +94,19 @@ describe("mimi-seed credentials", () => {
     expect(fs.existsSync(at("settings.json"))).toBe(false);
   });
 
+  it("auto 는 저장소에 못 닿아도 켜되, 지금은 평문이라고 알린다", async () => {
+    setDataKeySourceForTests(() => ({ state: "unavailable", backend: "Test Keychain", reason: "locked here" }));
+    const text = await run("mode", "auto");
+    expect(JSON.parse(raw("settings.json"))).toMatchObject({ credentialStore: "auto" });
+    expect(text).toMatch(/can't be reached right now \(locked here\)/);
+  });
+
+  it("TTY 가 아니면 잠긴 키체인에서도 묻지 않고 실패한다 (CI · 파이프)", async () => {
+    setDataKeySourceForTests(() => ({ state: "unavailable", backend: "Test Keychain", reason: "locked", locked: true }));
+    await expect(run("mode", "keychain")).rejects.toThrow("exit 1");
+    expect(out).not.toMatch(/Unlock it now\?/);
+  });
+
   it("못 여는 봉투는 decrypt 가 건너뛰고 표식을 남긴다 (키를 잃었으면 지울 수 있는 표식이 아니다)", async () => {
     put("tokens.json", { refresh_token: MARKER });
     await run("mode", "keychain");

@@ -18,6 +18,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- `mimi-seed credentials mode keychain` failed on macOS with an unexplained "security exited with status 36" when run over SSH, including VS Code's Remote-SSH terminal. macOS keeps the login keychain locked in an SSH session and can't show its unlock dialog there.
+  - The error now says the keychain is locked in this remote session. It names `security unlock-keychain …` and `mode file`.
+  - On a terminal, `mode` and `encrypt` offer to run that unlock and then try again.
+  - `mode auto` now tries to create the key at once. If it can't, it says credentials stay plaintext for now.
+  - Other keychain failures each get their own message: wrong keychain password, no keychain, a cancelled dialog, and a timed-out dialog.
+  - Creating the key no longer waits on the keychain a second time after a refusal.
+  - Both creating and reading the key now name the login keychain explicitly.
+
 ## [0.25.0] - 2026-11-27
 
 ### Added
