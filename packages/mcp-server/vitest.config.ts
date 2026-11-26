@@ -19,6 +19,10 @@ export default defineConfig({
     // 로컬 머신이나 느린 windows-latest 러너에서 로직과 무관한 타임아웃 실패가 났다. 행(hang) 감지용
     // 상한으로만 쓰므로 넉넉하게 잡는다.
     testTimeout: 30_000,
+    // 사람·LLM 에게 보이는 문구는 resolveLang() 을 따른다(MIMI_SEED_LANG > settings.json > 로캘). 기본은 원문인
+    // 한국어로 고정한다 — 아니면 실행 머신의 로캘(CI 러너는 영어)에 따라 결과가 바뀐다. 영어 경로는 각 테스트가
+    // vi.stubEnv('MIMI_SEED_LANG', 'en') 이나 buildServer({ lang: 'en' }) 로 명시해 검증한다.
+    env: { MIMI_SEED_LANG: 'ko' },
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'html'],

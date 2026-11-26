@@ -11,7 +11,8 @@
 //
 // mcp-server 도 이 함수로 언어를 고른다: 도구 · 파라미터 설명(lib/tool-text.ts — 원문 한국어, en 이면
 // i18n/tools-en 번역표), 도구 메뉴 리소스, 인증 에러 문구(auth/errors.ts 의 authText())와 OAuth 콜백 페이지.
-// 도구가 **돌려주는** 안내 · 에러 텍스트는 아직 대부분 한국어다(도메인별로 옮기는 중).
+// 도구가 **돌려주는** 텍스트는 catalog()(아래)로 옮기는 중이다 — 공통 경로(dry-run preview · 에러 변환 · 인증 안내 ·
+// mimi_seed_status · prompts · 리소스)는 끝났고, 도메인별 출력은 mcp-server output-i18n.test.ts 의 목록이 늘며 옮겨진다.
 // settings.json 의 **쓰기**는 CLI(settings.ts)가 소유한다.
 
 import fs from 'node:fs';
@@ -60,4 +61,21 @@ export function resolveLang(home: string = os.homedir()): Lang {
     // 파일 없음 / 권한 없음 / JSON 깨짐 — 전부 로캘로.
   }
   return systemLang();
+}
+
+/**
+ * 파일별 ko/en 문구 카탈로그 — CLI 와 mcp-server 가 같은 이 함수를 쓴다.
+ *
+ *   const M = catalog(
+ *     { title: '배포', done: (n: number) => `${n}개 완료` },
+ *     { title: 'Deploy', done: (n: number) => `${n} done` },
+ *   );
+ *   log(M().title);
+ *
+ * `en` 은 `ko` 와 같은 타입이어야 하므로 키를 빠뜨리면 **컴파일이 깨진다**. 언어는 `M()` 을 부를 때 읽는다
+ * (모듈 로드 시점이 아니라) — 설정이 바뀌면 다음 호출부터 반영된다. "카탈로그를 안 거친 하드코딩 한국어"는
+ * 컴파일러가 못 잡으므로 각 패키지의 i18n 커버리지 테스트가 i18n-scan.ts 로 잡는다.
+ */
+export function catalog<T extends object>(ko: T, en: NoInfer<T>): () => T {
+  return () => (resolveLang() === 'en' ? en : ko);
 }

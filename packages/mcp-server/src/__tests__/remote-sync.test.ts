@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   checkRemoteEndpoint,
   syncRemoteCredentials,
@@ -163,4 +163,38 @@ describe('syncRemoteCredentials — 허용 목록과 엔드포인트', () => {
       expect(checkRemoteEndpoint(endpoint).ok).toBe(true);
     },
   );
+});
+
+describe('syncRemoteCredentials — 영어 모드', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('미리보기와 건너뜀 안내가 영어로 나온다', async () => {
+    vi.stubEnv('MIMI_SEED_LANG', 'en');
+    const result = await syncRemoteCredentials({ packageNames: ['com.example.app', 'com.example.typo'] }, dependencies());
+    expect(result).toContain('Preview only');
+    expect(result).toContain('Destination: example.test');
+    expect(result).toContain('unregistered package');
+    expect(result).not.toMatch(/[가-힣]/);
+  });
+
+  it('신뢰할 수 없는 엔드포인트 거부 사유가 영어로 나온다', async () => {
+    vi.stubEnv('MIMI_SEED_LANG', 'en');
+    const deps = dependencies();
+    deps.getConfig = () => ({ token: 'example-pat', endpoint: 'http://example.test/api/mcp', webBase: 'https://example.test' });
+    const result = await syncRemoteCredentials({ confirm: true }, deps);
+    expect(deps.callRemote).not.toHaveBeenCalled();
+    expect(result).toContain('not trusted');
+    expect(result).toContain('Not https');
+    expect(result).not.toMatch(/[가-힣]/);
+  });
+
+  it('동기화 결과 꼬리말이 영어로 나온다', async () => {
+    vi.stubEnv('MIMI_SEED_LANG', 'en');
+    const deps = dependencies();
+    deps.callRemote = vi.fn(async () => ({ text: 'ok', isError: true }));
+    const result = await syncRemoteCredentials({ confirm: true }, deps);
+    expect(result).toContain('- App Store: failed');
+    expect(result).toContain('https://example.test/apps');
+    expect(result).not.toMatch(/[가-힣]/);
+  });
 });

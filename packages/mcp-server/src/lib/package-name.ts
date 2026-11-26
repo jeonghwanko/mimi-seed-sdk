@@ -10,6 +10,24 @@
 // 같은 규칙을 쓴다 — 한쪽만 막으면 다음 호출 경로가 새로 생길 때 다시 뚫린다.
 
 import { z } from 'zod';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    invalidAndroid: (value: string) =>
+      `잘못된 Android 패키지명입니다: ${value} — `
+      + 'com.example.app 처럼 점으로 구분된 영숫자/밑줄 세그먼트여야 합니다.',
+    androidFormat: 'Android 패키지명 형식이 아닙니다 (예: com.example.app)',
+    iosFormat: 'iOS 번들 ID 형식이 아닙니다 (예: com.example.app)',
+  },
+  {
+    invalidAndroid: (value: string) =>
+      `Invalid Android package name: ${value} — `
+      + 'it must be dot-separated alphanumeric/underscore segments, like com.example.app.',
+    androidFormat: 'Not a valid Android package name (e.g. com.example.app)',
+    iosFormat: 'Not a valid iOS bundle ID (e.g. com.example.app)',
+  },
+);
 
 /**
  * Android applicationId 모양: 점으로 구분된 두 개 이상의 세그먼트, 첫 세그먼트는 영문자로
@@ -33,8 +51,7 @@ export function isValidAndroidPackageName(value: unknown): value is string {
 export function assertAndroidPackageName(value: unknown): asserts value is string {
   if (!isValidAndroidPackageName(value)) {
     throw new Error(
-      `잘못된 Android 패키지명입니다: ${JSON.stringify(String(value).slice(0, 80))} — `
-      + 'com.example.app 처럼 점으로 구분된 영숫자/밑줄 세그먼트여야 합니다.',
+      M().invalidAndroid(JSON.stringify(String(value).slice(0, 80))),
     );
   }
 }
@@ -43,10 +60,10 @@ export function assertAndroidPackageName(value: unknown): asserts value is strin
 export const androidPackageName = z
   .string()
   .max(MAX_IDENTIFIER_LENGTH)
-  .regex(ANDROID_PACKAGE_NAME_RE, 'Android 패키지명 형식이 아닙니다 (예: com.example.app)');
+  .regex(ANDROID_PACKAGE_NAME_RE, { error: () => M().androidFormat });
 
 /** iOS 번들 ID 용 zod 파라미터. 하이픈을 허용한다. */
 export const iosBundleId = z
   .string()
   .max(MAX_IDENTIFIER_LENGTH)
-  .regex(IOS_BUNDLE_ID_RE, 'iOS 번들 ID 형식이 아닙니다 (예: com.example.app)');
+  .regex(IOS_BUNDLE_ID_RE, { error: () => M().iosFormat });

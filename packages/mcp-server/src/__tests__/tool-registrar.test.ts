@@ -102,11 +102,11 @@ describe('previewValue — dry-run 인자 표시', () => {
 
 describe('createToolRegistrar', () => {
   it('manifest 에 없는 이름은 throw — 인벤토리 누락을 즉시 드러낸다', async () => {
-    await expect(boot((r) => r.tool('ghost_tool', 'd', {}, ok('x')))).rejects.toThrow(/tool-manifest\.json 에 없는 도구/);
+    await expect(boot((r) => r.tool('ghost_tool', 'd', {}, ok('x')))).rejects.toThrow(/not in tool-manifest\.json/);
   });
 
   it('폐기 별칭을 register 파일에서 직접 등록하면 throw — 레지스트라가 자동 등록한다', async () => {
-    await expect(boot((r) => r.tool('store_old_write', 'd', {}, ok('x')))).rejects.toThrow(/별칭/);
+    await expect(boot((r) => r.tool('store_old_write', 'd', {}, ok('x')))).rejects.toThrow(/deprecated alias/);
   });
 
   it('registerTool 로 등록하고 annotations·title 을 싣는다', async () => {

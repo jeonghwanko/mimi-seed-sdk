@@ -8,6 +8,71 @@ import {
   listRegisteredServiceAccounts,
 } from './auth/playstore-auth.js';
 import { isValidAndroidPackageName } from './lib/package-name.js';
+import { catalog } from '#core/lang.js';
+
+/** 동기화 미리보기·결과 문구 — 호출 시점에 언어를 읽는다. */
+const R = catalog(
+  {
+    networkFailed: '원격 MCP 네트워크 연결 실패',
+    unreadable: '원격 MCP 응답을 읽지 못했습니다.',
+    remoteError: '원격 MCP 오류',
+    badFormat: '원격 MCP 응답 형식이 올바르지 않습니다.',
+    http: (status: number) => `원격 MCP HTTP ${status}`,
+    notUrl: 'URL 형식이 아닙니다',
+    userInfo: 'URL 에 사용자 정보가 들어 있습니다',
+    localHttp: (host: string) => `${host} (로컬 http)`,
+    notHttps: (target: string) => `https 가 아닙니다 (${target})`,
+    title: 'Mimi Seed 로컬 → 원격 자격증명 동기화',
+    target: (value: string) => `- 전송 대상: ${value}`,
+    noRemote: '원격 연결 정보 없음',
+    rejectedEndpoint: (reason: string | undefined) => `거부됨 — ${reason}`,
+    appStore: (state: 'one' | 'noKey' | 'excluded') =>
+      `- App Store Connect: ${state === 'one' ? '대상 1개' : state === 'noKey' ? '로컬 키 없음' : '제외'}`,
+    play: (count: number, missing: number) =>
+      `- Google Play: ${count}개 패키지${missing > 0 ? ` (자격증명 없는 대상 ${missing}개)` : ''}`,
+    skippedHeader: (n: number) =>
+      `- 건너뜀: 등록되지 않은 패키지 ${n}개 (playstore_list_service_accounts 로 등록 목록 확인):`,
+    oauthNotCopied: '- Google OAuth: 복사하지 않음 (원격 웹에서 별도 동의 필요)',
+    previewOnly: '미리보기만 수행했습니다. 원격 저장은 confirm=true일 때만 실행됩니다.',
+    noConfig: '원격 연결 정보가 없습니다. 먼저 `mimi-seed init`을 실행하세요.',
+    untrusted: (reason: string | undefined) => `원격 엔드포인트를 신뢰할 수 없어 전송하지 않았습니다: ${reason}`,
+    failed: '실패',
+    skippedResult: (name: string) => `- Play ${name}: 건너뜀 (등록되지 않은 패키지)`,
+    nothingToSync: '- 동기화할 로컬 자격증명이 없습니다.',
+    googleConsent: (webBase: string) =>
+      `Google 사용자 권한(Firebase/AdMob/vitals): ${webBase}/apps 에서 "Google 플랫폼 연결" 동의 필요`,
+  },
+  {
+    networkFailed: 'Remote MCP network connection failed',
+    unreadable: 'Could not read the remote MCP response.',
+    remoteError: 'Remote MCP error',
+    badFormat: 'The remote MCP response format is invalid.',
+    http: (status: number) => `Remote MCP HTTP ${status}`,
+    notUrl: 'Not a URL',
+    userInfo: 'The URL contains user credentials',
+    localHttp: (host: string) => `${host} (local http)`,
+    notHttps: (target: string) => `Not https (${target})`,
+    title: 'Mimi Seed local → remote credential sync',
+    target: (value: string) => `- Destination: ${value}`,
+    noRemote: 'no remote connection info',
+    rejectedEndpoint: (reason: string | undefined) => `rejected — ${reason}`,
+    appStore: (state: 'one' | 'noKey' | 'excluded') =>
+      `- App Store Connect: ${state === 'one' ? '1 target' : state === 'noKey' ? 'no local key' : 'excluded'}`,
+    play: (count: number, missing: number) =>
+      `- Google Play: ${count} package(s)${missing > 0 ? ` (${missing} target(s) without credentials)` : ''}`,
+    skippedHeader: (n: number) =>
+      `- Skipped: ${n} unregistered package(s) (check the registered list with playstore_list_service_accounts):`,
+    oauthNotCopied: '- Google OAuth: not copied (requires separate consent on the remote web)',
+    previewOnly: 'Preview only. Remote storage runs only with confirm=true.',
+    noConfig: 'No remote connection info. Run `mimi-seed init` first.',
+    untrusted: (reason: string | undefined) => `The remote endpoint is not trusted, so nothing was sent: ${reason}`,
+    failed: 'failed',
+    skippedResult: (name: string) => `- Play ${name}: skipped (unregistered package)`,
+    nothingToSync: '- No local credentials to sync.',
+    googleConsent: (webBase: string) =>
+      `Google user permissions (Firebase/AdMob/vitals): requires "Google platform connection" consent at ${webBase}/apps`,
+  },
+);
 
 interface RemoteConfig {
   token: string;
@@ -78,10 +143,10 @@ async function callRemote(
       }),
     }, 30_000);
   } catch {
-    return { text: '원격 MCP 네트워크 연결 실패', isError: true };
+    return { text: R().networkFailed, isError: true };
   }
   if (!response.ok) {
-    return { text: `원격 MCP HTTP ${response.status}`, isError: true };
+    return { text: R().http(response.status), isError: true };
   }
 
   const raw = await response.text();
@@ -91,7 +156,7 @@ async function callRemote(
       .split('\n')
       .map((line) => line.trim())
       .find((line) => line.startsWith('data:'));
-    if (!data) return { text: '원격 MCP 응답을 읽지 못했습니다.', isError: true };
+    if (!data) return { text: R().unreadable, isError: true };
     payloadRaw = data.slice(5).trim();
   }
   try {
@@ -99,7 +164,7 @@ async function callRemote(
       error?: { message?: string };
       result?: { isError?: boolean; content?: Array<{ type?: string; text?: string }> };
     };
-    if (payload.error) return { text: payload.error.message ?? '원격 MCP 오류', isError: true };
+    if (payload.error) return { text: payload.error.message ?? R().remoteError, isError: true };
     return {
       text: (payload.result?.content ?? [])
         .filter((item) => item.type === 'text')
@@ -108,7 +173,7 @@ async function callRemote(
       isError: payload.result?.isError === true,
     };
   } catch {
-    return { text: '원격 MCP 응답 형식이 올바르지 않습니다.', isError: true };
+    return { text: R().badFormat, isError: true };
   }
 }
 
@@ -126,16 +191,16 @@ export function checkRemoteEndpoint(
   try {
     url = new URL(endpoint);
   } catch {
-    return { ok: false, reason: 'URL 형식이 아닙니다' };
+    return { ok: false, reason: R().notUrl };
   }
   if (url.username || url.password) {
-    return { ok: false, reason: 'URL 에 사용자 정보가 들어 있습니다' };
+    return { ok: false, reason: R().userInfo };
   }
   if (url.protocol === 'https:') return { ok: true, host: url.host };
   if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
-    return { ok: true, host: `${url.host} (로컬 http)` };
+    return { ok: true, host: R().localHttp(url.host) };
   }
-  return { ok: false, reason: `https 가 아닙니다 (${url.protocol}//${url.host})` };
+  return { ok: false, reason: R().notHttps(`${url.protocol}//${url.host}`) };
 }
 
 const defaultDependencies: RemoteSyncDependencies = {
@@ -175,34 +240,28 @@ export async function syncRemoteCredentials(
   const config = dependencies.getConfig();
   const endpoint = config ? checkRemoteEndpoint(config.endpoint) : null;
 
+  const m = R();
   const lines = [
-    'Mimi Seed 로컬 → 원격 자격증명 동기화',
-    `- 전송 대상: ${
-      !config ? '원격 연결 정보 없음' : endpoint?.ok ? endpoint.host : `거부됨 — ${endpoint?.reason}`
-    }`,
-    `- App Store Connect: ${appStore ? '대상 1개' : includeAppStore ? '로컬 키 없음' : '제외'}`,
-    `- Google Play: ${playCredentials.length}개 패키지${
-      packageNames.length > playCredentials.length ? ` (자격증명 없는 대상 ${packageNames.length - playCredentials.length}개)` : ''
-    }`,
+    m.title,
+    m.target(!config ? m.noRemote : endpoint?.ok ? endpoint.host : m.rejectedEndpoint(endpoint?.reason)),
+    m.appStore(appStore ? 'one' : includeAppStore ? 'noKey' : 'excluded'),
+    m.play(playCredentials.length, packageNames.length - playCredentials.length),
     ...playCredentials.map((entry) => `  - ${entry.packageName}`),
     ...(rejected.length
-      ? [
-          `- 건너뜀: 등록되지 않은 패키지 ${rejected.length}개 (playstore_list_service_accounts 로 등록 목록 확인):`,
-          ...rejected.map((name) => `  - ${JSON.stringify(name.slice(0, 80))}`),
-        ]
+      ? [m.skippedHeader(rejected.length), ...rejected.map((name) => `  - ${JSON.stringify(name.slice(0, 80))}`)]
       : []),
-    '- Google OAuth: 복사하지 않음 (원격 웹에서 별도 동의 필요)',
+    m.oauthNotCopied,
   ];
 
   if (!options.confirm) {
-    return [...lines, '', '미리보기만 수행했습니다. 원격 저장은 confirm=true일 때만 실행됩니다.'].join('\n');
+    return [...lines, '', m.previewOnly].join('\n');
   }
 
   if (!config) {
-    return [...lines, '', '원격 연결 정보가 없습니다. 먼저 `mimi-seed init`을 실행하세요.'].join('\n');
+    return [...lines, '', m.noConfig].join('\n');
   }
   if (!endpoint?.ok) {
-    return [...lines, '', `원격 엔드포인트를 신뢰할 수 없어 전송하지 않았습니다: ${endpoint?.reason}`].join('\n');
+    return [...lines, '', m.untrusted(endpoint?.reason)].join('\n');
   }
   // 미등록 이름은 **건너뛰고** 나머지(App Store, 등록된 패키지)는 보낸다. 위험(임의 파일 전송)은
   // 허용 목록이 이미 막았으므로, 오타 하나로 App Store 동기화까지 멈출 이유가 없다. 대신 미리보기와
@@ -216,7 +275,7 @@ export async function syncRemoteCredentials(
       private_key: appStore.privateKey,
       confirm: true,
     });
-    results.push(`- App Store: ${result.isError ? '실패' : result.text}`);
+    results.push(`- App Store: ${result.isError ? m.failed : result.text}`);
   }
   for (const entry of playCredentials) {
     const result = await dependencies.callRemote(config, 'import_playstore_service_account', {
@@ -224,16 +283,16 @@ export async function syncRemoteCredentials(
       service_account_json: entry.json,
       confirm: true,
     });
-    results.push(`- Play ${entry.packageName}: ${result.isError ? '실패' : result.text}`);
+    results.push(`- Play ${entry.packageName}: ${result.isError ? m.failed : result.text}`);
   }
 
-  for (const name of rejected) results.push(`- Play ${JSON.stringify(name.slice(0, 80))}: 건너뜀 (등록되지 않은 패키지)`);
-  if (results.length === 0) results.push('- 동기화할 로컬 자격증명이 없습니다.');
+  for (const name of rejected) results.push(m.skippedResult(JSON.stringify(name.slice(0, 80))));
+  if (results.length === 0) results.push(m.nothingToSync);
   return [
     ...lines,
     '',
     ...results,
     '',
-    `Google 사용자 권한(Firebase/AdMob/vitals): ${config.webBase}/apps 에서 "Google 플랫폼 연결" 동의 필요`,
+    m.googleConsent(config.webBase),
   ].join('\n');
 }

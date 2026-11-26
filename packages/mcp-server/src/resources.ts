@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { resolveLang } from '#core/lang.js';
+import { catalog, resolveLang } from '#core/lang.js';
+import { MANIFEST_TEXT_EN } from './i18n/manifest-en.js';
 import { ensureFreshAccessToken } from './auth/google-auth.js';
 import { readPackageRootText, readToolManifest, type ToolManifest } from './lib/package-root.js';
 import { buildToolIndex } from './lib/tool-registrar.js';
@@ -10,18 +11,68 @@ import { buildToolMenu, formatToolMenu, selectToolMenu, TOOL_MENU_URI, TOOL_SELE
 // 갱신은 `npm run plugin:sync`, 드리프트는 prompts-resources.test.ts 가 잡는다.
 // 읽기 실패는 정상 설치에서 불가능하다(files 화이트리스트에 포함) — 그래서 폴백은 가이드
 // 요약본이 아니라 "깨진 설치" 신호 + 원본 포인터만 담는다. 요약본을 하나 더 관리하지 않는다.
-const AGENT_GUIDE_FALLBACK = [
-  '# Mimi Seed agent guide — 자산 누락 (degraded)',
-  '',
-  '⚠️ 이 설치본에서 assets/agent-guide.md 를 읽지 못했습니다 — 패키지가 손상됐습니다.',
-  '`npx -y @yoonion/mimi-seed-mcp` 재설치(필요 시 npx 캐시 정리) 후 새 세션을 여세요.',
-  '',
-  '가이드 전문: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/agent-guide.md',
-  '최소 안전수칙: 스토어 제출·승격·삭제·공개 게시는 사용자 명시 동의 없이 실행하지 않는다.',
-].join('\n');
-
-const DEFERRED_HINT =
-  'Claude Code 에서는 도구 schema 가 lazy 로드됩니다 — 호출 전 ToolSearch(query="select:<tool,...>") 로 선로드하세요. 상세: mimi-seed://agent/guide';
+const M = catalog(
+  {
+    agentGuideFallback: [
+      '# Mimi Seed agent guide — 자산 누락 (degraded)',
+      '',
+      '⚠️ 이 설치본에서 assets/agent-guide.md 를 읽지 못했습니다 — 패키지가 손상됐습니다.',
+      '`npx -y @yoonion/mimi-seed-mcp` 재설치(필요 시 npx 캐시 정리) 후 새 세션을 여세요.',
+      '',
+      '가이드 전문: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/agent-guide.md',
+      '최소 안전수칙: 스토어 제출·승격·삭제·공개 게시는 사용자 명시 동의 없이 실행하지 않는다.',
+    ].join('\n'),
+    deferredHint:
+      'Claude Code 에서는 도구 schema 가 lazy 로드됩니다 — 호출 전 ToolSearch(query="select:<tool,...>") 로 선로드하세요. 상세: mimi-seed://agent/guide',
+    noteAll: `모든 도메인이 켜져 있습니다. ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} 로 줄일 수 있습니다.`,
+    noteSelected: (total: number) =>
+      `선택된 도구를 보여줍니다 (전체 ${total}개). ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} 설정을 반영합니다.`,
+    legend: {
+      total: '이 서버에 등록된 도구 수 (폐기 예정 별칭 포함) = tools/list 길이. manifestTotal 은 toolset 제한 없는 전체.',
+      tools: '도메인의 정식 도구 (별칭 제외). write / destructive 어디에도 없으면 읽기 전용.',
+      write: '원격/로컬 상태를 바꾸지만 파괴적이지 않은 도구.',
+      destructive: '비가역·외부 공개·삭제·덮어쓰기 — confirm: true (일부 도구는 자체 confirmPublish / confirmVisible) 없이 부르면 실행하지 않는다.',
+      deprecated: '폐기 예정 별칭 → 정식 도구. 정식 이름으로 부를 것 (다음 minor 에서 제거).',
+    },
+    manifestUnreadable:
+      'tool-manifest.json 을 읽지 못했습니다 — 패키지가 손상됐습니다. `npx -y @yoonion/mimi-seed-mcp` 재설치 후 새 세션을 여세요.',
+    menuDescription: '사용할 서비스 다중 선택용 텍스트 목록',
+    selectionDescription: '쉼표로 구분한 서비스 ID의 정식 도구 이름',
+    authDescription: 'Google OAuth 인증 상태 — fresh / refreshed / expired / unauthenticated',
+    guideDescription: 'Mimi Seed 에이전트 운영 규약 전문 (docs/agent-guide.md) — deferred 도구 로딩·ToolSearch select: 배치·호출 순서·비가역 액션 안전수칙',
+    catalogDescription: '이 서버에 등록된 도구 카탈로그 (MIMI_SEED_TOOLSETS 반영) — 도메인별 도구 목록·쓰기/파괴 분류·폐기 예정 별칭·필요 자격증명·한줄 요약. "mimi-seed 로 뭘 할 수 있어?" 에는 이 리소스를 읽고 답하세요.',
+  },
+  {
+    agentGuideFallback: [
+      '# Mimi Seed agent guide — asset missing (degraded)',
+      '',
+      '⚠️ This installation could not read assets/agent-guide.md — the package is corrupted.',
+      'Reinstall with `npx -y @yoonion/mimi-seed-mcp` (clear the npx cache if needed), then open a new session.',
+      '',
+      'Full guide: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/agent-guide.md',
+      'Minimum safety rule: never run a store submission, promotion, deletion, or public post without the user\'s explicit consent.',
+    ].join('\n'),
+    deferredHint:
+      'In Claude Code, tool schemas are loaded lazily — preload them with ToolSearch(query="select:<tool,...>") before calling. Details: mimi-seed://agent/guide',
+    noteAll: `All domains are enabled. Narrow them with ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV}.`,
+    noteSelected: (total: number) =>
+      `Showing the selected tools (${total} in total). Reflects the ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} settings.`,
+    legend: {
+      total: 'Number of tools registered on this server (including deprecated aliases) = tools/list length. manifestTotal is the full count without toolset limits.',
+      tools: 'The domain\'s canonical tools (aliases excluded). A tool in neither write nor destructive is read-only.',
+      write: 'Tools that change remote/local state but are not destructive.',
+      destructive: 'Irreversible, publicly visible, deleting, or overwriting — does not run when called without confirm: true (some tools use their own confirmPublish / confirmVisible).',
+      deprecated: 'Deprecated alias → canonical tool. Call the canonical name (removed in the next minor).',
+    },
+    manifestUnreadable:
+      'Could not read tool-manifest.json — the package is corrupted. Reinstall with `npx -y @yoonion/mimi-seed-mcp`, then open a new session.',
+    menuDescription: 'Text list for choosing one or more services to use',
+    selectionDescription: 'Canonical tool names for comma-separated service IDs',
+    authDescription: 'Google OAuth authentication status — fresh / refreshed / expired / unauthenticated',
+    guideDescription: 'Full Mimi Seed agent operating contract (docs/agent-guide.md) — deferred tool loading, ToolSearch select: batches, call order, safety rules for irreversible actions',
+    catalogDescription: 'Catalog of the tools registered on this server (reflects MIMI_SEED_TOOLSETS) — per-domain tool lists, write/destructive classification, deprecated aliases, required credentials, one-line summaries. To answer "What can mimi-seed do?", read this resource.',
+  },
+);
 
 /**
  * `mimi-seed://tools/catalog` 페이로드 — **이 서버에 실제로 등록된 도구만** 담는다.
@@ -31,7 +82,11 @@ const DEFERRED_HINT =
  * `tools` 가 아니라 `deprecated`(별칭 → 정식)에, 쓰기/파괴 분류는 `write` / `destructive` 에 싣는다.
  * `total` 은 등록된 도구 수(별칭 포함) = tools/list 길이다.
  */
+/** manifest 도메인 문구 — 영어 모드면 i18n/manifest-en.ts 번역, 없으면 원문 (누락은 output-i18n.test.ts 가 잡는다). */
+const manifestText = (text: string): string => (resolveLang() === 'en' ? MANIFEST_TEXT_EN[text] ?? text : text);
+
 export function buildToolCatalog(manifest: ToolManifest, selection: ToolsetSelection) {
+  const m = M();
   const index = buildToolIndex(manifest);
   const deprecated: Record<string, string> = {};
   let total = 0;
@@ -46,9 +101,9 @@ export function buildToolCatalog(manifest: ToolManifest, selection: ToolsetSelec
     }
     return [{
       id,
-      label: d.label,
-      credential: d.credential,
-      summary: d.summary,
+      label: manifestText(d.label),
+      credential: manifestText(d.credential),
+      summary: manifestText(d.summary),
       toolCount: tools.length,
       tools,
       write: tools.filter((name) => index.get(name)?.kind === 'write'),
@@ -63,18 +118,10 @@ export function buildToolCatalog(manifest: ToolManifest, selection: ToolsetSelec
       enabled: Object.keys(manifest.domains).filter((d) => selection.enabled.has(d)),
       include: selection.include,
       exclude: selection.exclude,
-      note: selection.all
-        ? `모든 도메인이 켜져 있습니다. ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} 로 줄일 수 있습니다.`
-        : `선택된 도구를 보여줍니다 (전체 ${manifest.total}개). ${TOOLSETS_ENV} / ${TOOLSETS_EXCLUDE_ENV} / ${TOOL_NAMES_ENV} 설정을 반영합니다.`,
+      note: selection.all ? m.noteAll : m.noteSelected(manifest.total),
     },
-    legend: {
-      total: '이 서버에 등록된 도구 수 (폐기 예정 별칭 포함) = tools/list 길이. manifestTotal 은 toolset 제한 없는 전체.',
-      tools: '도메인의 정식 도구 (별칭 제외). write / destructive 어디에도 없으면 읽기 전용.',
-      write: '원격/로컬 상태를 바꾸지만 파괴적이지 않은 도구.',
-      destructive: '비가역·외부 공개·삭제·덮어쓰기 — confirm: true (일부 도구는 자체 confirmPublish / confirmVisible) 없이 부르면 실행하지 않는다.',
-      deprecated: '폐기 예정 별칭 → 정식 도구. 정식 이름으로 부를 것 (다음 minor 에서 제거).',
-    },
-    deferredHint: DEFERRED_HINT,
+    legend: m.legend,
+    deferredHint: m.deferredHint,
     deprecated,
     domains,
   };
@@ -84,6 +131,8 @@ export function registerResources(
   server: McpServer,
   options: { manifest?: ToolManifest; toolsets?: ToolsetSelection } = {},
 ) {
+  // 리소스 설명은 등록 시점의 언어로 고정된다. 본문은 읽을 때마다 M() 을 다시 부른다.
+  const m = M();
   const getToolMenu = (lang: MenuLanguage) => {
     const manifest = options.manifest ?? readToolManifest();
     const selection = options.toolsets ?? resolveToolsets(process.env, manifest);
@@ -93,7 +142,7 @@ export function registerResources(
   server.resource(
     'tools-menu',
     TOOL_MENU_URI,
-    { description: '사용할 서비스 다중 선택용 텍스트 목록', mimeType: 'text/plain' },
+    { description: m.menuDescription, mimeType: 'text/plain' },
     async () => {
       const lang = resolveLang();
       return { contents: [{ uri: TOOL_MENU_URI, mimeType: 'text/plain', text: formatToolMenu(getToolMenu(lang), lang) }] };
@@ -103,7 +152,7 @@ export function registerResources(
   server.resource(
     'tools-menu-selection',
     new ResourceTemplate(TOOL_SELECTION_URI, { list: undefined }),
-    { description: '쉼표로 구분한 서비스 ID의 정식 도구 이름', mimeType: 'application/json' },
+    { description: m.selectionDescription, mimeType: 'application/json' },
     async (uri, { areas }) => {
       const input = Array.isArray(areas) ? areas.join(',') : (areas ?? '');
       const selected = selectToolMenu(getToolMenu(resolveLang()), decodeURIComponent(input));
@@ -115,7 +164,7 @@ export function registerResources(
   server.resource(
     'auth-status',
     'mimi-seed://auth/status',
-    { description: 'Google OAuth 인증 상태 — fresh / refreshed / expired / unauthenticated', mimeType: 'application/json' },
+    { description: m.authDescription, mimeType: 'application/json' },
     async () => {
       const r = await ensureFreshAccessToken();
       const ok = r.status === 'fresh' || r.status === 'refreshed';
@@ -139,7 +188,7 @@ export function registerResources(
     'agent-guide',
     'mimi-seed://agent/guide',
     {
-      description: 'Mimi Seed 에이전트 운영 규약 전문 (docs/agent-guide.md) — deferred 도구 로딩·ToolSearch select: 배치·호출 순서·비가역 액션 안전수칙',
+      description: m.guideDescription,
       mimeType: 'text/markdown',
     },
     async () => {
@@ -147,7 +196,7 @@ export function registerResources(
       try {
         text = readPackageRootText('assets/agent-guide.md');
       } catch {
-        text = AGENT_GUIDE_FALLBACK;
+        text = M().agentGuideFallback;
       }
       return {
         contents: [{
@@ -163,7 +212,7 @@ export function registerResources(
     'tools-catalog',
     'mimi-seed://tools/catalog',
     {
-      description: '이 서버에 등록된 도구 카탈로그 (MIMI_SEED_TOOLSETS 반영) — 도메인별 도구 목록·쓰기/파괴 분류·폐기 예정 별칭·필요 자격증명·한줄 요약. "mimi-seed 로 뭘 할 수 있어?" 에는 이 리소스를 읽고 답하세요.',
+      description: m.catalogDescription,
       mimeType: 'application/json',
     },
     async () => {
@@ -178,8 +227,7 @@ export function registerResources(
       } catch (e) {
         // 가짜 성공(빈 카탈로그)을 서빙하지 않는다 — 깨진 설치임을 명시적으로 알린다.
         payload = JSON.stringify({
-          error:
-            'tool-manifest.json 을 읽지 못했습니다 — 패키지가 손상됐습니다. `npx -y @yoonion/mimi-seed-mcp` 재설치 후 새 세션을 여세요.',
+          error: M().manifestUnreadable,
           detail: e instanceof Error ? e.message : String(e),
           total: null,
           domains: [],
