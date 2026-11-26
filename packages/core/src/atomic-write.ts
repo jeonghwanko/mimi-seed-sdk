@@ -17,6 +17,7 @@
 import { chmodSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { sealForWrite } from './credential-store.js';
 
 /** 자격증명 파일 권한 — 소유자만 읽고 쓴다. */
 export const CREDENTIAL_FILE_MODE = 0o600;
@@ -113,12 +114,15 @@ export function writeJsonAtomic(
   writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`, options);
 }
 
-/** 자격증명 JSON 저장 — 0600 파일 / 0700 디렉터리를 강제한다. */
+/**
+ * 자격증명 JSON 저장 — 0600 파일 / 0700 디렉터리를 강제한다. 저장 모드가 암호화면(credential-store.ts) 봉투로 쓴다.
+ * 암호화는 temp 에 쓰기 **전에** 하므로, keychain 모드에서 키 저장소에 못 닿아 던져도 기존 파일은 그대로다.
+ */
 export function writeCredentialJson(filePath: string, value: unknown): void {
-  writeJsonAtomic(filePath, value, { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
+  writeCredentialFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-/** 이미 직렬화된 자격증명(서비스 계정 키 원본, keystore 바이너리 등) 저장. */
+/** 이미 직렬화된 자격증명(서비스 계정 키 원본, keystore 바이너리 등) 저장. 암호화 대상 경로의 문자열만 봉투가 된다. */
 export function writeCredentialFile(filePath: string, contents: string | Uint8Array): void {
-  writeFileAtomic(filePath, contents, { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
+  writeFileAtomic(filePath, sealForWrite(filePath, contents), { mode: CREDENTIAL_FILE_MODE, dirMode: CREDENTIAL_DIR_MODE });
 }

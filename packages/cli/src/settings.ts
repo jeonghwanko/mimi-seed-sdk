@@ -19,7 +19,8 @@ export function readSettings(home: string = os.homedir()): Settings {
   try {
     return JSON.parse(fs.readFileSync(settingsPath(home), "utf-8")) as Settings;
   } catch {
-    // 없거나 깨진 settings.json 은 '언어 미선택' — 담는 것이 lang 하나라, 다음 writeSettings 가 새 선택으로 덮어써도 잃는 값이 없다(복구가 된다)
+    // 없거나 깨진 settings.json 은 '언어 미선택' — 다음 writeSettings 가 새 선택으로 덮어쓴다. 함께 사라질 수 있는
+    // credentialStore 는 core 가 .data-key.id 표식으로 지킨다: 한 번 암호화한 컴퓨터는 설정이 사라져도 평문으로 내려가지 않는다
     return {};
   }
 }
