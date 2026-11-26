@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { catalog } from '#core/lang.js';
-import { jsonFileProblem } from '#core/json-file.js';
+import { jsonFileProblem, readJsonFile } from '#core/json-file.js';
 
 // 읽기(없음/정상/깨짐)와 원인 문구는 CLI 와 공유하는 core 에 있다. 여기는 MCP 전용 안내만 더한다.
 export { readJsonFile, jsonFileProblem, type JsonFileRead } from '#core/json-file.js';
@@ -10,10 +10,14 @@ const MSG = catalog(
   {
     corrupt: (file: string, reason: string, fix: string) =>
       `❌ 설정 파일이 손상되어 읽을 수 없습니다: ${file}\n   원인: ${reason}\n   → 파일을 고치거나 지운 뒤 다시 설정하세요: ${fix}`,
+    locked: (file: string, reason: string, fix: string) =>
+      `❌ 암호화된 설정 파일을 열 수 없습니다: ${file}\n   원인: ${reason}\n   → 다시 설정하세요: ${fix}`,
   },
   {
     corrupt: (file: string, reason: string, fix: string) =>
       `❌ The settings file is damaged and cannot be read: ${file}\n   Cause: ${reason}\n   → Fix or delete the file, then set it up again: ${fix}`,
+    locked: (file: string, reason: string, fix: string) =>
+      `❌ The encrypted settings file cannot be opened: ${file}\n   Cause: ${reason}\n   → Set it up again: ${fix}`,
   },
 );
 
@@ -22,8 +26,10 @@ const MSG = catalog(
  * 다시 설정하면 파일을 통째로 새로 쓰므로 복구 명령은 원래 안내와 같다; 달라지는 건 원인을 밝히는 것뿐이다.
  */
 export function assertCredentialFileReadable(file: string, fixHint: string): void {
-  const problem = jsonFileProblem(file);
-  if (problem) throw new Error(MSG().corrupt(file, problem, fixHint));
+  const read = readJsonFile(file);
+  // 잠김(암호화됐는데 이 컴퓨터에 키가 없음)은 '손상'이 아니다 — 고칠 게 없고 다시 설정하면 된다.
+  if (read.state === 'locked') throw new Error(MSG().locked(file, read.reason, fixHint));
+  if (read.state === 'invalid') throw new Error(MSG().corrupt(file, read.reason, fixHint));
 }
 
 /**

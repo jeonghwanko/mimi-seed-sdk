@@ -326,7 +326,7 @@ function existingBlockingAudit(
 ): TikTokPublishAudit | null {
   const read = readJsonFile(file);
   if (read.state === 'missing') return null;
-  if (read.state === 'invalid') throw new Error(M().auditUnreadable(file, read.reason));
+  if (read.state === 'invalid' || read.state === 'locked') throw new Error(M().auditUnreadable(file, read.reason));
   const audit = read.value as TikTokPublishAudit | null;
   return audit && ['pending', 'published', 'unknown'].includes(audit.state) ? audit : null;
 }

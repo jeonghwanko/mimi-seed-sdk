@@ -13,6 +13,7 @@ import {
   credLabel,
   credNote,
   credObtain,
+  credentialProblemText,
   detectAll,
   isSatisfied,
   missingRequired,
@@ -127,7 +128,7 @@ function statusLine(spec: CredSpec, detected: Map<CredId, Detected>, platforms: 
     : d.present
       ? kleur.dim(d.detail ?? "")
     : d.invalid
-      ? kleur.yellow(t().doctor.credCorrupt(d.invalid.file, d.invalid.reason, spec.fix))
+      ? kleur.yellow(credentialProblemText(d.invalid, spec.fix))
     : isSatisfied(spec, detected)
       ? kleur.dim(`${credNote(spec) ?? t().setup.fallbackWorking}`)
       : kleur.dim(`→ ${spec.fix}`);
