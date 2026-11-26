@@ -70,9 +70,15 @@ jobs:
         os: [ubuntu-latest]
         # Windows 는 상용 버전 하나만. 사용자 상당수가 Windows 이고(PATH·.cmd shim·경로
         # 구분자·CRLF), 그 경로는 리눅스 러너에서 절대 실행되지 않는다.
+        # macOS 도 상용 버전 하나만. App Store Connect·iOS 쪽 사용자는 사실상 전부 macOS 인데,
+        # 리눅스 러너가 밟지 않는 경로가 있다: cli/src/mcp-restart.ts 의 darwin 분기(lsof 로 프로세스
+        # 작업 폴더 조회), tmpdir 이 /var → /private/var 심볼릭 링크라 realpath 와 경로 비교가
+        # 어긋나는 것, 대소문자를 구분하지 않는 APFS.
         include:
           - { package: cli, node: 24, os: windows-latest }
           - { package: mcp-server, node: 24, os: windows-latest }
+          - { package: cli, node: 24, os: macos-latest }
+          - { package: mcp-server, node: 24, os: macos-latest }
     defaults:
       run:
         shell: bash
