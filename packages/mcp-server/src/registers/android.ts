@@ -92,7 +92,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
         playNote,
         jenkinsStatus,
         jenkinsConfigured: Boolean(jenkinsCfg),
-        keytoolOk: isKeytoolAvailable(),
+        keytoolOk: await isKeytoolAvailable(),
         projectId: project_id,
         keystoreDir: path.join(keystoresDir(), package_name),
       }));
@@ -115,9 +115,9 @@ export function registerAndroidTools(server: ToolRegistrar) {
     },
     async ({ app_name, org, country }) => {
       const prefix = credentialPrefix(app_name);
-      if (!isKeytoolAvailable()) return textResult(keytoolMissingLines());
+      if (!(await isKeytoolAvailable())) return textResult(keytoolMissingLines());
 
-      const saved = persistGeneratedKeystore(generateKeystore({ appName: app_name, org, country }), prefix);
+      const saved = persistGeneratedKeystore(await generateKeystore({ appName: app_name, org, country }), prefix);
       return textResult(keystoreGeneratedLines(prefix, saved));
     },
   );

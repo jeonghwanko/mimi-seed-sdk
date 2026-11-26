@@ -19,7 +19,7 @@ const h = await vi.hoisted(async () => {
   const nodePath = await import('node:path');
   return { home: nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'mimi-secret-home-')) };
 });
-const mocks = vi.hoisted(() => ({ keysCreate: vi.fn(), spawnSync: vi.fn(), upsertSecretText: vi.fn(), upsertSecretFile: vi.fn() }));
+const mocks = vi.hoisted(() => ({ keysCreate: vi.fn(), execFile: vi.fn(), upsertSecretText: vi.fn(), upsertSecretFile: vi.fn() }));
 
 vi.mock('node:os', async (original) => {
   const actual = await original<typeof import('node:os') & { default: typeof import('node:os') }>();
@@ -27,7 +27,7 @@ vi.mock('node:os', async (original) => {
 });
 vi.mock('node:child_process', async (original) => {
   const actual = await original<typeof import('node:child_process')>();
-  return { ...actual, spawnSync: mocks.spawnSync };
+  return { ...actual, execFile: mocks.execFile };
 });
 vi.mock('../lib/googleapis-lite.js', async (original) => {
   const actual = await original<typeof import('../lib/googleapis-lite.js')>();
@@ -189,10 +189,10 @@ describe('키/keystore 경로 입력 — 봉쇄', () => {
 
 describe('android_generate_keystore → Jenkins', () => {
   function keytoolWrites() {
-    mocks.spawnSync.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd !== 'keytool') return { status: 0 };
-      fs.writeFileSync(args[args.indexOf('-keystore') + 1], Buffer.from('FAKE-KEYSTORE-BYTES'));
-      return { status: 0, stderr: Buffer.from('') };
+    // keytool 은 비동기 execFile 로 돈다 (android/keystore.ts). -help 가용성 확인과 -genkeypair 둘 다 여기로 온다.
+    mocks.execFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: (e: null, out: string, err: string) => void) => {
+      if (args.includes('-genkeypair')) fs.writeFileSync(args[args.indexOf('-keystore') + 1], Buffer.from('FAKE-KEYSTORE-BYTES'));
+      setImmediate(() => cb(null, '', ''));
     });
   }
 
