@@ -10,6 +10,8 @@ vi.mock('../appstore/auth.js', () => ({
   getAppStoreCredentials: h.getAppStoreCredentials,
   generateToken: h.generateToken,
   getAuthHeaders: vi.fn(),
+  // 없는 경로 — "파일 없음" 시나리오를 유지한다 (깨진 파일 분기는 credential-files.test.ts).
+  appStoreCredentialsPath: () => '/nonexistent/mimi-seed-test/appstore.json',
 }));
 
 import { verifyAppStoreCredentials } from '../appstore/tools.js';

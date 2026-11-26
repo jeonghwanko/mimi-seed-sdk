@@ -8,6 +8,7 @@ const CI_CONFIG_PATH = path.join(CONFIG_DIR, 'ci.json');
 
 // ci.json 의 모양은 CLI 와 공유한다 — 두 패키지가 모두 쓰는 문서화된 예외다(pitfalls §12).
 import type { CiConfig } from '#core/ci.js';
+import { assertCredentialFileReadable } from '../lib/json-file.js';
 export type { CiConfig, CiProvider } from '#core/ci.js';
 
 export function loadCiConfig(): CiConfig | null {
@@ -25,6 +26,7 @@ export function saveCiConfig(config: CiConfig): void {
 export function requireCiConfig(): CiConfig {
   const cfg = loadCiConfig();
   if (!cfg) {
+    assertCredentialFileReadable(CI_CONFIG_PATH, 'ci_save_config');
     throw new Error(
       'CI 설정이 없습니다.\n' +
       'ci_save_config 도구로 먼저 설정해주세요.\n' +

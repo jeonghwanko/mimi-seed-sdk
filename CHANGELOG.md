@@ -18,6 +18,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Google sign-in errors, their recovery hints, and the browser page shown after sign-in now follow your language setting (`MIMI_SEED_LANG`, then `mimi-seed lang`, then the system locale). Before this change they were always in Korean, and the callback-port message showed Korean and English together. Error codes are unchanged.
+
+### Fixed
+
+- A credential file that exists but cannot be read (empty after an interrupted write, broken JSON, or no permission) is no longer reported as "not configured". The error now names the file and where it is broken, and `mimi_seed_status` lists every unreadable file under `~/.mimi-seed`. File contents are never included in the message.
+- A sign-in error that was already classified (for example `CALLBACK_PORT_IN_USE`) keeps its code instead of being re-classified as `CODE_EXCHANGE_FAILED`.
+
+### Tool changes
+
+- none
+
 ## [0.24.0] - 2026-11-24
 
 ### Added
