@@ -1,8 +1,9 @@
 import { getAuthenticatedClient, ensureFreshAccessToken } from './auth/google-auth.js';
 import { domainsForScope, isPreTrackingScope } from './auth/scopes.js';
 import { getServiceAccountClient, getServiceAccountJson } from './auth/playstore-auth.js';
-import { getAppStoreCredentials } from './appstore/auth.js';
+import { appStoreCredentialsPath, getAppStoreCredentials } from './appstore/auth.js';
 import { authText, type AuthErrorPayload } from './auth/errors.js';
+import { assertCredentialFileReadable } from './lib/json-file.js';
 
 export { ensureFreshAccessToken };
 
@@ -140,6 +141,9 @@ export function requireServiceAccountJson(packageName?: string): string {
 
 export function requireAppStoreCreds() {
   const creds = getAppStoreCredentials();
-  if (!creds) throw new Error(APPSTORE_AUTH_HINT);
+  if (!creds) {
+    assertCredentialFileReadable(appStoreCredentialsPath(), 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
+    throw new Error(APPSTORE_AUTH_HINT);
+  }
   return creds;
 }

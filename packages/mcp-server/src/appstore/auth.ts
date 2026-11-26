@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
+import { assertCredentialFileReadable } from '../lib/json-file.js';
 
 // Primary location under ~/.mimi-seed. Legacy ~/.preseed read as fallback
 // during the rebrand window so existing App Store Connect sessions don't
@@ -74,6 +75,11 @@ export function mergeAppStoreCredentials(
   const normalizedVendorNumber = normalizeVendorNumber(vendorNumber);
   if (normalizedVendorNumber) merged.vendorNumber = normalizedVendorNumber;
   return merged;
+}
+
+/** getAppStoreCredentials 가 읽는 파일 — appstore.json, 없으면 레거시 경로. */
+export function appStoreCredentialsPath(): string {
+  return !fs.existsSync(CONFIG_PATH) && fs.existsSync(LEGACY_CONFIG_PATH) ? LEGACY_CONFIG_PATH : CONFIG_PATH;
 }
 
 export function getAppStoreCredentials(): AppStoreCredentials | null {
@@ -159,9 +165,20 @@ export function clearAppStoreTokenCache(): void {
   tokenCache.clear();
 }
 
+/**
+ * 자격증명이 없을 때 호출자는 각자 "설정 없음" 안내를 던진다 — 그 전에, 파일이 있는데 깨진 경우라면 그 사실을
+ * 대신 알린다. ASC 도구 대부분은 requireAppStoreCreds 가 아니라 이 헤더 함수들을 거친다.
+ */
+function assertAppStoreFileReadable(): void {
+  assertCredentialFileReadable(appStoreCredentialsPath(), 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
+}
+
 export async function getAuthHeaders(): Promise<Record<string, string> | null> {
   const creds = getAppStoreCredentials();
-  if (!creds) return null;
+  if (!creds) {
+    assertAppStoreFileReadable();
+    return null;
+  }
   return { Authorization: `Bearer ${await cachedToken(creds)}` };
 }
 
@@ -175,7 +192,10 @@ export async function getReportsAuthHeaders(): Promise<
   { headers: Record<string, string>; source: 'reportsKey' | 'default' } | null
 > {
   const creds = getAppStoreCredentials();
-  if (!creds) return null;
+  if (!creds) {
+    assertAppStoreFileReadable();
+    return null;
+  }
   if (creds.reportsKey) {
     return {
       headers: { Authorization: `Bearer ${await cachedToken(creds.reportsKey)}` },

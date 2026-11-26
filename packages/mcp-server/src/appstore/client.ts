@@ -1,6 +1,7 @@
-import { getAppStoreCredentials, generateToken } from './auth.js';
+import { appStoreCredentialsPath, getAppStoreCredentials, generateToken } from './auth.js';
 import { authHeadersOrThrow, apiRequest, V1_BASE, type UntypedAscJson } from './http.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { jsonFileProblem } from '../lib/json-file.js';
 
 /**
  * App Store Connect API v1 래퍼
@@ -33,10 +34,14 @@ export async function verifyAppStoreCredentials(
   creds = getAppStoreCredentials(),
 ): Promise<AppStoreVerifyResult> {
   if (!creds) {
+    const file = appStoreCredentialsPath();
+    const problem = jsonFileProblem(file);
     return {
       ok: false,
       stage: 'creds',
-      message: '~/.mimi-seed/appstore.json 이 없습니다. `mimi-seed auth appstore` 로 등록하세요.',
+      message: problem
+        ? `${file} 이 손상되어 읽을 수 없습니다 (${problem}). \`mimi-seed auth appstore\` 로 다시 등록하세요.`
+        : '~/.mimi-seed/appstore.json 이 없습니다. `mimi-seed auth appstore` 로 등록하세요.',
     };
   }
   let token: string;

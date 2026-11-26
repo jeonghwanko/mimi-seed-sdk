@@ -157,6 +157,15 @@ second call with `confirm=true`.
   running. `atomic-write.test.ts` enforces this and keeps the writer list complete. The CLI's own files
   (`config.json`, `ci.json`, `telemetry.json`) go through the same shared module, guarded by the CLI's own
   `atomic-write.test.ts`.
+- ✅ **Read** failures stay `null` to the loaders (their contract is unchanged), but the places that tell the
+  user something is wrong distinguish *missing* from *unreadable* through `lib/json-file.ts`: a `require…()`
+  helper calls `assertCredentialFileReadable(path, fixHint)` before its "not configured" error — and so must any
+  other entry point that turns a `null` into that error (the App Store header helpers `getAuthHeaders` /
+  `getReportsAuthHeaders`, which most ASC calls go through, not `requireAppStoreCreds`; Drive's OAuth path;
+  `jenkins_status`; `appstore_verify_credentials`). The Google token
+  path reports `UNAUTHENTICATED` with the file and reason, and `mimi_seed_status` lists every unreadable
+  `~/.mimi-seed/**/*.json` (top level + one folder down). The reason carries only a **location** — V8's
+  `JSON.parse` message quotes the input, which in a credential file is a token or key fragment.
 - ✅ Surface the **raw provider reason** on `401`/`403` via the friendly-error layer ([[external-apis]]).
 - ❌ Never log, echo, return, or embed a token / key / `.p8` / SA JSON — not in tool output, not in error
   messages, not in tests. Tests use placeholder fixtures only.

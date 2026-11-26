@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
+import { assertCredentialFileReadable } from '../lib/json-file.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'google-ads.json');
@@ -57,6 +58,7 @@ export function loadConfig(): GoogleAdsConfig | null {
 export function requireConfig(): GoogleAdsConfig {
   const cfg = loadConfig();
   if (!cfg) {
+    assertCredentialFileReadable(CONFIG_PATH, 'googleads_save_config');
     throw new Error(
       [
         '❌ Google Ads 설정이 없어.',

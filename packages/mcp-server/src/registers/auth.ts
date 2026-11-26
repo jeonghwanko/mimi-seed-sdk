@@ -1,3 +1,5 @@
+import path from 'node:path';
+import os from 'node:os';
 import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getGoogleAuthAttempt } from '../auth/google-auth.js';
 import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
@@ -36,6 +38,7 @@ import {
 } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
 import { describeToolsets } from '../lib/toolsets.js';
+import { findInvalidJsonFiles } from '../lib/json-file.js';
 
 /**
  * tokens.json mtime → "Nd Hh ago" 형식 문자열 + 재인증 권고.
@@ -269,6 +272,15 @@ export function registerAuthTools(server: ToolRegistrar) {
         lines.push('⚠️  BigQuery          — OAuth fallback (Workspace 재인증 정책 시 끊길 수 있음 → 서비스 계정 권장: mimi-seed-bigquery-auth)');
       } else {
         lines.push('❌ BigQuery          — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)');
+      }
+
+      // 12. 깨진 설정 파일 — 로더는 "없음"과 "깨짐"을 둘 다 null 로 돌려주므로 위 줄들은 ❌ 미설정으로만 보인다.
+      // 어느 파일이 왜 못 읽히는지는 여기서 따로 밝힌다 (잘린 쓰기 · 손으로 고친 문법 오류 · 권한).
+      const invalidFiles = findInvalidJsonFiles(path.join(os.homedir(), '.mimi-seed'));
+      if (invalidFiles.length > 0) {
+        lines.push('', '── ⚠️ 읽을 수 없는 설정 파일 ─────────────────────');
+        for (const { file, reason } of invalidFiles) lines.push(`❌ ${file}`, `   원인: ${reason}`);
+        lines.push('   → 해당 연결을 다시 설정하면 파일을 새로 씁니다. 고치기 전 내용을 보존하려면 먼저 백업하세요.');
       }
 
       // 다음 단계 안내
