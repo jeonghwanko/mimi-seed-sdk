@@ -124,6 +124,10 @@ const ko = {
     manifestReason: { unreadable: "읽기 실패", "invalid-json": "JSON 형식 오류", "not-an-object": "객체가 아님" } as Record<ManifestInvalidReason, string>,
     credCorrupt: (file: string, reason: string, fix: string) => `파일이 손상됨: ${file} — ${reason}. 고치거나 지운 뒤 다시 연결: ${fix}`,
     credLocked: (file: string, reason: string, fix: string) => `암호화된 파일을 열 수 없음: ${file} — ${reason}. 다시 연결: ${fix}`,
+    storeLabel: "자격증명 저장",
+    storePlain: "평문 0600 — 암호화하려면: mimi-seed credentials mode keychain",
+    storeEncrypted: (n: number) => `암호화 (${n}개 파일)`,
+    storePlainLeft: (n: number) => `암호화 모드인데 평문 파일 ${n}개가 남음 → mimi-seed credentials encrypt`,
   },
 
   auth: {
@@ -254,6 +258,10 @@ MIMI_SEED_LANG takes precedence when set.`,
     manifestReason: { unreadable: "unreadable", "invalid-json": "invalid JSON", "not-an-object": "not an object" },
     credCorrupt: (file: string, reason: string, fix: string) => `file is damaged: ${file} — ${reason}. Fix or delete it, then reconnect: ${fix}`,
     credLocked: (file: string, reason: string, fix: string) => `cannot open encrypted file: ${file} — ${reason}. Reconnect: ${fix}`,
+    storeLabel: "Credential storage",
+    storePlain: "plaintext 0600 — to encrypt: mimi-seed credentials mode keychain",
+    storeEncrypted: (n: number) => `encrypted (${n} file(s))`,
+    storePlainLeft: (n: number) => `encrypting mode, but ${n} plaintext file(s) remain → mimi-seed credentials encrypt`,
   },
 
   auth: {

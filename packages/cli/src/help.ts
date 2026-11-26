@@ -34,6 +34,17 @@ const M = catalog(
   --fail-on-missing   필수 자격증명이 없으면 exit 1 (CI 게이트)
 
 ${kleur.dim("비TTY / CI 환경에서는 프롬프트 없이 상태표만 출력한다.")}`,
+      credentials: `${kleur.bold("mimi-seed credentials")} — 저장된 자격증명(~/.mimi-seed) 암호화
+
+  mimi-seed credentials status                    저장 모드, 키 저장소, 파일별 상태(암호화 · 평문 · 잠김)
+  mimi-seed credentials mode <file|keychain|auto> file: 평문(기본) · keychain: 항상 암호화 · auto: 가능하면 암호화
+  mimi-seed credentials encrypt                   지금 있는 평문 자격증명을 암호화 (암호화 모드에서)
+  mimi-seed credentials decrypt                   암호화된 자격증명을 평문으로 되돌림 (mode file 다음에)
+
+  --force   mode 를 켤 때, 옛 버전으로 고정된 MCP 서버 등록이 있어도 진행
+
+${kleur.dim("키는 OS 키 저장소(macOS 키체인 · Windows DPAPI · Linux Secret Service)에 둡니다. 환경변수 MIMI_SEED_CREDENTIAL_STORE 가 settings.json 보다 우선합니다.")}
+${kleur.dim("한 번 암호화한 컴퓨터는 mode file 을 명시하기 전까지 평문으로 내려가지 않습니다. 키를 잃으면(키체인 초기화 등) 각 서비스에 다시 로그인해야 합니다.")}`,
       lang: `${kleur.bold("mimi-seed lang")} — CLI 출력 언어 (한국어 / English)
 
   mimi-seed lang        현재 언어 표시
@@ -123,6 +134,7 @@ ${kleur.bold("명령어:")}
   ${kleur.cyan("mimi-seed init")}        현재 프로젝트를 Mimi Seed에 연결
   ${kleur.cyan("mimi-seed setup")}       가진 계정을 한 번에 연결 (안내형 마법사)
   ${kleur.cyan("mimi-seed lang")}        출력 언어 (ko / en)
+  ${kleur.cyan("mimi-seed credentials")} 저장된 자격증명 암호화 (status / mode / encrypt / decrypt)
   ${kleur.cyan("mimi-seed status")}      연결 상태 + 등록 앱 목록
   ${kleur.cyan("mimi-seed auth")}        자격증명 개별 인증 (Google / App Store / Play / Jenkins / CI …)
   ${kleur.cyan("mimi-seed firebase")}    Firebase 앱 생성·config 다운로드·GA4 링크
@@ -176,6 +188,17 @@ Options:
   --fail-on-missing   exit 1 if a required credential is missing (CI gate)
 
 ${kleur.dim("In non-TTY / CI environments it prints the status table only, with no prompts.")}`,
+      credentials: `${kleur.bold("mimi-seed credentials")} — encrypt the stored credentials (~/.mimi-seed)
+
+  mimi-seed credentials status                    storage mode, key store, and each file's state (encrypted · plaintext · locked)
+  mimi-seed credentials mode <file|keychain|auto> file: plaintext (default) · keychain: always encrypt · auto: encrypt when possible
+  mimi-seed credentials encrypt                   encrypt the plaintext credentials that exist now (in an encrypting mode)
+  mimi-seed credentials decrypt                   turn encrypted credentials back into plaintext (after mode file)
+
+  --force   when turning a mode on, proceed even if an MCP server registration is pinned to an old version
+
+${kleur.dim("The key lives in the OS key store (macOS Keychain · Windows DPAPI · Linux Secret Service). MIMI_SEED_CREDENTIAL_STORE wins over settings.json.")}
+${kleur.dim("Once a machine has encrypted, it does not go back to plaintext until you set mode file. If the key is lost (a keychain reset, for example), sign in to each service again.")}`,
       lang: `${kleur.bold("mimi-seed lang")} — CLI output language (한국어 / English)
 
   mimi-seed lang        show current language
@@ -265,6 +288,7 @@ ${kleur.bold("Commands:")}
   ${kleur.cyan("mimi-seed init")}        connect the current project to Mimi Seed
   ${kleur.cyan("mimi-seed setup")}       connect the accounts you have, in one pass (guided wizard)
   ${kleur.cyan("mimi-seed lang")}        output language (ko / en)
+  ${kleur.cyan("mimi-seed credentials")} encrypt the stored credentials (status / mode / encrypt / decrypt)
   ${kleur.cyan("mimi-seed status")}      connection status + registered apps
   ${kleur.cyan("mimi-seed auth")}        connect credentials one by one (Google / App Store / Play / Jenkins / CI …)
   ${kleur.cyan("mimi-seed firebase")}    create Firebase apps, download configs, link GA4

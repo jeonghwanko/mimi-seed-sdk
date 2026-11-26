@@ -1,6 +1,7 @@
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { credentialFileProblemMessage, credentialProblemText } from "./credentials.js";
+import { credentialStoreReport } from "#core/credential-store.js";
 import { mcpCall } from "./mcp-client.js";
 import { isGitRepo, getLatestTag, getGitLog } from "./git.js";
 import { detectHints } from "./detect.js";
@@ -200,6 +201,14 @@ export async function runDoctor(opts: { cwd: string; print: boolean }): Promise<
     }
     else r.fail(base, fix);
   }
+  // 저장 방식 — 평문은 오늘의 기본이라 ✓ 로 두고 켜는 법만 알린다. 암호화 모드인데 평문이 남았으면 ⚠.
+  // 키 저장소는 봉투 파일이 있을 때만 부른다 (credentialStoreReport) — 평문 사용자에게 키체인 프로세스를 띄우지 않는다.
+  const store = credentialStoreReport();
+  const plain = store.files.filter((f) => f.state === "plaintext").length;
+  const sealed = store.files.filter((f) => f.state === "encrypted").length;
+  if (store.effective === "file") r.ok(m.storeLabel, sealed > 0 ? m.storeEncrypted(sealed) : m.storePlain);
+  else if (plain > 0) r.warn(m.storeLabel, m.storePlainLeft(plain));
+  else r.ok(m.storeLabel, m.storeEncrypted(sealed));
   r.text(kleur.dim(m.credsHint));
 
   // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ──

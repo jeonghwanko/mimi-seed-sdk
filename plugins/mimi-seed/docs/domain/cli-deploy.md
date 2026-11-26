@@ -15,6 +15,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `init` | `init.ts` | detect app → browser PAT handshake → register apps → scaffold project context files |
 | `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
 | `lang` | `lang.ts` | CLI output language (`ko` / `en`) → `~/.mimi-seed/settings.json`. `setup` asks on first run; `MIMI_SEED_LANG` overrides |
+| `credentials` | `credentials-cmd.ts` | credential encryption at rest: `status`, `mode <file\|keychain\|auto>` (→ `settings.json` `credentialStore`; refuses while an MCP registration is pinned to a release from before encrypted-credential reading (`FIRST_ENVELOPE_READER`; a range pin is judged by the newest version it resolves to), `--force` to override; warns when `MIMI_SEED_CREDENTIAL_STORE` overrides it; `keychain` checks the key store first), `encrypt` / `decrypt` (rewrite every in-scope file through the core writer). Logic is in `core/src/credential-store.ts` ([`../design/credential-encryption.md`](../design/credential-encryption.md)) |
 | `status` | `index.ts` (`cmdStatus`) | show connection + `list_apps` via the remote MCP |
 | `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` / `tiktok`; `meta` opens the combined Meta setup — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
@@ -38,7 +39,7 @@ detailed help in `auth.ts`. Adding a command means touching three places: the `s
 
 ### Output language
 
-`settings.ts` owns `~/.mimi-seed/settings.json` (`{ lang }`); `i18n.ts` holds the catalogs (`ko` is the source,
+`settings.ts` owns `~/.mimi-seed/settings.json` (`{ lang, credentialStore }`); `i18n.ts` holds the catalogs (`ko` is the source,
 `en` must satisfy `typeof ko`, so a missing translation is a **compile error**). `t()` resolves the language at
 call time, not module-load time — the wizard asks for a language on its very first prompt and everything after it
 is already in that language.
