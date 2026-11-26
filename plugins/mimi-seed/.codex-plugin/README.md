@@ -26,6 +26,7 @@ codex plugin add mimi-seed@yoonion
   - `deploy` — CI 빌드 → 블로커 점검 → 릴리스 노트 → 스토어 적용 풀 파이프라인
   - `video-create-publish` — story/쇼츠 제작 → 타이포·크롭 검수 → 렌더 검증 → 선택적 YouTube 게시
   - `game-intro-short` — 실제 플레이 촬영, 결과 검증, 게임 쇼츠 편집과 현지화
+  - `pdf-design-quality` — 한글 서체, 읽는 순서, 모바일 PDF 렌더 검수
   - `mimi-seed-install` — git 체크아웃을 소스에서 설치·등록 (기여자 / 미배포 코드)
   - `mimi-seed-update` — 서버·스킬·CLI를 최신으로 올리고 실제 돌고 있는 버전까지 검증
 - **에이전트 가이드**: `docs/agent-guide.md` — deferred-tool 로딩(`ToolSearch select:`) 패턴과 도메인별 배치,

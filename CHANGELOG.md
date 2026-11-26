@@ -20,6 +20,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The `pdf-design-quality` skill guides readers through Korean font selection and embedding, page hierarchy, and desktop and mobile PDF render checks.
 - English output from every tool: in English mode, the text each tool returns (store, Firebase, Jenkins, CI, video, social, and the rest) is English, along with the destructive-tool dry-run preview, Google / Google Play / App Store error explanations, store auth hints, `mimi_seed_status` and the other connection tools, remote credential sync, MCP prompts, and the `mimi-seed://tools/catalog` / agent-guide resources are in English.
 - English tool descriptions: in English mode (`MIMI_SEED_LANG=en`, `mimi-seed lang en`, or a non-Korean system locale), every MCP tool and parameter description the agent sees is in English. Korean mode is unchanged. A machine with a non-Korean locale now gets English descriptions by default; set `MIMI_SEED_LANG=ko` (or `mimi-seed lang ko`) to keep Korean. Prompts sent to Claude for AI drafts stay Korean by design; the `language` / `locales` parameters choose the result language.
 
