@@ -12,7 +12,7 @@ import zlib from 'node:zlib';
 import { fetchWithTimeout } from '../lib/http.js';
 import { getAppStoreCredentials, getReportsAuthHeaders, normalizeVendorNumber } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
-import { V1_BASE } from './http.js';
+import { appStoreErrorStatus, V1_BASE } from './http.js';
 import { catalog } from '#core/lang.js';
 
 const M = catalog(
@@ -158,7 +158,8 @@ async function fetchReport(
     // 일반 403 안내("키 role 확인")로는 못 고친다 — 리포트 엔드포인트만 요구 롤이 다르다.
     // 앱 메타데이터가 멀쩡히 조회되는 키에서도 여기서만 막히는 게 정상 동작이라,
     // "키가 깨졌나" 로 헤매기 쉽다.
-    throw new Error(M().forbidden(auth.source === 'reportsKey'));
+    // cause.status 로 상태를 싣는다 — 호출부(probeReportsAccess)가 문구가 아니라 상태로 판정한다.
+    throw new Error(M().forbidden(auth.source === 'reportsKey'), { cause: { status: 403 } });
   }
   if (!response.ok) {
     throw friendlyAppStoreError(response.status, await response.text());
@@ -405,7 +406,7 @@ export async function probeReportsAccess(): Promise<{
     };
   } catch (err) {
     const message = (err as Error)?.message ?? '';
-    if (message.includes('403')) {
+    if (appStoreErrorStatus(err) === 403) {
       const usingSeparateKey = getAppStoreCredentials()?.reportsKey != null;
       return {
         status: 'forbidden',
