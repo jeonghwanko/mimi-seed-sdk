@@ -9,7 +9,15 @@ import path from "node:path";
 import kleur from "kleur";
 import { catalog } from "#core/lang.js";
 import { writeCredentialFile } from "#core/atomic-write.js";
-import { obtainDataKey, lookupDataKey } from "#core/credential-keystore.js";
+import { spawnSync } from "node:child_process";
+import { createInterface } from "node:readline/promises";
+import {
+  forgetFailedDataKeyLookup,
+  lookupDataKey,
+  macosLoginKeychain,
+  obtainDataKey,
+  type DataKeyLookup,
+} from "#core/credential-keystore.js";
 import {
   CREDENTIAL_STORE_ENV,
   clearKeyIdMarker,
@@ -45,6 +53,8 @@ const M = catalog(
       `${where} 에 Mimi Seed MCP 서버가 ${version} 으로 고정돼 있습니다. 그 버전은 암호화된 자격증명을 읽지 못합니다 — @latest 로 바꾸거나 0.24.0 보다 높은 버전으로 올린 뒤 다시 실행하세요 (무시하려면 --force).`,
     envOverrides: (env: string, value: string) => `주의: ${env}=${value} 가 설정돼 있어 그 값이 이 설정보다 우선합니다. 바꾼 모드를 쓰려면 환경 변수를 지우세요.`,
     storeNeeded: (backend: string, why: string) => `${backend}에 닿지 못해 암호화를 켤 수 없습니다: ${why}`,
+    unlockAsk: "로그인 키체인이 잠겨 있습니다. 지금 잠금을 해제할까요? 키체인 비밀번호(보통 로그인 비밀번호)를 묻습니다. (y/N) ",
+    autoPending: (why: string) => `지금은 키 저장소에 닿지 못해(${why}) 키 저장소가 준비될 때까지 평문으로 저장됩니다.`,
     modeSaved: (mode: string) => `저장 모드를 ${mode}(으)로 바꿨습니다. 앞으로 쓰는 자격증명에 적용됩니다.`,
     modeFileNote: "이미 암호화된 파일은 그대로 남고, 키가 있는 한 계속 읽힙니다. 평문으로 되돌리려면: mimi-seed credentials decrypt",
     encryptNeedsMode: "먼저 암호화 모드를 켜세요: mimi-seed credentials mode keychain (또는 auto)",
@@ -74,6 +84,8 @@ const M = catalog(
       `${where} pins the Mimi Seed MCP server to ${version}, which cannot read encrypted credentials. Change it to @latest or a version newer than 0.24.0, then run this again (--force to ignore).`,
     envOverrides: (env: string, value: string) => `Note: ${env}=${value} is set and wins over this setting. Unset it to use the mode you just chose.`,
     storeNeeded: (backend: string, why: string) => `Cannot turn on encryption: ${backend} could not be reached: ${why}`,
+    unlockAsk: "The login keychain is locked. Unlock it now? You will be asked for the keychain password (usually your login password). (y/N) ",
+    autoPending: (why: string) => `The key store can't be reached right now (${why}), so credentials stay plaintext until it is.`,
     modeSaved: (mode: string) => `Storage mode set to ${mode}. It applies to credentials saved from now on.`,
     modeFileNote: "Files already encrypted stay encrypted and keep working while the key exists. To turn them back into plaintext: mimi-seed credentials decrypt",
     encryptNeedsMode: "Turn on an encrypting mode first: mimi-seed credentials mode keychain (or auto)",
@@ -160,33 +172,54 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function setMode(value: string | undefined, force: boolean): void {
+/**
+ * 키를 얻고(없으면 만들고), macOS 로그인 키체인이 잠겨 있으면 터미널에서 잠금 해제를 제안한 뒤 한 번 더 시도한다.
+ * SSH·원격 세션은 화면 세션과 따로 잠기고 확인 창을 못 띄운다 — `security unlock-keychain` 이 그 세션에서 비밀번호를
+ * 물어 푼다(입력은 security 가 직접 TTY 에서 받는다. 이 프로세스는 비밀번호를 보지 않는다). TTY 가 아니면 묻지 않는다.
+ */
+async function obtainKeyInteractively(): Promise<DataKeyLookup> {
+  const key = obtainDataKey();
+  if (key.state !== "unavailable" || !key.locked || process.platform !== "darwin" || !process.stdin.isTTY || !process.stdout.isTTY) {
+    return key;
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question(M().unlockAsk)).trim().toLowerCase();
+  rl.close();
+  if (answer !== "y" && answer !== "yes") return key;
+  spawnSync("/usr/bin/security", ["unlock-keychain", macosLoginKeychain()], { stdio: "inherit" });
+  forgetFailedDataKeyLookup();
+  return obtainDataKey();
+}
+
+async function setMode(value: string | undefined, force: boolean): Promise<void> {
   const m = M();
   if (!isCredentialStoreMode(value)) fail(m.badMode(value ?? ""));
+  let pending: string | undefined;
   if (value !== "file") {
     const pins = force ? [] : findOldMcpPins();
     if (pins.length > 0) fail(pins.map((pin) => m.pinned(pin.where, pin.version)).join("\n"));
-    if (value === "keychain") {
-      // 켜는 순간 저장소를 확인한다 — 다음 토큰 갱신에서 처음 실패하면 원인이 멀어진다. 키가 없으면 여기서 만든다.
-      const key = obtainDataKey();
-      if (key.state !== "ok") fail(m.storeNeeded(key.backend, key.state === "unavailable" ? key.reason : "no key"));
-    }
+    // 켜는 순간 저장소를 확인하고 키를 만든다 — MCP 서버의 첫 쓰기(TTY 없음)에서 처음 실패하면 원인이 멀어진다.
+    // keychain 은 실패면 켜지 않는다. auto 는 저장소가 없을 때 평문이 정상 동작이라 켜되, 지금은 평문이라고 알린다.
+    const key = await obtainKeyInteractively();
+    if (value === "keychain" && key.state !== "ok") fail(m.storeNeeded(key.backend, key.state === "unavailable" ? key.reason : "no key"));
+    if (value === "auto" && key.state === "unavailable") pending = key.reason;
   }
   writeSettings({ credentialStore: value });
   log(kleur.green(m.modeSaved(m.modeLabel[value])));
+  if (pending) log(kleur.yellow(m.autoPending(pending)));
   const env = process.env[CREDENTIAL_STORE_ENV]?.trim().toLowerCase();
   if (isCredentialStoreMode(env) && env !== value) log(kleur.yellow(m.envOverrides(CREDENTIAL_STORE_ENV, env)));
   if (value === "file") log(kleur.dim(m.modeFileNote));
   else log(kleur.dim(m.plainHint));
 }
 
-function convert(target: "encrypted" | "plaintext"): void {
+async function convert(target: "encrypted" | "plaintext"): Promise<void> {
   const m = M();
   const report = credentialStoreReport();
   if (target === "encrypted") {
     if (report.effective === "file") fail(m.encryptNeedsMode);
     // auto 라도 저장소가 없으면 writer 가 평문으로 쓴다 — "암호화했다"고 말하기 전에 키를 확보한다.
-    const key = obtainDataKey();
+    const key = await obtainKeyInteractively();
     if (key.state !== "ok") fail(m.storeNeeded(key.backend, key.state === "unavailable" ? key.reason : "no key"));
   } else if (report.effective !== "file") {
     const env = process.env[CREDENTIAL_STORE_ENV]?.trim().toLowerCase();
@@ -213,13 +246,13 @@ export async function cmdCredentials(args: string[]): Promise<void> {
       printStatus();
       return;
     case "mode":
-      setMode(rest.find((a) => !a.startsWith("-"))?.toLowerCase(), rest.includes("--force"));
+      await setMode(rest.find((a) => !a.startsWith("-"))?.toLowerCase(), rest.includes("--force"));
       return;
     case "encrypt":
-      convert("encrypted");
+      await convert("encrypted");
       return;
     case "decrypt":
-      convert("plaintext");
+      await convert("plaintext");
       return;
     default:
       printCommandHelp("credentials");

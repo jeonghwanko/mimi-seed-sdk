@@ -475,6 +475,11 @@ mimi-seed credentials status          # mode, key store, and each file's state
 - The key lives in your OS key store: macOS Keychain, Windows DPAPI, or Linux Secret Service (needs
   `secret-tool` and a desktop session). `MIMI_SEED_CREDENTIAL_STORE` overrides the saved mode.
 - Mimi Seed keeps working the same. Encrypted files are opened in memory when a tool needs them.
+- **Over SSH (including VS Code Remote-SSH),** macOS keeps the login keychain locked in that session, separately
+  from your desktop session, and can't show its unlock dialog. `mode` and `encrypt` offer to run
+  `security unlock-keychain ~/Library/Keychains/login.keychain-db`, which asks for the keychain password (usually
+  your login password). The unlock lasts only for that SSH session, so the next session sees locked files until
+  you unlock again. On a machine you mostly use remotely, stay with `file`.
 - **What it protects:** a copy of `~/.mimi-seed/` on its own reveals nothing. A full home-folder copy is only as
   safe as your login password, because the OS key store is protected by it. It does **not** protect against
   malware running as you.

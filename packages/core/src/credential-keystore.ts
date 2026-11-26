@@ -22,7 +22,8 @@ export const DPAPI_KEY_FILE = '.data-key.dpapi';
 export type DataKeyLookup =
   | { state: 'ok'; key: Buffer; backend: string }
   | { state: 'absent'; backend: string }
-  | { state: 'unavailable'; backend: string; reason: string };
+  /** `locked` — macOS 로그인 키체인이 잠겨 있다(잠금 해제하면 풀린다). CLI 가 잠금 해제를 제안하는 근거. */
+  | { state: 'unavailable'; backend: string; reason: string; locked?: boolean };
 
 export type DataKeySource = () => DataKeyLookup;
 /** 키가 없을 때 새로 만들고, 최종적으로 저장소에 남은 키(경쟁에서 이긴 쪽)를 돌려준다. */
@@ -35,6 +36,13 @@ const R = catalog(
     timeout: (cmd: string) => `${cmd} 응답 없음(시간 초과)`,
     badKey: '저장된 키의 형식이 올바르지 않음',
     noBackend: (platform: string) => `이 OS(${platform})에는 지원하는 키 저장소가 없음`,
+    lockedRemote: (keychain: string) =>
+      `로그인 키체인이 잠겨 있음 — SSH·원격 세션(VS Code Remote-SSH 포함)에서는 화면 세션과 따로 잠기고 확인 창도 뜨지 않는다. \`security unlock-keychain ${keychain}\` 로 이 세션에서 풀거나, 주로 원격으로 쓰는 컴퓨터라면 \`mimi-seed credentials mode file\``,
+    lockedLocal: '로그인 키체인이 잠겨 있음 — 키체인 접근(Keychain Access)에서 잠금을 해제하세요',
+    wrongPassword: '로그인 키체인 비밀번호가 맞지 않음(로그인 비밀번호와 어긋났을 수 있음)',
+    noKeychain: '기본 키체인이 없거나 찾을 수 없음',
+    cancelled: '키체인 확인 창에서 취소됨',
+    waiting: '키체인 확인 창이 응답을 기다리다 시간이 초과됨',
   },
   {
     exit: (cmd: string, status: string) => `${cmd} exited with status ${status}`,
@@ -42,6 +50,13 @@ const R = catalog(
     timeout: (cmd: string) => `${cmd} did not respond (timed out)`,
     badKey: 'the stored key is not in the expected format',
     noBackend: (platform: string) => `no supported key store on this OS (${platform})`,
+    lockedRemote: (keychain: string) =>
+      `the login keychain is locked — an SSH or remote session (including VS Code Remote-SSH) has its own lock and cannot show the unlock dialog. Run \`security unlock-keychain ${keychain}\` to unlock it for this session, or use \`mimi-seed credentials mode file\` on a machine you mostly use remotely`,
+    lockedLocal: 'the login keychain is locked — unlock it in Keychain Access',
+    wrongPassword: 'the login keychain password is wrong (it may be out of sync with the login password)',
+    noKeychain: 'there is no default keychain, or it cannot be found',
+    cancelled: 'the keychain dialog was cancelled',
+    waiting: 'timed out waiting for the keychain dialog',
   },
 );
 
@@ -74,14 +89,54 @@ function decodeKey(text: string, backend: string): DataKeyLookup {
     : { state: 'unavailable', backend, reason: R().badKey };
 }
 
-/** macOS 로그인 키체인. `security` 의 항목 없음 종료 코드는 44. */
-function macosLookup(): DataKeyLookup {
+/** spawn 오류 코드(ENOENT · ETIMEDOUT …). */
+function errorCode(result: SpawnSyncReturns<string>): string | undefined {
+  const error: NodeJS.ErrnoException | undefined = result.error;
+  return error?.code;
+}
+
+/** macOS 로그인 키체인 파일. 추가와 조회가 같은 키체인을 보도록 둘 다 이 경로를 명시한다. */
+export function macosLoginKeychain(home: string = os.homedir()): string {
+  return path.join(home, 'Library', 'Keychains', 'login.keychain-db');
+}
+
+/** SSH·원격 세션인가 — 그 보안 세션에서는 로그인 키체인이 따로 잠기고 잠금 해제 창을 띄울 수 없다. */
+function isRemoteSession(): boolean {
+  if (process.env.SSH_CONNECTION || process.env.SSH_TTY || process.env.SSH_CLIENT) return true;
+  const manager = run('/bin/launchctl', ['managername']);
+  return manager.status === 0 && manager.stdout.trim() !== 'Aqua';
+}
+
+/**
+ * `security` 의 종료 코드(= OSStatus 의 하위 바이트)를 사용자가 할 일로 바꾼다. stderr 는 싣지 않는다.
+ * 36 = -25308 errSecInteractionNotAllowed: 로그인 키체인이 잠겼는데 확인 창을 띄울 수 없다(대개 SSH 세션).
+ */
+export function macosFailure(status: number | null, keychain: string): Extract<DataKeyLookup, { state: 'unavailable' }> {
   const backend = 'macOS Keychain';
-  const result = run('/usr/bin/security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', KEYCHAIN_ACCOUNT, '-w']);
+  switch (status) {
+    case 36:
+      return { state: 'unavailable', backend, locked: true, reason: isRemoteSession() ? R().lockedRemote(keychain) : R().lockedLocal };
+    case 51:
+      return { state: 'unavailable', backend, reason: R().wrongPassword };
+    case 37:
+    case 50:
+      return { state: 'unavailable', backend, reason: R().noKeychain };
+    case 128:
+      return { state: 'unavailable', backend, reason: R().cancelled };
+    default:
+      return { state: 'unavailable', backend, reason: R().exit('security', String(status)) };
+  }
+}
+
+/** macOS 로그인 키체인. `security` 의 항목 없음 종료 코드는 44. 잠긴 키체인에서는 항목이 있어도 36 이다. */
+function macosLookup(home: string = os.homedir()): DataKeyLookup {
+  const backend = 'macOS Keychain';
+  const keychain = macosLoginKeychain(home);
+  const result = run('/usr/bin/security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', KEYCHAIN_ACCOUNT, '-w', keychain]);
   const problem = spawnProblem('security', result);
-  if (problem) return { state: 'unavailable', backend, reason: problem };
+  if (problem) return { state: 'unavailable', backend, reason: errorCode(result) === 'ETIMEDOUT' ? R().waiting : problem };
   if (result.status === 44) return { state: 'absent', backend };
-  if (result.status !== 0) return { state: 'unavailable', backend, reason: R().exit('security', String(result.status)) };
+  if (result.status !== 0) return macosFailure(result.status, keychain);
   return decodeKey(result.stdout, backend);
 }
 
@@ -124,23 +179,26 @@ function linuxLookup(): DataKeyLookup {
 // ── 생성 ────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * macOS: `security -i` 의 **stdin** 으로 add-generic-password 를 보낸다 — `-w <키>` 를 argv 로 넘기면 ps 에 보인다.
- * `-U` 없이 추가하므로 이미 있으면 실패한다. 성공 여부는 종료 코드 대신 다시 읽어서 판정한다(대화형 모드의
- * 종료 코드는 명령 실패를 싣지 않는다) — 다시 읽은 키가 곧 이긴 쪽 키다.
+ * macOS: `security -i` 의 **stdin** 으로 add-generic-password 를 보낸다 — `-w <키>` 를 argv 로 넘기면 ps 에 보인다
+ * (macOS 의 ps 는 setuid root 라 다른 사용자의 프로세스 인자도 읽는다). `-U` 없이 추가하므로 이미 있으면 45 다.
+ * 대화형 모드도 마지막 명령의 실패를 종료 코드로 돌려준다(36 등): 0 이나 45(경쟁에서 짐)면 다시 읽어 이긴 쪽 키를 쓰고,
+ * 그 밖의 실패는 다시 읽지 않는다 — 잠긴 키체인에서 확인 창을 기다리며 두 번 멈추지 않게.
+ * 키체인 경로는 공백·따옴표가 없을 때만 명시한다(대화형 모드의 인용 규칙에 기대지 않는다). 생성과 조회는 같은 Apple
+ * 바이너리(security)가 하므로 그 항목의 신뢰 앱 목록이 Node 업그레이드와 무관하다 — 다른 생성기를 섞지 말 것.
  */
-function macosCreate(): DataKeyLookup {
+function macosCreate(home: string = os.homedir()): DataKeyLookup {
+  const keychain = macosLoginKeychain(home);
+  const target = /^[^\s"'\\]+$/.test(keychain) ? ` ${keychain}` : '';
   const key = randomBytes(DATA_KEY_BYTES).toString('base64');
-  const command = `add-generic-password -s ${KEYCHAIN_SERVICE} -a ${KEYCHAIN_ACCOUNT} -w ${key}\n`;
+  const command = `add-generic-password -s ${KEYCHAIN_SERVICE} -a ${KEYCHAIN_ACCOUNT} -w ${key}${target}\n`;
   const result = run('/usr/bin/security', ['-i'], command);
   const problem = spawnProblem('security', result);
-  if (problem) return { state: 'unavailable', backend: 'macOS Keychain', reason: problem };
-  const stored = macosLookup();
-  // 추가가 거부됐는데(잠긴 키체인 · SSH · 샌드박스: -25308 "User interaction is not allowed") 다른 프로세스가 만든
-  // 키도 없으면 "키 없음"이 아니라 "닿지 못함"이다 — keychain 모드의 오류가 이유(종료 코드)를 싣게.
-  if (stored.state === 'absent' && result.status !== 0) {
-    return { state: 'unavailable', backend: 'macOS Keychain', reason: R().exit('security', String(result.status)) };
+  if (problem) {
+    const timedOut = errorCode(result) === 'ETIMEDOUT';
+    return { state: 'unavailable', backend: 'macOS Keychain', reason: timedOut ? R().waiting : problem };
   }
-  return stored;
+  if (result.status !== 0 && result.status !== 45) return macosFailure(result.status, keychain);
+  return macosLookup(home);
 }
 
 const DPAPI_PROTECT = DPAPI_UNPROTECT.replace('::Unprotect(', '::Protect(');
@@ -213,14 +271,14 @@ function linuxCreate(home: string): DataKeyLookup {
 
 /** 이 OS 의 저장소에 키를 만든다(이미 있으면 그 키). 쓰기 경로만 부른다. */
 export function osCreateDataKey(home: string = os.homedir(), platform: NodeJS.Platform = process.platform): DataKeyLookup {
-  if (platform === 'darwin') return macosCreate();
+  if (platform === 'darwin') return macosCreate(home);
   if (platform === 'win32') return windowsCreate(home);
   if (platform === 'linux') return linuxCreate(home);
   return { state: 'unavailable', backend: platform, reason: R().noBackend(platform) };
 }
 
 export function osDataKeySource(home: string = os.homedir(), platform: NodeJS.Platform = process.platform): DataKeyLookup {
-  if (platform === 'darwin') return macosLookup();
+  if (platform === 'darwin') return macosLookup(home);
   if (platform === 'win32') return windowsLookup(home);
   if (platform === 'linux') return linuxLookup();
   return { state: 'unavailable', backend: platform, reason: R().noBackend(platform) };
@@ -264,6 +322,11 @@ export function obtainDataKey(): DataKeyLookup {
     failed = undefined;
   }
   return made;
+}
+
+/** 기억해 둔 실패를 지운다 — CLI 가 키체인 잠금을 풀어 준 직후 곧바로 다시 시도할 수 있게. */
+export function forgetFailedDataKeyLookup(): void {
+  failed = undefined;
 }
 
 /** 테스트용 — 키 출처(와 생성기)를 바꾸고 캐시를 비운다. 인자 없이 부르면 OS 저장소로 되돌린다. 제품 코드는 부르지 않는다(가드 테스트). */
