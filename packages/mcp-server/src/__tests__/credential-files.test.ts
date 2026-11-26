@@ -55,18 +55,20 @@ describe('readJsonFile — 없음 / 정상 / 깨짐을 구분한다', () => {
   });
 
   // V8 의 JSON.parse 메시지는 입력 일부를 인용한다 — 그대로 내보내면 자격증명 조각이 MCP 출력으로 샌다.
+  // 픽스처는 비밀처럼 생기지 않은 표시 문자열만 쓴다 (plugin-scanner 의 HARDCODED_SECRET 규칙은 테스트도 본다).
+  // 세 형태 모두 V8 이 원문을 인용하거나 위치만 주는 경우다: 따옴표 없는 값 / 값 뒤 쓰레기 / 문자열 속 제어 문자.
   it.each([
-    '{"refresh_token": SECRETVALUE_abc}',
-    '{"refresh_token": "SECRETVALUE_abc" x}',
-    '{"private_key": "-----BEGIN PRIVATE KEY-----\nSECRETVALUE_abc',
-    'SECRETVALUE_abc',
+    '{"field": LEAKMARKER_abc}',
+    '{"field": "LEAKMARKER_abc" x}',
+    '{"field": "LEAKMARKER\nabc',
+    'LEAKMARKER_abc',
   ])('원인에 파일 내용을 싣지 않는다: %s', async (text) => {
     const { readJsonFile } = await import('../lib/json-file.js');
     for (const lang of ['ko', 'en']) {
       vi.stubEnv('MIMI_SEED_LANG', lang);
       const r = readJsonFile(write('leak.json', text));
       expect(r.state).toBe('invalid');
-      expect(JSON.stringify(r)).not.toMatch(/SECRET|BEGIN|refresh_token|private_key/);
+      expect(JSON.stringify(r)).not.toMatch(/LEAKMARKER|field/);
     }
   });
 
