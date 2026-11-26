@@ -1,3 +1,24 @@
+/**
+ * Release Doctor 로컬 스캔 — 한 파일인 이유와 찾아보는 법.
+ *
+ * 한 파일이어야 한다: 모든 스캔이 아래 scanReleaseDoctor 래퍼를 거치며 targetSdk 불변식과 fail-closed 그물을
+ * 검사하고, 그 횟수를 파일 전역 카운터에 쌓는다. 맨 마지막 테스트가 그 카운터로 "OK · unresolved · blocker
+ * 경로를 모두 지났다"를 확인한다. vitest 는 테스트 파일마다 모듈을 따로 불러오므로(카운터도 파일마다 새로 0),
+ * 파일을 나누면 이 합산이 불가능하다. 새 테스트는 주제가 맞는 describe 에 넣고, 메타 테스트는 계속 마지막에 둔다.
+ *
+ * 주제 (위에서 아래 순서):
+ *  - 기본 판정 · 프레임워크 감지 · 오감지 방지 · Android TV
+ *  - iOS Xcode/SDK 업로드 최소 요건 · FCM 레거시 API
+ *  - Xcode 근거 · FCM 소스 탐색 오탐 방지 (1차 리뷰) · 실제 오픈소스 저장소 모양 (리허설)
+ *  - Gradle targetSdk 해석 (2~12차 리뷰) — catalog · 속성 범위 · 불변식 · 플러그인 적용 형태 · 컨벤션 빌드 ·
+ *    서드파티 스크립트 · 라이브러리 전용 블록 · 워크스페이스 · Kotlin when · 클로저 매개변수
+ *  - 보고서 렌더링 (한국어 · 영어)
+ *  - 메타: 불변식과 그물이 모든 스캔에서 확인되었는가 (반드시 마지막)
+ *
+ * 리뷰 회차 표시 (N차 리뷰)는 출처 추적용이다. 회차를 넘나들며 테스트를 옮기지 않는다 — 각 회차 describe 의
+ * 지역 헬퍼는 이름이 같아도 정의가 다르다: at 은 1차 리뷰만 2026-09-04(나머지 2026-10-01), rnApp 은 8차에선
+ * 함수 · 9차에선 문자열, groovyApp 은 5차와 6차의 시그니처가, app36kts 는 7차와 10차의 내용이 다르다.
+ */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -108,312 +129,320 @@ afterEach(async () => {
 });
 
 describe('Release Doctor local scan', () => {
-  it('로그인 없이 오래된 targetSdk와 Billing 제출 블로커를 함께 찾는다', async () => {
-    const root = await fixture({
-      'app/build.gradle.kts': [
-        'android {',
-        '  defaultConfig { applicationId = "com.example.app"; targetSdk = 35 }',
-        '}',
-        'dependencies { implementation("com.android.billingclient:billing-ktx:7.1.1") }',
-      ].join('\n'),
+  describe('Android targetSdk · Billing 기본 판정', () => {
+    it('로그인 없이 오래된 targetSdk와 Billing 제출 블로커를 함께 찾는다', async () => {
+      const root = await fixture({
+        'app/build.gradle.kts': [
+          'android {',
+          '  defaultConfig { applicationId = "com.example.app"; targetSdk = 35 }',
+          '}',
+          'dependencies { implementation("com.android.billingclient:billing-ktx:7.1.1") }',
+        ].join('\n'),
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.platforms).toEqual(['android']);
+      expect(report.identifiers.androidPackageNames).toEqual(['com.example.app']);
+      expect(report.findings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM', severity: 'blocker' }),
+        expect.objectContaining({ code: 'BILLING_BLOCKER', severity: 'blocker' }),
+      ]));
+      expect(report.counts.blocker).toBe(2);
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('지원되는 Android 구성은 블로커 없이 근거를 남긴다', async () => {
+      const root = await fixture({
+        'android/app/build.gradle': [
+          'android { defaultConfig { applicationId "com.example.app"; targetSdkVersion 36 } }',
+          'dependencies { implementation "com.android.billingclient:billing:8.0.0" }',
+        ].join('\n'),
+      });
 
-    expect(report.platforms).toEqual(['android']);
-    expect(report.identifiers.androidPackageNames).toEqual(['com.example.app']);
-    expect(report.findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM', severity: 'blocker' }),
-      expect.objectContaining({ code: 'BILLING_BLOCKER', severity: 'blocker' }),
-    ]));
-    expect(report.counts.blocker).toBe(2);
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('지원되는 Android 구성은 블로커 없이 근거를 남긴다', async () => {
-    const root = await fixture({
-      'android/app/build.gradle': [
-        'android { defaultConfig { applicationId "com.example.app"; targetSdkVersion 36 } }',
-        'dependencies { implementation "com.android.billingclient:billing:8.0.0" }',
-      ].join('\n'),
+      expect(report.counts.blocker).toBe(0);
+      expect(report.findings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'TARGET_SDK_OK', severity: 'info' }),
+        expect.objectContaining({ code: 'BILLING_WARNING', severity: 'warning' }),
+      ]));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('version catalog의 targetSdk를 해석해 정책 미달을 놓치지 않는다', async () => {
+      const root = await fixture({
+        'app/build.gradle.kts': [
+          'plugins { id("com.android.application") }',
+          'android { defaultConfig { applicationId = "com.example.catalog"; targetSdk = libs.versions.targetSdk.get().toInt() } }',
+        ].join('\n'),
+        'gradle/libs.versions.toml': '[versions]\ntargetSdk = "35"\n',
+      });
 
-    expect(report.counts.blocker).toBe(0);
-    expect(report.findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'TARGET_SDK_OK', severity: 'info' }),
-      expect.objectContaining({ code: 'BILLING_WARNING', severity: 'warning' }),
-    ]));
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'TARGET_SDK_BELOW_MINIMUM',
+        severity: 'blocker',
+        file: 'gradle/libs.versions.toml',
+      }));
+    });
   });
 
-  it('version catalog의 targetSdk를 해석해 정책 미달을 놓치지 않는다', async () => {
-    const root = await fixture({
-      'app/build.gradle.kts': [
-        'plugins { id("com.android.application") }',
-        'android { defaultConfig { applicationId = "com.example.catalog"; targetSdk = libs.versions.targetSdk.get().toInt() } }',
-      ].join('\n'),
-      'gradle/libs.versions.toml': '[versions]\ntargetSdk = "35"\n',
+  describe('프레임워크별 앱 · 플랫폼 · 식별자 감지 (Expo · React Native · Unity · iOS)', () => {
+    it('iOS 테스트 타깃 bundle ID는 출시 앱 식별자에서 제외한다', async () => {
+      const root = await fixture({
+        'ios/Runner.xcodeproj/project.pbxproj': [
+          'SDKROOT = iphoneos;',
+          'PRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
+          'PRODUCT_BUNDLE_IDENTIFIER = com.example.app.RunnerTests;',
+          'PRODUCT_BUNDLE_IDENTIFIER = com.example.app.UITests;',
+        ].join('\n'),
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.identifiers.iosBundleIds).toEqual(['com.example.app']);
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'MULTIPLE_IOS_BUNDLE_IDS' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('여러 앱의 근거가 섞일 수 있는 저장소 범위를 명시한다', async () => {
+      const root = await fixture({
+        'apps/one/android/app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.one"; targetSdk 36 } }',
+        'apps/two/android/app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.two"; targetSdk 36 } }',
+        'ios/App.xcodeproj/project.pbxproj': [
+          'SDKROOT = iphoneos;',
+          'PRODUCT_BUNDLE_IDENTIFIER = com.example.one;',
+          'PRODUCT_BUNDLE_IDENTIFIER = com.example.widget;',
+        ].join('\n'),
+      });
 
-    expect(report.findings).toContainEqual(expect.objectContaining({
-      code: 'TARGET_SDK_BELOW_MINIMUM',
-      severity: 'blocker',
-      file: 'gradle/libs.versions.toml',
-    }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('iOS 테스트 타깃 bundle ID는 출시 앱 식별자에서 제외한다', async () => {
-    const root = await fixture({
-      'ios/Runner.xcodeproj/project.pbxproj': [
-        'SDKROOT = iphoneos;',
-        'PRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
-        'PRODUCT_BUNDLE_IDENTIFIER = com.example.app.RunnerTests;',
-        'PRODUCT_BUNDLE_IDENTIFIER = com.example.app.UITests;',
-      ].join('\n'),
+      expect(report.findings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'MULTIPLE_ANDROID_APPLICATION_IDS', severity: 'warning' }),
+        expect.objectContaining({ code: 'MULTIPLE_IOS_BUNDLE_IDS', severity: 'warning' }),
+      ]));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('기본 Expo 프로젝트의 양 플랫폼과 iOS bundle identifier를 감지한다', async () => {
+      const root = await fixture({
+        'app.json': JSON.stringify({ expo: { name: 'Example', ios: { bundleIdentifier: 'com.example.ios' } } }),
+      });
 
-    expect(report.identifiers.iosBundleIds).toEqual(['com.example.app']);
-    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'MULTIPLE_IOS_BUNDLE_IDS' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('여러 앱의 근거가 섞일 수 있는 저장소 범위를 명시한다', async () => {
-    const root = await fixture({
-      'apps/one/android/app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.one"; targetSdk 36 } }',
-      'apps/two/android/app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.two"; targetSdk 36 } }',
-      'ios/App.xcodeproj/project.pbxproj': [
-        'SDKROOT = iphoneos;',
-        'PRODUCT_BUNDLE_IDENTIFIER = com.example.one;',
-        'PRODUCT_BUNDLE_IDENTIFIER = com.example.widget;',
-      ].join('\n'),
+      expect(report.platforms).toEqual(['android', 'ios']);
+      expect(report.identifiers.iosBundleIds).toEqual(['com.example.ios']);
+      expect(report.counts.blocker).toBe(0);
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('동적 app.config.ts를 사용하는 managed Expo 프로젝트도 놓치지 않는다', async () => {
+      const root = await fixture({
+        'app.config.ts': [
+          'export default {',
+          '  expo: {',
+          '    android: { package: "com.example.expo" },',
+          '    ios: { bundleIdentifier: "com.example.expo.ios" },',
+          '  },',
+          '};',
+        ].join('\n'),
+        'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+      });
 
-    expect(report.findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'MULTIPLE_ANDROID_APPLICATION_IDS', severity: 'warning' }),
-      expect.objectContaining({ code: 'MULTIPLE_IOS_BUNDLE_IDS', severity: 'warning' }),
-    ]));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('기본 Expo 프로젝트의 양 플랫폼과 iOS bundle identifier를 감지한다', async () => {
-    const root = await fixture({
-      'app.json': JSON.stringify({ expo: { name: 'Example', ios: { bundleIdentifier: 'com.example.ios' } } }),
+      expect(report.platforms).toEqual(['android', 'ios']);
+      expect(report.identifiers.androidPackageNames).toEqual(['com.example.expo']);
+      expect(report.identifiers.iosBundleIds).toEqual(['com.example.expo.ios']);
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('동적 Expo 설정이 import한 JSON의 앱 식별자를 해석한다', async () => {
+      const root = await fixture({
+        'app.config.ts': [
+          'import product from "./product.config.json";',
+          'export default {',
+          '  ios: { bundleIdentifier: product.iosBundleIdentifier },',
+          '  android: { package: product.androidPackage },',
+          '};',
+        ].join('\n'),
+        'product.config.json': JSON.stringify({
+          androidPackage: 'com.example.dynamic',
+          iosBundleIdentifier: 'com.example.dynamic.ios',
+        }),
+        'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+      });
 
-    expect(report.platforms).toEqual(['android', 'ios']);
-    expect(report.identifiers.iosBundleIds).toEqual(['com.example.ios']);
-    expect(report.counts.blocker).toBe(0);
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('동적 app.config.ts를 사용하는 managed Expo 프로젝트도 놓치지 않는다', async () => {
-    const root = await fixture({
-      'app.config.ts': [
-        'export default {',
-        '  expo: {',
-        '    android: { package: "com.example.expo" },',
-        '    ios: { bundleIdentifier: "com.example.expo.ios" },',
-        '  },',
-        '};',
-      ].join('\n'),
-      'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+      expect(report.identifiers.androidPackageNames).toEqual(['com.example.dynamic']);
+      expect(report.identifiers.iosBundleIds).toEqual(['com.example.dynamic.ios']);
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('React Native가 제공하는 targetSdk catalog로 rootProject.ext 표현식을 해석한다', async () => {
+      const root = await fixture({
+        'android/app/build.gradle': [
+          'plugins { id "com.android.application" }',
+          'android { defaultConfig { applicationId "com.example.rn"; targetSdkVersion rootProject.ext.targetSdkVersion } }',
+        ].join('\n'),
+        'node_modules/react-native/gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+      });
 
-    expect(report.platforms).toEqual(['android', 'ios']);
-    expect(report.identifiers.androidPackageNames).toEqual(['com.example.expo']);
-    expect(report.identifiers.iosBundleIds).toEqual(['com.example.expo.ios']);
-    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('동적 Expo 설정이 import한 JSON의 앱 식별자를 해석한다', async () => {
-    const root = await fixture({
-      'app.config.ts': [
-        'import product from "./product.config.json";',
-        'export default {',
-        '  ios: { bundleIdentifier: product.iosBundleIdentifier },',
-        '  android: { package: product.androidPackage },',
-        '};',
-      ].join('\n'),
-      'product.config.json': JSON.stringify({
-        androidPackage: 'com.example.dynamic',
-        iosBundleIdentifier: 'com.example.dynamic.ios',
-      }),
-      'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'TARGET_SDK_OK',
+        file: 'node_modules/react-native/gradle/libs.versions.toml',
+      }));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_UNRESOLVED' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('Unity ProjectSettings와 Android template에서 앱 ID·targetSdk·Billing을 검사한다', async () => {
+      const root = await fixture({
+        'ProjectSettings/ProjectSettings.asset': [
+          'PlayerSettings:',
+          '  applicationIdentifier:',
+          '    Android: com.example.unity',
+          '  AndroidTargetSdkVersion: 36',
+          '  someOtherMap:',
+          '    Android: 1',
+          '    iOS: 0',
+        ].join('\n'),
+        'Assets/Plugins/Android/mainTemplate.gradle': "implementation 'com.android.billingclient:billing:9.0.0'",
+      });
 
-    expect(report.identifiers.androidPackageNames).toEqual(['com.example.dynamic']);
-    expect(report.identifiers.iosBundleIds).toEqual(['com.example.dynamic.ios']);
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('React Native가 제공하는 targetSdk catalog로 rootProject.ext 표현식을 해석한다', async () => {
-    const root = await fixture({
-      'android/app/build.gradle': [
-        'plugins { id "com.android.application" }',
-        'android { defaultConfig { applicationId "com.example.rn"; targetSdkVersion rootProject.ext.targetSdkVersion } }',
-      ].join('\n'),
-      'node_modules/react-native/gradle/libs.versions.toml': '[versions]\ntargetSdk = "36"\n',
+      expect(report.platforms).toEqual(['android']);
+      expect(report.identifiers.androidPackageNames).toEqual(['com.example.unity']);
+      expect(report.identifiers.iosBundleIds).toEqual([]);
+      expect(report.findings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'TARGET_SDK_OK', file: 'ProjectSettings/ProjectSettings.asset' }),
+        expect.objectContaining({ code: 'BILLING_PASS', severity: 'info' }),
+      ]));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('Unity applicationIdentifier의 iPhone 식별자를 iOS 앱으로 감지한다', async () => {
+      const root = await fixture({
+        'ProjectSettings/ProjectSettings.asset': [
+          'PlayerSettings:',
+          '  applicationIdentifier:',
+          '    Android: com.example.unity',
+          '    iPhone: com.example.unity.ios',
+          '  AndroidTargetSdkVersion: 36',
+        ].join('\n'),
+      });
 
-    expect(report.findings).toContainEqual(expect.objectContaining({
-      code: 'TARGET_SDK_OK',
-      file: 'node_modules/react-native/gradle/libs.versions.toml',
-    }));
-    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_UNRESOLVED' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('Unity ProjectSettings와 Android template에서 앱 ID·targetSdk·Billing을 검사한다', async () => {
-    const root = await fixture({
-      'ProjectSettings/ProjectSettings.asset': [
-        'PlayerSettings:',
-        '  applicationIdentifier:',
-        '    Android: com.example.unity',
-        '  AndroidTargetSdkVersion: 36',
-        '  someOtherMap:',
-        '    Android: 1',
-        '    iOS: 0',
-      ].join('\n'),
-      'Assets/Plugins/Android/mainTemplate.gradle': "implementation 'com.android.billingclient:billing:9.0.0'",
+      expect(report.platforms).toEqual(['android', 'ios']);
+      expect(report.identifiers.iosBundleIds).toEqual(['com.example.unity.ios']);
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_BUNDLE_ID_FOUND' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('platforms가 web으로 제한된 Expo 저장소는 모바일 앱으로 과대 감지하지 않는다', async () => {
+      const root = await fixture({
+        'app.json': JSON.stringify({ expo: { platforms: ['web'] } }),
+        'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+      });
 
-    expect(report.platforms).toEqual(['android']);
-    expect(report.identifiers.androidPackageNames).toEqual(['com.example.unity']);
-    expect(report.identifiers.iosBundleIds).toEqual([]);
-    expect(report.findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'TARGET_SDK_OK', file: 'ProjectSettings/ProjectSettings.asset' }),
-      expect.objectContaining({ code: 'BILLING_PASS', severity: 'info' }),
-    ]));
-    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.platforms).toEqual([]);
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
+    });
   });
 
-  it('Unity applicationIdentifier의 iPhone 식별자를 iOS 앱으로 감지한다', async () => {
-    const root = await fixture({
-      'ProjectSettings/ProjectSettings.asset': [
-        'PlayerSettings:',
-        '  applicationIdentifier:',
-        '    Android: com.example.unity',
-        '    iPhone: com.example.unity.ios',
-        '  AndroidTargetSdkVersion: 36',
-      ].join('\n'),
+  describe('모바일 앱이 아닌 저장소 — 오감지 방지', () => {
+    it('모바일 프로젝트가 아닌 경로는 명확한 블로커로 보고한다', async () => {
+      const root = await fixture({ 'package.json': '{"name":"web-only"}' });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.platforms).toEqual([]);
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('일반 Java Gradle 저장소를 Android 앱으로 오인하지 않는다', async () => {
+      const root = await fixture({
+        'build.gradle.kts': 'plugins { java }\njava { toolchain { languageVersion = JavaLanguageVersion.of(21) } }',
+        'settings.gradle.kts': 'rootProject.name = "backend"',
+      });
 
-    expect(report.platforms).toEqual(['android', 'ios']);
-    expect(report.identifiers.iosBundleIds).toEqual(['com.example.unity.ios']);
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'IOS_BUNDLE_ID_FOUND' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('platforms가 web으로 제한된 Expo 저장소는 모바일 앱으로 과대 감지하지 않는다', async () => {
-    const root = await fixture({
-      'app.json': JSON.stringify({ expo: { platforms: ['web'] } }),
-      'package.json': JSON.stringify({ dependencies: { expo: '^55.0.0' } }),
+      expect(report.platforms).toEqual([]);
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('일반 app.json을 Expo 설정으로 오인하지 않는다', async () => {
+      const root = await fixture({
+        'app.json': JSON.stringify({ name: 'web-service', port: 3000 }),
+        'package.json': JSON.stringify({ dependencies: { next: '^16.0.0' } }),
+      });
 
-    expect(report.platforms).toEqual([]);
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('모바일 프로젝트가 아닌 경로는 명확한 블로커로 보고한다', async () => {
-    const root = await fixture({ 'package.json': '{"name":"web-only"}' });
-
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
-
-    expect(report.platforms).toEqual([]);
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
-  });
-
-  it('일반 Java Gradle 저장소를 Android 앱으로 오인하지 않는다', async () => {
-    const root = await fixture({
-      'build.gradle.kts': 'plugins { java }\njava { toolchain { languageVersion = JavaLanguageVersion.of(21) } }',
-      'settings.gradle.kts': 'rootProject.name = "backend"',
+      expect(report.platforms).toEqual([]);
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('Android 라이브러리 Manifest만 있는 저장소를 앱으로 오인하지 않는다', async () => {
+      const root = await fixture({
+        'android/library/build.gradle.kts': 'plugins { id("com.android.library") }',
+        'android/library/src/main/AndroidManifest.xml': '<manifest package="com.example.library" />',
+      });
 
-    expect(report.platforms).toEqual([]);
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('일반 app.json을 Expo 설정으로 오인하지 않는다', async () => {
-    const root = await fixture({
-      'app.json': JSON.stringify({ name: 'web-service', port: 3000 }),
-      'package.json': JSON.stringify({ dependencies: { next: '^16.0.0' } }),
+      expect(report.platforms).toEqual([]);
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('macOS Xcode 프로젝트의 Info.plist를 iOS 앱으로 오인하지 않는다', async () => {
+      const root = await fixture({
+        'Desktop.xcodeproj/project.pbxproj': 'SDKROOT = macosx; PRODUCT_BUNDLE_IDENTIFIER = com.example.desktop;',
+        'Desktop/Info.plist': '<key>CFBundleIdentifier</key><string>com.example.desktop</string>',
+      });
 
-    expect(report.platforms).toEqual([]);
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.platforms).toEqual([]);
+      expect(report.identifiers.iosBundleIds).toEqual([]);
+    });
   });
 
-  it('Android 라이브러리 Manifest만 있는 저장소를 앱으로 오인하지 않는다', async () => {
-    const root = await fixture({
-      'android/library/build.gradle.kts': 'plugins { id("com.android.library") }',
-      'android/library/src/main/AndroidManifest.xml': '<manifest package="com.example.library" />',
+  describe('Android TV · leanback 예외', () => {
+    it('주석 속 leanback 문자열만으로 Target API 검사를 우회하지 않는다', async () => {
+      const root = await fixture({
+        'android/app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.app"; targetSdk 35 } }',
+        'android/app/src/main/AndroidManifest.xml': '<manifest><!-- android.software.leanback --></manifest>',
+      });
+
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM' }));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW' }));
     });
 
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+    it('Android TV 같은 예외 카테고리에 일반 모바일 API 36 기준을 잘못 적용하지 않는다', async () => {
+      const root = await fixture({
+        'android/app/build.gradle': 'android { defaultConfig { applicationId "com.example.tv"; targetSdkVersion 35 } }',
+        'android/app/src/main/AndroidManifest.xml': [
+          '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+          '  <uses-feature android:name="android.software.leanback" android:required="true" />',
+          '</manifest>',
+        ].join('\n'),
+      });
 
-    expect(report.platforms).toEqual([]);
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NO_MOBILE_PROJECT' }));
-  });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
 
-  it('macOS Xcode 프로젝트의 Info.plist를 iOS 앱으로 오인하지 않는다', async () => {
-    const root = await fixture({
-      'Desktop.xcodeproj/project.pbxproj': 'SDKROOT = macosx; PRODUCT_BUNDLE_IDENTIFIER = com.example.desktop;',
-      'Desktop/Info.plist': '<key>CFBundleIdentifier</key><string>com.example.desktop</string>',
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
+        severity: 'warning',
+      }));
+      expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM' }));
     });
-
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
-
-    expect(report.platforms).toEqual([]);
-    expect(report.identifiers.iosBundleIds).toEqual([]);
-  });
-
-  it('주석 속 leanback 문자열만으로 Target API 검사를 우회하지 않는다', async () => {
-    const root = await fixture({
-      'android/app/build.gradle': 'plugins { id "com.android.application" }\nandroid { defaultConfig { applicationId "com.example.app"; targetSdk 35 } }',
-      'android/app/src/main/AndroidManifest.xml': '<manifest><!-- android.software.leanback --></manifest>',
-    });
-
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
-
-    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM' }));
-    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW' }));
-  });
-
-  it('Android TV 같은 예외 카테고리에 일반 모바일 API 36 기준을 잘못 적용하지 않는다', async () => {
-    const root = await fixture({
-      'android/app/build.gradle': 'android { defaultConfig { applicationId "com.example.tv"; targetSdkVersion 35 } }',
-      'android/app/src/main/AndroidManifest.xml': [
-        '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-        '  <uses-feature android:name="android.software.leanback" android:required="true" />',
-        '</manifest>',
-      ].join('\n'),
-    });
-
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
-
-    expect(report.findings).toContainEqual(expect.objectContaining({
-      code: 'TARGET_SDK_SPECIALIZED_APP_REVIEW',
-      severity: 'warning',
-    }));
-    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'TARGET_SDK_BELOW_MINIMUM' }));
   });
 
   describe('iOS Xcode / SDK 업로드 최소 요건', () => {
@@ -633,7 +662,7 @@ describe('Release Doctor local scan', () => {
 
   // Adversarial review regressions (c1–c11 are the reviewer's fixtures). Each one produced a false blocker or a
   // false/noisy FCM finding in the first version of these checks.
-  describe('리뷰 회귀 — 오탐 방지', () => {
+  describe('Xcode · FCM 근거 탐색 — 오탐 방지 · worktree · 소스 상한 (1차 리뷰)', () => {
     const ios = { 'ios/App.xcodeproj/project.pbxproj': 'PRODUCT_BUNDLE_IDENTIFIER = com.example.app;\nSDKROOT = iphoneos;\n' };
     const at = new Date('2026-09-04T00:00:00Z');
     const xcodeCodes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) =>
@@ -923,7 +952,7 @@ describe('Release Doctor local scan', () => {
 
   // Pre-pilot rehearsal on 12 open-source apps: each fixture is the minimal synthetic shape of a real repository
   // that produced a false positive, a wrong identifier or citation, or hid a blocker.
-  describe('리허설 회귀 — 실제 저장소 모양', () => {
+  describe('실제 오픈소스 저장소 모양 — 앱 ID · Wear · example 앱 · bundle ID · CI 근거 · 첫 실행 출력 (리허설)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const git = { '.git/HEAD': 'ref: refs/heads/main\n' };
     const codes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.map((row) => row.code);
@@ -1358,7 +1387,7 @@ describe('Release Doctor local scan', () => {
   });
 
   // Second adversarial review (round 2): each fixture is the reviewer's minimal reproduction.
-  describe('2차 리뷰 회귀', () => {
+  describe('모듈별 catalog · TV/Wear · demo 앱 · Kotlin extra · 앱별 Billing (2차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const git = { '.git/HEAD': 'ref: refs/heads/main\n' };
     const codes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.map((row) => row.code);
@@ -1511,7 +1540,7 @@ describe('Release Doctor local scan', () => {
 
   // Third adversarial review (round 3): the reviewer's fixtures; every one is a true blocker that must keep firing or
   // a result the previous round got wrong.
-  describe('3차 리뷰 회귀', () => {
+  describe('주석 제거 · catalog 선언 · 표본 제외 범위 · Gradle 속성 · LAUNCHER (3차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.map((row) => row.code);
     const below = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -1712,7 +1741,7 @@ describe('Release Doctor local scan', () => {
   });
 
   // Fourth adversarial review (round 4): property-based targetSdk must never produce a guessed OK.
-  describe('4차 리뷰 회귀', () => {
+  describe('Gradle 속성 범위 · settings catalog 해석 (4차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.map((row) => row.code);
     const below = (report: Awaited<ReturnType<typeof scanReleaseDoctor>>) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -1878,7 +1907,7 @@ describe('Release Doctor local scan', () => {
   });
 
   // Fifth adversarial review (round 5): every s*/k* fixture checked against real Gradle 8.14.3 (all use 33).
-  describe('5차 리뷰 회귀', () => {
+  describe('targetSdk 불변식 · ?: 기본값 · subprojects 상속 · version 덮어쓰기 (5차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -2077,7 +2106,7 @@ describe('Release Doctor local scan', () => {
   });
 
   // Round-6 shapes were confirmed against real AGP 9.0.0 / Gradle 9.2.0 (`help` task printing each variant's targetSdk).
-  describe('6차 리뷰 회귀', () => {
+  describe('subprojects 최솟값 · 플러그인 적용 형태 · 지역 변수 범위 · extra 속성 · 그물 (6차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -2266,7 +2295,7 @@ describe('Release Doctor local scan', () => {
   });
 
   // Round-7 shapes (X*, L*, E1, R1) were confirmed against real AGP 9.0.0 / Gradle 9.2.0.
-  describe('7차 리뷰 회귀', () => {
+  describe('컨벤션 · composite 빌드 · apply from · 대입 형태 · Unity 템플릿 (7차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -2474,7 +2503,7 @@ describe('Release Doctor local scan', () => {
 
   // Round-8 shapes: the React Native sample (react-native-config, @sentry/react-native 8, Expo bare), fx8 P1–P13,
   // and the real-AGP probes SP1/SP2.
-  describe('8차 리뷰 회귀', () => {
+  describe('서드파티 패키지 스크립트 · 컨벤션 빌드 예산 · included 빌드 소스 (8차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -2647,7 +2676,7 @@ describe('Release Doctor local scan', () => {
 
   // Round-9 shapes (L1–L6, W1–W5, T9, B1–B4; L1–L4, W1i, W5 and B4 confirmed with real AGP 9.0.0), plus the
   // self-adversarial counter-fixtures for every exclusion added or changed in this round ("반례").
-  describe('9차 리뷰 회귀', () => {
+  describe('라이브러리 전용 블록 · 워크스페이스 패키지 · included 빌드 (9차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -2813,7 +2842,7 @@ describe('Release Doctor local scan', () => {
 
   // Round-10 shapes (fx10, agp/T3 confirmed with real AGP 9.0.0) and the counter-fixtures ("반례") for every
   // exclusion this round added or changed.
-  describe('10차 리뷰 회귀', () => {
+  describe('플러그인 빌드 언급 · include 이름 규칙 · symlink 경로 (10차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -2985,7 +3014,7 @@ describe('Release Doctor local scan', () => {
 
   // Round-11 shapes (agp/W2, W4, D2 confirmed with real AGP 9.0.0; fx11) and the counter-fixtures ("반례") for every
   // exclusion this round changed.
-  describe('11차 리뷰 회귀', () => {
+  describe('Kotlin when · Gradle 객체 hook · file: 의존성 (11차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -3103,7 +3132,7 @@ describe('Release Doctor local scan', () => {
 
   // Round-12 shapes (K1–K12, G1–G6, R1/R2, P1–P6; K1–K5, G1, G2b, G3, G4 confirmed with real AGP 9.0.0) and the
   // counter-fixtures ("반례") for every exclusion this round changed.
-  describe('12차 리뷰 회귀', () => {
+  describe('when fail-closed · 클로저 매개변수 · 워크스페이스 glob 상한 (12차 리뷰)', () => {
     const at = new Date('2026-10-01T00:00:00Z');
     const codes = (report: ReleaseDoctorReport) => report.findings.map((row) => row.code);
     const below = (report: ReleaseDoctorReport) => report.findings.find((row) => row.code === 'TARGET_SDK_BELOW_MINIMUM');
@@ -3274,7 +3303,35 @@ describe('Release Doctor local scan', () => {
     });
   });
 
-  // Runs after the scans above: the invariant and the net were checked on each of them.
+  describe('보고서 렌더링 (한국어 · 영어)', () => {
+    it('새 iOS·FCM 결과를 한국어와 영어로 렌더링한다', async () => {
+      const root = await fixture({
+        'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
+        '.xcode-version': '16.4\n',
+        'server/push.py': "requests.post('https://fcm.googleapis.com/fcm/send', json=payload)",
+      });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      const ko = renderReleaseDoctor(report, 'ko');
+      const en = renderReleaseDoctor(report, 'en');
+      expect(ko).toContain('App Store Connect 업로드 최소 기준 미달');
+      expect(ko).toContain('종료된 레거시 FCM 발송 엔드포인트');
+      expect(en).toContain('below the App Store Connect upload minimum');
+      expect(en).toContain('Source: https://firebase.google.com/docs/cloud-messaging/send/v1-api');
+    });
+
+    it('CLI와 직접 bin이 공유하는 보고서 렌더러를 한국어와 영어로 출력한다', async () => {
+      const root = await fixture({
+        'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 35 } }',
+      });
+      const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
+
+      expect(renderReleaseDoctor(report, 'ko')).toContain('현재 제출 기준 미달');
+      expect(renderReleaseDoctor(report, 'en')).toContain('below the submission minimum');
+    });
+  });
+
+  // Runs last, after every scan in this file: the invariant and the net were checked on each of them.
   it('불변식과 그물이 이 파일의 모든 스캔에서 확인되었고, OK·unresolved·blocker 경로를 모두 지났다', () => {
     expect(invariant.scans).toBeGreaterThan(150);
     expect(invariant.ok).toBeGreaterThan(20);
@@ -3283,31 +3340,5 @@ describe('Release Doctor local scan', () => {
     expect(net.okScans).toBe(invariant.ok);
     expect(net.tokens).toBeGreaterThan(net.okScans);
     expect(net.excluded).toBeGreaterThan(0);
-  });
-
-  it('새 iOS·FCM 결과를 한국어와 영어로 렌더링한다', async () => {
-    const root = await fixture({
-      'ios/App.xcodeproj/project.pbxproj': 'SDKROOT = iphoneos;\nPRODUCT_BUNDLE_IDENTIFIER = com.example.app;',
-      '.xcode-version': '16.4\n',
-      'server/push.py': "requests.post('https://fcm.googleapis.com/fcm/send', json=payload)",
-    });
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
-
-    const ko = renderReleaseDoctor(report, 'ko');
-    const en = renderReleaseDoctor(report, 'en');
-    expect(ko).toContain('App Store Connect 업로드 최소 기준 미달');
-    expect(ko).toContain('종료된 레거시 FCM 발송 엔드포인트');
-    expect(en).toContain('below the App Store Connect upload minimum');
-    expect(en).toContain('Source: https://firebase.google.com/docs/cloud-messaging/send/v1-api');
-  });
-
-  it('CLI와 직접 bin이 공유하는 보고서 렌더러를 한국어와 영어로 출력한다', async () => {
-    const root = await fixture({
-      'app/build.gradle.kts': 'plugins { id("com.android.application") }\nandroid { defaultConfig { applicationId = "com.example.app"; targetSdk = 35 } }',
-    });
-    const report = await scanReleaseDoctor(root, new Date('2026-09-04T00:00:00Z'));
-
-    expect(renderReleaseDoctor(report, 'ko')).toContain('현재 제출 기준 미달');
-    expect(renderReleaseDoctor(report, 'en')).toContain('below the submission minimum');
   });
 });
