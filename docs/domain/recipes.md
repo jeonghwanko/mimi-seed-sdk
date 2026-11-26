@@ -37,6 +37,10 @@
    `mcp-server/src/i18n/tools-en/<domain>.ts` (`'<Korean source>': '<English>'`); delete the entry of a source
    you removed. `tool-text-en.test.ts` lists anything missing or stale. Keep tool and parameter names, `code`,
    URLs, and safety wording ("irreversible", "explicit approval", `confirm`) intact.
+   **Output text** (what a handler returns, an error a user or agent reads) goes through
+   `catalog(ko, en)` from `#core/lang.js`. Read `M()` at call time, never at module load. In a file listed in
+   `output-i18n.test.ts`, a Korean literal outside the `ko` block fails the build. When you finish converting a
+   file, add it to that list.
    *New domain?* also add `registerXxxTools(registrar)` to **`src/server.ts`** — `index.ts` is only the stdio entry
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
 3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then

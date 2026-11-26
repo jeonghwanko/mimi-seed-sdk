@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HANGUL, hangulLiterals, koBlockRanges, stripComments } from '#core/i18n-scan.js';
 
 // i18n 커버리지 가드.
 //
@@ -14,77 +15,9 @@ import { fileURLToPath } from 'node:url';
 
 const srcDir = fileURLToPath(new URL('../', import.meta.url));
 
-/** 문자열 리터럴 안의 내용은 건드리지 않고 주석만 지운다. */
-function stripComments(code: string): string {
-  let out = '';
-  let i = 0;
-  let quote: string | null = null;
-  while (i < code.length) {
-    const c = code[i];
-    const next = code[i + 1];
-    if (quote) {
-      if (c === '\\') { out += c + (next ?? ''); i += 2; continue; }
-      if (c === quote) quote = null;
-      out += c;
-      i++;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === '`') { quote = c; out += c; i++; continue; }
-    if (c === '/' && next === '/') { while (i < code.length && code[i] !== '\n') i++; continue; }
-    if (c === '/' && next === '*') {
-      i += 2;
-      while (i < code.length && !(code[i] === '*' && code[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    out += c;
-    i++;
-  }
-  return out;
-}
-
-/** `const ko = {` / `catalog(\n  {` 로 시작하는 ko 블록의 [start, end) 범위들 (중괄호 매칭). */
-function koBlockRanges(code: string): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
-  const starts: number[] = [];
-
-  // i18n.ts / 파일별 카탈로그: `const ko = {`
-  for (const m of code.matchAll(/const ko(?::\s*[\w<>.\s]+)?\s*=\s*\{/g)) {
-    starts.push(m.index + m[0].length - 1);
-  }
-  // 파일별 카탈로그: `catalog(` 의 첫 인자 = ko
-  for (const m of code.matchAll(/catalog\(\s*\{/g)) {
-    starts.push(m.index + m[0].length - 1);
-  }
-  // credentials.ts: localized 필드 `ko: [` / `ko: "..."` 는 아래 별도 처리
-
-  for (const start of starts) {
-    let depth = 0;
-    for (let i = start; i < code.length; i++) {
-      if (code[i] === '{') depth++;
-      else if (code[i] === '}') {
-        depth--;
-        if (depth === 0) { ranges.push([start, i + 1]); break; }
-      }
-    }
-  }
-  return ranges;
-}
-
-const HANGUL = /[가-힣]/;
-
-/** 한글이 든 문자열 리터럴의 인덱스 목록. */
-function hangulLiterals(code: string): Array<{ index: number; text: string }> {
-  const found: Array<{ index: number; text: string }> = [];
-  for (const m of code.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/gs)) {
-    if (HANGUL.test(m[0])) found.push({ index: m.index, text: m[0] });
-  }
-  return found;
-}
-
 /**
- * src/*.ts 와 src/lib/*.ts. packages/core(`#core/…`)는 여기서 보지 않는다 — 두 패키지 공용이라
- * `catalog` 를 쓸 수 없고, 사람용 문구는 Release Doctor 처럼 ko/en 을 스스로 함께 들고 있다.
+ * src/*.ts 와 src/lib/*.ts. packages/core(`#core/…`)는 여기서 보지 않는다 — 공용 코드의 사람용 문구는
+ * Release Doctor 처럼 ko/en 을 스스로 함께 들고 있다.
  * lib/ 를 빼면 공용 헬퍼의 사용자 출력이 이 가드를 통째로 피해 간다.
  */
 function sourceFiles(): string[] {

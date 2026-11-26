@@ -2,6 +2,7 @@ import type { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { catalog } from '#core/lang.js';
 import type { ToolManifest } from './package-root.js';
 import type { ToolsetSelection } from './toolsets.js';
 
@@ -150,22 +151,40 @@ function redactNested(value: unknown): unknown {
   return value;
 }
 
+/** dry-run preview 문구 — LLM 이 사용자에게 그대로 보여주는 텍스트라 언어를 따른다. */
+const P = catalog(
+  {
+    chars: (n: number) => `${n}자`,
+    notRun: (name: string) => `\`${name}\` 은(는) 되돌리기 어렵거나 외부에 공개되는 작업이라 아직 실행하지 않았다.`,
+    args: '실행 예정 인자:',
+    none: '(없음)',
+    next: '사용자에게 위 내용을 보여주고 명시 승인을 받은 뒤, 같은 인자에 `confirm: true` 를 추가해 다시 호출하세요.',
+  },
+  {
+    chars: (n: number) => `${n} chars`,
+    notRun: (name: string) => `\`${name}\` is hard to undo or publishes externally, so it has not run yet.`,
+    args: 'Arguments it would run with:',
+    none: '(none)',
+    next: 'Show the user the above, get their explicit approval, then call again with the same arguments plus `confirm: true`.',
+  },
+);
+
 export function previewValue(key: string, value: unknown): string {
   if (SECRET_KEY.test(key)) return '(redacted)';
   const raw = typeof value === 'string' ? value : JSON.stringify(redactNested(value));
   if (raw === undefined) return 'undefined';
-  return raw.length > 200 ? `${raw.slice(0, 200)}… (${raw.length}자)` : raw;
+  return raw.length > 200 ? `${raw.slice(0, 200)}… (${P().chars(raw.length)})` : raw;
 }
 
 export function confirmPreview(name: string, args: Record<string, unknown>): CallToolResult {
   const entries = Object.entries(args).filter(([k, v]) => k !== 'confirm' && v !== undefined);
   const lines = [
-    `${CONFIRM_PREVIEW_MARKER} — \`${name}\` 은(는) 되돌리기 어렵거나 외부에 공개되는 작업이라 아직 실행하지 않았다.`,
+    `${CONFIRM_PREVIEW_MARKER} — ${P().notRun(name)}`,
     '',
-    '실행 예정 인자:',
-    ...(entries.length ? entries.map(([k, v]) => `  ${k}: ${previewValue(k, v)}`) : ['  (없음)']),
+    P().args,
+    ...(entries.length ? entries.map(([k, v]) => `  ${k}: ${previewValue(k, v)}`) : [`  ${P().none}`]),
     '',
-    '사용자에게 위 내용을 보여주고 명시 승인을 받은 뒤, 같은 인자에 `confirm: true` 를 추가해 다시 호출하세요.',
+    P().next,
   ];
   return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
@@ -215,7 +234,7 @@ export function createToolRegistrar(
     const meta = index.get(name);
     if (!meta) {
       throw new Error(
-        `tool-manifest.json 에 없는 도구 "${name}" — 해당 도메인의 tools 에 추가하고 write/destructive 분류도 정하세요 (docs/domain/recipes.md §1).`,
+        `Tool "${name}" is not in tool-manifest.json — add it to its domain's tools and classify it as write/destructive (docs/domain/recipes.md §1).`,
       );
     }
     return meta;
@@ -243,7 +262,7 @@ export function createToolRegistrar(
       const meta = metaOf(name);
       if (meta.deprecatedFor) {
         throw new Error(
-          `"${name}" 은(는) ${meta.deprecatedFor} 의 폐기 예정 별칭이라 레지스트라가 자동 등록한다 — register 파일에서 직접 등록하지 마세요.`,
+          `"${name}" is a deprecated alias of ${meta.deprecatedFor}; the registrar registers it automatically — do not register it in a register file.`,
         );
       }
 
@@ -256,12 +275,12 @@ export function createToolRegistrar(
       // 일부 경로만 막는 도구가 조용히 통과한다 (예: 공개 업로드만 막고 비공개 업로드는 그냥 실행).
       const hasConfirmParam = CONFIRM_KEYS.some((k) => k in shape);
       if (meta.kind === 'destructive' && meta.ownGate && !hasConfirmParam) {
-        throw new Error(`"${name}" 은(는) manifest ownGate 인데 confirm 류 파라미터(${CONFIRM_KEYS.join('/')})가 없습니다.`);
+        throw new Error(`"${name}" is listed in manifest ownGate but has no confirm-style parameter (${CONFIRM_KEYS.join('/')}).`);
       }
       if (meta.kind === 'destructive' && !meta.ownGate && hasConfirmParam) {
         throw new Error(
-          `"${name}" 은(는) 자체 confirm 파라미터가 있는 destructive 도구입니다 — 그 가드가 모든 파괴적 경로를 막으면 ` +
-            `manifest ownGate 에 추가하고, 아니면 파라미터를 없애 레지스트라 가드를 받으세요.`,
+          `"${name}" is a destructive tool with its own confirm parameter — if that gate blocks every destructive path, ` +
+            `add it to manifest ownGate; otherwise remove the parameter to get the registrar guard.`,
         );
       }
       if (meta.kind === 'destructive' && !meta.ownGate) {

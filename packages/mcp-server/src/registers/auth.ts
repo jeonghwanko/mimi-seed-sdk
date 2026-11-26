@@ -39,6 +39,213 @@ import {
 import { textResult } from '../lib/mcp-response.js';
 import { describeToolsets } from '../lib/toolsets.js';
 import { findInvalidJsonFiles } from '../lib/json-file.js';
+import { catalog } from '#core/lang.js';
+
+/** 출력 문구 — 도구별로 묶었다. 호출 시점에 언어를 읽는다 (`A()`). */
+const A = catalog(
+  {
+    // ── 공통: tokens.json 갱신 시각 · Meta 연결 줄 · 매니페스트 줄 ──
+    refresh: {
+      mtimeFailed: '(파일 mtime 조회 실패)',
+      daysAgo: (days: number, hours: number) => `${days}d ${hours}h 전 갱신`,
+      hoursAgo: (hours: number) => `${hours}h 전 갱신`,
+      over14: `⚠️ 14일 이상 미사용 — Google 정책상 refresh_token revoke 위험. 안전을 위해 'mimi_seed_auth_start' 로 재인증 권장.`,
+      over7: `ℹ️ 7일 이상 미사용 — 한 번 더 갱신하지 않으면 곧 revoke 가능. 다음 도구 호출이 자동 갱신해주지만, 장기 미사용 예정이면 미리 인증 갱신 권장.`,
+    },
+    meta: {
+      missing: (padded: string, fix: string) => `❌ ${padded} — 미설정 → ${fix}  (선택)`,
+      expired: (padded: string, fix: string) => `❌ ${padded} — 토큰 만료 → ${fix}`,
+      expiring: (padded: string, days: number | undefined, detail: string, fix: string) =>
+        `⚠️  ${padded} — ${days}일 후 만료 (${detail}) → ${fix}`,
+      unknown: (padded: string, detail: string) => `⚠️  ${padded} — 설정됨, 만료일 미상 (${detail}) → 계정 조회 도구로 검증`,
+      ok: (padded: string, detail: string, days: number | undefined) => `✅ ${padded} — 연결됨 (${detail}, ${days}일 남음)`,
+    },
+    manifestFix: {
+      oauth: () => 'mimi_seed_auth_start  (Google 로그인 — Firebase/AdMob/Play/GSC/GA4)',
+      bigquery: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (서비스 계정 권장)',
+      playstore: (svc: ManifestService) =>
+        svc.packageName
+          ? `setup_playstore_connection(packageName="${svc.packageName}")`
+          : 'setup_playstore_connection(packageName=...)',
+      appstore: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      jenkins: () => 'claude mcp add <your-jenkins-mcp> -s user  (개인 자격증명 — .mcp.json 금지)',
+    },
+    manifest: {
+      connected: (label: string, suffix: string) => `✅ ${label} — 연결됨${suffix}`,
+      optional: (label: string, suffix: string, note: string) => `ℹ️  ${label} — (선택)${suffix}${note}`,
+      missing: (label: string, suffix: string, fix: string, noteLine: string) =>
+        `❌ ${label} — 미설정${suffix}\n     → ${fix}${noteLine}`,
+    },
+    // ── mimi_seed_status ──
+    status: {
+      header: (version: string) => `🌱 Mimi Seed 연결 상태 — local-stdio (@yoonion/mimi-seed-mcp v${version})`,
+      accountUnknown: '계정 확인 불가 — 재로그인하면 기록됨',
+      oauthOk: (account: string, min: number, label: string) =>
+        `✅ Google OAuth      — 연결됨 (${account}, ${min}분 남음, ${label})`,
+      oauthMissing: '❌ Google OAuth      — 미연결 → mimi_seed_auth_start',
+      youtubeUpload: '✅ YouTube           — 업로드·상태 관리 권한 연결됨',
+      youtubeRead: '✅ YouTube           — 채널·영상·성과 읽기 권한 연결됨',
+      youtubeMissing: '❌ YouTube           — 미연결 → mimi_seed_auth_start(domains=["youtube"])  (선택)',
+      playOk: (count: number, detail: string) => `✅ Play Store SA     — ${count}개 등록 (${detail})`,
+      playMissing: '⚠️  Play Store SA     — 미설정 (선택 — 로컬은 OAuth 로 가능, CI/헤드리스는 필수) → setup_playstore_connection',
+      ascOk: (keyId: string) => `✅ App Store Connect — 연결됨 (keyId: ${keyId})`,
+      ascMissing: '❌ App Store Connect — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      jenkinsOk: (url: string) => `✅ Jenkins           — 연결됨 (${url})`,
+      jenkinsMissing: '❌ Jenkins           — 미설정 → jenkins_status → jenkins_save_config  (선택)',
+      ciMissing: '❌ CI               — 미설정 → ci_save_config  (선택)',
+      gadsOk: (customerId: string) => `⚠️  Google Ads       — 설정됨 (customerId: ${customerId})`,
+      gadsMissing: '❌ Google Ads        — 미설정 → googleads_save_config  (선택)',
+      tiktokMissing: '❌ TikTok Business    — 미설정 → mimi-seed auth tiktok  (선택)',
+      tiktokRefreshExpired: (openId: string) => `❌ TikTok Business    — refresh token 만료 (${openId}) → mimi-seed auth tiktok`,
+      tiktokAccessExpired: (openId: string) => `⚠️  TikTok Business    — 연결됨, 다음 호출에서 access token 자동 갱신 (${openId})`,
+      tiktokOk: (openId: string) => `✅ TikTok Business    — Organic API 연결됨 (${openId})`,
+      bqSa: (email: string) => `✅ BigQuery          — 서비스 계정 연결됨 (${email})`,
+      bqOauth: '⚠️  BigQuery          — OAuth fallback (Workspace 재인증 정책 시 끊길 수 있음 → 서비스 계정 권장: mimi-seed-bigquery-auth)',
+      bqMissing: '❌ BigQuery          — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)',
+      invalidHeader: '── ⚠️ 읽을 수 없는 설정 파일 ─────────────────────',
+      invalidReason: (reason: string) => `   원인: ${reason}`,
+      invalidFix: '   → 해당 연결을 다시 설정하면 파일을 새로 씁니다. 고치기 전 내용을 보존하려면 먼저 백업하세요.',
+      nextOauth: '  1. mimi_seed_auth_start  (Google 계정 로그인 — Firebase/AdMob/GSC 등 필수)',
+      nextAsc: '  2. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)',
+      nextHeader: '── 다음 단계 (필수) ─────────────────────────────',
+      allDone: '✅ 필수 연결 모두 완료. 앱 출시 작업을 시작할 수 있습니다.',
+      thisProject: '이 프로젝트',
+      reqHeader: (name: string) => `── ${name} 요구사항 (.mimi-seed.json) ─────────`,
+      teamHint: [
+        'ℹ️  팀 공유가 목표라면, 각자 로컬 자격증명을 채우는 대신',
+        '   워크스페이스(https://mimi-seed.pryzm.gg) 초대 → PAT 발급 → 원격 MCP 연결도 가능.',
+      ],
+    },
+    // ── mimi_seed_auth_start ──
+    start: {
+      scopeSome: (list: string) => `요청 도메인: ${list} — 기존 부여 권한은 유지됨.`,
+      scopeAll: (list: string) => `요청 도메인: 전체 (${list})`,
+      linkTitle: '🔐 Google 로그인 링크 (10분 유효):',
+      profileLine: (profile: string | undefined, channel: string | undefined) =>
+        `로그인 프로필: ${profile ?? '(기본)'} / 대상 채널: ${channel ?? '(로그인 후 확인)'}`,
+      outro: [
+        'YouTube는 Google 로그인에서 선택한 개인/브랜드 채널에 연결됩니다. 완료 후 mimi_seed_auth_status(profile=...)로 실제 채널을 확인하세요.',
+        '',
+        '이 URL을 브라우저에서 열고 Google 계정으로 승인해줘.',
+        '완료되면 localhost:9876으로 자동 리다이렉트되고 토큰이 저장돼.',
+        '이후 바로 다른 MCP 도구(playstore_*, firebase_* 등) 호출 가능.',
+      ],
+    },
+    // ── mimi_seed_auth_status ──
+    authStatus: {
+      account: (email: string | null) => `   계정: ${email ?? '(확인 불가 — 재로그인하면 기록됨)'}\n`,
+      lastRefresh: (label: string) => `   마지막 갱신: ${label}`,
+      domainsUnknown: '   권한 도메인: (구 토큰 — scope 기록 없음. 재로그인하면 기록됨)',
+      domains: (list: string) => `   권한 도메인: ${list || '(없음)'}`,
+      notGranted: (list: string) => `   미부여: ${list} → mimi_seed_auth_start(domains=[...]) 로 추가 (기존 권한 유지)`,
+      runInTerminal: '터미널에서 실행:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+      fresh: (min: number) => `✅ 인증 유효 (${min}분 남음).`,
+      refreshed: (min: number) => `✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).`,
+      refreshFailed: '⚠️ 토큰 만료 + 자동 갱신 실패',
+      code: (code: string) => `   코드: ${code}`,
+      reloginInTerminal: '\n\n터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+    },
+  },
+  {
+    refresh: {
+      mtimeFailed: '(could not read file mtime)',
+      daysAgo: (days: number, hours: number) => `refreshed ${days}d ${hours}h ago`,
+      hoursAgo: (hours: number) => `refreshed ${hours}h ago`,
+      over14: `⚠️ Unused for 14+ days — under Google policy the refresh_token may be revoked. To be safe, re-authenticate with 'mimi_seed_auth_start'.`,
+      over7: `ℹ️ Unused for 7+ days — it may be revoked soon unless refreshed again. The next tool call refreshes it automatically, but if you expect a long period without use, refresh authentication in advance.`,
+    },
+    meta: {
+      missing: (padded: string, fix: string) => `❌ ${padded} — not set up → ${fix}  (optional)`,
+      expired: (padded: string, fix: string) => `❌ ${padded} — token expired → ${fix}`,
+      expiring: (padded: string, days: number | undefined, detail: string, fix: string) =>
+        `⚠️  ${padded} — expires in ${days} day(s) (${detail}) → ${fix}`,
+      unknown: (padded: string, detail: string) => `⚠️  ${padded} — set up, expiry unknown (${detail}) → verify with the account lookup tool`,
+      ok: (padded: string, detail: string, days: number | undefined) => `✅ ${padded} — connected (${detail}, ${days} day(s) left)`,
+    },
+    manifestFix: {
+      oauth: () => 'mimi_seed_auth_start  (Google login — Firebase/AdMob/Play/GSC/GA4)',
+      bigquery: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (service account recommended)',
+      playstore: (svc: ManifestService) =>
+        svc.packageName
+          ? `setup_playstore_connection(packageName="${svc.packageName}")`
+          : 'setup_playstore_connection(packageName=...)',
+      appstore: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      jenkins: () => 'claude mcp add <your-jenkins-mcp> -s user  (personal credentials — never in .mcp.json)',
+    },
+    manifest: {
+      connected: (label: string, suffix: string) => `✅ ${label} — connected${suffix}`,
+      optional: (label: string, suffix: string, note: string) => `ℹ️  ${label} — (optional)${suffix}${note}`,
+      missing: (label: string, suffix: string, fix: string, noteLine: string) =>
+        `❌ ${label} — not set up${suffix}\n     → ${fix}${noteLine}`,
+    },
+    status: {
+      header: (version: string) => `🌱 Mimi Seed connection status — local-stdio (@yoonion/mimi-seed-mcp v${version})`,
+      accountUnknown: 'account unknown — recorded on next login',
+      oauthOk: (account: string, min: number, label: string) =>
+        `✅ Google OAuth      — connected (${account}, ${min} min left, ${label})`,
+      oauthMissing: '❌ Google OAuth      — not connected → mimi_seed_auth_start',
+      youtubeUpload: '✅ YouTube           — upload and status management permission connected',
+      youtubeRead: '✅ YouTube           — channel, video, and performance read permission connected',
+      youtubeMissing: '❌ YouTube           — not connected → mimi_seed_auth_start(domains=["youtube"])  (optional)',
+      playOk: (count: number, detail: string) => `✅ Play Store SA     — ${count} registered (${detail})`,
+      playMissing: '⚠️  Play Store SA     — not set up (optional — OAuth works locally; required for CI/headless) → setup_playstore_connection',
+      ascOk: (keyId: string) => `✅ App Store Connect — connected (keyId: ${keyId})`,
+      ascMissing: '❌ App Store Connect — not set up → npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      jenkinsOk: (url: string) => `✅ Jenkins           — connected (${url})`,
+      jenkinsMissing: '❌ Jenkins           — not set up → jenkins_status → jenkins_save_config  (optional)',
+      ciMissing: '❌ CI               — not set up → ci_save_config  (optional)',
+      gadsOk: (customerId: string) => `⚠️  Google Ads       — set up (customerId: ${customerId})`,
+      gadsMissing: '❌ Google Ads        — not set up → googleads_save_config  (optional)',
+      tiktokMissing: '❌ TikTok Business    — not set up → mimi-seed auth tiktok  (optional)',
+      tiktokRefreshExpired: (openId: string) => `❌ TikTok Business    — refresh token expired (${openId}) → mimi-seed auth tiktok`,
+      tiktokAccessExpired: (openId: string) => `⚠️  TikTok Business    — connected; the access token refreshes automatically on the next call (${openId})`,
+      tiktokOk: (openId: string) => `✅ TikTok Business    — Organic API connected (${openId})`,
+      bqSa: (email: string) => `✅ BigQuery          — service account connected (${email})`,
+      bqOauth: '⚠️  BigQuery          — OAuth fallback (may disconnect under a Workspace re-auth policy → service account recommended: mimi-seed-bigquery-auth)',
+      bqMissing: '❌ BigQuery          — not set up → npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (optional)',
+      invalidHeader: '── ⚠️ Unreadable config files ─────────────────────',
+      invalidReason: (reason: string) => `   Cause: ${reason}`,
+      invalidFix: '   → Setting up that connection again rewrites the file. To keep its current contents, back it up first.',
+      nextOauth: '  1. mimi_seed_auth_start  (Google account login — required for Firebase/AdMob/GSC, etc.)',
+      nextAsc: '  2. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (required for App Store releases)',
+      nextHeader: '── Next steps (required) ─────────────────────────────',
+      allDone: '✅ All required connections are complete. You can start app release work.',
+      thisProject: 'This project',
+      reqHeader: (name: string) => `── ${name} requirements (.mimi-seed.json) ─────────`,
+      teamHint: [
+        'ℹ️  If the goal is team sharing, instead of each person filling in local credentials,',
+        '   you can also use workspace (https://mimi-seed.pryzm.gg) invite → PAT issuance → remote MCP connection.',
+      ],
+    },
+    start: {
+      scopeSome: (list: string) => `Requested domains: ${list} — existing granted permissions are kept.`,
+      scopeAll: (list: string) => `Requested domains: all (${list})`,
+      linkTitle: '🔐 Google login link (valid for 10 minutes):',
+      profileLine: (profile: string | undefined, channel: string | undefined) =>
+        `Login profile: ${profile ?? '(default)'} / Target channel: ${channel ?? '(checked after login)'}`,
+      outro: [
+        'YouTube connects to the personal/brand channel selected during Google login. When done, check the actual channel with mimi_seed_auth_status(profile=...).',
+        '',
+        'Open this URL in a browser and approve with your Google account.',
+        'When done, it redirects to localhost:9876 automatically and the token is saved.',
+        'You can then call other MCP tools (playstore_*, firebase_*, etc.) right away.',
+      ],
+    },
+    authStatus: {
+      account: (email: string | null) => `   Account: ${email ?? '(unknown — recorded on next login)'}\n`,
+      lastRefresh: (label: string) => `   Last refresh: ${label}`,
+      domainsUnknown: '   Permission domains: (old token — no scope recorded. Recorded on next login)',
+      domains: (list: string) => `   Permission domains: ${list || '(none)'}`,
+      notGranted: (list: string) => `   Not granted: ${list} → add with mimi_seed_auth_start(domains=[...]) (existing permissions kept)`,
+      runInTerminal: 'Run in a terminal:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+      fresh: (min: number) => `✅ Authentication valid (${min} min left).`,
+      refreshed: (min: number) => `✅ Token expired → automatically refreshed with refresh_token (${min} min left).`,
+      refreshFailed: '⚠️ Token expired + automatic refresh failed',
+      code: (code: string) => `   Code: ${code}`,
+      reloginInTerminal: '\n\nLog in again in a terminal:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+    },
+  },
+);
 
 /**
  * tokens.json mtime → "Nd Hh ago" 형식 문자열 + 재인증 권고.
@@ -46,21 +253,22 @@ import { findInvalidJsonFiles } from '../lib/json-file.js';
  * 14일 초과 시 강한 권고, 7일~14일 부드러운 안내.
  */
 function formatLastRefreshHint(lastMs: number | null): { label: string; recommendation?: string } {
-  if (lastMs === null) return { label: '(파일 mtime 조회 실패)' };
+  const m = A().refresh;
+  if (lastMs === null) return { label: m.mtimeFailed };
   const ageMs = Date.now() - lastMs;
   const days = Math.floor(ageMs / 86_400_000);
   const hours = Math.floor((ageMs % 86_400_000) / 3_600_000);
-  const label = days > 0 ? `${days}d ${hours}h 전 갱신` : `${hours}h 전 갱신`;
+  const label = days > 0 ? m.daysAgo(days, hours) : m.hoursAgo(hours);
   if (days >= 14) {
     return {
       label,
-      recommendation: `⚠️ 14일 이상 미사용 — Google 정책상 refresh_token revoke 위험. 안전을 위해 'mimi_seed_auth_start' 로 재인증 권장.`,
+      recommendation: m.over14,
     };
   }
   if (days >= 7) {
     return {
       label,
-      recommendation: `ℹ️ 7일 이상 미사용 — 한 번 더 갱신하지 않으면 곧 revoke 가능. 다음 도구 호출이 자동 갱신해주지만, 장기 미사용 예정이면 미리 인증 갱신 권장.`,
+      recommendation: m.over7,
     };
   }
   return { label };
@@ -73,30 +281,19 @@ function renderMetaConnection(
   fix: string,
 ): string {
   const padded = label.padEnd(18);
-  if (!config) return `❌ ${padded} — 미설정 → ${fix}  (선택)`;
+  const m = A().meta;
+  if (!config) return m.missing(padded, fix);
 
   const freshness = metaTokenFreshness(config.expiresAt);
-  if (freshness.state === 'expired') return `❌ ${padded} — 토큰 만료 → ${fix}`;
+  if (freshness.state === 'expired') return m.expired(padded, fix);
   if (freshness.state === 'expiring') {
-    return `⚠️  ${padded} — ${freshness.daysRemaining}일 후 만료 (${detail}) → ${fix}`;
+    return m.expiring(padded, freshness.daysRemaining, detail, fix);
   }
   if (freshness.state === 'unknown') {
-    return `⚠️  ${padded} — 설정됨, 만료일 미상 (${detail}) → 계정 조회 도구로 검증`;
+    return m.unknown(padded, detail);
   }
-  return `✅ ${padded} — 연결됨 (${detail}, ${freshness.daysRemaining}일 남음)`;
+  return m.ok(padded, detail, freshness.daysRemaining);
 }
-
-// 매니페스트 서비스별 셋업 명령. status/doctor 가 "정확한 다음 명령"으로 안내한다.
-const MANIFEST_FIX: Record<ManifestServiceId, (svc: ManifestService) => string> = {
-  oauth: () => 'mimi_seed_auth_start  (Google 로그인 — Firebase/AdMob/Play/GSC/GA4)',
-  bigquery: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (서비스 계정 권장)',
-  playstore: (svc) =>
-    svc.packageName
-      ? `setup_playstore_connection(packageName="${svc.packageName}")`
-      : 'setup_playstore_connection(packageName=...)',
-  appstore: () => 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-  jenkins: () => 'claude mcp add <your-jenkins-mcp> -s user  (개인 자격증명 — .mcp.json 금지)',
-};
 
 // 두 MCP 가 모두 'mimi-seed' 로 등록되는 환경에서 에이전트가 프로그램적으로
 // 어느 서버인지 판별할 수 있도록 status 첫 줄에 자기소개를 넣는다.
@@ -129,14 +326,16 @@ function renderManifestLine(
   const detail = manifestServiceDetail(id, svc);
   const detailSuffix = detail ? ` (${detail})` : '';
 
-  if (connected) return `✅ ${label} — 연결됨${detailSuffix}`;
+  const m = A().manifest;
+  if (connected) return m.connected(label, detailSuffix);
   if (!required) {
     const note = svc.note ? ` — ${svc.note}` : '';
-    return `ℹ️  ${label} — (선택)${detailSuffix}${note}`;
+    return m.optional(label, detailSuffix, note);
   }
-  const fix = MANIFEST_FIX[id](svc);
+  // 매니페스트 서비스별 셋업 명령 — status/doctor 가 "정확한 다음 명령"으로 안내한다.
+  const fix = A().manifestFix[id](svc);
   const noteLine = svc.note ? `\n     ${svc.note}` : '';
-  return `❌ ${label} — 미설정${detailSuffix}\n     → ${fix}${noteLine}`;
+  return m.missing(label, detailSuffix, fix, noteLine);
 }
 
 export function registerAuthTools(server: ToolRegistrar) {
@@ -151,8 +350,9 @@ export function registerAuthTools(server: ToolRegistrar) {
     ].join(' '),
     {},
     async () => {
+      const m = A().status;
       const lines: string[] = [
-        `🌱 Mimi Seed 연결 상태 — local-stdio (@yoonion/mimi-seed-mcp v${PKG_VERSION})`,
+        m.header(PKG_VERSION),
         // 도메인을 꺼 둔 서버에서 "도구가 없다" 를 연결 문제로 오해하지 않게 켜진 toolset 을 밝힌다.
         `🧰 Toolsets: ${describeToolsets(server.toolsets, server.manifest)}`,
         '',
@@ -164,21 +364,21 @@ export function registerAuthTools(server: ToolRegistrar) {
         const min = Math.round(oauthResult.msUntilExpiry / 60_000);
         const hint = formatLastRefreshHint(getTokensLastRefreshMs());
         // 계정을 함께 보여야 "다른 계정으로 로그인돼 있음" 을 여기서 알아챈다.
-        const account = (await resolveAccountEmail()) ?? '계정 확인 불가 — 재로그인하면 기록됨';
-        lines.push(`✅ Google OAuth      — 연결됨 (${account}, ${min}분 남음, ${hint.label})`);
+        const account = (await resolveAccountEmail()) ?? m.accountUnknown;
+        lines.push(m.oauthOk(account, min, hint.label));
         if (hint.recommendation) lines.push(`   ${hint.recommendation}`);
       } else {
-        lines.push('❌ Google OAuth      — 미연결 → mimi_seed_auth_start');
+        lines.push(m.oauthMissing);
       }
 
       const grantedDomains = summarizeGrantedDomains(getStoredTokens()?.scope).granted;
       const youtubeGranted = grantedDomains.includes('youtube') || grantedDomains.includes('youtube_analytics');
       if (youtubeGranted && (oauthResult.status === 'fresh' || oauthResult.status === 'refreshed')) {
         lines.push(grantedDomains.includes('youtube')
-          ? '✅ YouTube           — 업로드·상태 관리 권한 연결됨'
-          : '✅ YouTube           — 채널·영상·성과 읽기 권한 연결됨');
+          ? m.youtubeUpload
+          : m.youtubeRead);
       } else {
-        lines.push('❌ YouTube           — 미연결 → mimi_seed_auth_start(domains=["youtube"])  (선택)');
+        lines.push(m.youtubeMissing);
       }
 
       // 2. Play Store SA
@@ -187,27 +387,27 @@ export function registerAuthTools(server: ToolRegistrar) {
       if (saCount > 0) {
         const pkgs = saInfo.perPackage.map((p) => p.packageName).join(', ');
         const detail = pkgs || saInfo.default?.clientEmail || '(default)';
-        lines.push(`✅ Play Store SA     — ${saCount}개 등록 (${detail})`);
+        lines.push(m.playOk(saCount, detail));
       } else {
         // SA 는 CI/헤드리스 전용 — 로컬은 OAuth(androidpublisher scope)로 대부분의 Play 작업이 된다.
         // (helpers.ts requirePlayStoreAuth 가 SA → OAuth 로 폴백한다.) "필수"로 표기하면 안 된다.
-        lines.push('⚠️  Play Store SA     — 미설정 (선택 — 로컬은 OAuth 로 가능, CI/헤드리스는 필수) → setup_playstore_connection');
+        lines.push(m.playMissing);
       }
 
       // 3. App Store Connect
       const asc = getAppStoreCredentials();
       if (asc) {
-        lines.push(`✅ App Store Connect — 연결됨 (keyId: ${asc.keyId})`);
+        lines.push(m.ascOk(asc.keyId));
       } else {
-        lines.push('❌ App Store Connect — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
+        lines.push(m.ascMissing);
       }
 
       // 4. Jenkins
       const jenkins = loadJenkinsConfig();
       if (jenkins) {
-        lines.push(`✅ Jenkins           — 연결됨 (${jenkins.url})`);
+        lines.push(m.jenkinsOk(jenkins.url));
       } else {
-        lines.push('❌ Jenkins           — 미설정 → jenkins_status → jenkins_save_config  (선택)');
+        lines.push(m.jenkinsMissing);
       }
 
       // 5. CI (GitHub/GitLab)
@@ -215,15 +415,15 @@ export function registerAuthTools(server: ToolRegistrar) {
       if (ci) {
         lines.push(`✅ CI               — ${ci.provider} (${ci.owner}/${ci.repo})`);
       } else {
-        lines.push('❌ CI               — 미설정 → ci_save_config  (선택)');
+        lines.push(m.ciMissing);
       }
 
       // 6. Google Ads
       const gads = loadGoogleAdsConfig();
       if (gads) {
-        lines.push(`⚠️  Google Ads       — 설정됨 (customerId: ${gads.customerId})`);
+        lines.push(m.gadsOk(gads.customerId));
       } else {
-        lines.push('❌ Google Ads        — 미설정 → googleads_save_config  (선택)');
+        lines.push(m.gadsMissing);
       }
 
       // 7. Facebook
@@ -254,50 +454,50 @@ export function registerAuthTools(server: ToolRegistrar) {
       const tiktok = loadTikTokBusinessConfig();
       const tiktokFreshness = tiktokTokenFreshness(tiktok);
       if (!tiktok) {
-        lines.push('❌ TikTok Business    — 미설정 → mimi-seed auth tiktok  (선택)');
+        lines.push(m.tiktokMissing);
       } else if (tiktokFreshness.state === 'refresh_expired') {
-        lines.push(`❌ TikTok Business    — refresh token 만료 (${tiktok.openId}) → mimi-seed auth tiktok`);
+        lines.push(m.tiktokRefreshExpired(tiktok.openId));
       } else if (tiktokFreshness.state === 'access_expired') {
-        lines.push(`⚠️  TikTok Business    — 연결됨, 다음 호출에서 access token 자동 갱신 (${tiktok.openId})`);
+        lines.push(m.tiktokAccessExpired(tiktok.openId));
       } else {
-        lines.push(`✅ TikTok Business    — Organic API 연결됨 (${tiktok.openId})`);
+        lines.push(m.tiktokOk(tiktok.openId));
       }
 
       // 11. BigQuery — resolveBigQueryAuth 기준(서비스 계정 우선, OAuth fallback).
       // 이전엔 SA 파일만 검사해 OAuth fallback 이 살아있어도 ❌ 로 오표기했다.
       const bqAuth = resolveBigQueryAuth();
       if (bqAuth?.source === 'service-account') {
-        lines.push(`✅ BigQuery          — 서비스 계정 연결됨 (${bqAuth.clientEmail ?? ''})`);
+        lines.push(m.bqSa(bqAuth.clientEmail ?? ''));
       } else if (bqAuth?.source === 'user-oauth') {
-        lines.push('⚠️  BigQuery          — OAuth fallback (Workspace 재인증 정책 시 끊길 수 있음 → 서비스 계정 권장: mimi-seed-bigquery-auth)');
+        lines.push(m.bqOauth);
       } else {
-        lines.push('❌ BigQuery          — 미설정 → npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth  (선택)');
+        lines.push(m.bqMissing);
       }
 
       // 12. 깨진 설정 파일 — 로더는 "없음"과 "깨짐"을 둘 다 null 로 돌려주므로 위 줄들은 ❌ 미설정으로만 보인다.
       // 어느 파일이 왜 못 읽히는지는 여기서 따로 밝힌다 (잘린 쓰기 · 손으로 고친 문법 오류 · 권한).
       const invalidFiles = findInvalidJsonFiles(path.join(os.homedir(), '.mimi-seed'));
       if (invalidFiles.length > 0) {
-        lines.push('', '── ⚠️ 읽을 수 없는 설정 파일 ─────────────────────');
-        for (const { file, reason } of invalidFiles) lines.push(`❌ ${file}`, `   원인: ${reason}`);
-        lines.push('   → 해당 연결을 다시 설정하면 파일을 새로 씁니다. 고치기 전 내용을 보존하려면 먼저 백업하세요.');
+        lines.push('', m.invalidHeader);
+        for (const { file, reason } of invalidFiles) lines.push(`❌ ${file}`, m.invalidReason(reason));
+        lines.push(m.invalidFix);
       }
 
       // 다음 단계 안내
       const missing: string[] = [];
       if (oauthResult.status !== 'fresh' && oauthResult.status !== 'refreshed') {
-        missing.push('  1. mimi_seed_auth_start  (Google 계정 로그인 — Firebase/AdMob/GSC 등 필수)');
+        missing.push(m.nextOauth);
       }
       if (!asc) {
-        missing.push('  2. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)');
+        missing.push(m.nextAsc);
       }
       // Play SA 는 "다음 단계 (필수)" 에 넣지 않는다 — OAuth 로 대부분의 Play 작업이 되므로.
       // CI/헤드리스에서만 필요하고, 그 안내는 위 상태 줄(⚠️)에 이미 있다.
 
       if (missing.length > 0) {
-        lines.push('', '── 다음 단계 (필수) ─────────────────────────────', ...missing);
+        lines.push('', m.nextHeader, ...missing);
       } else {
-        lines.push('', '✅ 필수 연결 모두 완료. 앱 출시 작업을 시작할 수 있습니다.');
+        lines.push('', m.allDone);
       }
 
       // ── 프로젝트 매니페스트(.mimi-seed.json) 기반 요구사항 ────────────────────
@@ -318,8 +518,8 @@ export function registerAuthTools(server: ToolRegistrar) {
           jenkins: !!jenkins,
         };
 
-        const projName = loaded.manifest.displayName ?? loaded.manifest.project ?? '이 프로젝트';
-        const reqLines: string[] = ['', `── ${projName} 요구사항 (.mimi-seed.json) ─────────`];
+        const projName = loaded.manifest.displayName ?? loaded.manifest.project ?? m.thisProject;
+        const reqLines: string[] = ['', m.reqHeader(projName)];
         let anyMissing = false;
 
         for (const [id, svc] of manifestServiceEntries(loaded.manifest)) {
@@ -331,11 +531,7 @@ export function registerAuthTools(server: ToolRegistrar) {
         }
 
         if (anyMissing) {
-          reqLines.push(
-            '',
-            'ℹ️  팀 공유가 목표라면, 각자 로컬 자격증명을 채우는 대신',
-            '   워크스페이스(https://mimi-seed.pryzm.gg) 초대 → PAT 발급 → 원격 MCP 연결도 가능.',
-          );
+          reqLines.push('', ...m.teamHint);
         }
         lines.push(...reqLines);
       }
@@ -380,21 +576,18 @@ export function registerAuthTools(server: ToolRegistrar) {
         () => { /* saved */ },
         (err: Error) => { console.error('[mimi-seed auth]', err.message); },
       );
+      const m = A().start;
       const scopeLine = domains?.length
-        ? `요청 도메인: ${domains.map((d) => `${d} (${AUTH_DOMAINS[d].label})`).join(', ')} — 기존 부여 권한은 유지됨.`
-        : `요청 도메인: 전체 (${DOMAIN_IDS.join(', ')})`;
+        ? m.scopeSome(domains.map((d) => `${d} (${AUTH_DOMAINS[d].label})`).join(', '))
+        : m.scopeAll(DOMAIN_IDS.join(', '));
       return textResult([
-        '🔐 Google 로그인 링크 (10분 유효):',
+        m.linkTitle,
         '',
         url,
         '',
         scopeLine,
-        `로그인 프로필: ${profile ?? '(기본)'} / 대상 채널: ${expectedChannelId ?? '(로그인 후 확인)'}`,
-        'YouTube는 Google 로그인에서 선택한 개인/브랜드 채널에 연결됩니다. 완료 후 mimi_seed_auth_status(profile=...)로 실제 채널을 확인하세요.',
-        '',
-        '이 URL을 브라우저에서 열고 Google 계정으로 승인해줘.',
-        '완료되면 localhost:9876으로 자동 리다이렉트되고 토큰이 저장돼.',
-        '이후 바로 다른 MCP 도구(playstore_*, firebase_* 등) 호출 가능.',
+        m.profileLine(profile, expectedChannelId),
+        ...m.outro,
       ]);
     },
   );
@@ -419,12 +612,13 @@ export function registerAuthTools(server: ToolRegistrar) {
         const accountEmail = await resolveAccountEmail(profile);
         return textResult(JSON.stringify({ profile, status: result.status, accountEmail, youtubeChannel: channel, loginAttempt, profiles }));
       }
+      const m = A().authStatus;
       const r = await ensureFreshAccessToken();
       const refreshHint = formatLastRefreshHint(getTokensLastRefreshMs());
       const accountLine = r.status === 'fresh' || r.status === 'refreshed'
-        ? `   계정: ${(await resolveAccountEmail()) ?? '(확인 불가 — 재로그인하면 기록됨)'}\n`
+        ? m.account(await resolveAccountEmail())
         : '';
-      const refreshLine = `${accountLine}   마지막 갱신: ${refreshHint.label}\nGoogle profiles: ${JSON.stringify(profiles)}`;
+      const refreshLine = `${accountLine}${m.lastRefresh(refreshHint.label)}\nGoogle profiles: ${JSON.stringify(profiles)}`;
       const recommendation = refreshHint.recommendation ? `\n\n${refreshHint.recommendation}` : '';
 
       // 도메인 선택형 로그인 이후 토큰은 전체 권한이 아닐 수 있다 — 부여 현황을 함께
@@ -434,13 +628,11 @@ export function registerAuthTools(server: ToolRegistrar) {
         const summary = summarizeGrantedDomains(getStoredTokens()?.scope);
         const domainLines: string[] = [];
         if (!summary.known) {
-          domainLines.push('   권한 도메인: (구 토큰 — scope 기록 없음. 재로그인하면 기록됨)');
+          domainLines.push(m.domainsUnknown);
         } else {
-          domainLines.push(`   권한 도메인: ${summary.granted.join(', ') || '(없음)'}`);
+          domainLines.push(m.domains(summary.granted.join(', ')));
           if (summary.missing.length > 0) {
-            domainLines.push(
-              `   미부여: ${summary.missing.join(', ')} → mimi_seed_auth_start(domains=[...]) 로 추가 (기존 권한 유지)`,
-            );
+            domainLines.push(m.notGranted(summary.missing.join(', ')));
           }
         }
         return `\n${domainLines.join('\n')}`;
@@ -452,26 +644,26 @@ export function registerAuthTools(server: ToolRegistrar) {
             `❌ [${r.error.code}] ${r.error.message}\n` +
             (r.error.hint ? `→ ${r.error.hint}\n\n` : '\n') +
             `Google profiles: ${JSON.stringify(profiles)}\n` +
-            '터미널에서 실행:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+            m.runInTerminal,
           );
         case 'fresh': {
           const min = Math.round(r.msUntilExpiry / 60000);
-          return textResult(`✅ 인증 유효 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`);
+          return textResult(`${m.fresh(min)}\n${refreshLine}${domainStatusBlock()}${recommendation}`);
         }
         case 'refreshed': {
           const min = Math.round(r.msUntilExpiry / 60000);
-          return textResult(`✅ 토큰 만료 → refresh_token으로 자동 갱신 완료 (${min}분 남음).\n${refreshLine}${domainStatusBlock()}${recommendation}`);
+          return textResult(`${m.refreshed(min)}\n${refreshLine}${domainStatusBlock()}${recommendation}`);
         }
         case 'expired_refresh_failed':
           return textResult(
-            `⚠️ 토큰 만료 + 자동 갱신 실패\n` +
-            `   코드: ${r.error.code}\n` +
+            `${m.refreshFailed}\n` +
+            `${m.code(r.error.code)}\n` +
             `   ${r.error.message}\n` +
             (r.error.hint ? `   → ${r.error.hint}\n` : '') +
             `${refreshLine}` +
             // 재로그인 안내는 그것이 실제 해법일 때만 (네트워크/설정 조회 실패엔 무의미)
             (r.error.needsReauth
-              ? '\n\n터미널에서 재로그인:\n  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth'
+              ? m.reloginInTerminal
               : ''),
           );
       }

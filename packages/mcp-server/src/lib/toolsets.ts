@@ -1,4 +1,20 @@
+import { catalog } from '#core/lang.js';
 import type { ToolManifest } from './package-root.js';
+
+const M = catalog(
+  {
+    unknownKey: (envName: string, key: string, known: string) =>
+      `${envName}: 알 수 없는 toolset "${key}" — 무시함 (도메인 키 또는 그룹: ${known})`,
+    noValidKey: (envName: string) => `${envName}: 유효한 toolset 이 없어 전체 도메인을 켭니다.`,
+    limited: (on: string, include: string, exclude: string) => `${on} — ${include}/${exclude} 로 제한됨`,
+  },
+  {
+    unknownKey: (envName: string, key: string, known: string) =>
+      `${envName}: unknown toolset "${key}" — ignored (domain keys or groups: ${known})`,
+    noValidKey: (envName: string) => `${envName}: no valid toolset, so all domains are enabled.`,
+    limited: (on: string, include: string, exclude: string) => `${on} — limited by ${include}/${exclude}`,
+  },
+);
 
 /**
  * MIMI_SEED_TOOLSETS — 노출할 도구 도메인을 고른다.
@@ -70,7 +86,7 @@ export function resolveToolsets(
     for (const key of keys) {
       const domains = expandKey(key, manifest);
       if (domains === null) {
-        warnings.push(`${envName}: 알 수 없는 toolset "${key}" — 무시함 (도메인 키 또는 그룹: ${knownKeys(manifest).join(', ')})`);
+        warnings.push(M().unknownKey(envName, key, knownKeys(manifest).join(', ')));
         continue;
       }
       for (const d of domains) out.add(d);
@@ -80,7 +96,7 @@ export function resolveToolsets(
 
   let included = include.length > 0 ? expand(include, TOOLSETS_ENV) : new Set(allDomains);
   if (include.length > 0 && included.size === 0) {
-    warnings.push(`${TOOLSETS_ENV}: 유효한 toolset 이 없어 전체 도메인을 켭니다.`);
+    warnings.push(M().noValidKey(TOOLSETS_ENV));
     included = new Set(allDomains);
   }
   const excluded = expand(exclude, TOOLSETS_EXCLUDE_ENV);
@@ -139,5 +155,5 @@ export function describeToolsets(selection: ToolsetSelection, manifest: ToolMani
   if (selection.all) return `all (${Object.keys(manifest.domains).length} domains)`;
   if (selection.toolNames) return `${TOOL_NAMES_ENV} (${selection.toolNames.length} tools)`;
   const on = Object.keys(manifest.domains).filter((d) => selection.enabled.has(d));
-  return `${on.join(', ')} — ${TOOLSETS_ENV}/${TOOLSETS_EXCLUDE_ENV} 로 제한됨`;
+  return M().limited(on.join(', '), TOOLSETS_ENV, TOOLSETS_EXCLUDE_ENV);
 }

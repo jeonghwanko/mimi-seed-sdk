@@ -4,6 +4,7 @@ import { getServiceAccountClient, getServiceAccountJson } from './auth/playstore
 import { appStoreCredentialsPath, getAppStoreCredentials } from './appstore/auth.js';
 import { authText, type AuthErrorPayload } from './auth/errors.js';
 import { assertCredentialFileReadable } from './lib/json-file.js';
+import { catalog } from '#core/lang.js';
 
 export { ensureFreshAccessToken };
 
@@ -75,8 +76,7 @@ export async function requireAuth(requiredScope?: string | readonly string[], pr
     throw new Error(
       formatAuthError({
         code: 'UNAUTHENTICATED',
-        message: 'Google 계정이 연결되지 않았어.',
-        hint: 'mimi-seed-auth 로 로그인하세요.',
+        ...H().googleNotConnected,
         retriable: false,
         needsReauth: true,
       }, profile, scopes),
@@ -87,28 +87,62 @@ export async function requireAuth(requiredScope?: string | readonly string[], pr
   return client;
 }
 
-export const PLAY_AUTH_HINT = [
-  '❌ Google Play 인증이 없어.',
-  '',
-  '가장 쉬운 방법 — Google 로그인 (androidpublisher 권한 포함):',
-  REAUTH_CMD,
-  '',
-  '또는 서버/헤드리스 환경이면 서비스 계정 JSON 등록:',
-  '  npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth',
-  '',
-  '그 다음에 다시 물어봐줘.',
-].join('\n');
+/** 인증 안내 — LLM 이 사용자에게 전하는 복구 절차라 언어를 따른다 (호출 시점에 언어를 읽는다). */
+const H = catalog(
+  {
+    googleNotConnected: { message: 'Google 계정이 연결되지 않았어.', hint: 'mimi-seed-auth 로 로그인하세요.' },
+    play: [
+      '❌ Google Play 인증이 없어.',
+      '',
+      '가장 쉬운 방법 — Google 로그인 (androidpublisher 권한 포함):',
+      REAUTH_CMD,
+      '',
+      '또는 서버/헤드리스 환경이면 서비스 계정 JSON 등록:',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth',
+      '',
+      '그 다음에 다시 물어봐줘.',
+    ],
+    appstore: [
+      '❌ App Store Connect 인증이 설정되지 않았어.',
+      '',
+      '터미널에서 이것만 실행하면 돼:',
+      '',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      '',
+      'Issuer ID, Key ID, .p8 파일 경로를 입력하면 저장 완료.',
+      '그 다음에 다시 물어봐줘.',
+    ],
+  },
+  {
+    googleNotConnected: { message: 'No Google account is connected.', hint: 'Log in with mimi-seed-auth.' },
+    play: [
+      '❌ No Google Play authentication.',
+      '',
+      'Easiest — Google login (includes the androidpublisher permission):',
+      REAUTH_CMD,
+      '',
+      'Or, on a server/headless environment, register a service account JSON:',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-playstore-auth',
+      '',
+      'Then ask again.',
+    ],
+    appstore: [
+      '❌ App Store Connect authentication is not set up.',
+      '',
+      'Run just this in a terminal:',
+      '',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+      '',
+      'Enter the Issuer ID, Key ID, and .p8 file path to save it.',
+      'Then ask again.',
+    ],
+  },
+);
 
-export const APPSTORE_AUTH_HINT = [
-  '❌ App Store Connect 인증이 설정되지 않았어.',
-  '',
-  '터미널에서 이것만 실행하면 돼:',
-  '',
-  '  npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-  '',
-  'Issuer ID, Key ID, .p8 파일 경로를 입력하면 저장 완료.',
-  '그 다음에 다시 물어봐줘.',
-].join('\n');
+/** Google Play 인증이 없을 때의 안내 (현재 언어). */
+export const playAuthHint = (): string => H().play.join('\n');
+/** App Store Connect 인증이 없을 때의 안내 (현재 언어). */
+export const appStoreAuthHint = (): string => H().appstore.join('\n');
 
 /**
  * Google Play 인증 — 서비스 계정 JSON 우선, 없으면 OAuth 클라이언트로 폴백.
@@ -123,10 +157,10 @@ export async function requirePlayStoreAuth(packageName?: string, requiredScope?:
   // OAuth 폴백도 requireAuth 와 같이 사전 갱신한다 — 안 그러면 refresh_token 이 폐기됐을 때
   // 재로그인 안내 대신 googleapis 의 raw invalid_grant 가 그대로 노출된다.
   const result = await ensureFreshAccessToken();
-  if (result.status === 'unauthenticated') throw new Error(PLAY_AUTH_HINT);
+  if (result.status === 'unauthenticated') throw new Error(playAuthHint());
   if (result.status === 'expired_refresh_failed') throw new Error(formatAuthError(result.error));
   const oauth = getAuthenticatedClient();
-  if (!oauth) throw new Error(PLAY_AUTH_HINT);
+  if (!oauth) throw new Error(playAuthHint());
   // OAuth 폴백일 때만 스코프 pre-flight — SA JWT 는 자체 scopes 로 토큰을 받으므로
   // (getServiceAccountClient 가 reporting 스코프를 이미 싣는다) 해당 없음.
   assertStoredScope(requiredScope ? [requiredScope] : [], result.tokens.scope);
@@ -135,7 +169,7 @@ export async function requirePlayStoreAuth(packageName?: string, requiredScope?:
 
 export function requireServiceAccountJson(packageName?: string): string {
   const json = getServiceAccountJson(packageName);
-  if (!json) throw new Error(PLAY_AUTH_HINT);
+  if (!json) throw new Error(playAuthHint());
   return json;
 }
 
@@ -143,7 +177,7 @@ export function requireAppStoreCreds() {
   const creds = getAppStoreCredentials();
   if (!creds) {
     assertCredentialFileReadable(appStoreCredentialsPath(), 'npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth');
-    throw new Error(APPSTORE_AUTH_HINT);
+    throw new Error(appStoreAuthHint());
   }
   return creds;
 }
