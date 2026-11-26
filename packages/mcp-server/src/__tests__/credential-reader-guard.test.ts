@@ -37,6 +37,7 @@ const ALLOWED: Record<string, string> = {
   'core/src/credential-store.ts': 'settings.json(모드)과 .data-key.id(kid 표식)를 읽는다 — 둘 다 비밀이 아니다',
   'core/src/credential-keystore.ts': 'Windows DPAPI 로 보호된 데이터 키 파일 — 자격증명이 아니라 키 저장소다',
   'cli/src/mcp-config.ts': 'MCP 클라이언트 설정 파일을 읽는다. config.json 은 안내 문구에만 나온다',
+  'cli/src/credentials-cmd.ts': 'MCP 클라이언트 설정(.claude.json 등)에서 버전 고정을 찾는다 — 자격증명은 core 의 rewriteCredentialFiles 로 읽는다',
   'cli/src/jenkins-project.ts': '프로젝트의 .mimi-seed.json 을 읽는다. jenkins.json 은 출처 표시 문자열이다',
 };
 

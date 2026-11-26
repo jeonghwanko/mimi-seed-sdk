@@ -37,8 +37,8 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
 | `settings.json` | **Not a credential** — user preference (`{ lang }`), deliberately separate so logout/re-auth never resets it. Read by both packages through the one rule in `core/src/lang.ts`; written only by the CLI (`cli/src/settings.ts`) | `mimi-seed lang` / the setup wizard's first prompt |
 
-> Treat every file above as a secret. They are plaintext `0600` today. Encrypting them at rest with an OS-held key
-> is planned. The shared readers can already open such a file, but nothing writes one yet — see [`../design/credential-encryption.md`](../design/credential-encryption.md). A repo `.gitignore` should keep them out even if a user runs the CLI
+> Treat every file above as a secret. They are plaintext `0600` by default. Encryption at rest with an OS-held key
+> is opt-in: `mimi-seed credentials mode keychain` ([`../credentials.md`](../credentials.md#encrypt-stored-credentials)); every reader understands both — see [`../design/credential-encryption.md`](../design/credential-encryption.md). A repo `.gitignore` should keep them out even if a user runs the CLI
 > inside a project; the SDK itself never writes them into the repo tree.
 
 ## The four auth models

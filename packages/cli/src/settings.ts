@@ -10,9 +10,12 @@ import fs from "node:fs";
 import os from "node:os";
 import { settingsPath, type Lang } from "#core/lang.js";
 import { writeJsonAtomic } from "#core/atomic-write.js";
+import type { CredentialStoreMode } from "#core/credential-store.js";
 
 export interface Settings {
   lang?: Lang;
+  /** 자격증명 저장 모드 — `mimi-seed credentials mode`. 해석은 core 의 credential-store.ts. */
+  credentialStore?: CredentialStoreMode;
 }
 
 export function readSettings(home: string = os.homedir()): Settings {

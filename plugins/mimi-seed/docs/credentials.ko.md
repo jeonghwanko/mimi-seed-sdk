@@ -449,3 +449,30 @@ export OPENAI_API_KEY=<openai-api-key>
 끝까지 수동으로 남는 단계가 둘 있다: Play Console 권한 부여([Play 서비스 계정](#play-service-account) 참고),
 그리고 **완전히 새 앱**이라면 **첫 AAB 를 Play Console 에 손으로 업로드**하는 것. API 는 한 번도 게시된 적 없는
 앱을 만들어낼 수 없다.
+
+<a id="encrypt-stored-credentials"></a>
+
+## 저장된 자격증명 암호화 (선택)
+
+기본값에서는 위의 모든 파일이 권한 `0600` 인 평문이다. 같은 컴퓨터의 다른 사용자는 읽지 못하지만, 홈 폴더의
+복사본(백업 · 동기화 폴더 · 예전 디스크)에서는 읽힌다. 저장된 파일을 암호화해 두려면:
+
+```sh
+mimi-seed credentials mode keychain   # 또는 auto — 키 저장소가 있는 곳만 암호화하고 없는 곳(CI · 컨테이너)은 평문
+mimi-seed credentials encrypt         # 이미 있는 파일을 암호화
+mimi-seed credentials status          # 모드 · 키 저장소 · 파일별 상태
+```
+
+- 키는 OS 키 저장소에 둔다: macOS 키체인, Windows DPAPI, Linux Secret Service(`secret-tool` 과 데스크톱 세션
+  필요). `MIMI_SEED_CREDENTIAL_STORE` 가 저장된 모드보다 우선한다.
+- Mimi Seed 사용법은 그대로다. 도구가 필요할 때 암호화된 파일을 메모리에서 연다.
+- **무엇을 막아 주나:** `~/.mimi-seed/` 복사본만으로는 아무것도 드러나지 않는다. 홈 폴더 전체 복사본은 로그인
+  비밀번호만큼만 안전하다(OS 키 저장소가 그 비밀번호로 보호되기 때문). 내 계정으로 도는 악성코드는 막지 **못한다**.
+- **키를 잃으면**(로그인 키체인 초기화, 홈 폴더를 다른 컴퓨터로 옮김) 암호화된 파일을 열 수 없다:
+  `mimi-seed doctor` 가 "암호화된 파일을 열 수 없음"을 보여준다. 그 서비스들에 다시 로그인하면 된다.
+- 한 번 암호화한 컴퓨터는 `settings.json` 이 사라져도 계속 암호화한다. 되돌리려면
+  `mimi-seed credentials mode file` 다음에 `mimi-seed credentials decrypt`.
+- `keys/` 와 `keystores/` 는 평문으로 남는다 — gcloud · Gradle · CI 가 직접 읽는다.
+- 이 폴더를 읽는 모든 Mimi Seed 설치가 이 버전 이상이어야 한다. MCP 서버 등록이 옛 버전으로 고정돼 있으면
+  `mode` 가 거부한다 — `@latest` 로 등록하자. 전역 설치한 `mimi-seed-mcp` 는 버전을 확인할 수 없으니 암호화를 켜기
+  전에 업데이트하자.

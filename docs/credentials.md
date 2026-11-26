@@ -458,3 +458,32 @@ Once you have it, upload it and its passwords into Jenkins with `jenkins_upload_
 Two steps stay irreducibly manual: the Play Console permission grant (see
 [Play service account](#play-service-account)), and — for a brand-new app — uploading the **first** AAB to Play
 Console by hand. The API cannot create an app that has never been published.
+
+<a id="encrypt-stored-credentials"></a>
+
+## Encrypting stored credentials (optional)
+
+By default every file above is plaintext with mode `0600`: other users on the machine can't read it, but a copy of
+your home folder (a backup, a synced folder, an old disk) can. To keep those files encrypted at rest:
+
+```sh
+mimi-seed credentials mode keychain   # or: auto — encrypt where a key store exists, plaintext elsewhere (CI, containers)
+mimi-seed credentials encrypt         # encrypt the files that already exist
+mimi-seed credentials status          # mode, key store, and each file's state
+```
+
+- The key lives in your OS key store: macOS Keychain, Windows DPAPI, or Linux Secret Service (needs
+  `secret-tool` and a desktop session). `MIMI_SEED_CREDENTIAL_STORE` overrides the saved mode.
+- Mimi Seed keeps working the same. Encrypted files are opened in memory when a tool needs them.
+- **What it protects:** a copy of `~/.mimi-seed/` on its own reveals nothing. A full home-folder copy is only as
+  safe as your login password, because the OS key store is protected by it. It does **not** protect against
+  malware running as you.
+- **If the key is lost** (the login keychain was reset, or you moved your home folder to another machine), the
+  encrypted files can't be opened: `mimi-seed doctor` shows "cannot open encrypted file". Sign in to those
+  services again.
+- Once a machine has encrypted, it stays encrypted even if `settings.json` is lost. To go back:
+  `mimi-seed credentials mode file`, then `mimi-seed credentials decrypt`.
+- `keys/` and `keystores/` stay plaintext, because gcloud, Gradle, and CI read them directly.
+- Every Mimi Seed install that reads this folder must be this version or newer. `mode` refuses while an MCP
+  server registration is pinned to a version from before this feature. Register it with `@latest` instead. A
+  globally installed `mimi-seed-mcp` can't be checked, so update it before turning encryption on.

@@ -73,6 +73,7 @@ const CREDENTIAL_ANCHORS = [
   'cloud-pat',
   'anthropic-api-key',
   'android-keystore',
+  'encrypt-stored-credentials',
 ];
 
 describe('온보딩 문서 ↔ 코드', () => {

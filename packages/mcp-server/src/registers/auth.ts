@@ -39,6 +39,7 @@ import {
 import { textResult } from '../lib/mcp-response.js';
 import { describeToolsets } from '../lib/toolsets.js';
 import { findInvalidJsonFiles } from '../lib/json-file.js';
+import { credentialStoreReport } from '#core/credential-store.js';
 import { catalog } from '#core/lang.js';
 
 /** 출력 문구 — 도구별로 묶었다. 호출 시점에 언어를 읽는다 (`A()`). */
@@ -107,6 +108,8 @@ const A = catalog(
       invalidHeader: '── ⚠️ 읽을 수 없는 설정 파일 ─────────────────────',
       invalidReason: (reason: string) => `   원인: ${reason}`,
       invalidFix: '   → 해당 연결을 다시 설정하면 파일을 새로 씁니다. 고치기 전 내용을 보존하려면 먼저 백업하세요.',
+      storePlain: '🔓 자격증명 저장: 평문 0600 (암호화: 터미널에서 mimi-seed credentials mode keychain)',
+      storeEncrypted: (n: number, left: number) => `🔐 자격증명 저장: 암호화 (${n}개 파일)${left ? ` — 평문 ${left}개 남음 → mimi-seed credentials encrypt` : ''}`,
       nextOauth: '  1. mimi_seed_auth_start  (Google 계정 로그인 — Firebase/AdMob/GSC 등 필수)',
       nextAsc: '  2. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (App Store 배포 필수)',
       nextHeader: '── 다음 단계 (필수) ─────────────────────────────',
@@ -210,6 +213,8 @@ const A = catalog(
       invalidHeader: '── ⚠️ Unreadable config files ─────────────────────',
       invalidReason: (reason: string) => `   Cause: ${reason}`,
       invalidFix: '   → Setting up that connection again rewrites the file. To keep its current contents, back it up first.',
+      storePlain: '🔓 Credential storage: plaintext 0600 (to encrypt, run in a terminal: mimi-seed credentials mode keychain)',
+      storeEncrypted: (n: number, left: number) => `🔐 Credential storage: encrypted (${n} file(s))${left ? ` — ${left} plaintext left → mimi-seed credentials encrypt` : ''}`,
       nextOauth: '  1. mimi_seed_auth_start  (Google account login — required for Firebase/AdMob/GSC, etc.)',
       nextAsc: '  2. npx -y @yoonion/mimi-seed-mcp mimi-seed-appstore-auth  (required for App Store releases)',
       nextHeader: '── Next steps (required) ─────────────────────────────',
@@ -528,6 +533,12 @@ export function registerAuthTools(server: ToolRegistrar) {
         for (const { file, reason } of invalidFiles) lines.push(`❌ ${file}`, m.invalidReason(reason));
         lines.push(m.invalidFix);
       }
+
+      // 13. 저장 방식 — 봉투 파일이 있을 때만 키 저장소를 부른다(키를 만들지는 않는다). 잠긴 파일은 위 12 가 이미 짚는다.
+      const store = credentialStoreReport();
+      const sealed = store.files.filter((f) => f.state === 'encrypted').length;
+      const plain = store.files.filter((f) => f.state === 'plaintext').length;
+      lines.push('', store.effective === 'file' && sealed === 0 ? m.storePlain : m.storeEncrypted(sealed, store.effective === 'file' ? 0 : plain));
 
       // 다음 단계 안내
       const missing: string[] = [];

@@ -7,8 +7,14 @@
 > - In stage 2 so far, writers encrypt only when `MIMI_SEED_CREDENTIAL_STORE` (or `settings.json`
 >   `credentialStore`) is `keychain` or `auto` (`core/src/credential-store.ts`). The default stays `file`, which is
 >   plaintext `0600` ([`../domain/auth-credentials.md`](../domain/auth-credentials.md)).
-> - Still to do in stage 2: the `mimi-seed credentials` command, the `doctor` / `mimi_seed_status` lines, the
->   version-skew check, and the user docs.
+> - `mimi-seed credentials status|mode|encrypt|decrypt` (`cli/src/credentials-cmd.ts`) and the `doctor` /
+>   `mimi_seed_status` storage lines are in place. The user docs are in [`../credentials.md`](../credentials.md#encrypt-stored-credentials).
+> - The version-skew check refuses to turn encryption on while an MCP registration in `~/.claude.json`,
+>   `~/.codex/config.toml`, `~/.cursor/mcp.json`, or `./.mcp.json` is pinned to a release from before encrypted
+>   credentials could be read (`FIRST_ENVELOPE_READER` in `credentials-cmd.ts`). A range pin is judged by the newest
+>   version it resolves to. `@latest` registrations, the default, pass. An MCP server installed globally without a
+>   version in its registration can't be checked this way.
+> - Next is stage 3: deciding whether `auto` becomes the default (§9 Q1).
 > This document describes structure only and contains no secret values.
 
 ## 1. Problem

@@ -15,6 +15,7 @@ import { cmdReview } from "./review.js";
 import { cmdAuth } from "./auth.js";
 import { cmdSetup } from "./setup.js";
 import { cmdLang } from "./lang.js";
+import { cmdCredentials } from "./credentials-cmd.js";
 import { cmdFirebase, cmdAdmob, cmdGa4 } from "./cloud.js";
 import { cmdDeploy } from "./deploy.js";
 import { cmdRestart } from "./mcp-restart.js";
@@ -166,6 +167,9 @@ async function main(): Promise<void> {
         break;
       case "lang":
         await cmdLang(restArgs);
+        break;
+      case "credentials":
+        await cmdCredentials(restArgs);
         break;
       case "status":
         await cmdStatus();
