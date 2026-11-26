@@ -56,7 +56,7 @@ mcp-server/src/server.ts   buildServer(version, { env })   ← the single assemb
   active toolset selection. A **new register module must be added here**; `index.ts` only
   picks a run mode and hands `buildServer()` a transport. `tool-manifest.test.ts` boots this same function, so
   a module that never got wired shows up as missing tools rather than silence.
-- Each `registers/<domain>.ts` (App Store: `registers/appstore/<part>.ts`) declares tools with
+- Each `registers/<domain>.ts` (App Store / Google Play: `registers/<store>/<part>.ts`) declares tools with
   `server.tool(...)` — but `server` is a `ToolRegistrar`, not the SDK's deprecated `McpServer.tool`. Input
   validation is **zod** schemas; there is no separate schema file.
 
@@ -86,7 +86,11 @@ classified — nobody has to remember to hand-write a preview branch.
   `metadata`, `media`, `testflight`, `customer-reviews`, `products`, `review-submission`, `declarations`,
   `reports`). Call order there is the `tools/list` order, so a module that owns non-adjacent tools exports more
   than one register function rather than reordering them. A new App Store tool goes into its part's function,
-  not the entry file. File IO (reading a CSV or a key
+  not the entry file. The Google Play register layer follows the same rules: `registers/playstore.ts` sequences
+  `registers/playstore/<part>.ts` (`listing`, `media`, `releases`, `reviews`, `products`, `service-accounts`,
+  `recovery`, `financials`), and `registers/playstore/shared.ts` holds the friendly-error proxy and
+  `truncatedList` they share. `appstore-register-order.test.ts` and `playstore-register-order.test.ts` pin each
+  store's `tools/list` order. File IO (reading a CSV or a key
   file the caller named) belongs to the domain module too — e.g. `playstore/data-safety.ts`,
   `android/playstore-sa.ts`.
 - Responses go through `lib/mcp-response.ts`: `jsonResult(value)` for structured output, `textResult(str | lines)`
