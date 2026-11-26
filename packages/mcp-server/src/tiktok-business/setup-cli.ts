@@ -22,6 +22,7 @@ const ko = {
   exchanging: '  🔎 authorization code 교환 및 계정 검증 중...',
   saved: (openId: string) => `  ✅ 연결 완료 (${openId}) — ~/.mimi-seed/tiktok-business.json (0600)`,
   cancelled: '  취소됨.',
+  noPublishScope: '승인된 권한에 video.publish가 없습니다. 앱 권한을 확인한 뒤 다시 승인하세요.',
 };
 
 const en: typeof ko = {
@@ -41,6 +42,7 @@ const en: typeof ko = {
   exchanging: '  🔎 Exchanging the authorization code and verifying the account...',
   saved: (openId: string) => `  ✅ Connected (${openId}) — ~/.mimi-seed/tiktok-business.json (0600)`,
   cancelled: '  Cancelled.',
+  noPublishScope: 'The granted scopes do not include video.publish. Check the app permissions, then authorize again.',
 };
 
 const M = resolveLang() === 'en' ? en : ko;
@@ -75,7 +77,7 @@ async function main(): Promise<void> {
   const token = await exchangeAuthorizationCode({ clientId, clientSecret, redirectUri, authCode });
   const config = configFromToken({ clientId, clientSecret, redirectUri }, token);
   if (!hasTikTokScope(config, 'video.publish')) {
-    throw new Error('승인된 권한에 video.publish가 없습니다. 앱 권한을 확인한 뒤 다시 승인하세요.');
+    throw new Error(M.noPublishScope);
   }
   await getBusinessAccount(config);
   saveTikTokBusinessConfig(config);

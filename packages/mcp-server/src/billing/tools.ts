@@ -1,6 +1,26 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { resourceName, resourceSegment } from '../lib/resource-id.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    billingAccountId: '결제 계정 ID',
+    gcpProjectId: 'GCP 프로젝트 ID',
+    blaze: (account: string | null | undefined) => `Blaze — 결제 계정 ${account} 연결됨. Cloud Functions/Run 배포 가능.`,
+    spark: 'Spark — 결제 계정 미연결. Cloud Functions 등 유료 서비스 배포 불가.',
+    lastPeriod: '(직전 기간 금액)',
+    unspecified: '(미지정)',
+  },
+  {
+    billingAccountId: 'billing account ID',
+    gcpProjectId: 'GCP project ID',
+    blaze: (account: string | null | undefined) => `Blaze — billing account ${account} linked. Cloud Functions/Run can be deployed.`,
+    spark: 'Spark — no billing account linked. Paid services such as Cloud Functions cannot be deployed.',
+    lastPeriod: '(last period amount)',
+    unspecified: '(unspecified)',
+  },
+);
 
 /**
  * Cloud Billing + Billing Budgets 래퍼.
@@ -47,7 +67,7 @@ function quotaHeaders(quotaProjectId?: string) {
 
 /** `01F1F4-FD007B-2973A7` / `billingAccounts/01F1F4-...` 어느 형태로 줘도 정규화. */
 export function normalizeBillingAccount(input: string): string {
-  return resourceName(input, 'billingAccounts', '결제 계정 ID');
+  return resourceName(input, 'billingAccounts', M().billingAccountId);
 }
 
 export type BillingInfo = {
@@ -77,8 +97,8 @@ export async function getBillingInfo(
     billingEnabled: enabled,
     billingAccountName: account,
     verdict: enabled
-      ? `Blaze — 결제 계정 ${account} 연결됨. Cloud Functions/Run 배포 가능.`
-      : 'Spark — 결제 계정 미연결. Cloud Functions 등 유료 서비스 배포 불가.',
+      ? M().blaze(account)
+      : M().spark,
   };
 }
 
@@ -128,8 +148,8 @@ export async function listBudgets(
     amount: b.amount?.specifiedAmount
       ? `${b.amount.specifiedAmount.units ?? '0'} ${b.amount.specifiedAmount.currencyCode ?? ''}`.trim()
       : b.amount?.lastPeriodAmount
-        ? '(직전 기간 금액)'
-        : '(미지정)',
+        ? M().lastPeriod
+        : M().unspecified,
     projects: b.budgetFilter?.projects ?? [],
     thresholds: (b.thresholdRules ?? []).map((t) => t.thresholdPercent),
   }));
@@ -160,7 +180,7 @@ export async function createBudget(auth: OAuth2Client, input: CreateBudgetInput)
       budgetFilter: {
         // projects 는 `projects/<번호 또는 ID>` 형태를 받는다.
         ...(input.projectIds?.length
-          ? { projects: input.projectIds.map((p) => resourceName(p, 'projects', 'GCP 프로젝트 ID')) }
+          ? { projects: input.projectIds.map((p) => resourceName(p, 'projects', M().gcpProjectId)) }
           : {}),
       },
       amount: {

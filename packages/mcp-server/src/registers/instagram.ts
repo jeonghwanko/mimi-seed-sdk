@@ -6,6 +6,24 @@ import * as api from '../instagram/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    type: (t: string) => `   타입: ${t}`,
+    followers: (n: string) => `   팔로워: ${n}`,
+    posts: (n: number) => `   게시물: ${n}`,
+    posted: `✅ 게시 완료`,
+    carousel: (n: number) => `✅ 캐러셀 ${n}장 게시 완료`,
+  },
+  {
+    type: (t: string) => `   Type: ${t}`,
+    followers: (n: string) => `   Followers: ${n}`,
+    posts: (n: number) => `   Posts: ${n}`,
+    posted: `✅ Posted`,
+    carousel: (n: number) => `✅ Posted a ${n}-image carousel`,
+  },
+);
 
 export function registerInstagramTools(server: ToolRegistrar) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
@@ -47,9 +65,9 @@ export function registerInstagramTools(server: ToolRegistrar) {
       return textResult([
         `@${account.username}${account.name ? ` (${account.name})` : ''}`,
         `   ID: ${account.id}`,
-        account.account_type ? `   타입: ${account.account_type}` : '',
-        account.followers_count !== undefined ? `   팔로워: ${account.followers_count.toLocaleString()}` : '',
-        account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
+        account.account_type ? M().type(account.account_type) : '',
+        account.followers_count !== undefined ? M().followers(account.followers_count.toLocaleString()) : '',
+        account.media_count !== undefined ? M().posts(account.media_count) : '',
         `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth instagram')}`,
       ].filter(Boolean));
     },
@@ -72,7 +90,7 @@ export function registerInstagramTools(server: ToolRegistrar) {
       const cfg = requireInstagramConfig({ profile });
       const result = await api.postImage(cfg, imageUrl, caption);
       return textResult([
-        `✅ 게시 완료`,
+        M().posted,
         `   media_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));
@@ -96,7 +114,7 @@ export function registerInstagramTools(server: ToolRegistrar) {
       const cfg = requireInstagramConfig({ profile });
       const result = await api.postCarousel(cfg, imageUrls, caption);
       return textResult([
-        `✅ 캐러셀 ${imageUrls.length}장 게시 완료`,
+        M().carousel(imageUrls.length),
         `   media_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));

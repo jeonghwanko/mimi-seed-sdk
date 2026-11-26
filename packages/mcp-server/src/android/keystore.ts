@@ -4,6 +4,24 @@ import { existsSync, statSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    tooMuchOutput: '(출력이 너무 커서 중단됨)',
+    timedOut: (sec: number) => `keytool 실패: ${sec}초 안에 끝나지 않아 중단했습니다. JDK 설치 상태를 확인하세요.`,
+    missing: 'keytool 실패: keytool 을 찾을 수 없습니다 (JDK 가 PATH 에 있어야 합니다).',
+    failed: (output: string) => `keytool 실패:\n${output}`,
+    cleanupFailed: (dir: string, reason: string) => `[mimi-seed] 임시 keystore 폴더를 지우지 못했습니다 — 직접 지우세요: ${dir} (${reason})`,
+  },
+  {
+    tooMuchOutput: '(stopped: output too large)',
+    timedOut: (sec: number) => `keytool failed: stopped because it did not finish within ${sec} seconds. Check the JDK installation.`,
+    missing: 'keytool failed: keytool not found (the JDK must be on PATH).',
+    failed: (output: string) => `keytool failed:\n${output}`,
+    cleanupFailed: (dir: string, reason: string) => `[mimi-seed] Could not delete the temporary keystore folder — delete it manually: ${dir} (${reason})`,
+  },
+);
 
 export interface GeneratedKeystore {
   keystoreBase64: string;
@@ -60,7 +78,7 @@ function runKeytool(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv, 
         if (e.code === 'ENOENT') return resolve({ code: null, output, timedOut: false, missing: true });
         // maxBuffer 초과도 자식을 죽이고 killed 를 세운다 — 시간 초과로 오진하지 않게 먼저 거른다.
         if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-          return resolve({ code: null, output: `${output}\n(출력이 너무 커서 중단됨)`, timedOut: false, missing: false });
+          return resolve({ code: null, output: `${output}\n${M().tooMuchOutput}`, timedOut: false, missing: false });
         }
         if (e.killed) return resolve({ code: null, output, timedOut: true, missing: false });
         resolve({ code: typeof e.code === 'number' ? e.code : null, output, timedOut: false, missing: false });
@@ -142,10 +160,10 @@ export async function generateKeystore(opts: {
     );
 
     if (result.timedOut) {
-      throw new Error(`keytool 실패: ${KEYTOOL_GENERATE_TIMEOUT_MS / 1000}초 안에 끝나지 않아 중단했습니다. JDK 설치 상태를 확인하세요.`);
+      throw new Error(M().timedOut(KEYTOOL_GENERATE_TIMEOUT_MS / 1000));
     }
-    if (result.missing) throw new Error('keytool 실패: keytool 을 찾을 수 없습니다 (JDK 가 PATH 에 있어야 합니다).');
-    if (result.code !== 0) throw new Error(`keytool 실패:\n${result.output}`);
+    if (result.missing) throw new Error(M().missing);
+    if (result.code !== 0) throw new Error(M().failed(result.output));
 
     const keystoreBuffer = await readFile(keystorePath);
     return {
@@ -161,7 +179,7 @@ export async function generateKeystore(opts: {
     try {
       await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     } catch (e) {
-      console.error(`[mimi-seed] 임시 keystore 폴더를 지우지 못했습니다 — 직접 지우세요: ${dir} (${(e as Error).message})`);
+      console.error(M().cleanupFailed(dir, (e as Error).message));
     }
   }
 }

@@ -3,6 +3,12 @@ import type { GoogleAdsConfig } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { googleAdsError } from './errors.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { noToken: 'OAuth 토큰을 가져올 수 없음. 재인증 필요.' },
+  { noToken: 'Could not get an OAuth token. Reauthentication required.' },
+);
 
 // Google Ads API는 ~13개월 주기로 sunset (항상 최신 3개 major만 유지).
 // v24 = 2026-06 기준 현행 major. 새 major 출시 시 갱신 필요.
@@ -73,7 +79,7 @@ interface GoogleAdsRow {
 
 async function getAccessToken(auth: OAuth2Client): Promise<string> {
   const token = await auth.getAccessToken();
-  if (!token.token) throw new Error('OAuth 토큰을 가져올 수 없음. 재인증 필요.');
+  if (!token.token) throw new Error(M().noToken);
   return token.token;
 }
 

@@ -4,6 +4,24 @@ import { isNotFound } from './http.js';
 import { collectPages } from '../lib/paginate.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { appStoreNextPagePath } from './read-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noGroup: 'App Store Connect에서 대상 미디어 배치 그룹을 확인할 수 없습니다.',
+    badShape: 'App Store Connect의 미디어 배치 응답 형식이 올바르지 않습니다.',
+    duplicate: 'App Store Connect의 미디어 배치 ID가 중복됩니다.',
+    incomplete: 'App Store Connect의 미디어 배치 목록이 불완전합니다.',
+    noMedia: 'App Store Connect에서 대상 로컬라이제이션의 미디어를 찾을 수 없습니다.',
+  },
+  {
+    noGroup: 'Cannot confirm the target media placement group in App Store Connect.',
+    badShape: 'The App Store Connect media placement response has an invalid format.',
+    duplicate: 'App Store Connect returned duplicate media placement IDs.',
+    incomplete: 'The App Store Connect media placement list is incomplete.',
+    noMedia: 'Cannot find media for the target localization in App Store Connect.',
+  },
+);
 
 const id = z.string().min(1);
 const resourceRef = z.object({ type: z.string(), id });
@@ -169,7 +187,7 @@ export async function listPlacementGroup(
     ...(includeAsset ? { include: includeAsset, [`fields[${assetType}]`]: 'state' } : {}),
   });
   if (!rows || rows.some((row) => row.placementGroup !== placementGroup)) {
-    throw new Error('App Store Connect에서 대상 미디어 배치 그룹을 확인할 수 없습니다.');
+    throw new Error(M().noGroup);
   }
   return rows;
 }
@@ -188,17 +206,17 @@ async function readPlacements(localizationId: string, filters: Record<string, st
   let total = 0;
   return collectPages(async (next) => {
     const page = placementPage.safeParse(next ? await apiGet<unknown>(next) : first);
-    if (!page.success) throw new Error('App Store Connect의 미디어 배치 응답 형식이 올바르지 않습니다.');
+    if (!page.success) throw new Error(M().badShape);
     const { data, included, links, meta } = page.data;
     const assets = indexIncludedResources(included ?? []);
     for (const row of data) {
-      if (seen.has(row.id)) throw new Error('App Store Connect의 미디어 배치 ID가 중복됩니다.');
+      if (seen.has(row.id)) throw new Error(M().duplicate);
       seen.add(row.id);
     }
     total = Math.max(total, meta?.paging?.total ?? 0);
     const nextPageToken = links?.next ? appStoreNextPagePath(path, links.next) : undefined;
     if (!nextPageToken && (meta?.paging?.nextCursor || total > seen.size)) {
-      throw new Error('App Store Connect의 미디어 배치 목록이 불완전합니다.');
+      throw new Error(M().incomplete);
     }
     return {
       items: data.map((row) => toPlacement(row, assets)),
@@ -220,6 +238,6 @@ export async function listProductPageMedia<T>(
       throw error;
     }),
   ]);
-  if (!placements && !legacySets) throw new Error('App Store Connect에서 대상 로컬라이제이션의 미디어를 찾을 수 없습니다.');
+  if (!placements && !legacySets) throw new Error(M().noMedia);
   return { placements: placements ?? [], legacySets: legacySets ?? [] };
 }

@@ -16,18 +16,79 @@ import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { CREDENTIAL_DIR_MODE, writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
+import { catalog } from '#core/lang.js';
 import type { JenkinsConfig } from './config.js';
 import { authHeaders, isStrictJobPath, jobUrl, requestCrumb } from './http.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 
+const M = catalog(
+  {
+    badJobPath: '잡 경로에는 빈 세그먼트, . 또는 .., 백슬래시, 제어 문자를 쓸 수 없습니다.',
+    badRequestId: 'request_id 는 영숫자·_·- 만 쓸 수 있습니다 (최대 128자).',
+    badKeyFile: (name: string) => `Jenkins 빌드 요청 키 파일이 손상됐습니다 (${name}). 빌드를 요청하지 않았습니다.`,
+    needAuth: 'Jenkins 사용자와 API Token 설정이 필요합니다.',
+    badUrl: 'Jenkins URL은 인증정보·쿼리·fragment 없는 HTTP(S) 주소여야 합니다.',
+    pending:
+      '같은 request_id 의 요청을 다른 호출이 방금 예약해 처리 중입니다. 잠시 뒤 같은 request_id 로 다시 호출해 결과를 확인하세요. '
+      + '새 request_id 로 재시도하지 마세요.',
+    unknown:
+      '접수 여부 불명입니다. 자동 재전송하지 않습니다. Jenkins에서 접수 여부를 확인하세요. 같은 request_id 재호출도 POST하지 않습니다.',
+    rejected: 'Jenkins가 요청을 거절했습니다. 권한·잡·파라미터를 확인하세요. 수정 후 새 요청에만 새 request_id를 사용하세요.',
+    queuedNotPersisted:
+      'Jenkins 빌드는 큐에 들어갔습니다 — 다시 트리거하지 마세요. queue_id 를 jenkins_get_queue_item 으로 추적하세요. '
+      + '(로컬 결과 기록 저장 실패: 같은 request_id 재호출은 pending/unknown 으로 보이지만 재전송하지 않습니다.) '
+      + 'The build WAS queued — do not retrigger; track queue_id with jenkins_get_queue_item. '
+      + '(The local result record could not be saved; replays of this request_id report pending/unknown and never re-send.)',
+    notPersisted: ' 로컬 결과 기록을 저장하지 못했습니다 — 새 request_id 로 재시도하지 마세요. '
+      + 'The local result record could not be saved — do not retry with a new request_id.',
+    fingerprintMismatch: '같은 request_id에 다른 잡/파라미터를 사용할 수 없습니다. 새 요청이면 새 request_id를 쓰세요.',
+    crumbFailed: (status: string) =>
+      `Jenkins CSRF crumb 조회 실패${status} — 빌드를 요청하지 않았습니다. `
+      + '인증·서버 상태를 확인한 뒤 같은 request_id 로 다시 시도해도 됩니다.',
+    readConnect: 'Jenkins 조회 연결 실패/시간 초과. 연결 상태를 확인한 뒤 조회만 재시도하세요.',
+    readFailed: (status: number) => `Jenkins 조회 실패 (HTTP ${status}). 인증·권한·서버 상태를 확인하세요.`,
+    badJson: 'Jenkins JSON 응답을 읽을 수 없습니다.',
+    queueGone: '큐 항목이 만료됐거나 없습니다. 이미 기록한 빌드 번호로 조회하세요. 재트리거하거나 lastBuild로 추정하지 마세요.',
+    queueMismatch: 'Jenkins 큐 응답 형식 또는 ID가 일치하지 않습니다.',
+    buildMismatch: 'Jenkins 빌드 응답 형식 또는 번호가 일치하지 않습니다.',
+  },
+  {
+    badJobPath: 'A job path cannot contain empty segments, . or .., backslashes, or control characters.',
+    badRequestId: 'request_id may contain only letters, digits, _ and - (max 128 characters).',
+    badKeyFile: (name: string) => `The Jenkins build request key file is corrupted (${name}). No build was requested.`,
+    needAuth: 'A Jenkins user and API Token must be configured.',
+    badUrl: 'The Jenkins URL must be an HTTP(S) address with no credentials, query, or fragment.',
+    pending:
+      'Another call just reserved a request with the same request_id and is processing it. Call again with the same request_id shortly to check the result. '
+      + 'Do not retry with a new request_id.',
+    unknown:
+      'Whether Jenkins accepted the request is unknown. It is not re-sent automatically. Check in Jenkins whether it was accepted. Calling again with the same request_id does not POST either.',
+    rejected: 'Jenkins rejected the request. Check permissions, the job, and parameters. After fixing them, use a new request_id only for a new request.',
+    queuedNotPersisted:
+      'The build WAS queued — do not retrigger; track queue_id with jenkins_get_queue_item. '
+      + '(The local result record could not be saved; replays of this request_id report pending/unknown and never re-send.)',
+    notPersisted: ' The local result record could not be saved — do not retry with a new request_id.',
+    fingerprintMismatch: 'The same request_id cannot be used with a different job or parameters. Use a new request_id for a new request.',
+    crumbFailed: (status: string) =>
+      `Jenkins CSRF crumb request failed${status} — no build was requested. `
+      + 'After checking authentication and server status, you may retry with the same request_id.',
+    readConnect: 'Jenkins read failed to connect or timed out. Check the connection, then retry only the read.',
+    readFailed: (status: number) => `Jenkins read failed (HTTP ${status}). Check authentication, permissions, and server status.`,
+    badJson: 'Could not read the Jenkins JSON response.',
+    queueGone: 'The queue item expired or does not exist. Look up the build number you already recorded. Do not retrigger or guess from lastBuild.',
+    queueMismatch: 'The Jenkins queue response format or ID does not match.',
+    buildMismatch: 'The Jenkins build response format or number does not match.',
+  },
+);
+
 export const buildJobSchema = z
   .string()
   .min(1)
   .max(1024)
-  .refine(isStrictJobPath, '잡 경로에는 빈 세그먼트, . 또는 .., 백슬래시, 제어 문자를 쓸 수 없습니다.');
+  .refine(isStrictJobPath, { error: () => M().badJobPath });
 export const buildIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
-export const requestIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/, 'request_id 는 영숫자·_·- 만 쓸 수 있습니다 (최대 128자).');
+export const requestIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/, { error: () => M().badRequestId });
 export const buildParametersSchema = z.record(z.string().min(1), z.string());
 
 export const triggerBuildSchema = z.object({
@@ -74,7 +135,7 @@ export function fingerprintKey(): Buffer {
   const read = (): Buffer => {
     const text = readFileSync(file, 'utf8').trim();
     if (!/^[0-9a-f]{64}$/.test(text)) {
-      throw new Error(`Jenkins 빌드 요청 키 파일이 손상됐습니다 (${path.basename(file)}). 빌드를 요청하지 않았습니다.`);
+      throw new Error(M().badKeyFile(path.basename(file)));
     }
     return Buffer.from(text, 'hex');
   };
@@ -97,28 +158,22 @@ export function fingerprintKey(): Buffer {
 }
 
 function root(cfg: JenkinsConfig): string {
-  if (!cfg.username?.trim() || !cfg.token?.trim()) throw new Error('Jenkins 사용자와 API Token 설정이 필요합니다.');
+  if (!cfg.username?.trim() || !cfg.token?.trim()) throw new Error(M().needAuth);
   const url = new URL(cfg.url);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error('Jenkins URL은 인증정보·쿼리·fragment 없는 HTTP(S) 주소여야 합니다.');
+    throw new Error(M().badUrl);
   }
   return url.href.replace(/\/+$/, '');
 }
 
 const queueUrlOf = (base: string, queueId: number) => `${base}/queue/item/${encodePathSegment(queueId)}/`;
 
-const MESSAGES: Record<Receipt['state'], string | undefined> = {
-  pending:
-    '같은 request_id 의 요청을 다른 호출이 방금 예약해 처리 중입니다. 잠시 뒤 같은 request_id 로 다시 호출해 결과를 확인하세요. '
-    + '새 request_id 로 재시도하지 마세요.',
-  unknown:
-    '접수 여부 불명입니다. 자동 재전송하지 않습니다. Jenkins에서 접수 여부를 확인하세요. 같은 request_id 재호출도 POST하지 않습니다.',
-  rejected: 'Jenkins가 요청을 거절했습니다. 권한·잡·파라미터를 확인하세요. 수정 후 새 요청에만 새 request_id를 사용하세요.',
-  queued: undefined,
-};
+function messageFor(state: Receipt['state']): string | undefined {
+  return state === 'queued' ? undefined : M()[state];
+}
 
 function result(receipt: Receipt, base: string, requestId: string, replayed: boolean) {
-  const message = MESSAGES[receipt.state];
+  const message = messageFor(receipt.state);
   return {
     request_id: requestId,
     state: receipt.state,
@@ -131,14 +186,8 @@ function result(receipt: Receipt, base: string, requestId: string, replayed: boo
 
 /** 결과 기록을 저장하지 못했을 때 — 로컬 경로·원인 문자열은 싣지 않는다. */
 function notPersistedMessage(receipt: Receipt): string {
-  if (receipt.state === 'queued') {
-    return 'Jenkins 빌드는 큐에 들어갔습니다 — 다시 트리거하지 마세요. queue_id 를 jenkins_get_queue_item 으로 추적하세요. '
-      + '(로컬 결과 기록 저장 실패: 같은 request_id 재호출은 pending/unknown 으로 보이지만 재전송하지 않습니다.) '
-      + 'The build WAS queued — do not retrigger; track queue_id with jenkins_get_queue_item. '
-      + '(The local result record could not be saved; replays of this request_id report pending/unknown and never re-send.)';
-  }
-  return `${MESSAGES[receipt.state] ?? ''} 로컬 결과 기록을 저장하지 못했습니다 — 새 request_id 로 재시도하지 마세요. `
-    + 'The local result record could not be saved — do not retry with a new request_id.';
+  if (receipt.state === 'queued') return M().queuedNotPersisted;
+  return `${messageFor(receipt.state) ?? ''}${M().notPersisted}`;
 }
 
 /** 이미 예약된 request_id 재호출 — 기록을 돌려주고 POST 하지 않는다. */
@@ -150,7 +199,7 @@ function replay(dir: string, file: string, fingerprint: string, base: string, re
     // 다른 호출이 아직 예약 중이거나, 도중에 죽어 기록이 없거나 잘렸다 — 아래에서 나이로 가른다.
   }
   if (receipt && receipt.fingerprint !== fingerprint) {
-    throw new Error('같은 request_id에 다른 잡/파라미터를 사용할 수 없습니다. 새 요청이면 새 request_id를 쓰세요.');
+    throw new Error(M().fingerprintMismatch);
   }
   if (receipt && receipt.state !== 'pending') return result(receipt, base, requestId, true);
   let since = receipt?.reserved_at;
@@ -214,10 +263,7 @@ export async function triggerBuild(cfg: JenkinsConfig, input: TriggerInput) {
     // API 토큰 인증은 보통 crumb 이 면제지만, 켜 둔 서버도 있다. 인증 헤더를 단 채 리다이렉트를 따라가지 않는다.
     const crumbResult = await requestCrumb({ ...cfg, url: base }, { redirect: 'manual', maxAttempts: 1 });
     if (crumbResult.kind === 'failed') {
-      throw new Error(
-        `Jenkins CSRF crumb 조회 실패${crumbResult.status ? ` (HTTP ${crumbResult.status})` : ''} — 빌드를 요청하지 않았습니다. `
-        + '인증·서버 상태를 확인한 뒤 같은 request_id 로 다시 시도해도 됩니다.',
-      );
+      throw new Error(M().crumbFailed(crumbResult.status ? ` (HTTP ${crumbResult.status})` : ''));
     }
     crumb = crumbResult.kind === 'ok' ? crumbResult.headers : {};
   } catch (error) {
@@ -266,14 +312,14 @@ async function readJson(cfg: JenkinsConfig, url: string): Promise<{ missing: boo
   try {
     response = await fetchWithTimeout(url, { headers: authHeaders(cfg), redirect: 'manual' });
   } catch {
-    throw new Error('Jenkins 조회 연결 실패/시간 초과. 연결 상태를 확인한 뒤 조회만 재시도하세요.');
+    throw new Error(M().readConnect);
   }
   if (response.status === 404) return { missing: true };
-  if (!response.ok) throw new Error(`Jenkins 조회 실패 (HTTP ${response.status}). 인증·권한·서버 상태를 확인하세요.`);
+  if (!response.ok) throw new Error(M().readFailed(response.status));
   try {
     return { missing: false, data: await response.json() };
   } catch {
-    throw new Error('Jenkins JSON 응답을 읽을 수 없습니다.');
+    throw new Error(M().badJson);
   }
 }
 
@@ -295,11 +341,11 @@ export async function getQueueItem(cfg: JenkinsConfig, queueId: number) {
     return {
       queue_id: queueId,
       state: 'unavailable',
-      message: '큐 항목이 만료됐거나 없습니다. 이미 기록한 빌드 번호로 조회하세요. 재트리거하거나 lastBuild로 추정하지 마세요.',
+      message: M().queueGone,
     };
   }
   const data = queueSchema.safeParse(response.data);
-  if (!data.success || data.data.id !== queueId) throw new Error('Jenkins 큐 응답 형식 또는 ID가 일치하지 않습니다.');
+  if (!data.success || data.data.id !== queueId) throw new Error(M().queueMismatch);
   const item = data.data;
   return {
     queue_id: queueId,
@@ -328,6 +374,6 @@ export async function getBuildStatus(cfg: JenkinsConfig, job: string, buildNumbe
   const response = await readJson(cfg, `${buildUrl}api/json?tree=number,building,result,timestamp,duration`);
   if (response.missing) return { job, build_number: buildNumber, state: 'unavailable', build_url: buildUrl };
   const data = buildSchema.safeParse(response.data);
-  if (!data.success || data.data.number !== buildNumber) throw new Error('Jenkins 빌드 응답 형식 또는 번호가 일치하지 않습니다.');
+  if (!data.success || data.data.number !== buildNumber) throw new Error(M().buildMismatch);
   return { job, build_number: buildNumber, build_url: buildUrl, ...data.data };
 }

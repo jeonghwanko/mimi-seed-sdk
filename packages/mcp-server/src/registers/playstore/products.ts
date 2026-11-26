@@ -12,6 +12,40 @@ import { requirePlayStoreAuth, requireServiceAccountJson } from '../../helpers.j
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
 import { googleSubscriptionCreationResult } from '../../lib/store-create-result.js';
 import { playstore, truncatedList } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    createFailed: (err: string | undefined) => `❌ 상품 생성 실패: ${err}`,
+    created: `✓ Play 일회성 상품 생성 완료`,
+    checkActive: 'Play Console에서 활성화 확인:',
+    listingUpdated: (id: string) => `✓ ${id} 리스팅 갱신`,
+    subListingUpdated: (id: string) => `✓ ${id} 구독 리스팅 갱신`,
+    added: (langs: string) => `추가된 언어: ${langs}`,
+    modified: (langs: string) => `수정된 언어: ${langs}`,
+    current: (langs: string) => `현재 언어: ${langs}`,
+    noStates: '(응답에 상태 없음 — playstore_list_inapp_products 로 확인)',
+    updateFailed: (err: string | undefined) => `❌ 수정 실패: ${err}`,
+    updated: (fields: string) => `✓ 수정 완료 (변경 필드: ${fields})`,
+    deleteFailed: (err: string | undefined) => `❌ 삭제 실패: ${err}`,
+    deleted: (id: string) => `✓ ${id} 삭제 완료`,
+  },
+  {
+    createFailed: (err: string | undefined) => `❌ Product creation failed: ${err}`,
+    created: `✓ Play one-time product created`,
+    checkActive: 'Check activation in Play Console:',
+    listingUpdated: (id: string) => `✓ ${id} listings updated`,
+    subListingUpdated: (id: string) => `✓ ${id} subscription listings updated`,
+    added: (langs: string) => `Added languages: ${langs}`,
+    modified: (langs: string) => `Updated languages: ${langs}`,
+    current: (langs: string) => `Current languages: ${langs}`,
+    noStates: '(no state in the response — check with playstore_list_inapp_products)',
+    updateFailed: (err: string | undefined) => `❌ Update failed: ${err}`,
+    updated: (fields: string) => `✓ Update complete (changed fields: ${fields})`,
+    deleteFailed: (err: string | undefined) => `❌ Delete failed: ${err}`,
+    deleted: (id: string) => `✓ ${id} deleted`,
+  },
+);
 
 /**
  * playstore_list_inapp_products
@@ -81,14 +115,14 @@ export function registerProductCreateTools(server: ToolRegistrar) {
         serviceAccountKey: json,
       });
       if (!result.success) {
-        return textResult(`❌ 상품 생성 실패: ${result.error}`);
+        return textResult(M().createFailed(result.error));
       }
       return textResult([
-        `✓ Play 일회성 상품 생성 완료`,
+        M().created,
         `productId: ${result.productId}`,
         `price: ${args.price} ${args.currency}`,
         '',
-        'Play Console에서 활성화 확인:',
+        M().checkActive,
         `https://play.google.com/console/u/0/developers/-/app/-/managed-products?package=${encodeURIComponent(args.packageName)}`,
       ]);
     },
@@ -179,10 +213,10 @@ export function registerProductEditTools(server: ToolRegistrar) {
       const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updateOneTimeProductListings(auth, packageName, productId, listings);
       return textResult([
-        `✓ ${productId} 리스팅 갱신`,
-        result.created.length ? `추가된 언어: ${result.created.join(', ')}` : '',
-        result.updated.length ? `수정된 언어: ${result.updated.join(', ')}` : '',
-        `현재 언어: ${result.listings.map((l) => l.languageCode).join(', ')}`,
+        M().listingUpdated(productId),
+        result.created.length ? M().added(result.created.join(', ')) : '',
+        result.updated.length ? M().modified(result.updated.join(', ')) : '',
+        M().current(result.listings.map((l) => l.languageCode).join(', ')),
       ].filter(Boolean));
     },
   );
@@ -206,10 +240,10 @@ export function registerProductEditTools(server: ToolRegistrar) {
       const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.updateSubscriptionListings(auth, packageName, productId, listings);
       return textResult([
-        `✓ ${productId} 구독 리스팅 갱신`,
-        result.created.length ? `추가된 언어: ${result.created.join(', ')}` : '',
-        result.updated.length ? `수정된 언어: ${result.updated.join(', ')}` : '',
-        `현재 언어: ${result.listings.map((l) => l.languageCode).join(', ')}`,
+        M().subListingUpdated(productId),
+        result.created.length ? M().added(result.created.join(', ')) : '',
+        result.updated.length ? M().modified(result.updated.join(', ')) : '',
+        M().current(result.listings.map((l) => l.languageCode).join(', ')),
       ].filter(Boolean));
     },
   );
@@ -232,7 +266,7 @@ export function registerProductEditTools(server: ToolRegistrar) {
       );
       const states = result.states.length
         ? result.states.map((s) => `${s.purchaseOptionId}: ${s.state}`).join(', ')
-        : '(응답에 상태 없음 — playstore_list_inapp_products 로 확인)';
+        : M().noStates;
       return textResult(`✓ ${productId} / ${purchaseOptionId} ${action}\n${states}`);
     },
   );
@@ -253,9 +287,9 @@ export function registerProductEditTools(server: ToolRegistrar) {
         packageName, productId, productType, name, serviceAccountKey: json,
       });
       if (!result.success) {
-        return textResult(`❌ 수정 실패: ${result.error}`);
+        return textResult(M().updateFailed(result.error));
       }
-      return textResult(`✓ 수정 완료 (변경 필드: ${result.updated.join(', ') || 'none'})`);
+      return textResult(M().updated(result.updated.join(', ') || 'none'));
     },
   );
 
@@ -273,9 +307,9 @@ export function registerProductEditTools(server: ToolRegistrar) {
         packageName, productId, productType, serviceAccountKey: json,
       });
       if (!result.success) {
-        return textResult(`❌ 삭제 실패: ${result.error}`);
+        return textResult(M().deleteFailed(result.error));
       }
-      return textResult(`✓ ${productId} 삭제 완료`);
+      return textResult(M().deleted(productId));
     },
   );
 }

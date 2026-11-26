@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import { apiGet } from './client.js';
 import { V1_BASE } from './http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    nextLinkMismatch: 'App Store Connect의 다음 페이지 링크가 요청한 리소스와 일치하지 않습니다.',
+    responseBody: '응답 본문',
+    badShape: (field: string) => `App Store Connect 응답 형식 오류 (${field}).`,
+  },
+  {
+    nextLinkMismatch: 'The App Store Connect next-page link does not match the requested resource.',
+    responseBody: 'response body',
+    badShape: (field: string) => `Unexpected App Store Connect response format (${field}).`,
+  },
+);
 
 export const appStoreResourceRef = z.object({ id: z.string().min(1), type: z.string().min(1) });
 export const appStoreToOne = z.object({ data: appStoreResourceRef.nullable() });
@@ -29,7 +43,7 @@ export function appStoreNextPagePath(path: string, next: string): string {
   const url = new URL(next, endpoint);
   if (url.origin !== endpoint.origin || url.pathname !== endpoint.pathname
       || url.username || url.password || url.hash || !url.search) {
-    throw new Error('App Store Connect의 다음 페이지 링크가 요청한 리소스와 일치하지 않습니다.');
+    throw new Error(M().nextLinkMismatch);
   }
   return `${path}${url.search}`;
 }
@@ -41,8 +55,8 @@ export function pageIsIncomplete(page: z.infer<typeof appStorePagination>, count
 export async function getAppStoreResponse<T>(schema: z.ZodType<T>, path: string, params?: Record<string, string>): Promise<T> {
   const response = schema.safeParse(await apiGet<unknown>(path, params));
   if (!response.success) {
-    const field = response.error.issues[0]?.path.join('.') || '응답 본문';
-    throw new Error(`App Store Connect 응답 형식 오류 (${field}).`);
+    const field = response.error.issues[0]?.path.join('.') || M().responseBody;
+    throw new Error(M().badShape(field));
   }
   return response.data;
 }

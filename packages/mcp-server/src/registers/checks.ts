@@ -11,6 +11,25 @@ import { getReleaseStatus } from '../checks/release-status.js';
 import { errorResult, jsonResult, textResult } from '../lib/mcp-response.js';
 import { checkBillingCompliance } from '#core/checks/billing.js';
 import { resolveOpenIapBilling } from '../checks/billing-network.js';
+import { catalog } from '#core/lang.js';
+
+/** Argument errors returned to the caller agent. */
+const E = catalog(
+  {
+    trackAndVersionCode: '대상 릴리스를 점검하려면 track과 versionCode를 함께 전달하세요.',
+    appIdOrPackage: 'appId 또는 packageName 중 하나를 지정하세요.',
+    appIdAndVersion: 'App Store를 조회하려면 appId와 version을 함께 전달하세요.',
+    playVersion: 'Google Play를 조회하려면 version 또는 versionCode를 전달하세요.',
+    pairing: 'appStorePlatform은 appId와, versionCode는 packageName과 함께 전달하세요.',
+  },
+  {
+    trackAndVersionCode: 'To check a target release, pass track and versionCode together.',
+    appIdOrPackage: 'Specify appId or packageName.',
+    appIdAndVersion: 'To query the App Store, pass appId and version together.',
+    playVersion: 'To query Google Play, pass version or versionCode.',
+    pairing: 'Pass appStorePlatform together with appId, and versionCode together with packageName.',
+  },
+);
 
 export function registerChecksTools(server: ToolRegistrar) {
   server.tool(
@@ -45,7 +64,7 @@ export function registerChecksTools(server: ToolRegistrar) {
     },
     async ({ packageName, language, track, versionCode }) => {
       if (Boolean(track) !== Boolean(versionCode)) {
-        return errorResult('대상 릴리스를 점검하려면 track과 versionCode를 함께 전달하세요.');
+        return errorResult(E().trackAndVersionCode);
       }
       const auth = await requirePlayStoreAuth(packageName);
       const target = track && versionCode ? { track, versionCode } : undefined;
@@ -130,16 +149,16 @@ export function registerChecksTools(server: ToolRegistrar) {
     async (args) => {
       const { version, appId, appStorePlatform, packageName, versionCode } = args;
       if (!appId && !packageName) {
-        return errorResult('appId 또는 packageName 중 하나를 지정하세요.');
+        return errorResult(E().appIdOrPackage);
       }
       if (appId && !version) {
-        return errorResult('App Store를 조회하려면 appId와 version을 함께 전달하세요.');
+        return errorResult(E().appIdAndVersion);
       }
       if (packageName && !version && !versionCode) {
-        return errorResult('Google Play를 조회하려면 version 또는 versionCode를 전달하세요.');
+        return errorResult(E().playVersion);
       }
       if ((appStorePlatform && !appId) || (versionCode && !packageName)) {
-        return errorResult('appStorePlatform은 appId와, versionCode는 packageName과 함께 전달하세요.');
+        return errorResult(E().pairing);
       }
       return jsonResult(await getReleaseStatus(args));
     },

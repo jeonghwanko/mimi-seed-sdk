@@ -5,8 +5,14 @@ import { GOOGLE_PROFILE_ID } from '../auth/google-auth.js';
 import { requireAuth } from '../helpers.js';
 import * as ga4 from './tools.js';
 import { CliUsageError, runDomainCli, requireFlag, flag, flagList, type ParsedArgs } from '../lib/cli-args.js';
+import { catalog } from '#core/lang.js';
 
-const HELP = `
+const HELP = catalog(
+  {
+    badProfile: '--profile 은 소문자 또는 숫자로 시작하고 소문자, 숫자, _, - 로 이루어진 1~64자여야 합니다.',
+    badInt: (name: string, min: number, max: number) => `--${name} 는 ${min} 이상 ${max} 이하의 정수여야 합니다.`,
+    get text() {
+      return `
   📊 mimi-seed-ga4 — GA4(Google Analytics 4) attach
 
   사용법:
@@ -38,6 +44,47 @@ const HELP = `
   생성은 analytics.edit 가 필요합니다. 권한이 없으면 아래 명령으로 로그인하세요.
      mimi-seed auth login --domains ga4 [--profile <id>]
 `;
+    },
+  },
+  {
+    badProfile: '--profile must be 1–64 characters of lowercase letters, digits, _ and -, starting with a lowercase letter or digit.',
+    badInt: (name: string, min: number, max: number) => `--${name} must be an integer from ${min} to ${max}.`,
+    get text() {
+      return `
+  📊 mimi-seed-ga4 — GA4(Google Analytics 4) attach
+
+  Usage:
+    mimi-seed ga4 accounts
+        Summary of accessible GA accounts + properties (find accountId/propertyId)
+
+    mimi-seed ga4 properties --account <id>
+        List GA4 properties under the account
+
+    mimi-seed ga4 create-property --account <id> --name <displayName>
+                                  [--timezone Asia/Seoul] [--currency KRW]
+        Create a new GA4 property
+
+    mimi-seed ga4 create-stream --property <id> --platform <web|android|ios> --name <name>
+                                [--uri https://...] [--package com.x.y] [--bundle com.x.y]
+        Create a data stream (web→measurementId, app→firebaseAppId)
+
+    mimi-seed ga4 streams --property <id>
+        List data streams
+
+    mimi-seed ga4 report --property <id> --start 28daysAgo --end today
+                         [--dimensions date,country] [--metrics activeUsers,eventCount]
+                         [--limit <1-${ga4.GA4_REPORT_MAX_LIMIT}>] [--offset <starting at 0>]
+        GA4 Data API report (10000 rows by default; rowCount is the total row count)
+        To page through results, pass --limit or --offset 0 from the first request.
+
+  Every command accepts --profile <id> to choose the Google login profile.
+  Listing needs analytics.readonly or analytics.edit, reports need analytics.readonly or analytics,
+  and creation needs analytics.edit. Without the permission, log in with the command below.
+     mimi-seed auth login --domains ga4 [--profile <id>]
+`;
+    },
+  },
+);
 
 function optionalValue(p: ParsedArgs, name: string): string | undefined {
   if (flag(p, name) !== undefined || p.bools.has(name)) return requireFlag(p, name);
@@ -47,7 +94,7 @@ function optionalValue(p: ParsedArgs, name: string): string | undefined {
 function profileFlag(p: ParsedArgs): string | undefined {
   const profile = optionalValue(p, 'profile');
   if (profile !== undefined && !GOOGLE_PROFILE_ID.test(profile)) {
-    throw new CliUsageError('--profile 은 소문자 또는 숫자로 시작하고 소문자, 숫자, _, - 로 이루어진 1~64자여야 합니다.');
+    throw new CliUsageError(HELP().badProfile);
   }
   return profile;
 }
@@ -57,7 +104,7 @@ function integerFlag(p: ParsedArgs, name: string, min: number, max: number): num
   if (value === undefined) return undefined;
   const number = Number(value);
   if (!/^\d+$/.test(value) || number < min || number > max) {
-    throw new CliUsageError(`--${name} 는 ${min} 이상 ${max} 이하의 정수여야 합니다.`);
+    throw new CliUsageError(HELP().badInt(name, min, max));
   }
   return number;
 }
@@ -66,7 +113,7 @@ function integerFlag(p: ParsedArgs, name: string, min: number, max: number): num
 void runDomainCli({
   binName: 'mimi-seed-ga4',
   argv: process.argv.slice(2),
-  help: HELP,
+  help: HELP().text,
   handlers: {
     accounts: async (p) => ga4.listAccountSummaries(await requireAuth(ga4.GA4_ADMIN_READ_SCOPES, profileFlag(p))),
     properties: async (p) =>

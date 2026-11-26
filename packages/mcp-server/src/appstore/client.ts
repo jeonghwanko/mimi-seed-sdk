@@ -2,6 +2,30 @@ import { appStoreCredentialsPath, getAppStoreCredentials, generateToken } from '
 import { authHeadersOrThrow, apiRequest, V1_BASE, type UntypedAscJson } from './http.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { jsonFileProblem } from '../lib/json-file.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    corrupt: (file: string, problem: string) =>
+      `${file} 이 손상되어 읽을 수 없습니다 (${problem}). \`mimi-seed auth appstore\` 로 다시 등록하세요.`,
+    missing: '~/.mimi-seed/appstore.json 이 없습니다. `mimi-seed auth appstore` 로 등록하세요.',
+    signFailed: (msg: string) => `JWT 서명 실패 — .p8 privateKey / keyId 확인 필요.\n${msg}`,
+    connectFailed: (msg: string) => `App Store API 연결 실패: ${msg}`,
+    rejected:
+      'Apple이 인증을 거부했어요 — issuerId / keyId / .p8 조합이 틀렸거나 키 권한이 부족합니다.\n`mimi-seed auth appstore` 로 재등록하세요.',
+    valid: '인증 유효',
+  },
+  {
+    corrupt: (file: string, problem: string) =>
+      `${file} is corrupted and cannot be read (${problem}). Register again with \`mimi-seed auth appstore\`.`,
+    missing: '~/.mimi-seed/appstore.json does not exist. Register with `mimi-seed auth appstore`.',
+    signFailed: (msg: string) => `JWT signing failed — check the .p8 privateKey / keyId.\n${msg}`,
+    connectFailed: (msg: string) => `App Store API connection failed: ${msg}`,
+    rejected:
+      'Apple rejected the credentials — the issuerId / keyId / .p8 combination is wrong or the key lacks permission.\nRegister again with `mimi-seed auth appstore`.',
+    valid: 'Credentials valid',
+  },
+);
 
 /**
  * App Store Connect API v1 래퍼
@@ -40,8 +64,8 @@ export async function verifyAppStoreCredentials(
       ok: false,
       stage: 'creds',
       message: problem
-        ? `${file} 이 손상되어 읽을 수 없습니다 (${problem}). \`mimi-seed auth appstore\` 로 다시 등록하세요.`
-        : '~/.mimi-seed/appstore.json 이 없습니다. `mimi-seed auth appstore` 로 등록하세요.',
+        ? M().corrupt(file, problem)
+        : M().missing,
     };
   }
   let token: string;
@@ -51,22 +75,21 @@ export async function verifyAppStoreCredentials(
     return {
       ok: false,
       stage: 'sign',
-      message: `JWT 서명 실패 — .p8 privateKey / keyId 확인 필요.\n${(e as Error).message}`,
+      message: M().signFailed((e as Error).message),
     };
   }
   let res: Response;
   try {
     res = await fetchWithTimeout(`${BASE}/apps?limit=1`, { headers: { Authorization: `Bearer ${token}` } });
   } catch (e) {
-    return { ok: false, stage: 'api', message: `App Store API 연결 실패: ${(e as Error).message}` };
+    return { ok: false, stage: 'api', message: M().connectFailed((e as Error).message) };
   }
   if (res.status === 401 || res.status === 403) {
     return {
       ok: false,
       stage: 'auth',
       httpStatus: res.status,
-      message:
-        'Apple이 인증을 거부했어요 — issuerId / keyId / .p8 조합이 틀렸거나 키 권한이 부족합니다.\n`mimi-seed auth appstore` 로 재등록하세요.',
+      message: M().rejected,
     };
   }
   if (!res.ok) {
@@ -81,7 +104,7 @@ export async function verifyAppStoreCredentials(
   return {
     ok: true,
     stage: 'done',
-    message: '인증 유효',
+    message: M().valid,
     appCount: data.meta?.paging?.total,
     firstApp: first ? { id: first.id, name: first.attributes?.name } : undefined,
   };

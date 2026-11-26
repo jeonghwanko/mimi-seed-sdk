@@ -7,6 +7,30 @@ import { z } from 'zod';
 import * as appstore from '../../appstore/tools.js';
 import { validateAppStoreWhatsNew, formatIssuesForUser } from '../../lib/text-validators.js';
 import { jsonResult, textResult, errorResult } from '../../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noFields: '수정할 필드를 하나 이상 지정해줘 (whatsNew, description, keywords, promotionalText, supportUrl, marketingUrl).',
+    lintFailed: (label: string, issues: string) => `❌ ${label} 사전 검증 실패 — API 호출 안 함\n\n${issues}\n\n수정 후 다시 호출해주세요.`,
+    whatsNewUpdated: (locale: string, json: string) => `✅ ${locale} 로캘의 What's New가 업데이트됐어.\n\n${json}`,
+    reviewNotesSaved: (created: boolean, id: string) => `✅ 리뷰어 노트 ${created ? '신규 등록' : '수정'} 완료 (reviewDetailId: ${id})`,
+    noReviewNotes: (json: string) => `이 버전에는 아직 리뷰어 노트가 없어. appstore_update_review_notes로 등록해줘.\n\n${json}`,
+    reviewNotesSummary: (id: string, email: string | null | undefined, notes: string | null | undefined) =>
+      `reviewDetailId: ${id}\ncontactEmail: ${email ?? '(없음)'}\n\n노트:\n${notes ?? '(비어있음)'}`,
+    localizationCreated: (locale: string, json: string) => `✅ ${locale} 로컬라이제이션이 생성됐어.\n\n${json}`,
+  },
+  {
+    noFields: 'Specify at least one field to update (whatsNew, description, keywords, promotionalText, supportUrl, marketingUrl).',
+    lintFailed: (label: string, issues: string) => `❌ ${label} pre-validation failed — no API call made\n\n${issues}\n\nFix them and call again.`,
+    whatsNewUpdated: (locale: string, json: string) => `✅ What's New for locale ${locale} updated.\n\n${json}`,
+    reviewNotesSaved: (created: boolean, id: string) => `✅ Reviewer notes ${created ? 'created' : 'updated'} (reviewDetailId: ${id})`,
+    noReviewNotes: (json: string) => `This version has no reviewer notes yet. Add them with appstore_update_review_notes.\n\n${json}`,
+    reviewNotesSummary: (id: string, email: string | null | undefined, notes: string | null | undefined) =>
+      `reviewDetailId: ${id}\ncontactEmail: ${email ?? '(none)'}\n\nNotes:\n${notes ?? '(empty)'}`,
+    localizationCreated: (locale: string, json: string) => `✅ ${locale} localization created.\n\n${json}`,
+  },
+);
 
 /** appstore_get_metadata · appstore_update_localization */
 export function registerVersionLocalizationTools(server: ToolRegistrar) {
@@ -37,13 +61,13 @@ export function registerVersionLocalizationTools(server: ToolRegistrar) {
         Object.entries(fields).filter(([, v]) => v !== undefined),
       );
       if (Object.keys(cleaned).length === 0) {
-        throw new Error('수정할 필드를 하나 이상 지정해줘 (whatsNew, description, keywords, promotionalText, supportUrl, marketingUrl).');
+        throw new Error(M().noFields);
       }
       // whatsNew 가 포함될 때만 사전 lint — 다른 필드(description/keywords)는 별도 정책.
       if (typeof cleaned.whatsNew === 'string') {
         const validation = validateAppStoreWhatsNew(cleaned.whatsNew);
         if (!validation.ok) {
-          return errorResult(`❌ whatsNew 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
+          return errorResult(M().lintFailed('whatsNew', formatIssuesForUser(validation.issues)));
         }
       }
       const result = await appstore.updateVersionLocalization(localizationId, cleaned);
@@ -66,10 +90,10 @@ export function registerWhatsNewAndReviewNoteTools(server: ToolRegistrar) {
       // ── 사전 lint — Apple 409 INVALID_CHARACTERS 등 round-trip 낭비 차단.
       const validation = validateAppStoreWhatsNew(whatsNew);
       if (!validation.ok) {
-        return errorResult(`❌ What's New 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
+        return errorResult(M().lintFailed("What's New", formatIssuesForUser(validation.issues)));
       }
       const result = await appstore.updateVersionWhatsNew(versionId, locale, { whatsNew });
-      return textResult(`✅ ${locale} 로캘의 What's New가 업데이트됐어.\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().whatsNewUpdated(locale, JSON.stringify(result, null, 2)));
     },
   );
 
@@ -83,7 +107,7 @@ export function registerWhatsNewAndReviewNoteTools(server: ToolRegistrar) {
     async ({ versionId, notes }) => {
       const result = await appstore.updateReviewNotes(versionId, notes);
       const action = result.created ? 'created' : 'updated';
-      const summary = `✅ 리뷰어 노트 ${result.created ? '신규 등록' : '수정'} 완료 (reviewDetailId: ${result.reviewDetailId})`;
+      const summary = M().reviewNotesSaved(result.created, result.reviewDetailId);
       return textResult(`${summary}\n\n${JSON.stringify({ ok: true, action, ...result }, null, 2)}`);
     },
   );
@@ -97,9 +121,9 @@ export function registerWhatsNewAndReviewNoteTools(server: ToolRegistrar) {
     async ({ versionId }) => {
       const result = await appstore.getReviewNotes(versionId);
       if (!result.reviewDetailId) {
-        return textResult(`이 버전에는 아직 리뷰어 노트가 없어. appstore_update_review_notes로 등록해줘.\n\n${JSON.stringify({ ok: true, exists: false }, null, 2)}`);
+        return textResult(M().noReviewNotes(JSON.stringify({ ok: true, exists: false }, null, 2)));
       }
-      const summary = `reviewDetailId: ${result.reviewDetailId}\ncontactEmail: ${result.contactEmail ?? '(없음)'}\n\n노트:\n${result.notes ?? '(비어있음)'}`;
+      const summary = M().reviewNotesSummary(result.reviewDetailId, result.contactEmail, result.notes);
       return textResult(`${summary}\n\n${JSON.stringify({ ok: true, exists: true, ...result }, null, 2)}`);
     },
   );
@@ -175,7 +199,7 @@ export function registerAppInfoTools(server: ToolRegistrar) {
     },
     async ({ appId, locale, ...fields }) => {
       const result = await appstore.createAppInfoLocalization(appId, locale, fields);
-      return textResult(`✅ ${locale} 로컬라이제이션이 생성됐어.\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().localizationCreated(locale, JSON.stringify(result, null, 2)));
     },
   );
 }

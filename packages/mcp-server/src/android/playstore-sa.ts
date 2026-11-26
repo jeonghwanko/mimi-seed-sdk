@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { serviceAccountPathForPackage } from '../auth/playstore-auth.js';
 import { readServiceAccountKeyFile } from '../iam/key-files.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog({ parseFailed: '(파싱 실패)' }, { parseFailed: '(parse failed)' });
 
 /**
  * jenkins_upload_playstore_sa 가 올릴 Play 서비스 계정 JSON 을 고른다.
@@ -23,7 +26,7 @@ export function loadPlayServiceAccountForUpload(
   if (!explicitPath && !existsSync(saPath)) return { found: false, path: saPath };
 
   const raw = explicitPath ? readServiceAccountKeyFile(explicitPath) : readFileSync(saPath, 'utf-8');
-  let clientEmail = '(파싱 실패)';
+  let clientEmail = M().parseFailed;
   try {
     clientEmail = (JSON.parse(raw) as { client_email?: string }).client_email ?? clientEmail;
   } catch { /* ignore */ }

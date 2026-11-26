@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveLang } from '#core/lang.js';
+import { catalog } from '#core/lang.js';
 
 /**
  * JSON 설정·자격증명 파일 읽기의 세 가지 결과.
@@ -17,8 +17,8 @@ export type JsonFileRead =
   | { state: 'invalid'; reason: string };
 
 // 이유 문구는 인증 에러 안내(auth/errors.ts authText)에도 끼워 들어가므로 같은 언어 규칙을 따른다.
-const REASON = {
-  ko: {
+const REASON = catalog(
+  {
     unreadable: (c: string) => `읽을 수 없음 (${c})`,
     empty: '빈 파일 (쓰기가 중간에 끊겼을 수 있음)',
     syntax: (at: string | null) => `JSON 형식 오류${at ? ` — ${at}` : ''}`,
@@ -27,7 +27,7 @@ const REASON = {
     corrupt: (file: string, reason: string, fix: string) =>
       `❌ 설정 파일이 손상되어 읽을 수 없습니다: ${file}\n   원인: ${reason}\n   → 파일을 고치거나 지운 뒤 다시 설정하세요: ${fix}`,
   },
-  en: {
+  {
     unreadable: (c: string) => `unreadable (${c})`,
     empty: 'empty file (a write may have been interrupted)',
     syntax: (at: string | null) => `invalid JSON${at ? ` at ${at}` : ''}`,
@@ -36,14 +36,14 @@ const REASON = {
     corrupt: (file: string, reason: string, fix: string) =>
       `❌ The settings file is damaged and cannot be read: ${file}\n   Cause: ${reason}\n   → Fix or delete the file, then set it up again: ${fix}`,
   },
-} as const;
+);
 
 /**
  * JSON.parse 오류에서 **위치만** 뽑는다. V8 메시지는 입력 일부를 그대로 인용한다
  * (`Unexpected token 'S', ..."h_token": SECRETVALU"... is not valid JSON`) — 자격증명 파일이면 토큰·개인키
  * 조각이 MCP 출력(LLM 컨텍스트)과 터미널로 새어 나간다. 그래서 원문 메시지는 절대 내보내지 않는다.
  */
-function syntaxLocation(message: string, R: (typeof REASON)[keyof typeof REASON]): string | null {
+function syntaxLocation(message: string, R: ReturnType<typeof REASON>): string | null {
   const lc = /line (\d+) column (\d+)/.exec(message);
   if (lc) return R.at(lc[1], lc[2]);
   const pos = /position (\d+)/.exec(message);
@@ -54,7 +54,7 @@ function syntaxLocation(message: string, R: (typeof REASON)[keyof typeof REASON]
 const MISSING_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
 export function readJsonFile(file: string): JsonFileRead {
-  const R = REASON[resolveLang()];
+  const R = REASON();
   let text: string;
   try {
     text = fs.readFileSync(file, 'utf-8');
@@ -85,7 +85,7 @@ export function jsonFileProblem(file: string): string | null {
  */
 export function assertCredentialFileReadable(file: string, fixHint: string): void {
   const problem = jsonFileProblem(file);
-  if (problem) throw new Error(REASON[resolveLang()].corrupt(file, problem, fixHint));
+  if (problem) throw new Error(REASON().corrupt(file, problem, fixHint));
 }
 
 /**

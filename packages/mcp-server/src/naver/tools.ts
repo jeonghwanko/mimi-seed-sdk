@@ -1,6 +1,124 @@
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { isAllowed, parseRobots, type ParsedRobots, type RobotsVerdict } from './robots.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    badUrl: (label: string, v: string) => `${label}: 올바른 절대 URL 이 아닙니다 — ${v}`,
+    notHttp: (label: string, v: string) => `${label}: http(s) URL 만 받습니다 — ${v}`,
+    redirectInvalid: (href: string, loc: string) => `${href} 의 Location 헤더가 URL 이 아니다: ${loc}`,
+    redirectLoop: (n: number) => `리다이렉트가 ${n}번 이어지거나 순환한다 — 크롤러는 중간에 포기한다.`,
+    redirectTemporary: (codes: string) => `임시 리다이렉트(${codes})가 있다 — 영구 이전이면 301/308 로 바꿔야 새 URL 이 색인된다.`,
+    notHttps: '최종 URL 이 https 가 아니다.',
+    robotsUnreachable: (url: string, why: string | number | undefined) =>
+      `${url} 를 읽지 못했다(${why}) — 크롤러는 이 경우 사이트 전체를 막힌 것으로 본다.`,
+    robotsBlocked: (href: string, via: string, pattern: string | undefined) =>
+      `robots.txt 가 Yeti 의 ${href} 수집을 막는다 (${via} → Disallow: ${pattern}).`,
+    noSitemap: 'robots.txt 에 Sitemap: 선언이 없다. 서치어드바이저 콘솔(요청 → 사이트맵 제출)에도 따로 제출해 두는 게 좋다.',
+    httpStatus: (status: number) => `최종 응답이 ${status} 다 — 200 이 아니면 색인되지 않는다.`,
+    uaBlocked: (status: number) =>
+      `Yeti UA 로는 ${status}, 브라우저 UA 로는 200 이다 — 서버/WAF 가 봇 UA 를 막거나, 네이버 IP 가 아닌 Yeti 를 거르는 것일 수 있다. ` +
+      '진짜 Yeti 의 수집 결과는 서치어드바이저 콘솔(수집 현황·웹 페이지 최적화)에서 확인해.',
+    htmlTruncated: (mib: number) => `HTML 이 ${mib} MiB 를 넘어 앞부분만 점검했다.`,
+    notHtml: (ct: string | null) => `HTML 이 아니다(content-type: ${ct ?? '없음'}) — 메타 태그 점검을 건너뛴다.`,
+    noindex: (sources: string) => `noindex 지시어가 있다 (${sources}) — 검색에 나오지 않는다.`,
+    noindexAmbiguous: (header: string | null) =>
+      `X-Robots-Tag 의 noindex 가 다른 봇 접두어 뒤에 이어져 있다(${header}). ` +
+      'X-Robots-Tag 헤더가 여러 줄이면 이 noindex 는 Yeti 에게도 적용된다 — 서버 설정을 확인해.',
+    nofollow: 'nofollow 지시어가 있다 — 이 페이지의 링크를 따라가지 않는다.',
+    canonicalInvalid: (v: string) => `canonical 값이 URL 이 아니다: ${v}`,
+    canonicalMismatch: (href: string) => `정규 URL 이 다른 주소(${href})를 가리킨다 — 이 URL 대신 그쪽이 색인된다.`,
+    noCanonical: '<link rel="canonical"> 이 없다 — 파라미터 붙은 중복 URL 이 따로 색인될 수 있다.',
+    noTitle: '<title> 이 없거나 비었다.',
+    noDescription: '<meta name="description"> 이 없다 — 검색 결과 요약문으로 쓰인다.',
+    ogMissing: (tags: string) => `Open Graph 태그가 빠졌다: ${tags} — 서치어드바이저가 권장하는 제목·요약·대표 이미지 정보다.`,
+    thinHtml: (n: number) =>
+      `원본 HTML 의 본문이 ${n}자뿐이다 — JS 로 그리는 페이지면 크롤러에 빈 문서로 보일 수 있다. 서버 렌더링(SSR/SSG)이 가장 안전하다.`,
+    noLang: '<html lang> 이 없다.',
+    noSiteVerification: 'naver-site-verification 메타 태그가 없다 — HTML 파일 방식으로 소유 확인했다면 무시해도 된다.',
+    indexNowStatus: (status: number): string | undefined => {
+      const text: Record<number, string> = {
+        400: '요청 형식이 잘못됐다(400).',
+        403: '키가 유효하지 않다(403) — 키 파일 내용이 key 와 정확히 같은지, 파일이 공개로 열리는지 확인해.',
+        422: 'URL 이 host 나 키 파일 위치와 맞지 않는다(422) — URL 은 키 파일과 같은 스킴·호스트, 같은 디렉터리 이하여야 한다.',
+        429: '너무 자주 보냈다(429) — 스팸으로 볼 수 있으니 한참 뒤에 다시 보내. 자동 재시도는 하지 않았다.',
+      };
+      return text[status];
+    },
+    badKey: 'key 는 8–128자의 영문·숫자·대시(-)여야 합니다.',
+    noUrls: 'urls 가 비었습니다.',
+    tooMany: (max: number) => `한 번에 최대 ${max}개까지 보낼 수 있습니다.`,
+    mixedOrigins: (a: string, b: string) => `모든 URL 은 같은 스킴·호스트여야 합니다 — ${a} 와 ${b} 가 섞였습니다. 나눠서 보내세요.`,
+    keyOrigin: (origin: string) => `keyLocation 은 제출 URL 과 같은 스킴·호스트(${origin})에 있어야 합니다.`,
+    outsideKeyDir: (dir: string, href: string) => `키 파일 디렉터리(${dir}) 밖의 URL 은 보낼 수 없습니다 — ${href}`,
+    keyStatus: (status: number) => `응답 ${status}`,
+    keyMismatch: '파일 내용이 key 와 다름',
+    keyCheckFailed: (href: string, why: string, pathname: string): string[] => [
+      `키 파일 확인 실패: ${href} (${why}). 아무것도 제출하지 않았습니다.`,
+      `→ 사이트에 ${pathname} 파일을 올리고 내용으로 key 한 줄만 넣으세요 (UTF-8, 리다이렉트 없이 200).`,
+      '   정적 사이트는 보통 public/ (또는 static/) 폴더 루트에 두면 됩니다.',
+    ],
+    submitFailed: (reason: string, detail: string) => `네이버 IndexNow 제출 실패: ${reason}${detail ? `\n응답: ${detail}` : ''}`,
+  },
+  {
+    badUrl: (label: string, v: string) => `${label}: not a valid absolute URL — ${v}`,
+    notHttp: (label: string, v: string) => `${label}: only http(s) URLs are accepted — ${v}`,
+    redirectInvalid: (href: string, loc: string) => `The Location header of ${href} is not a URL: ${loc}`,
+    redirectLoop: (n: number) => `Redirects continue ${n} times or loop — crawlers give up partway.`,
+    redirectTemporary: (codes: string) => `There are temporary redirects (${codes}) — for a permanent move, change them to 301/308 so the new URL gets indexed.`,
+    notHttps: 'The final URL is not https.',
+    robotsUnreachable: (url: string, why: string | number | undefined) =>
+      `Could not read ${url} (${why}) — in this case crawlers treat the whole site as blocked.`,
+    robotsBlocked: (href: string, via: string, pattern: string | undefined) =>
+      `robots.txt blocks Yeti from crawling ${href} (${via} → Disallow: ${pattern}).`,
+    noSitemap: 'robots.txt has no Sitemap: declaration. It is also a good idea to submit the sitemap separately in the Naver Search Advisor console (Request → Submit sitemap).',
+    httpStatus: (status: number) => `The final response is ${status} — anything other than 200 is not indexed.`,
+    uaBlocked: (status: number) =>
+      `The Yeti UA gets ${status}, a browser UA gets 200 — the server/WAF may block bot UAs, or filter Yeti requests that do not come from Naver IPs. ` +
+      'Check what the real Yeti crawled in the Naver Search Advisor console (crawl status · web page optimization).',
+    htmlTruncated: (mib: number) => `The HTML exceeds ${mib} MiB, so only the first part was checked.`,
+    notHtml: (ct: string | null) => `Not HTML (content-type: ${ct ?? 'none'}) — skipping the meta tag checks.`,
+    noindex: (sources: string) => `A noindex directive is present (${sources}) — the page does not appear in search.`,
+    noindexAmbiguous: (header: string | null) =>
+      `A noindex in X-Robots-Tag follows another bot prefix (${header}). ` +
+      'If the X-Robots-Tag header has multiple lines, this noindex also applies to Yeti — check the server configuration.',
+    nofollow: 'A nofollow directive is present — links on this page are not followed.',
+    canonicalInvalid: (v: string) => `The canonical value is not a URL: ${v}`,
+    canonicalMismatch: (href: string) => `The canonical URL points to a different address (${href}) — that one is indexed instead of this URL.`,
+    noCanonical: 'No <link rel="canonical"> — duplicate URLs with parameters may be indexed separately.',
+    noTitle: '<title> is missing or empty.',
+    noDescription: 'No <meta name="description"> — it is used as the search result snippet.',
+    ogMissing: (tags: string) => `Open Graph tags are missing: ${tags} — the title, summary, and representative image that Naver Search Advisor recommends.`,
+    thinHtml: (n: number) =>
+      `The original HTML body has only ${n} characters — if the page is rendered by JS, crawlers may see an empty document. Server rendering (SSR/SSG) is safest.`,
+    noLang: 'No <html lang>.',
+    noSiteVerification: 'No naver-site-verification meta tag — ignore this if you verified ownership with the HTML file method.',
+    indexNowStatus: (status: number): string | undefined => {
+      const text: Record<number, string> = {
+        400: 'The request format is invalid (400).',
+        403: 'The key is invalid (403) — check that the key file content exactly matches key and that the file is publicly accessible.',
+        422: 'The URLs do not match the host or the key file location (422) — URLs must have the same scheme and host as the key file and be in the same directory or below.',
+        429: 'Too many submissions (429) — this may be treated as spam; wait a good while before sending again. No automatic retry was made.',
+      };
+      return text[status];
+    },
+    badKey: 'key must be 8–128 characters of letters, digits, and dashes (-).',
+    noUrls: 'urls is empty.',
+    tooMany: (max: number) => `At most ${max} URLs can be sent at once.`,
+    mixedOrigins: (a: string, b: string) => `All URLs must have the same scheme and host — ${a} and ${b} are mixed. Send them separately.`,
+    keyOrigin: (origin: string) => `keyLocation must be on the same scheme and host as the submitted URLs (${origin}).`,
+    outsideKeyDir: (dir: string, href: string) => `URLs outside the key file directory (${dir}) cannot be sent — ${href}`,
+    keyStatus: (status: number) => `response ${status}`,
+    keyMismatch: 'file content differs from key',
+    keyCheckFailed: (href: string, why: string, pathname: string): string[] => [
+      `Key file check failed: ${href} (${why}). Nothing was submitted.`,
+      `→ Upload the file ${pathname} to the site with only the key on one line (UTF-8, 200 with no redirect).`,
+      '   For a static site, the root of the public/ (or static/) folder usually works.',
+    ],
+    submitFailed: (reason: string, detail: string) => `Naver IndexNow submission failed: ${reason}${detail ? `\nResponse: ${detail}` : ''}`,
+  },
+);
 
 /**
  * 네이버 서치어드바이저 — 검색 노출·색인 도구.
@@ -47,10 +165,10 @@ function parseHttpUrl(value: string, label: string): URL {
   try {
     url = new URL(value.trim());
   } catch {
-    throw new Error(`${label}: 올바른 절대 URL 이 아닙니다 — ${JSON.stringify(value)}`);
+    throw new Error(M().badUrl(label, JSON.stringify(value)));
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error(`${label}: http(s) URL 만 받습니다 — ${JSON.stringify(value)}`);
+    throw new Error(M().notHttp(label, JSON.stringify(value)));
   }
   url.hash = '';
   return url;
@@ -431,14 +549,14 @@ export async function checkPage(input: string): Promise<PageCheck> {
       next = new URL(location, current);
     } catch {
       stopped = true;
-      add('error', 'redirect_invalid', `${current.href} 의 Location 헤더가 URL 이 아니다: ${JSON.stringify(location)}`);
+      add('error', 'redirect_invalid', M().redirectInvalid(current.href, JSON.stringify(location)));
       break;
     }
     next.hash = '';
     redirects.push({ url: current.href, status: res.status, location: next.href });
     if (redirects.length > MAX_REDIRECTS || redirects.some((hop) => hop.url === next.href)) {
       stopped = true;
-      add('error', 'redirect_loop', `리다이렉트가 ${redirects.length}번 이어지거나 순환한다 — 크롤러는 중간에 포기한다.`);
+      add('error', 'redirect_loop', M().redirectLoop(redirects.length));
       break;
     }
     current = next;
@@ -447,9 +565,9 @@ export async function checkPage(input: string): Promise<PageCheck> {
   const temporary = redirects.filter((hop) => hop.status !== 301 && hop.status !== 308);
   if (temporary.length > 0) {
     add('warn', 'redirect_temporary',
-      `임시 리다이렉트(${temporary.map((h) => h.status).join(', ')})가 있다 — 영구 이전이면 301/308 로 바꿔야 새 URL 이 색인된다.`);
+      M().redirectTemporary(temporary.map((h) => h.status).join(', ')));
   }
-  if (current.protocol !== 'https:') add('warn', 'not_https', '최종 URL 이 https 가 아니다.');
+  if (current.protocol !== 'https:') add('warn', 'not_https', M().notHttps);
 
   // robots.txt — 시작 URL, 중간 경유지, 최종 URL 모두 Yeti 가 긁을 수 있어야 끝까지 따라간다.
   const robotsCache = new Map<string, Promise<RobotsFetch>>();
@@ -472,7 +590,7 @@ export async function checkPage(input: string): Promise<PageCheck> {
       if (!unreachableReported.has(robots.url)) {
         unreachableReported.add(robots.url);
         add('error', 'robots_unreachable',
-          `${robots.url} 를 읽지 못했다(${robots.status ?? robots.error}) — 크롤러는 이 경우 사이트 전체를 막힌 것으로 본다.`);
+          M().robotsUnreachable(robots.url, robots.status ?? robots.error));
       }
       continue;
     }
@@ -481,16 +599,16 @@ export async function checkPage(input: string): Promise<PageCheck> {
     if (!verdict.allowed) {
       const via = verdict.group === 'crawler' ? 'User-agent: Yeti' : 'User-agent: *';
       add('error', 'robots_blocked',
-        `robots.txt 가 Yeti 의 ${target.href} 수집을 막는다 (${via} → Disallow: ${verdict.matchedRule?.pattern}).`);
+        M().robotsBlocked(target.href, via, verdict.matchedRule?.pattern));
     }
   }
   if (!finalRobots.unreachable && finalRobots.parsed.sitemaps.length === 0) {
     add('info', 'no_sitemap_in_robots',
-      'robots.txt 에 Sitemap: 선언이 없다. 서치어드바이저 콘솔(요청 → 사이트맵 제출)에도 따로 제출해 두는 게 좋다.');
+      M().noSitemap);
   }
 
   if (res.status !== 200) {
-    add('error', 'http_status', `최종 응답이 ${res.status} 다 — 200 이 아니면 색인되지 않는다.`);
+    add('error', 'http_status', M().httpStatus(res.status));
     if (!stopped) {
       // Yeti UA 만 막히는가? WAF 는 IP 가 네이버가 아닌 "가짜 Yeti" 를 거르기도 해서, 진짜 Yeti 는 통과할 수 있다.
       try {
@@ -498,8 +616,7 @@ export async function checkPage(input: string): Promise<PageCheck> {
         await probe.body?.cancel();
         if (probe.status === 200) {
           add('warn', 'ua_blocked',
-            `Yeti UA 로는 ${res.status}, 브라우저 UA 로는 200 이다 — 서버/WAF 가 봇 UA 를 막거나, 네이버 IP 가 아닌 Yeti 를 거르는 것일 수 있다. ` +
-              '진짜 Yeti 의 수집 결과는 서치어드바이저 콘솔(수집 현황·웹 페이지 최적화)에서 확인해.');
+            M().uaBlocked(res.status));
         }
       } catch {
         // 비교 요청 실패는 진단을 바꾸지 않는다.
@@ -515,10 +632,10 @@ export async function checkPage(input: string): Promise<PageCheck> {
   } else if (contentType && /html/i.test(contentType)) {
     const { text, truncated } = await readCapped(res, HTML_MAX_BYTES);
     head = parseHead(text);
-    if (truncated) add('info', 'html_truncated', `HTML 이 ${HTML_MAX_BYTES / 1024 / 1024} MiB 를 넘어 앞부분만 점검했다.`);
+    if (truncated) add('info', 'html_truncated', M().htmlTruncated(HTML_MAX_BYTES / 1024 / 1024));
   } else {
     await res.body?.cancel();
-    add('warn', 'not_html', `HTML 이 아니다(content-type: ${contentType ?? '없음'}) — 메타 태그 점검을 건너뛴다.`);
+    add('warn', 'not_html', M().notHtml(contentType));
   }
 
   const blocks = (list: string[]) => list.includes('noindex') || list.includes('none');
@@ -526,14 +643,13 @@ export async function checkPage(input: string): Promise<PageCheck> {
     ...(blocks(xRobots.applies) ? ['X-Robots-Tag'] : []),
     ...(blocks(head?.robots ?? []) ? ['meta robots/yeti'] : []),
   ];
-  if (sources.length > 0) add('error', 'noindex', `noindex 지시어가 있다 (${sources.join(', ')}) — 검색에 나오지 않는다.`);
+  if (sources.length > 0) add('error', 'noindex', M().noindex(sources.join(', ')));
   else if (blocks(xRobots.ambiguous)) {
     add('warn', 'noindex_ambiguous',
-      `X-Robots-Tag 의 noindex 가 다른 봇 접두어 뒤에 이어져 있다(${res.headers.get('x-robots-tag')}). ` +
-        'X-Robots-Tag 헤더가 여러 줄이면 이 noindex 는 Yeti 에게도 적용된다 — 서버 설정을 확인해.');
+      M().noindexAmbiguous(res.headers.get('x-robots-tag')));
   }
   if ([...xRobots.applies, ...(head?.robots ?? [])].includes('nofollow')) {
-    add('warn', 'nofollow', 'nofollow 지시어가 있다 — 이 페이지의 링크를 따라가지 않는다.');
+    add('warn', 'nofollow', M().nofollow);
   }
 
   if (head) {
@@ -550,29 +666,29 @@ export async function checkPage(input: string): Promise<PageCheck> {
         canonical = new URL(canonicalRaw, base);
         canonical.hash = '';
       } catch {
-        add('warn', 'canonical_invalid', `canonical 값이 URL 이 아니다: ${JSON.stringify(canonicalRaw)}`);
+        add('warn', 'canonical_invalid', M().canonicalInvalid(JSON.stringify(canonicalRaw)));
       }
       if (canonical && canonical.href !== current.href) {
-        add('warn', 'canonical_mismatch', `정규 URL 이 다른 주소(${canonical.href})를 가리킨다 — 이 URL 대신 그쪽이 색인된다.`);
+        add('warn', 'canonical_mismatch', M().canonicalMismatch(canonical.href));
       }
     } else {
-      add('info', 'no_canonical', '<link rel="canonical"> 이 없다 — 파라미터 붙은 중복 URL 이 따로 색인될 수 있다.');
+      add('info', 'no_canonical', M().noCanonical);
     }
-    if (!head.title) add('warn', 'no_title', '<title> 이 없거나 비었다.');
-    if (!head.description) add('warn', 'no_description', '<meta name="description"> 이 없다 — 검색 결과 요약문으로 쓰인다.');
+    if (!head.title) add('warn', 'no_title', M().noTitle);
+    if (!head.description) add('warn', 'no_description', M().noDescription);
     const og = head.og;
     const missingOg = (['title', 'description', 'image'] as const).filter((k) => !og[k]);
     if (missingOg.length > 0) {
-      add('warn', 'og_missing', `Open Graph 태그가 빠졌다: ${missingOg.map((k) => `og:${k}`).join(', ')} — 서치어드바이저가 권장하는 제목·요약·대표 이미지 정보다.`);
+      add('warn', 'og_missing', M().ogMissing(missingOg.map((k) => `og:${k}`).join(', ')));
     }
     if (head.textLength < THIN_TEXT_CHARS && head.scriptCount > 0) {
       add('warn', 'thin_html',
-        `원본 HTML 의 본문이 ${head.textLength}자뿐이다 — JS 로 그리는 페이지면 크롤러에 빈 문서로 보일 수 있다. 서버 렌더링(SSR/SSG)이 가장 안전하다.`);
+        M().thinHtml(head.textLength));
     }
-    if (!head.lang) add('info', 'no_lang', '<html lang> 이 없다.');
+    if (!head.lang) add('info', 'no_lang', M().noLang);
     if (!head.naverSiteVerification) {
       add('info', 'no_site_verification',
-        'naver-site-verification 메타 태그가 없다 — HTML 파일 방식으로 소유 확인했다면 무시해도 된다.');
+        M().noSiteVerification);
     }
   }
 
@@ -615,13 +731,6 @@ export interface IndexNowResult {
   submitted: number;
 }
 
-const INDEXNOW_STATUS: Record<number, string> = {
-  400: '요청 형식이 잘못됐다(400).',
-  403: '키가 유효하지 않다(403) — 키 파일 내용이 key 와 정확히 같은지, 파일이 공개로 열리는지 확인해.',
-  422: 'URL 이 host 나 키 파일 위치와 맞지 않는다(422) — URL 은 키 파일과 같은 스킴·호스트, 같은 디렉터리 이하여야 한다.',
-  429: '너무 자주 보냈다(429) — 스팸으로 볼 수 있으니 한참 뒤에 다시 보내. 자동 재시도는 하지 않았다.',
-};
-
 /**
  * 네이버 IndexNow 로 URL 변경을 알린다.
  *
@@ -630,7 +739,7 @@ const INDEXNOW_STATUS: Record<number, string> = {
  */
 export async function submitIndexNow({ urls, key, keyLocation }: IndexNowInput): Promise<IndexNowResult> {
   if (!INDEXNOW_KEY_PATTERN.test(key)) {
-    throw new Error('key 는 8–128자의 영문·숫자·대시(-)여야 합니다.');
+    throw new Error(M().badKey);
   }
   // 정규화(호스트 소문자·# 제거) 뒤에 중복을 없앤다 — 입력 문자열 기준이면 같은 URL 이 여러 번 나간다.
   const byHref = new Map<string, URL>();
@@ -640,26 +749,26 @@ export async function submitIndexNow({ urls, key, keyLocation }: IndexNowInput):
     byHref.set(url.href, url);
   }
   const parsed = [...byHref.values()];
-  if (parsed.length === 0) throw new Error('urls 가 비었습니다.');
-  if (parsed.length > INDEXNOW_MAX_URLS) throw new Error(`한 번에 최대 ${INDEXNOW_MAX_URLS}개까지 보낼 수 있습니다.`);
+  if (parsed.length === 0) throw new Error(M().noUrls);
+  if (parsed.length > INDEXNOW_MAX_URLS) throw new Error(M().tooMany(INDEXNOW_MAX_URLS));
 
   // IndexNow 의 범위는 URL 접두어다 — 호스트만이 아니라 스킴까지 같아야 한다.
   const origin = parsed[0].origin;
   const foreign = parsed.find((u) => u.origin !== origin);
   if (foreign) {
-    throw new Error(`모든 URL 은 같은 스킴·호스트여야 합니다 — ${origin} 와 ${foreign.origin} 가 섞였습니다. 나눠서 보내세요.`);
+    throw new Error(M().mixedOrigins(origin, foreign.origin));
   }
 
   const keyUrl = keyLocation
     ? parseHttpUrl(keyLocation, 'keyLocation')
     : new URL(`/${encodePathSegment(key)}.txt`, origin);
   if (keyUrl.origin !== origin) {
-    throw new Error(`keyLocation 은 제출 URL 과 같은 스킴·호스트(${origin})에 있어야 합니다.`);
+    throw new Error(M().keyOrigin(origin));
   }
   const keyDir = keyUrl.pathname.slice(0, keyUrl.pathname.lastIndexOf('/') + 1);
   const outside = parsed.find((u) => !u.pathname.startsWith(keyDir));
   if (outside) {
-    throw new Error(`키 파일 디렉터리(${keyDir}) 밖의 URL 은 보낼 수 없습니다 — ${outside.href}`);
+    throw new Error(M().outsideKeyDir(keyDir, outside.href));
   }
 
   // 사전 확인: 키 파일이 리다이렉트 없이 200 으로, 내용이 key 그대로 열려야 한다.
@@ -668,12 +777,8 @@ export async function submitIndexNow({ urls, key, keyLocation }: IndexNowInput):
   if (keyRes.status === 200) keyBody = (await readCapped(keyRes, 4096)).text.trim();
   else await keyRes.body?.cancel();
   if (keyRes.status !== 200 || keyBody !== key) {
-    const why = keyRes.status !== 200 ? `응답 ${keyRes.status}` : '파일 내용이 key 와 다름';
-    throw new Error([
-      `키 파일 확인 실패: ${keyUrl.href} (${why}). 아무것도 제출하지 않았습니다.`,
-      `→ 사이트에 ${keyUrl.pathname} 파일을 올리고 내용으로 key 한 줄만 넣으세요 (UTF-8, 리다이렉트 없이 200).`,
-      '   정적 사이트는 보통 public/ (또는 static/) 폴더 루트에 두면 됩니다.',
-    ].join('\n'));
+    const why = keyRes.status !== 200 ? M().keyStatus(keyRes.status) : M().keyMismatch;
+    throw new Error(M().keyCheckFailed(keyUrl.href, why, keyUrl.pathname).join('\n'));
   }
 
   // 429 도 재시도하지 않는다 — IndexNow 의 429 는 "스팸 의심"이라 연타가 상황을 악화시킨다.
@@ -696,6 +801,6 @@ export async function submitIndexNow({ urls, key, keyLocation }: IndexNowInput):
     return { endpoint: NAVER_INDEXNOW_ENDPOINT, status: res.status, host: keyUrl.host, keyLocation: keyUrl.href, submitted: parsed.length };
   }
   throw new Error(
-    `네이버 IndexNow 제출 실패: ${INDEXNOW_STATUS[res.status] ?? `HTTP ${res.status}`}${detail ? `\n응답: ${detail}` : ''}`,
+    M().submitFailed(M().indexNowStatus(res.status) ?? `HTTP ${res.status}`, detail),
   );
 }

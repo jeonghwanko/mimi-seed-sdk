@@ -68,7 +68,7 @@ export function readToolManifest(): ToolManifest {
     typeof manifest?.domains !== 'object' ||
     manifest.domains === null
   ) {
-    throw new Error('tool-manifest.json 의 형태가 예상과 다릅니다');
+    throw new Error('tool-manifest.json does not have the expected shape');
   }
   return manifest;
 }

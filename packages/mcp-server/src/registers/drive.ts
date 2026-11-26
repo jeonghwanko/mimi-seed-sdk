@@ -3,10 +3,22 @@ import { z } from 'zod';
 import { GOOGLE_PROFILE_ID, getStoredTokens, googleTokenFilePath } from '../auth/google-auth.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
 import { DRIVE_FILE_SCOPE } from '../auth/scopes.js';
-import { DRIVE_AUTH_HINT, driveJwt, getDriveServiceAccount, type DriveAuthSource } from '../auth/drive-auth.js';
+import { driveAuthHint, driveJwt, getDriveServiceAccount, type DriveAuthSource } from '../auth/drive-auth.js';
 import { requireAuth } from '../helpers.js';
 import { jsonResult, errorResult } from '../lib/mcp-response.js';
 import * as drive from '../drive/tools.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    saNote: '대상 폴더나 공유 드라이브를 이 이메일과 공유해야 접근할 수 있다.',
+    oauthNote: 'drive.file 권한은 mimi-seed 가 만든 파일·폴더만 다룬다. 기존 폴더는 Drive 서비스 계정을 쓴다.',
+  },
+  {
+    saNote: 'Share the target folder or shared drive with this email to give access.',
+    oauthNote: 'The drive.file permission handles only files and folders mimi-seed created. Use the Drive service account for existing folders.',
+  },
+);
 
 interface DriveAuth {
   client: drive.DriveClient;
@@ -24,7 +36,7 @@ async function resolveDriveAuth(profile?: string): Promise<DriveAuth> {
   if (sa) return { client: driveJwt(sa.key), source: sa.source, clientEmail: sa.key.client_email ?? null };
   if (!getStoredTokens(profile)) {
     assertCredentialFileReadable(googleTokenFilePath(profile), `mimi-seed-auth${profile === undefined ? '' : ` --profile ${profile}`}`);
-    throw new Error(DRIVE_AUTH_HINT);
+    throw new Error(driveAuthHint());
   }
   return { client: await requireAuth(DRIVE_FILE_SCOPE, profile), source: 'user-oauth', clientEmail: null };
 }
@@ -62,7 +74,7 @@ export function registerDriveTools(server: ToolRegistrar): void {
             authenticated: true,
             source: sa.source,
             clientEmail: sa.key.client_email,
-            note: '대상 폴더나 공유 드라이브를 이 이메일과 공유해야 접근할 수 있다.',
+            note: M().saNote,
           });
         }
       } catch (e) {
@@ -74,10 +86,10 @@ export function registerDriveTools(server: ToolRegistrar): void {
           authenticated: true,
           source: 'user-oauth',
           scope: DRIVE_FILE_SCOPE,
-          note: 'drive.file 권한은 mimi-seed 가 만든 파일·폴더만 다룬다. 기존 폴더는 Drive 서비스 계정을 쓴다.',
+          note: M().oauthNote,
         });
       }
-      return jsonResult({ authenticated: false, hint: DRIVE_AUTH_HINT });
+      return jsonResult({ authenticated: false, hint: driveAuthHint() });
     },
   );
 

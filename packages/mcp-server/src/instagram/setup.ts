@@ -6,6 +6,36 @@ import * as api from './api.js';
 import type { ConnectResult } from '../facebook/setup.js';
 import type { SocialConfigOptions } from '../social/profile-store.js';
 import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    userIdFailed: (api: string) => `❌ userId 자동 조회 실패 (${api})`,
+    userIdHint: 'userId를 명시적으로 전달하거나 토큰을 다시 확인하세요.',
+    connected: (api: string) => `✅ Instagram 연결 확인 완료 (${api})`,
+    target: (t: string) => `   저장 대상: ${t}`,
+    account: (a: string) => `   계정: ${a}`,
+    type: (t: string) => `   타입: ${t}`,
+    followers: (n: string) => `   팔로워: ${n}`,
+    posts: (n: number) => `   게시물: ${n}`,
+    expires: (d: string) => `   토큰 만료(추정): ${d}`,
+    verifyFailed: (api: string) => `❌ 토큰 검증 실패 (${api})`,
+    verifyHint: '토큰을 다시 발급받거나 userId를 직접 지정해보세요.',
+  },
+  {
+    userIdFailed: (api: string) => `❌ Could not look up userId automatically (${api})`,
+    userIdHint: 'Pass userId explicitly or check the token again.',
+    connected: (api: string) => `✅ Instagram connection verified (${api})`,
+    target: (t: string) => `   Saved to: ${t}`,
+    account: (a: string) => `   Account: ${a}`,
+    type: (t: string) => `   Type: ${t}`,
+    followers: (n: string) => `   Followers: ${n}`,
+    posts: (n: number) => `   Posts: ${n}`,
+    expires: (d: string) => `   Token expires (estimated): ${d}`,
+    verifyFailed: (api: string) => `❌ Token verification failed (${api})`,
+    verifyHint: 'Issue a new token or specify userId directly.',
+  },
+);
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -36,10 +66,10 @@ export async function connectInstagram(
       return {
         ok: false,
         text: [
-          `❌ userId 자동 조회 실패 (${apiType})`,
+          M().userIdFailed(apiType),
           `   ${(err as Error).message}`,
           '',
-          'userId를 명시적으로 전달하거나 토큰을 다시 확인하세요.',
+          M().userIdHint,
         ].join('\n'),
       };
     }
@@ -60,16 +90,16 @@ export async function connectInstagram(
     return {
       ok: true,
       text: [
-        `✅ Instagram 연결 확인 완료 (${apiType})`,
-        `   저장 대상: ${socialTargetLabel(target)}`,
-        `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
+        M().connected(apiType),
+        M().target(socialTargetLabel(target)),
+        M().account(`@${account.username}${account.name ? ` (${account.name})` : ''}`),
         `   ID: ${account.id}`,
-        account.account_type ? `   타입: ${account.account_type}` : '',
+        account.account_type ? M().type(account.account_type) : '',
         account.followers_count !== undefined
-          ? `   팔로워: ${account.followers_count.toLocaleString()}`
+          ? M().followers(account.followers_count.toLocaleString())
           : '',
-        account.media_count !== undefined ? `   게시물: ${account.media_count}` : '',
-        expiresAt ? `   토큰 만료(추정): ${expiresAt.slice(0, 10)}` : '',
+        account.media_count !== undefined ? M().posts(account.media_count) : '',
+        expiresAt ? M().expires(expiresAt.slice(0, 10)) : '',
       ]
         .filter(Boolean)
         .join('\n'),
@@ -79,11 +109,11 @@ export async function connectInstagram(
     return {
       ok: false,
       text: [
-        `❌ 토큰 검증 실패 (${apiType})`,
+        M().verifyFailed(apiType),
         `   userId: ${resolvedUserId}`,
         `   ${(err as Error).message}`,
         '',
-        '토큰을 다시 발급받거나 userId를 직접 지정해보세요.',
+        M().verifyHint,
       ].join('\n'),
     };
   }

@@ -11,6 +11,36 @@ import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from 
 import {
   ambiguousDefaultIdNote, existingCredentialPreview, jenkinsConfiguredLines, jenkinsNotConfiguredLines,
 } from '../jenkins/messages.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    corrupt: (file: string, reason: string) => `❌ ${file} 이 손상되어 읽을 수 없습니다 (${reason}). 다시 저장하면 새로 씁니다.`,
+    saved: '✅ Jenkins 설정 저장 완료',
+    user: (u: string) => `   사용자: ${u}`,
+    verifyNext: '이제 jenkins_list_credentials 로 연결이 잘 됐는지 확인하세요.',
+    noCredentials: '등록된 Jenkins credential 없음.',
+    credentials: (n: number, body: string) => `Jenkins credentials (${n}개):\n\n${body}`,
+    deleted: (id: string) => `🗑 Jenkins credential 삭제 완료: \`${id}\``,
+    noJobs: '잡 없음.',
+    jobs: (n: number, body: string) => `Jenkins jobs (${n}개):\n\n${body}`,
+    jobDone: (result: string, job: string) => `✅ Jenkins 잡 ${result}: \`${job}\``,
+    jobExists: (job: string) => `⚠️ 잡 \`${job}\` 이(가) 이미 존재합니다. jenkins_update_job 을 쓰거나 overwrite=true 로 다시 호출하세요.`,
+  },
+  {
+    corrupt: (file: string, reason: string) => `❌ ${file} is corrupted and cannot be read (${reason}). Saving again rewrites it.`,
+    saved: '✅ Jenkins configuration saved',
+    user: (u: string) => `   User:   ${u}`,
+    verifyNext: 'Now check the connection with jenkins_list_credentials.',
+    noCredentials: 'No Jenkins credentials registered.',
+    credentials: (n: number, body: string) => `Jenkins credentials (${n}):\n\n${body}`,
+    deleted: (id: string) => `🗑 Jenkins credential deleted: \`${id}\``,
+    noJobs: 'No jobs.',
+    jobs: (n: number, body: string) => `Jenkins jobs (${n}):\n\n${body}`,
+    jobDone: (result: string, job: string) => `✅ Jenkins job ${result}: \`${job}\``,
+    jobExists: (job: string) => `⚠️ Job \`${job}\` already exists. Use jenkins_update_job or call again with overwrite=true.`,
+  },
+);
 
 /** 기존 id 교체 dry-run — 무엇을 덮어쓰게 되는지(id·종류·설명)와 모호한 기본 id 경고를 싣는다. */
 async function existingPreview(cfg: JenkinsConfig, id: string, requested: creds.CredentialKind) {
@@ -36,7 +66,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       if (!cfg) {
         const problem = jenkinsConfigProblem();
         // 깨진 파일은 "설정 없음"이 아니다 — 원인을 먼저 밝히고, 복구 절차(다시 저장)는 같은 안내를 쓴다.
-        const head = problem ? [`❌ ${problem.file} 이 손상되어 읽을 수 없습니다 (${problem.reason}). 다시 저장하면 새로 씁니다.`, ''] : [];
+        const head = problem ? [M().corrupt(problem.file, problem.reason), ''] : [];
         return textResult([...head, ...jenkinsNotConfiguredLines()]);
       }
       return textResult(jenkinsConfiguredLines(cfg));
@@ -62,12 +92,12 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       saveJenkinsConfig({ url, username, token });
       const warning = jenkinsUrlWarning(url);
       return textResult([
-        '✅ Jenkins 설정 저장 완료',
+        M().saved,
         `   URL:    ${url}`,
-        `   사용자: ${username}`,
+        M().user(username),
         ...(warning ? ['', warning] : []),
         '',
-        '이제 jenkins_list_credentials 로 연결이 잘 됐는지 확인하세요.',
+        M().verifyNext,
       ]);
     },
   );
@@ -84,10 +114,10 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const cfg = requireJenkinsConfig();
       const list = await creds.listCredentials(cfg);
       if (list.length === 0) {
-        return textResult('등록된 Jenkins credential 없음.');
+        return textResult(M().noCredentials);
       }
       const lines = list.map((c) => `• ${c.id}  [${c.typeName}]  ${c.displayName}`);
-      return textResult(`Jenkins credentials (${list.length}개):\n\n${lines.join('\n')}`);
+      return textResult(M().credentials(list.length, lines.join('\n')));
     },
   );
 
@@ -169,7 +199,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
     async ({ id }) => {
       const cfg = requireJenkinsConfig();
       await creds.deleteCredential(cfg, id);
-      return textResult(`🗑 Jenkins credential 삭제 완료: \`${id}\``);
+      return textResult(M().deleted(id));
     },
   );
 
@@ -188,10 +218,10 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const cfg = requireJenkinsConfig();
       const list = await jobs.listJobs(cfg, folder);
       if (list.length === 0) {
-        return textResult('잡 없음.');
+        return textResult(M().noJobs);
       }
       const lines = list.map((j) => `• ${j.name}${j.color ? `  [${j.color}]` : '  [folder]'}`);
-      return textResult(`Jenkins jobs (${list.length}개):\n\n${lines.join('\n')}`);
+      return textResult(M().jobs(list.length, lines.join('\n')));
     },
   );
 
@@ -231,13 +261,13 @@ export function registerJenkinsTools(server: ToolRegistrar) {
       const cfg = requireJenkinsConfig();
       if (overwrite) {
         const result = await jobs.upsertJob(cfg, job, config_xml);
-        return textResult(`✅ Jenkins 잡 ${result}: \`${job}\``);
+        return textResult(M().jobDone(result, job));
       }
       if (await jobs.jobExists(cfg, job)) {
-        return textResult(`⚠️ 잡 \`${job}\` 이(가) 이미 존재합니다. jenkins_update_job 을 쓰거나 overwrite=true 로 다시 호출하세요.`);
+        return textResult(M().jobExists(job));
       }
       await jobs.createJob(cfg, job, config_xml);
-      return textResult(`✅ Jenkins 잡 created: \`${job}\``);
+      return textResult(M().jobDone('created', job));
     },
   );
 
@@ -256,7 +286,7 @@ export function registerJenkinsTools(server: ToolRegistrar) {
     async ({ job, config_xml }) => {
       const cfg = requireJenkinsConfig();
       await jobs.updateJob(cfg, job, config_xml);
-      return textResult(`✅ Jenkins 잡 updated: \`${job}\``);
+      return textResult(M().jobDone('updated', job));
     },
   );
 

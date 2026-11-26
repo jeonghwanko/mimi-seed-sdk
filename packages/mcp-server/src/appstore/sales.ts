@@ -13,6 +13,100 @@ import { fetchWithTimeout } from '../lib/http.js';
 import { getAppStoreCredentials, getReportsAuthHeaders, normalizeVendorNumber } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
 import { V1_BASE } from './http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    vendorMissing: [
+      '❌ vendorNumber 가 없어 — 매출 리포트는 판매자 번호가 반드시 필요해.',
+      '',
+      'App Store Connect > Reports > 왼쪽 위 Legal Entity Name 아래에 있는 숫자야.',
+      'API 로는 조회할 수 없으니 한 번만 저장해 두면 이후 생략할 수 있어:',
+      '  ~/.mimi-seed/appstore.json 에 "vendorNumber": "<번호>" 추가',
+      '또는 이 도구의 vendorNumber 인자로 직접 넘겨.',
+    ].join('\n'),
+    authNeeded: [
+      '❌ App Store Connect 인증이 필요해.',
+      '',
+      '터미널에서 실행:',
+      '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+    ].join('\n'),
+    forbidden: (reportsKey: boolean) =>
+      [
+        '❌ 매출 리포트 접근 거부 (403) — 키는 정상인데 **롤이 부족**하다.',
+        `   거부당한 키: ${reportsKey ? 'reportsKey (리포트 전용)' : '최상위 키 (배포용과 동일)'}`,
+        '',
+        '리포트 엔드포인트는 다른 App Store Connect API 와 요구 롤이 다르다:',
+        '  필요: **Admin / Finance / Sales and Reports(ACCESS_TO_REPORTS)** 중 하나',
+        'App Manager·Developer 키는 앱 메타데이터는 다 되는데 여기서만 막힌다 —',
+        '다른 도구가 잘 도는 것은 이 403 과 아무 관계가 없다.',
+        '',
+        '⚠️ **발급된 키의 롤은 수정할 수 없다** (Apple 정책 — 폐기 후 재발급만 가능).',
+        '그렇다고 배포 키를 갈아끼우면 릴리스 파이프라인 자격증명을 전부 교체해야 한다.',
+        '',
+        '권장: **읽기 전용 Finance 키를 따로 발급**해 리포트 도구만 쓰게 한다.',
+        '  1) ASC > 사용자 및 액세스 > 통합 > 팀 키 > 키 생성, 액세스 = Finance',
+        '  2) 받은 .p8 내용을 ~/.mimi-seed/appstore.json 의 reportsKey 에 넣는다:',
+        '     "reportsKey": { "issuerId": "...", "keyId": "...", "privateKey": "-----BEGIN..." }',
+        '배포 키는 그대로 두면 된다 — 리포트 도구만 reportsKey 를 쓴다.',
+      ].join('\n'),
+    badDate: '날짜는 YYYY-MM-DD 형식이어야 해.',
+    endBeforeStart: 'endDate 가 startDate 보다 앞설 수 없어.',
+    tooManyDays: (maxDays: number) => `한 번에 조회할 수 있는 일수는 ${maxDays}일까지야. 범위를 나눠서 호출해.`,
+    probeNoVendor: 'vendorNumber 미설정 — ~/.mimi-seed/appstore.json 에 추가하면 매출 리포트를 쓸 수 있다.',
+    probeOk: (vendorNumber: string, separateKey: boolean) =>
+      `매출 리포트 접근 가능 (vendorNumber ${vendorNumber}, ` +
+      `${separateKey ? 'reportsKey 사용' : '최상위 키 사용'})`,
+    probeForbidden: (separateKey: boolean) =>
+      '매출 리포트 403 — 키 롤 부족 (Admin / Finance / Sales and Reports 필요). ' +
+      (separateKey ? 'reportsKey 가 거부당했다.' : 'reportsKey 를 따로 두면 배포 키를 건드리지 않아도 된다.'),
+  },
+  {
+    vendorMissing: [
+      '❌ vendorNumber is missing — sales reports always require the vendor number.',
+      '',
+      'It is the number under Legal Entity Name at the top left of App Store Connect > Reports.',
+      'The API cannot look it up, so save it once and you can omit it afterward:',
+      '  add "vendorNumber": "<number>" to ~/.mimi-seed/appstore.json',
+      'or pass it directly as this tool\'s vendorNumber argument.',
+    ].join('\n'),
+    authNeeded: [
+      '❌ App Store Connect authentication is required.',
+      '',
+      'Run in a terminal:',
+      '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
+    ].join('\n'),
+    forbidden: (reportsKey: boolean) =>
+      [
+        '❌ Sales report access denied (403) — the key is valid but its **role is insufficient**.',
+        `   Rejected key: ${reportsKey ? 'reportsKey (reports only)' : 'top-level key (same as the release key)'}`,
+        '',
+        'The report endpoints require different roles from the rest of the App Store Connect API:',
+        '  Required: one of **Admin / Finance / Sales and Reports(ACCESS_TO_REPORTS)**',
+        'App Manager and Developer keys work for all app metadata but are blocked only here —',
+        'other tools working fine has nothing to do with this 403.',
+        '',
+        '⚠️ **The role of an issued key cannot be changed** (Apple policy — it can only be revoked and reissued).',
+        'But swapping the release key means replacing every release pipeline credential.',
+        '',
+        'Recommended: **issue a separate read-only Finance key** used only by the report tools.',
+        '  1) ASC > Users and Access > Integrations > Team Keys > Generate API Key, Access = Finance',
+        '  2) Put the downloaded .p8 contents into reportsKey in ~/.mimi-seed/appstore.json:',
+        '     "reportsKey": { "issuerId": "...", "keyId": "...", "privateKey": "-----BEGIN..." }',
+        'Leave the release key as it is — only the report tools use reportsKey.',
+      ].join('\n'),
+    badDate: 'Dates must be in YYYY-MM-DD format.',
+    endBeforeStart: 'endDate cannot be earlier than startDate.',
+    tooManyDays: (maxDays: number) => `At most ${maxDays} days can be queried at once. Split the range into separate calls.`,
+    probeNoVendor: 'vendorNumber not set — add it to ~/.mimi-seed/appstore.json to use sales reports.',
+    probeOk: (vendorNumber: string, separateKey: boolean) =>
+      `Sales reports accessible (vendorNumber ${vendorNumber}, ` +
+      `${separateKey ? 'using reportsKey' : 'using the top-level key'})`,
+    probeForbidden: (separateKey: boolean) =>
+      'Sales report 403 — insufficient key role (Admin / Finance / Sales and Reports required). ' +
+      (separateKey ? 'reportsKey was rejected.' : 'A separate reportsKey avoids touching the release key.'),
+  },
+);
 
 /**
  * vendorNumber 해석: 명시 인자 > ~/.mimi-seed/appstore.json 의 vendorNumber.
@@ -26,14 +120,7 @@ function resolveVendorNumber(explicit?: string): string {
     ?? normalizeVendorNumber(getAppStoreCredentials()?.vendorNumber);
   if (!vendorNumber) {
     throw new Error(
-      [
-        '❌ vendorNumber 가 없어 — 매출 리포트는 판매자 번호가 반드시 필요해.',
-        '',
-        'App Store Connect > Reports > 왼쪽 위 Legal Entity Name 아래에 있는 숫자야.',
-        'API 로는 조회할 수 없으니 한 번만 저장해 두면 이후 생략할 수 있어:',
-        '  ~/.mimi-seed/appstore.json 에 "vendorNumber": "<번호>" 추가',
-        '또는 이 도구의 vendorNumber 인자로 직접 넘겨.',
-      ].join('\n'),
+      M().vendorMissing,
     );
   }
   return vendorNumber;
@@ -58,12 +145,7 @@ async function fetchReport(
   const auth = await getReportsAuthHeaders();
   if (!auth) {
     throw new Error(
-      [
-        '❌ App Store Connect 인증이 필요해.',
-        '',
-        '터미널에서 실행:',
-        '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
-      ].join('\n'),
+      M().authNeeded,
     );
   }
   const query = new URLSearchParams(params).toString();
@@ -76,26 +158,7 @@ async function fetchReport(
     // 일반 403 안내("키 role 확인")로는 못 고친다 — 리포트 엔드포인트만 요구 롤이 다르다.
     // 앱 메타데이터가 멀쩡히 조회되는 키에서도 여기서만 막히는 게 정상 동작이라,
     // "키가 깨졌나" 로 헤매기 쉽다.
-    throw new Error(
-      [
-        '❌ 매출 리포트 접근 거부 (403) — 키는 정상인데 **롤이 부족**하다.',
-        `   거부당한 키: ${auth.source === 'reportsKey' ? 'reportsKey (리포트 전용)' : '최상위 키 (배포용과 동일)'}`,
-        '',
-        '리포트 엔드포인트는 다른 App Store Connect API 와 요구 롤이 다르다:',
-        '  필요: **Admin / Finance / Sales and Reports(ACCESS_TO_REPORTS)** 중 하나',
-        'App Manager·Developer 키는 앱 메타데이터는 다 되는데 여기서만 막힌다 —',
-        '다른 도구가 잘 도는 것은 이 403 과 아무 관계가 없다.',
-        '',
-        '⚠️ **발급된 키의 롤은 수정할 수 없다** (Apple 정책 — 폐기 후 재발급만 가능).',
-        '그렇다고 배포 키를 갈아끼우면 릴리스 파이프라인 자격증명을 전부 교체해야 한다.',
-        '',
-        '권장: **읽기 전용 Finance 키를 따로 발급**해 리포트 도구만 쓰게 한다.',
-        '  1) ASC > 사용자 및 액세스 > 통합 > 팀 키 > 키 생성, 액세스 = Finance',
-        '  2) 받은 .p8 내용을 ~/.mimi-seed/appstore.json 의 reportsKey 에 넣는다:',
-        '     "reportsKey": { "issuerId": "...", "keyId": "...", "privateKey": "-----BEGIN..." }',
-        '배포 키는 그대로 두면 된다 — 리포트 도구만 reportsKey 를 쓴다.',
-      ].join('\n'),
-    );
+    throw new Error(M().forbidden(auth.source === 'reportsKey'));
   }
   if (!response.ok) {
     throw friendlyAppStoreError(response.status, await response.text());
@@ -188,15 +251,15 @@ export function eachDate(startDate: string, endDate: string, maxDays: number): s
   const start = Date.parse(`${startDate}T00:00:00Z`);
   const end = Date.parse(`${endDate}T00:00:00Z`);
   if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    throw new Error('날짜는 YYYY-MM-DD 형식이어야 해.');
+    throw new Error(M().badDate);
   }
-  if (end < start) throw new Error('endDate 가 startDate 보다 앞설 수 없어.');
+  if (end < start) throw new Error(M().endBeforeStart);
 
   const dates: string[] = [];
   for (let t = start; t <= end; t += 86_400_000) {
     if (dates.length >= maxDays) {
       throw new Error(
-        `한 번에 조회할 수 있는 일수는 ${maxDays}일까지야. 범위를 나눠서 호출해.`,
+        M().tooManyDays(maxDays),
       );
     }
     dates.push(new Date(t).toISOString().slice(0, 10));
@@ -318,7 +381,7 @@ export async function probeReportsAccess(): Promise<{
   } catch {
     return {
       status: 'no_vendor_number',
-      detail: 'vendorNumber 미설정 — ~/.mimi-seed/appstore.json 에 추가하면 매출 리포트를 쓸 수 있다.',
+      detail: M().probeNoVendor,
     };
   }
 
@@ -338,8 +401,7 @@ export async function probeReportsAccess(): Promise<{
     return {
       status: 'ok',
       detail:
-        `매출 리포트 접근 가능 (vendorNumber ${vendorNumber}, ` +
-        `${usingSeparateKey ? 'reportsKey 사용' : '최상위 키 사용'})`,
+        M().probeOk(vendorNumber, usingSeparateKey),
     };
   } catch (err) {
     const message = (err as Error)?.message ?? '';
@@ -347,11 +409,7 @@ export async function probeReportsAccess(): Promise<{
       const usingSeparateKey = getAppStoreCredentials()?.reportsKey != null;
       return {
         status: 'forbidden',
-        detail:
-          '매출 리포트 403 — 키 롤 부족 (Admin / Finance / Sales and Reports 필요). ' +
-          (usingSeparateKey
-            ? 'reportsKey 가 거부당했다.'
-            : 'reportsKey 를 따로 두면 배포 키를 건드리지 않아도 된다.'),
+        detail: M().probeForbidden(usingSeparateKey),
       };
     }
     return { status: 'error', detail: message.split('\n')[0] };

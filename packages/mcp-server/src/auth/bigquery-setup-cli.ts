@@ -97,7 +97,7 @@ async function main() {
   console.log('');
 
   const jsonPath = await ask(M.askPath);
-  const trimmedPath = jsonPath.trim().replace(/^["']|["']$/g, '');
+  const trimmedPath = jsonPath.trim().replace(/^["\x27]|["\x27]$/g, '');
 
   if (!fs.existsSync(trimmedPath)) {
     console.log(M.noFile(trimmedPath));

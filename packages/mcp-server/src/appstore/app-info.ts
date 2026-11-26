@@ -3,6 +3,20 @@ import { encodePathSegment } from '../lib/url-path.js';
 import { appInfoReleasePolicyQuery, readIncludedAppInfoPolicy, type IncludedAppInfoPolicy } from './app-info-policy.js';
 import type { AppStorePlatform } from './release-target.js';
 import { appStorePagination, getAppStoreResponse, pageIsIncomplete } from './read-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    incomplete: 'App Store Connect의 앱 정보 목록이 불완전합니다.',
+    noneCurrent: '현재 사용할 수 있는 앱 정보 레코드가 없습니다.',
+    ambiguous: '대상 앱 정보 레코드를 하나로 확정할 수 없습니다.',
+  },
+  {
+    incomplete: 'The App Store Connect app info list is incomplete.',
+    noneCurrent: 'No app info record is currently available.',
+    ambiguous: 'Cannot resolve a single target app info record.',
+  },
+);
 
 const appInfoPage = appStorePagination.extend({
   data: z.array(z.object({
@@ -57,12 +71,12 @@ export async function selectAppInfo(appId: string, options: { privacyPlatform?: 
   const page = await readAppInfoPage(appId, privacyPlatform ? appInfoReleasePolicyQuery : {});
   const ids = new Set(page.data.map(({ id }) => id));
   if (ids.size !== page.data.length || pageIsIncomplete(page, page.data.length)) {
-    return { reason: 'App Store Connect의 앱 정보 목록이 불완전합니다.' };
+    return { reason: M().incomplete };
   }
 
   const records = page.data.map((row) => ({ record: toAppInfoRecord(row), relationships: row.relationships }));
   const current = records.filter(({ record: { state } }) => !state || !replacedStates.has(state));
-  if (current.length === 0) return { reason: '현재 사용할 수 있는 앱 정보 레코드가 없습니다.' };
+  if (current.length === 0) return { reason: M().noneCurrent };
 
   // Prefer a draft, then a version under review. Keep the single current-record fallback
   // for published apps and older responses that omit state.
@@ -71,7 +85,7 @@ export async function selectAppInfo(appId: string, options: { privacyPlatform?: 
     ? current.filter(({ record: { state } }) => state && reviewStates.has(state))
     : [];
   const candidates = editable.length > 0 ? editable : inReview.length > 0 ? inReview : current;
-  if (candidates.length !== 1) return { reason: '대상 앱 정보 레코드를 하나로 확정할 수 없습니다.' };
+  if (candidates.length !== 1) return { reason: M().ambiguous };
 
   const { record: target, relationships } = candidates[0];
   const policy = privacyPlatform ? readIncludedAppInfoPolicy(relationships, page.included, privacyPlatform) : {};

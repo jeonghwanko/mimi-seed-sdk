@@ -2,6 +2,40 @@ import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { collectPages } from '../lib/paginate.js';
 import { resourceSegment } from '../lib/resource-id.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    opFailed: (label: string, msg: string | undefined) => `${label} 실패: ${msg}`,
+    opTimeout: (label: string) => `${label}이(가) 시간 내에 끝나지 않았습니다 — 나중에 firebase_get_project 로 상태를 확인하세요.`,
+    noCreateOp: 'GCP 프로젝트 생성 응답에 operation name이 없습니다.',
+    createLabel: 'GCP 프로젝트 생성',
+    noAddOp: 'Firebase 추가 응답에 operation name이 없습니다.',
+    addLabel: 'Firebase 추가',
+    partialFailure: (projectId: string) => [
+      `⚠️ GCP 프로젝트 \`${projectId}\`는 이미 생성됐습니다.`,
+      '→ 다른 projectId로 재시도하지 말고, 원인을 해결한 뒤 같은 projectId로 다시 시도하거나',
+      `firebase_get_project("${projectId}")로 상태를 확인하세요.`,
+    ],
+    ga4LinkTarget:
+      'GA4 링크엔 analyticsAccountId(신규 property 생성) 또는 analyticsPropertyId(기존 property 연결) 중 하나가 필요합니다.',
+  },
+  {
+    opFailed: (label: string, msg: string | undefined) => `${label} failed: ${msg}`,
+    opTimeout: (label: string) => `${label} did not finish in time — check the status later with firebase_get_project.`,
+    noCreateOp: 'The GCP project creation response has no operation name.',
+    createLabel: 'GCP project creation',
+    noAddOp: 'The Add Firebase response has no operation name.',
+    addLabel: 'Adding Firebase',
+    partialFailure: (projectId: string) => [
+      `⚠️ GCP project \`${projectId}\` has already been created.`,
+      '→ Do not retry with a different projectId; fix the cause and retry with the same projectId, or',
+      `check the status with firebase_get_project("${projectId}").`,
+    ],
+    ga4LinkTarget:
+      'A GA4 link needs either analyticsAccountId (creates a new property) or analyticsPropertyId (links an existing property).',
+  },
+);
 
 /**
  * Firebase Management API + Cloud Resource Manager 래퍼
@@ -74,11 +108,11 @@ export async function waitForOperation(
     }
 
     const outcome = operationOutcome(op);
-    if (outcome.status === 'error') throw new Error(`${label} 실패: ${outcome.message}`);
+    if (outcome.status === 'error') throw new Error(M().opFailed(label, outcome.message));
     if (outcome.status === 'done') return;
     if (attempt < maxAttempts - 1) await sleep(intervalMs);
   }
-  throw new Error(`${label}이(가) 시간 내에 끝나지 않았습니다 — 나중에 firebase_get_project 로 상태를 확인하세요.`);
+  throw new Error(M().opTimeout(label));
 }
 
 /** 방금 만든 프로젝트를 곧바로 조회할 때의 짧은 전파 지연(propagation lag)을 흡수하는 재시도. */
@@ -112,10 +146,10 @@ export async function createProject(
     requestBody: { projectId, displayName, parent: opts.parent },
   });
   const createOpName = createRes.data.name;
-  if (!createOpName) throw new Error('GCP 프로젝트 생성 응답에 operation name이 없습니다.');
+  if (!createOpName) throw new Error(M().noCreateOp);
   await waitForOperation(
     async () => (await crm.operations.get({ auth, name: createOpName })).data,
-    'GCP 프로젝트 생성',
+    M().createLabel,
   );
 
   // 이 지점부터는 GCP 프로젝트가 이미 존재한다 — 아래서 실패하면 "다른 projectId로 재시도"가
@@ -124,17 +158,15 @@ export async function createProject(
     const fb = google.firebase('v1beta1');
     const addRes = await fb.projects.addFirebase({ auth, project: `projects/${resourceSegment(projectId)}` });
     const addOpName = addRes.data.name;
-    if (!addOpName) throw new Error('Firebase 추가 응답에 operation name이 없습니다.');
+    if (!addOpName) throw new Error(M().noAddOp);
     await waitForOperation(
       async () => (await fb.operations.get({ auth, name: addOpName })).data,
-      'Firebase 추가',
+      M().addLabel,
     );
   } catch (err) {
     if (err && typeof err === 'object') {
       (err as { partialFailureNote?: string }).partialFailureNote = [
-        `⚠️ GCP 프로젝트 \`${projectId}\`는 이미 생성됐습니다.`,
-        '→ 다른 projectId로 재시도하지 말고, 원인을 해결한 뒤 같은 projectId로 다시 시도하거나',
-        `firebase_get_project("${projectId}")로 상태를 확인하세요.`,
+        ...M().partialFailure(projectId),
       ].join(' ');
     }
     throw err;
@@ -338,7 +370,7 @@ export async function linkAnalytics(
   if (opts.analyticsPropertyId) requestBody.analyticsPropertyId = opts.analyticsPropertyId;
   if (!requestBody.analyticsAccountId && !requestBody.analyticsPropertyId) {
     throw new Error(
-      'GA4 링크엔 analyticsAccountId(신규 property 생성) 또는 analyticsPropertyId(기존 property 연결) 중 하나가 필요합니다.',
+      M().ga4LinkTarget,
     );
   }
   const res = await google.firebase('v1beta1').projects.addGoogleAnalytics({

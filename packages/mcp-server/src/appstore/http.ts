@@ -1,6 +1,18 @@
 import { getAuthHeaders } from './auth.js';
 import { friendlyAppStoreError } from './errors.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    authNeeded: '❌ App Store Connect 인증이 필요해.',
+    runInTerminal: '터미널에서 실행:',
+  },
+  {
+    authNeeded: '❌ App Store Connect authentication is required.',
+    runInTerminal: 'Run in a terminal:',
+  },
+);
 
 export const V1_BASE = 'https://api.appstoreconnect.apple.com/v1';
 export const V2_BASE = 'https://api.appstoreconnect.apple.com/v2';
@@ -19,9 +31,9 @@ export async function authHeadersOrThrow(): Promise<Record<string, string>> {
   if (!headers) {
     throw new Error(
       [
-        '❌ App Store Connect 인증이 필요해.',
+        M().authNeeded,
         '',
-        '터미널에서 실행:',
+        M().runInTerminal,
         '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
       ].join('\n'),
     );

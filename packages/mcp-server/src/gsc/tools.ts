@@ -2,6 +2,18 @@ import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import type { searchconsole_v1 } from '@googleapis/searchconsole';
 import { notDotSegment } from '../lib/resource-id.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    dateOrder: 'startDate는 endDate 이전 또는 같은 날짜여야 해.',
+    startRow: 'startRow는 dimensions로 분해한 조회에만 사용할 수 있어.',
+  },
+  {
+    dateOrder: 'startDate must be on or before endDate.',
+    startRow: 'startRow can be used only for queries broken down by dimensions.',
+  },
+);
 
 /**
  * Google Search Console (Webmasters) API v1 래퍼.
@@ -108,11 +120,11 @@ async function querySearchAnalytics(
 
 export async function searchAnalytics(auth: GscAuth, siteUrl: string, params: SearchAnalyticsParams) {
   const { startDate, endDate, startRow = 0, rowLimit = 1000, type = 'web', filters, summaryOnly, includeTotals } = params;
-  if (startDate > endDate) throw new Error('startDate는 endDate 이전 또는 같은 날짜여야 해.');
+  if (startDate > endDate) throw new Error(M().dateOrder);
   const dimensions = params.dimensions?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
   const reportDimensions = summaryOnly ? [] : dimensions;
   if (startRow > 0 && reportDimensions.length === 0 && !summaryOnly) {
-    throw new Error('startRow는 dimensions로 분해한 조회에만 사용할 수 있어.');
+    throw new Error(M().startRow);
   }
 
   const property = notDotSegment(siteUrl, 'siteUrl');

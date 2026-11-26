@@ -7,6 +7,20 @@ import { androidPackageName } from '../../lib/package-name.js';
 import { requirePlayStoreAuth } from '../../helpers.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
 import { playstore } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    uploaded: (json: string) => `✅ 업로드 완료\n${json}`,
+    allDeleted: (json: string) => `✅ 전체 삭제\n${json}`,
+    replaced: (n: number, json: string) => `✅ ${n}장 교체 완료\n${json}`,
+  },
+  {
+    uploaded: (json: string) => `✅ Upload complete\n${json}`,
+    allDeleted: (json: string) => `✅ All deleted\n${json}`,
+    replaced: (n: number, json: string) => `✅ Replaced ${n} images\n${json}`,
+  },
+);
 
 /** playstore_list_images · playstore_upload_image · playstore_delete_all_images · playstore_replace_images */
 export function registerImageTools(server: ToolRegistrar) {
@@ -37,7 +51,7 @@ export function registerImageTools(server: ToolRegistrar) {
     async ({ packageName, language, imageType, filePath }) => {
       const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.uploadImage(auth, packageName, language, imageType, filePath);
-      return textResult(`✅ 업로드 완료\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().uploaded(JSON.stringify(result, null, 2)));
     },
   );
 
@@ -52,7 +66,7 @@ export function registerImageTools(server: ToolRegistrar) {
     async ({ packageName, language, imageType }) => {
       const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.deleteAllImages(auth, packageName, language, imageType);
-      return textResult(`✅ 전체 삭제\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().allDeleted(JSON.stringify(result, null, 2)));
     },
   );
 
@@ -68,7 +82,7 @@ export function registerImageTools(server: ToolRegistrar) {
     async ({ packageName, language, imageType, filePaths }) => {
       const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.replaceImages(auth, packageName, language, imageType, filePaths);
-      return textResult(`✅ ${result.count}장 교체 완료\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().replaced(result.count, JSON.stringify(result, null, 2)));
     },
   );
 }

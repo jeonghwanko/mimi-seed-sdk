@@ -4,6 +4,50 @@ import { requireCiConfig, saveCiConfig } from '../ci/config.js';
 import * as github from '../ci/github.js';
 import * as gitlab from '../ci/gitlab.js';
 import { textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    saved: (provider: string) => `✅ CI 설정 저장 완료 (${provider})`,
+    repo: (r: string) => `   저장소: ${r}`,
+    savedNext: 'ci_list_workflows 로 사용 가능한 워크플로를 확인하세요.',
+    needWorkflow: 'GitHub 빌드 트리거에는 workflow 파라미터가 필요합니다. (예: "deploy.yml")',
+    triggeredNoRun: '✅ 빌드 트리거 완료. run_id 조회 불가 — 잠시 후 ci_list_recent_builds로 확인하세요.',
+    triggered: '✅ 빌드 트리거 완료',
+    status: (v: string) => `   상태: ${v}`,
+    branch: (v: string) => `   브랜치: ${v}`,
+    commit: (v: string) => `   커밋: ${v}`,
+    workflow: (v: string) => `   워크플로: ${v}`,
+    created: (v: string) => `   생성: ${v}`,
+    updated: (v: string) => `   갱신: ${v}`,
+    checkProgress: (id: string | number) => `ci_get_build_status(run_id="${id}") 로 진행 상황을 확인하세요.`,
+    buildHead: (emoji: string, id: string | number, status: string) => `${emoji} 빌드 #${id} — ${status}`,
+    noBuilds: '최근 빌드 없음.',
+    recent: (n: number, body: string) => `최근 빌드 ${n}개:\n\n${body}`,
+    locale: 'ko-KR',
+    cancelled: (id: string) => `⛔ 빌드 #${id} 취소 요청 완료.\nci_get_build_status(run_id="${id}") 로 상태를 확인하세요.`,
+  },
+  {
+    saved: (provider: string) => `✅ CI configuration saved (${provider})`,
+    repo: (r: string) => `   Repository: ${r}`,
+    savedNext: 'Check the available workflows with ci_list_workflows.',
+    needWorkflow: 'Triggering a GitHub build requires the workflow parameter. (e.g. "deploy.yml")',
+    triggeredNoRun: '✅ Build triggered. Could not get the run_id — check with ci_list_recent_builds shortly.',
+    triggered: '✅ Build triggered',
+    status: (v: string) => `   Status: ${v}`,
+    branch: (v: string) => `   Branch: ${v}`,
+    commit: (v: string) => `   Commit: ${v}`,
+    workflow: (v: string) => `   Workflow: ${v}`,
+    created: (v: string) => `   Created: ${v}`,
+    updated: (v: string) => `   Updated: ${v}`,
+    checkProgress: (id: string | number) => `Check progress with ci_get_build_status(run_id="${id}").`,
+    buildHead: (emoji: string, id: string | number, status: string) => `${emoji} Build #${id} — ${status}`,
+    noBuilds: 'No recent builds.',
+    recent: (n: number, body: string) => `Recent builds (${n}):\n\n${body}`,
+    locale: 'en-US',
+    cancelled: (id: string) => `⛔ Cancel requested for build #${id}.\nCheck its status with ci_get_build_status(run_id="${id}").`,
+  },
+);
 
 export function registerCiTools(server: ToolRegistrar) {
   server.tool(
@@ -27,11 +71,11 @@ export function registerCiTools(server: ToolRegistrar) {
       const config = { provider, token, owner, repo, host };
       saveCiConfig(config);
       return textResult([
-        `✅ CI 설정 저장 완료 (${provider})`,
-        `   저장소: ${owner}/${repo}`,
+        M().saved(provider),
+        M().repo(`${owner}/${repo}`),
         host ? `   Host: ${host}` : '',
         '',
-        'ci_list_workflows 로 사용 가능한 워크플로를 확인하세요.',
+        M().savedNext,
       ].filter(Boolean));
     },
   );
@@ -70,25 +114,25 @@ export function registerCiTools(server: ToolRegistrar) {
 
       let result;
       if (cfg.provider === 'github') {
-        if (!workflow) throw new Error('GitHub 빌드 트리거에는 workflow 파라미터가 필요합니다. (예: "deploy.yml")');
+        if (!workflow) throw new Error(M().needWorkflow);
         result = await github.triggerBuild(cfg, workflow, ref, inputs ?? {});
       } else {
         result = await gitlab.triggerBuild(cfg, ref, inputs ?? {});
       }
 
       if (!result) {
-        return textResult('✅ 빌드 트리거 완료. run_id 조회 불가 — 잠시 후 ci_list_recent_builds로 확인하세요.');
+        return textResult(M().triggeredNoRun);
       }
 
       return textResult([
-        `✅ 빌드 트리거 완료`,
+        M().triggered,
         `   run_id: ${result.id}`,
-        `   상태: ${result.status}`,
-        `   브랜치: ${result.branch}`,
-        result.commit ? `   커밋: ${result.commit}` : '',
+        M().status(result.status),
+        M().branch(result.branch),
+        result.commit ? M().commit(result.commit) : '',
         `   URL: ${result.url}`,
         '',
-        `ci_get_build_status(run_id="${result.id}") 로 진행 상황을 확인하세요.`,
+        M().checkProgress(result.id),
       ].filter(Boolean));
     },
   );
@@ -111,12 +155,12 @@ export function registerCiTools(server: ToolRegistrar) {
       const emoji = statusEmoji[build.status] ?? '❓';
 
       return textResult([
-        `${emoji} 빌드 #${build.id} — ${build.status.toUpperCase()}`,
-        build.workflow ? `   워크플로: ${build.workflow}` : '',
-        `   브랜치: ${build.branch}`,
-        build.commit ? `   커밋: ${build.commit}` : '',
-        `   생성: ${build.createdAt}`,
-        `   갱신: ${build.updatedAt}`,
+        M().buildHead(emoji, build.id, build.status.toUpperCase()),
+        build.workflow ? M().workflow(build.workflow) : '',
+        M().branch(build.branch),
+        build.commit ? M().commit(build.commit) : '',
+        M().created(build.createdAt),
+        M().updated(build.updatedAt),
         `   URL: ${build.url}`,
       ].filter(Boolean));
     },
@@ -137,7 +181,7 @@ export function registerCiTools(server: ToolRegistrar) {
         : await gitlab.listRecentBuilds(cfg, ref, limit);
 
       if (builds.length === 0) {
-        return textResult('최근 빌드 없음.');
+        return textResult(M().noBuilds);
       }
 
       const statusEmoji: Record<string, string> = {
@@ -152,12 +196,12 @@ export function registerCiTools(server: ToolRegistrar) {
           b.branch,
           b.commit ? `@${b.commit}` : '',
           `→ ${b.status}`,
-          `(${new Date(b.createdAt).toLocaleString('ko-KR')})`,
+          `(${new Date(b.createdAt).toLocaleString(M().locale)})`,
         ].filter(Boolean);
         return parts.join(' ');
       });
 
-      return textResult(`최근 빌드 ${builds.length}개:\n\n${lines.join('\n')}`);
+      return textResult(M().recent(builds.length, lines.join('\n')));
     },
   );
 
@@ -174,7 +218,7 @@ export function registerCiTools(server: ToolRegistrar) {
       } else {
         await gitlab.cancelBuild(cfg, run_id);
       }
-      return textResult(`⛔ 빌드 #${run_id} 취소 요청 완료.\nci_get_build_status(run_id="${run_id}") 로 상태를 확인하세요.`);
+      return textResult(M().cancelled(run_id));
     },
   );
 }

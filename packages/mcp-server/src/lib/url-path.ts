@@ -1,3 +1,9 @@
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { bad: (v: string) => `URL 경로 세그먼트로 쓸 수 없는 값입니다: ${v}` },
+  { bad: (v: string) => `Value cannot be used as a URL path segment: ${v}` },
+);
 // URL 경로 세그먼트 인코딩 — 호출자 입력을 REST 경로에 끼워 넣을 때 쓴다.
 //
 // 왜 필요한가: App Store Connect·Graph API 클라이언트는 `/appScreenshots/${screenshotId}` 처럼
@@ -11,7 +17,7 @@
 export function encodePathSegment(value: string | number): string {
   const raw = String(value);
   if (raw === '' || raw === '.' || raw === '..') {
-    throw new Error(`URL 경로 세그먼트로 쓸 수 없는 값입니다: ${JSON.stringify(raw)}`);
+    throw new Error(M().bad(JSON.stringify(raw)));
   }
   return encodeURIComponent(raw);
 }

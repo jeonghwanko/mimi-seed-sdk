@@ -6,6 +6,18 @@ import {
   type TikTokBusinessConfig,
 } from './config.js';
 import { refreshAccessToken } from './api.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    refreshExpired: 'TikTok refresh token이 만료되었습니다. `mimi-seed auth tiktok`으로 다시 연결하세요.',
+    noPublishScope: 'TikTok 연결에 video.publish 권한이 없습니다. Developer 앱 권한을 승인한 뒤 `mimi-seed auth tiktok`으로 다시 연결하세요.',
+  },
+  {
+    refreshExpired: 'The TikTok refresh token has expired. Reconnect with `mimi-seed auth tiktok`.',
+    noPublishScope: 'The TikTok connection lacks the video.publish scope. Approve the Developer app permission, then reconnect with `mimi-seed auth tiktok`.',
+  },
+);
 
 const REFRESH_EARLY_MS = 5 * 60 * 1000;
 
@@ -45,7 +57,7 @@ export async function ensureFreshTikTokConfig(): Promise<TikTokBusinessConfig> {
   const config = requireTikTokBusinessConfig();
   const freshness = tokenFreshness(config);
   if (freshness.state === 'refresh_expired') {
-    throw new Error('TikTok refresh token이 만료되었습니다. `mimi-seed auth tiktok`으로 다시 연결하세요.');
+    throw new Error(M().refreshExpired);
   }
   if (freshness.state === 'fresh') return config;
 
@@ -79,9 +91,7 @@ export function safeTokenInspection(
 export async function ensureTikTokPublishConfig(): Promise<TikTokBusinessConfig> {
   const config = await ensureFreshTikTokConfig();
   if (!hasTikTokScope(config, 'video.publish')) {
-    throw new Error(
-      'TikTok 연결에 video.publish 권한이 없습니다. Developer 앱 권한을 승인한 뒤 `mimi-seed auth tiktok`으로 다시 연결하세요.',
-    );
+    throw new Error(M().noPublishScope);
   }
   return config;
 }

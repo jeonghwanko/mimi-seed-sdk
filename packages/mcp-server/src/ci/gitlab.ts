@@ -2,6 +2,12 @@ import type { CiConfig, NormalizedBuild } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { gitlabApiBase, gitlabProjectId } from '#core/ci.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { noWorkflows: 'GitLab은 workflow 파일 개념이 없습니다. ci_trigger_build(ref="main")로 해당 브랜치의 .gitlab-ci.yml을 즉시 실행하세요.' },
+  { noWorkflows: 'GitLab has no workflow files. Use ci_trigger_build(ref="main") to run that branch\'s .gitlab-ci.yml immediately.' },
+);
 
 function headers(token: string): Record<string, string> {
   return {
@@ -69,7 +75,7 @@ export async function listWorkflows(cfg: CiConfig): Promise<GitLabWorkflowInfo> 
       id: t.id,
       description: t.description ?? '',
     })),
-    note: 'GitLab은 workflow 파일 개념이 없습니다. ci_trigger_build(ref="main")로 해당 브랜치의 .gitlab-ci.yml을 즉시 실행하세요.',
+    note: M().noWorkflows,
   };
 }
 

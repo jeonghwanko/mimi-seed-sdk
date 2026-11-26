@@ -9,21 +9,48 @@
 
 import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
 
-/** 외부 빌드 상태 → 사람이 읽을 뜻 + 다음 행동. */
-const EXTERNAL_STATE: Record<string, string> = {
-  PROCESSING: '업로드 처리 중 — 끝날 때까지 기다린다.',
-  PROCESSING_EXCEPTION: '처리 실패 — 빌드를 다시 업로드해야 한다.',
-  MISSING_EXPORT_COMPLIANCE: '수출 규정 정보 없음 — appstore_declare_encryption 으로 선언하거나 Info.plist 에 ITSAppUsesNonExemptEncryption 을 넣는다.',
-  READY_FOR_BETA_SUBMISSION: '베타 심사 제출 가능 — appstore_submit_beta_review.',
-  WAITING_FOR_BETA_REVIEW: '베타 심사 대기열.',
-  IN_BETA_REVIEW: '베타 심사 진행 중.',
-  BETA_APPROVED: '베타 심사 통과 — 외부 그룹에 배포할 수 있다.',
-  BETA_REJECTED: '베타 심사 반려 — 사유 확인 후 수정하고 재제출.',
-  READY_FOR_BETA_TESTING: '테스트 준비 완료.',
-  IN_BETA_TESTING: '외부 테스트 중.',
-  EXPIRED: '빌드 만료 — 새 빌드가 필요하다.',
-};
+const M = catalog(
+  {
+    /** 외부 빌드 상태 → 사람이 읽을 뜻 + 다음 행동. */
+    externalState: {
+      PROCESSING: '업로드 처리 중 — 끝날 때까지 기다린다.',
+      PROCESSING_EXCEPTION: '처리 실패 — 빌드를 다시 업로드해야 한다.',
+      MISSING_EXPORT_COMPLIANCE: '수출 규정 정보 없음 — appstore_declare_encryption 으로 선언하거나 Info.plist 에 ITSAppUsesNonExemptEncryption 을 넣는다.',
+      READY_FOR_BETA_SUBMISSION: '베타 심사 제출 가능 — appstore_submit_beta_review.',
+      WAITING_FOR_BETA_REVIEW: '베타 심사 대기열.',
+      IN_BETA_REVIEW: '베타 심사 진행 중.',
+      BETA_APPROVED: '베타 심사 통과 — 외부 그룹에 배포할 수 있다.',
+      BETA_REJECTED: '베타 심사 반려 — 사유 확인 후 수정하고 재제출.',
+      READY_FOR_BETA_TESTING: '테스트 준비 완료.',
+      IN_BETA_TESTING: '외부 테스트 중.',
+      EXPIRED: '빌드 만료 — 새 빌드가 필요하다.',
+    },
+    demoMissing: 'demoAccountName/demoAccountPassword (demoAccountRequired=true 인데 비어 있음)',
+    nothingToChange: '바꿀 항목이 없다.',
+    noReviewDetail: (appId: string) => `앱 ${appId} 의 betaAppReviewDetail 을 찾지 못했다.`,
+  },
+  {
+    externalState: {
+      PROCESSING: 'Upload processing — wait until it finishes.',
+      PROCESSING_EXCEPTION: 'Processing failed — the build must be uploaded again.',
+      MISSING_EXPORT_COMPLIANCE: 'Missing Compliance — declare it with appstore_declare_encryption or add ITSAppUsesNonExemptEncryption to Info.plist.',
+      READY_FOR_BETA_SUBMISSION: 'Ready to submit for beta review — appstore_submit_beta_review.',
+      WAITING_FOR_BETA_REVIEW: 'Waiting for Beta Review.',
+      IN_BETA_REVIEW: 'In Beta Review.',
+      BETA_APPROVED: 'Beta review approved — can be distributed to external groups.',
+      BETA_REJECTED: 'Beta review rejected — check the reason, fix, and resubmit.',
+      READY_FOR_BETA_TESTING: 'Ready for testing.',
+      IN_BETA_TESTING: 'In external testing.',
+      EXPIRED: 'Build expired — a new build is required.',
+    },
+    demoMissing: 'demoAccountName/demoAccountPassword (empty while demoAccountRequired=true)',
+    nothingToChange: 'Nothing to change.',
+    noReviewDetail: (appId: string) => `Could not find betaAppReviewDetail for app ${appId}.`,
+  },
+);
+
 
 async function get<T>(path: string, params?: Record<string, string>): Promise<T> {
   const headers = await authHeadersOrThrow();
@@ -90,7 +117,7 @@ export async function getBetaStatus(args: { buildId: string; appId?: string }): 
     buildId,
     internalState: detail?.attributes?.internalBuildState as string | undefined,
     externalState,
-    note: (externalState && EXTERNAL_STATE[externalState]) || '',
+    note: (externalState && (M().externalState as Record<string, string>)[externalState]) || '',
     autoNotifyEnabled: detail?.attributes?.autoNotifyEnabled as boolean | undefined,
     submissionState: submission?.attributes?.betaReviewState as string | undefined,
     whatsToTestLocales: (locs.data ?? [])
@@ -109,7 +136,7 @@ export async function getBetaStatus(args: { buildId: string; appId?: string }): 
         if (!a[f]) missing.push(f);
       }
       if (a.demoAccountRequired && (!a.demoAccountName || !a.demoAccountPassword)) {
-        missing.push('demoAccountName/demoAccountPassword (demoAccountRequired=true 인데 비어 있음)');
+        missing.push(M().demoMissing);
       }
       status.reviewDetail = { id: rd.id, complete: missing.length === 0, missing };
     }
@@ -129,10 +156,10 @@ export async function updateBetaReviewDetail(args: {
   fields: Record<string, string | boolean | undefined>;
 }): Promise<{ id: string; attributes: Record<string, unknown> }> {
   const attributes = Object.fromEntries(Object.entries(args.fields).filter(([, v]) => v !== undefined));
-  if (Object.keys(attributes).length === 0) throw new Error('바꿀 항목이 없다.');
+  if (Object.keys(attributes).length === 0) throw new Error(M().nothingToChange);
 
   const rd = await getOrNull<{ id: string }>(`/apps/${encodePathSegment(args.appId)}/betaAppReviewDetail`);
-  if (!rd) throw new Error(`앱 ${args.appId} 의 betaAppReviewDetail 을 찾지 못했다.`);
+  if (!rd) throw new Error(M().noReviewDetail(args.appId));
 
   await send('PATCH', `/betaAppReviewDetails/${encodePathSegment(rd.id)}`, {
     data: { type: 'betaAppReviewDetails', id: rd.id, attributes },

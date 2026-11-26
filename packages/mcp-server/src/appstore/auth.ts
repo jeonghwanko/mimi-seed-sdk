@@ -6,6 +6,20 @@ import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    vendorDigits: 'Vendor Number는 숫자만 입력하세요 (digits only).',
+    keyParse: (cause: string) =>
+      `App Store 개인 키 파싱 실패 — ~/.mimi-seed/appstore.json의 privateKey 형식 확인 필요.\n원인: ${cause}`,
+  },
+  {
+    vendorDigits: 'Vendor Number must contain digits only.',
+    keyParse: (cause: string) =>
+      `Failed to parse the App Store private key — check the privateKey format in ~/.mimi-seed/appstore.json.\nCause: ${cause}`,
+  },
+);
 
 // Primary location under ~/.mimi-seed. Legacy ~/.preseed read as fallback
 // during the rebrand window so existing App Store Connect sessions don't
@@ -54,7 +68,7 @@ export function normalizeVendorNumber(vendorNumber?: string): string | undefined
   const normalized = vendorNumber?.trim();
   if (!normalized) return undefined;
   if (!/^\d+$/.test(normalized)) {
-    throw new Error('Vendor Number는 숫자만 입력하세요 (digits only).');
+    throw new Error(M().vendorDigits);
   }
   return normalized;
 }
@@ -122,7 +136,7 @@ export async function generateToken(creds: AppStoreKey): Promise<string> {
     key = await importPKCS8(normalizedKey, 'ES256');
   } catch (err) {
     throw new Error(
-      `App Store 개인 키 파싱 실패 — ~/.mimi-seed/appstore.json의 privateKey 형식 확인 필요.\n원인: ${(err as Error).message}`,
+      M().keyParse((err as Error).message),
       { cause: err },
     );
   }

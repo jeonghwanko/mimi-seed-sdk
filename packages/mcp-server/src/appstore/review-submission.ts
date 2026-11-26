@@ -6,6 +6,92 @@ import { getVersionAppAndPlatform } from './versions.js';
 import type { AppStoreProductType } from './http.js';
 import type { AscListDocument, AscRef, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    listPaged: 'reviewSubmission 목록이 여러 페이지야. 기존 버전 묶음을 모두 확인할 수 없어 제출을 중단했어.',
+    listNoData: 'reviewSubmission 목록 응답에 data 배열이 없어. 제출을 중단했어.',
+    cannotResubmit: (id: string, state: string, versionId: string) =>
+      `reviewSubmission ${id} 상태 ${state}에서 버전 ${versionId}을(를) 재제출할 수 없어. 먼저 묶음 상태를 확인해줘.`,
+    unrelatedItems: (versionId: string) =>
+      `버전 ${versionId}과(와) 무관한 reviewSubmission 항목이 있어 자동 제출을 중단했어. 기존 묶음을 확인해줘.`,
+    itemsNoData: (id: string) => `reviewSubmission ${id} 항목 조회 응답에 data 배열이 없어. 제출을 중단했어.`,
+    itemsPaged: (id: string) => `reviewSubmission ${id} 항목이 여러 페이지야. 전체 항목을 확인할 수 없어 제출을 중단했어.`,
+    createNoId: (json: string) => `reviewSubmission 생성 응답에 id가 없어: ${json}`,
+    detachFailed: (id: string, versionId: string) =>
+      `reviewSubmission ${id}의 버전 ${versionId} 항목을 해제하지 못해 제출을 중단했어.`,
+    firstReviewProduct: (internalId: string, productType: string) =>
+      [
+        `상품 ${internalId} (${productType}) 은 API 로 심사 제출할 수 없는 상태야 — Apple 응답: "no pending version for submission".`,
+        '',
+        '**앱 첫 심사** 케이스다. 한 번도 승인된 적 없는 상품은 공개 API 로 심사에 못 넣는다.',
+        '앱 버전을 심사 대기로 만들어도 이 벽은 그대로다 (2026-07-25 재확인).',
+        '',
+        '실제로 통하는 순서 (실앱 2.0.6 실측):',
+        '  1. appstore_submit_for_review 로 앱 버전을 먼저 제출한다.',
+        '     → 상품은 자동으로 안 딸려간다. 버전 1개짜리 묶음 A 가 생긴다. 이건 정상이다.',
+        '  2. 그래야 ASC 웹에 상품의 "심사 추가" UI 가 나타난다. 웹에서 상품을 담으면',
+        '     상품들만 든 **새 묶음 B** 가 READY_FOR_REVIEW(미제출)로 생성된다.',
+        '  3. B 를 그냥 제출하면 409: "an appStoreVersions must be included in this review submission".',
+        '     상품 묶음에는 앱 버전이 반드시 함께 있어야 한다.',
+        '  4. appstore_cancel_review 로 묶음 A 를 취소해 버전을 풀어준다.',
+        '  5. POST /reviewSubmissionItems 로 B 에 appStoreVersion 을 추가한다.',
+        '     (상품 관계는 거부되지만 **버전 관계는 받는다**.)',
+        '  6. B 를 submitted=true 로 PATCH → 버전+상품이 한 묶음으로 제출된다.',
+        '',
+        '이미 승인된 적 있는 상품이라면: 변경분(pending version)이 실제로 있는지 확인.',
+      ].join('\n'),
+    draftsPaged: '심사 초안 목록이 여러 페이지야. 안전한 빈 초안을 확인할 수 없어 제출을 중단했어.',
+    draftsNoData: '심사 초안 목록 응답에 data 배열이 없어. 제출을 중단했어.',
+    nothingToCancel: [
+      `취소 가능한 심사 제출이 없어 (WAITING_FOR_REVIEW 상태 없음).`,
+      `IN_REVIEW 이상은 API로 취소 불가 — App Store Connect 웹에서 직접 처리하거나`,
+      `Apple 심사 결과(APPROVED/REJECTED)를 기다려야 해.`,
+    ].join('\n'),
+  },
+  {
+    listPaged: 'The reviewSubmission list spans multiple pages. Submission stopped because not every existing version submission could be checked.',
+    listNoData: 'The reviewSubmission list response has no data array. Submission stopped.',
+    cannotResubmit: (id: string, state: string, versionId: string) =>
+      `Cannot resubmit version ${versionId} from reviewSubmission ${id} in state ${state}. Check the submission state first.`,
+    unrelatedItems: (versionId: string) =>
+      `Automatic submission stopped because a reviewSubmission has items unrelated to version ${versionId}. Check the existing submission.`,
+    itemsNoData: (id: string) => `The reviewSubmission ${id} items response has no data array. Submission stopped.`,
+    itemsPaged: (id: string) => `The reviewSubmission ${id} items span multiple pages. Submission stopped because not every item could be checked.`,
+    createNoId: (json: string) => `reviewSubmission creation response has no id: ${json}`,
+    detachFailed: (id: string, versionId: string) =>
+      `Submission stopped because the version ${versionId} item could not be removed from reviewSubmission ${id}.`,
+    firstReviewProduct: (internalId: string, productType: string) =>
+      [
+        `Product ${internalId} (${productType}) cannot be submitted for review through the API — Apple response: "no pending version for submission".`,
+        '',
+        'This is the **app\'s first review** case. A product that has never been approved cannot be added to review through the public API.',
+        'Putting the app version into review does not remove this wall (reconfirmed 2026-07-25).',
+        '',
+        'The order that actually works (measured on real app 2.0.6):',
+        '  1. Submit the app version first with appstore_submit_for_review.',
+        '     → Products are not attached automatically. A submission A with only the version is created. This is expected.',
+        '  2. Only then does the product\'s "Add for Review" UI appear in the ASC web console. Adding products there',
+        '     creates a **new submission B** containing only the products, in READY_FOR_REVIEW (not submitted).',
+        '  3. Submitting B as is fails with 409: "an appStoreVersions must be included in this review submission".',
+        '     A product submission must include the app version.',
+        '  4. Cancel submission A with appstore_cancel_review to release the version.',
+        '  5. Add the appStoreVersion to B with POST /reviewSubmissionItems.',
+        '     (Product relationships are rejected, but **the version relationship is accepted**.)',
+        '  6. PATCH B with submitted=true → the version and products are submitted as one submission.',
+        '',
+        'If the product has been approved before: check that a change (pending version) actually exists.',
+      ].join('\n'),
+    draftsPaged: 'The review draft list spans multiple pages. Submission stopped because a safe empty draft could not be confirmed.',
+    draftsNoData: 'The review draft list response has no data array. Submission stopped.',
+    nothingToCancel: [
+      `No review submission can be canceled (none in WAITING_FOR_REVIEW).`,
+      `IN_REVIEW or later cannot be canceled through the API — handle it directly in the App Store Connect web console or`,
+      `wait for the Apple review result (APPROVED/REJECTED).`,
+    ].join('\n'),
+  },
+);
 
 export { buildSubmitForReviewPreview } from './review-preview.js';
 
@@ -42,10 +128,10 @@ async function findOpenReviewSubmission(
     'limit': '50',
   });
   if (data?.links?.next) {
-    throw new Error('reviewSubmission 목록이 여러 페이지야. 기존 버전 묶음을 모두 확인할 수 없어 제출을 중단했어.');
+    throw new Error(M().listPaged);
   }
   if (!Array.isArray(data?.data)) {
-    throw new Error('reviewSubmission 목록 응답에 data 배열이 없어. 제출을 중단했어.');
+    throw new Error(M().listNoData);
   }
   const submissions = data.data;
   let reusable: { id: string; versionAttached: boolean; state?: string } | null = null;
@@ -62,7 +148,7 @@ async function findOpenReviewSubmission(
         continue;
       }
       if (sub.attributes?.state === 'COMPLETING') {
-        throw new Error(`reviewSubmission ${sub.id} 상태 ${sub.attributes.state}에서 버전 ${versionId}을(를) 재제출할 수 없어. 먼저 묶음 상태를 확인해줘.`);
+        throw new Error(M().cannotResubmit(sub.id, sub.attributes.state, versionId));
       }
       return { id: sub.id, versionAttached: true, state: sub.attributes?.state };
     }
@@ -76,7 +162,7 @@ async function findOpenReviewSubmission(
   }
   if (staleSubmission) return staleSubmission;
   if (!reusable && hasUnrelatedItems) {
-    throw new Error(`버전 ${versionId}과(와) 무관한 reviewSubmission 항목이 있어 자동 제출을 중단했어. 기존 묶음을 확인해줘.`);
+    throw new Error(M().unrelatedItems(versionId));
   }
   return reusable;
 }
@@ -87,10 +173,10 @@ async function getReviewSubmissionItems(submissionId: string) {
     limit: '50',
   });
   if (!Array.isArray(data?.data)) {
-    throw new Error(`reviewSubmission ${submissionId} 항목 조회 응답에 data 배열이 없어. 제출을 중단했어.`);
+    throw new Error(M().itemsNoData(submissionId));
   }
   if (data?.links?.next) {
-    throw new Error(`reviewSubmission ${submissionId} 항목이 여러 페이지야. 전체 항목을 확인할 수 없어 제출을 중단했어.`);
+    throw new Error(M().itemsPaged(submissionId));
   }
   return { items: data.data, included: data.included ?? [] };
 }
@@ -107,7 +193,7 @@ async function createReviewSubmission(appId: string, platform: string): Promise<
   });
   const submissionId = created?.data?.id;
   if (!submissionId) {
-    throw new Error(`reviewSubmission 생성 응답에 id가 없어: ${JSON.stringify(created)}`);
+    throw new Error(M().createNoId(JSON.stringify(created)));
   }
   return submissionId;
 }
@@ -133,7 +219,7 @@ export async function submitVersionForReview(versionId: string) {
   if (existing?.state === 'UNRESOLVED_ISSUES' && existing.versionAttached) {
     const released = await releaseVersionFromStaleSubmissions(appId, platform, versionId);
     if (!released) {
-      throw new Error(`reviewSubmission ${existing.id}의 버전 ${versionId} 항목을 해제하지 못해 제출을 중단했어.`);
+      throw new Error(M().detachFailed(existing.id, versionId));
     }
     recoveredFromStaleSubmission = true;
     reusedSubmission = false;
@@ -263,26 +349,7 @@ export async function addProductToReviewSubmission(args: {
   } catch (error) {
     if (!isNoPendingVersionError(error)) throw error;
     const enriched = new Error(
-      [
-        `상품 ${internalId} (${productType}) 은 API 로 심사 제출할 수 없는 상태야 — Apple 응답: "no pending version for submission".`,
-        '',
-        '**앱 첫 심사** 케이스다. 한 번도 승인된 적 없는 상품은 공개 API 로 심사에 못 넣는다.',
-        '앱 버전을 심사 대기로 만들어도 이 벽은 그대로다 (2026-07-25 재확인).',
-        '',
-        '실제로 통하는 순서 (실앱 2.0.6 실측):',
-        '  1. appstore_submit_for_review 로 앱 버전을 먼저 제출한다.',
-        '     → 상품은 자동으로 안 딸려간다. 버전 1개짜리 묶음 A 가 생긴다. 이건 정상이다.',
-        '  2. 그래야 ASC 웹에 상품의 "심사 추가" UI 가 나타난다. 웹에서 상품을 담으면',
-        '     상품들만 든 **새 묶음 B** 가 READY_FOR_REVIEW(미제출)로 생성된다.',
-        '  3. B 를 그냥 제출하면 409: "an appStoreVersions must be included in this review submission".',
-        '     상품 묶음에는 앱 버전이 반드시 함께 있어야 한다.',
-        '  4. appstore_cancel_review 로 묶음 A 를 취소해 버전을 풀어준다.',
-        '  5. POST /reviewSubmissionItems 로 B 에 appStoreVersion 을 추가한다.',
-        '     (상품 관계는 거부되지만 **버전 관계는 받는다**.)',
-        '  6. B 를 submitted=true 로 PATCH → 버전+상품이 한 묶음으로 제출된다.',
-        '',
-        '이미 승인된 적 있는 상품이라면: 변경분(pending version)이 실제로 있는지 확인.',
-      ].join('\n'),
+      M().firstReviewProduct(internalId, productType),
     );
     (enriched as Error & { cause?: unknown }).cause = (error as Error & { cause?: unknown }).cause;
     throw enriched;
@@ -304,10 +371,10 @@ async function findDraftReviewSubmission(appId: string, platform: string): Promi
     'limit': '50',
   });
   if (data?.links?.next) {
-    throw new Error('심사 초안 목록이 여러 페이지야. 안전한 빈 초안을 확인할 수 없어 제출을 중단했어.');
+    throw new Error(M().draftsPaged);
   }
   if (!Array.isArray(data?.data)) {
-    throw new Error('심사 초안 목록 응답에 data 배열이 없어. 제출을 중단했어.');
+    throw new Error(M().draftsNoData);
   }
   const drafts = data.data;
   for (const draft of drafts) {
@@ -500,11 +567,7 @@ export async function cancelVersionReview(versionId: string): Promise<{
   const submission = data?.data?.[0];
   if (!submission) {
     throw new Error(
-      [
-        `취소 가능한 심사 제출이 없어 (WAITING_FOR_REVIEW 상태 없음).`,
-        `IN_REVIEW 이상은 API로 취소 불가 — App Store Connect 웹에서 직접 처리하거나`,
-        `Apple 심사 결과(APPROVED/REJECTED)를 기다려야 해.`,
-      ].join('\n'),
+      M().nothingToCancel,
     );
   }
 

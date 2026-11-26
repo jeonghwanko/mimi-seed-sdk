@@ -4,6 +4,22 @@ import {
   saveSocialPlatformConfig,
   type SocialConfigOptions,
 } from '../social/profile-store.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    missing: (profileHint: string) =>
+      'Instagram 설정이 없습니다.\n' +
+      'instagram_save_config 도구로 먼저 설정해주세요.\n' +
+      `예: instagram_save_config(accessToken="...", userId="..."${profileHint})`,
+  },
+  {
+    missing: (profileHint: string) =>
+      'No Instagram settings.\n' +
+      'Set them up first with the instagram_save_config tool.\n' +
+      `e.g. instagram_save_config(accessToken="...", userId="..."${profileHint})`,
+  },
+);
 
 export interface InstagramConfig {
   accessToken: string;
@@ -32,9 +48,7 @@ export function requireInstagramConfig(options: SocialConfigOptions = {}): Insta
     const target = resolveSocialConfigTarget('instagram', options);
     const profileHint = target.profile ? `, profile="${target.profile}"` : '';
     throw new Error(
-      'Instagram 설정이 없습니다.\n' +
-      'instagram_save_config 도구로 먼저 설정해주세요.\n' +
-      `예: instagram_save_config(accessToken="...", userId="..."${profileHint})`,
+      M().missing(profileHint),
     );
   }
   return cfg;

@@ -16,6 +16,20 @@ import {
   registeredServiceAccountsLines, playConnectionSetupLines,
 } from '../../playstore/messages.js';
 import { playstore } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    badJson: '❌ JSON 파싱 실패 — 서비스 계정 JSON 형식이 올바르지 않음.',
+    deleted: (pkg: string) => `✓ ${pkg} 서비스 계정 파일 삭제 완료. 이후 이 패키지는 default SA로 폴백.`,
+    skip: (pkg: string) => `(skip) ${pkg} 등록된 패키지별 SA 없음.`,
+  },
+  {
+    badJson: '❌ JSON parse failed — the service account JSON format is invalid.',
+    deleted: (pkg: string) => `✓ Service account file for ${pkg} deleted. This package now falls back to the default SA.`,
+    skip: (pkg: string) => `(skip) No per-package SA registered for ${pkg}.`,
+  },
+);
 
 /**
  * playstore_verify_service_account
@@ -79,7 +93,7 @@ export function registerServiceAccountTools(server: ToolRegistrar) {
         clientEmail = parsed.client_email ?? '';
         projectId = parsed.project_id ?? '';
       } catch {
-        return textResult('❌ JSON 파싱 실패 — 서비스 계정 JSON 형식이 올바르지 않음.');
+        return textResult(M().badJson);
       }
       saveServiceAccountJsonForPackage(packageName, serviceAccountJson);
       return textResult(serviceAccountRegisteredLines(packageName, clientEmail, projectId));
@@ -102,8 +116,8 @@ export function registerServiceAccountTools(server: ToolRegistrar) {
     async ({ packageName }) => {
       const deleted = deleteServiceAccountJsonForPackage(packageName);
       return textResult(deleted
-        ? `✓ ${packageName} 서비스 계정 파일 삭제 완료. 이후 이 패키지는 default SA로 폴백.`
-        : `(skip) ${packageName} 등록된 패키지별 SA 없음.`);
+        ? M().deleted(packageName)
+        : M().skip(packageName));
     },
   );
 }

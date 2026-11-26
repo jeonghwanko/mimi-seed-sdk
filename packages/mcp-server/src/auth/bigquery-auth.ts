@@ -5,6 +5,40 @@ import path from 'node:path';
 import os from 'node:os';
 import { getAuthenticatedClient } from './google-auth.js';
 import { writeCredentialFile } from '#core/atomic-write.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    badJson: 'JSON 파싱 실패 — 올바른 서비스 계정 키 파일이 아닙니다.',
+    notSaKey: '서비스 계정 키 형식이 아닙니다 (type="service_account", client_email, private_key 필요).',
+    hint: [
+      '❌ BigQuery 인증이 설정되지 않았어.',
+      '',
+      '방법 1 — 서비스 계정 (권장: Google Workspace 재인증 정책의 영향을 받지 않음):',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth',
+      '',
+      '방법 2 — Google 계정 OAuth:',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+      '',
+      '그 다음에 다시 물어봐줘.',
+    ],
+  },
+  {
+    badJson: 'JSON parse failed — this is not a valid service account key file.',
+    notSaKey: 'Not a service account key (needs type="service_account", client_email, private_key).',
+    hint: [
+      '❌ BigQuery authentication is not set up.',
+      '',
+      'Option 1 — service account (recommended: not affected by the Google Workspace reauthentication policy):',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth',
+      '',
+      'Option 2 — Google account OAuth:',
+      '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
+      '',
+      'Then ask again.',
+    ],
+  },
+);
 
 // BigQuery 전용 서비스 계정 키 저장 위치.
 // 서비스 계정 인증은 Google Workspace 의 재인증(reauth) 정책에서 면제되므로,
@@ -43,11 +77,11 @@ export function saveBigQueryServiceAccountJson(json: string): ServiceAccountKey 
   try {
     parsed = JSON.parse(json) as ServiceAccountKey;
   } catch {
-    throw new Error('JSON 파싱 실패 — 올바른 서비스 계정 키 파일이 아닙니다.');
+    throw new Error(M().badJson);
   }
   if (parsed.type !== 'service_account' || !parsed.client_email || !parsed.private_key) {
     throw new Error(
-      '서비스 계정 키 형식이 아닙니다 (type="service_account", client_email, private_key 필요).',
+      M().notSaKey,
     );
   }
   writeCredentialFile(BQ_SA_PATH, json);
@@ -107,21 +141,10 @@ export function resolveBigQueryAuth(): BigQueryAuth | null {
   return null;
 }
 
-const BQ_AUTH_HINT = [
-  '❌ BigQuery 인증이 설정되지 않았어.',
-  '',
-  '방법 1 — 서비스 계정 (권장: Google Workspace 재인증 정책의 영향을 받지 않음):',
-  '  npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth',
-  '',
-  '방법 2 — Google 계정 OAuth:',
-  '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth',
-  '',
-  '그 다음에 다시 물어봐줘.',
-].join('\n');
 
 /** BigQuery 인증을 강제. 없으면 안내 메시지와 함께 throw. */
 export function requireBigQueryAuth(): BigQueryAuth {
   const auth = resolveBigQueryAuth();
-  if (!auth) throw new Error(BQ_AUTH_HINT);
+  if (!auth) throw new Error(M().hint.join('\n'));
   return auth;
 }

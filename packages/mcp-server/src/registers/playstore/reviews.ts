@@ -7,6 +7,18 @@ import { androidPackageName } from '../../lib/package-name.js';
 import { requirePlayStoreAuth } from '../../helpers.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
 import { playstore } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    partial: (why: string) => `⚠️ 일부만 조회됨: ${why}`,
+    replied: (json: string) => `답변 완료:\n${json}`,
+  },
+  {
+    partial: (why: string) => `⚠️ Only partially fetched: ${why}`,
+    replied: (json: string) => `Reply posted:\n${json}`,
+  },
+);
 
 /** playstore_list_reviews · playstore_reply_review */
 export function registerReviewTools(server: ToolRegistrar) {
@@ -28,7 +40,7 @@ export function registerReviewTools(server: ToolRegistrar) {
       const { reviews, truncated } = await playstore.listReviewsWithStatus(auth, packageName);
       const result = jsonResult(reviews);
       // 목록이 잘렸을 때만 안내 줄을 덧붙인다 — 전부 가져왔으면 응답은 예전과 같은 JSON 하나다.
-      if (truncated) result.content.push({ type: 'text', text: `⚠️ 일부만 조회됨: ${truncated}` });
+      if (truncated) result.content.push({ type: 'text', text: M().partial(truncated) });
       return result;
     },
   );
@@ -44,7 +56,7 @@ export function registerReviewTools(server: ToolRegistrar) {
     async ({ packageName, reviewId, replyText }) => {
       const auth = await requirePlayStoreAuth(packageName);
       const result = await playstore.replyToReview(auth, packageName, reviewId, replyText);
-      return textResult(`답변 완료:\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().replied(JSON.stringify(result, null, 2)));
     },
   );
 }

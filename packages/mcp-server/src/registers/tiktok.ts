@@ -15,12 +15,18 @@ import {
   publishPlannedVideo,
 } from '../tiktok-business/posting.js';
 import { jsonResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { absoluteOnly: '절대경로만 허용합니다.', httpsOnly: 'HTTPS URL만 허용합니다.' },
+  { absoluteOnly: 'Only absolute paths are allowed.', httpsOnly: 'Only HTTPS URLs are allowed.' },
+);
 
 const absolutePath = z.string().min(1).refine((value) => value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value), {
-  message: '절대경로만 허용합니다.',
+  error: () => M().absoluteOnly,
 });
 const httpsUrl = z.string().url().refine((value) => new URL(value).protocol === 'https:', {
-  message: 'HTTPS URL만 허용합니다.',
+  error: () => M().httpsOnly,
 });
 
 export function registerTikTokBusinessTools(server: ToolRegistrar) {

@@ -6,6 +6,62 @@ import * as previews from '../../appstore/previews.js';
 import { listProductPageMedia } from '../../appstore/asset-library.js';
 import { reorderMediaPlacements, uploadAndPlaceMedia } from '../../appstore/asset-library-write.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    groupOrDisplay: 'placementGroup과 displayType 중 하나만 지정하세요.',
+    needDisplayAndFile: '기존 세트 업로드에는 displayType과 filePath가 필요합니다.',
+    shotUploaded: (displayType: string, json: string) => `✅ 스크린샷 업로드 완료 (${displayType})\n\n${json}`,
+    shotDeleted: (json: string) => `✅ 스크린샷 삭제됨\n${json}`,
+    setDeleted: (json: string) => `✅ 셋 삭제됨\n${json}`,
+    noPreviewSets: '미리보기 세트 없음.',
+    setCount: (n: number) => `${n}개`,
+    stateUnknown: '상태 미상',
+    poster: (tc: string) => ` · 포스터 ${tc}`,
+    playable: ' · 재생 가능',
+    libraryHeader: 'App Asset Library 배치',
+    assetStateUnknown: '에셋 상태 미상',
+    placementStateUnknown: '배치 상태 미상',
+    groupOrPreview: 'placementGroup과 previewType 중 하나만 지정하세요.',
+    needPreviewAndFile: '기존 세트 업로드에는 previewType과 filePath가 필요합니다.',
+    previewUploaded: '✅ 미리보기 업로드 완료 (인코딩 대기)',
+    file: (name: string, mb: string) => `  파일: ${name} (${mb} MB)`,
+    type: (t: string) => `  타입: ${t}`,
+    state: (s: string | null | undefined) => `  상태: ${s ?? '처리 중'}`,
+    encodingNote: 'Apple 인코딩이 끝나야 노출된다 — appstore_list_previews 로 상태를 확인할 것.',
+    needPreviewOrSet: 'previewId 또는 setId 중 하나는 필요하다.',
+    deletePreviewDryRun: (id: string) => `🛑 dry-run — 미리보기 ${id} 를 삭제할 참이다. confirm: true 로 다시 호출.`,
+    deleteSetDryRun: (id: string | undefined) => `🛑 dry-run — 세트 ${id} 와 그 안의 동영상 전부를 삭제할 참이다. confirm: true 로 다시 호출.`,
+    deleted: (id: string) => `✅ 삭제 완료 — ${id}`,
+  },
+  {
+    groupOrDisplay: 'Specify only one of placementGroup and displayType.',
+    needDisplayAndFile: 'Uploading to an existing set requires displayType and filePath.',
+    shotUploaded: (displayType: string, json: string) => `✅ Screenshot uploaded (${displayType})\n\n${json}`,
+    shotDeleted: (json: string) => `✅ Screenshot deleted\n${json}`,
+    setDeleted: (json: string) => `✅ Set deleted\n${json}`,
+    noPreviewSets: 'No preview sets.',
+    setCount: (n: number) => `${n} items`,
+    stateUnknown: 'state unknown',
+    poster: (tc: string) => ` · poster ${tc}`,
+    playable: ' · playable',
+    libraryHeader: 'App Asset Library placements',
+    assetStateUnknown: 'asset state unknown',
+    placementStateUnknown: 'placement state unknown',
+    groupOrPreview: 'Specify only one of placementGroup and previewType.',
+    needPreviewAndFile: 'Uploading to an existing set requires previewType and filePath.',
+    previewUploaded: '✅ Preview uploaded (waiting for encoding)',
+    file: (name: string, mb: string) => `  File: ${name} (${mb} MB)`,
+    type: (t: string) => `  Type: ${t}`,
+    state: (s: string | null | undefined) => `  State: ${s ?? 'processing'}`,
+    encodingNote: 'It appears only after Apple finishes encoding — check the state with appstore_list_previews.',
+    needPreviewOrSet: 'Either previewId or setId is required.',
+    deletePreviewDryRun: (id: string) => `🛑 dry-run — about to delete preview ${id}. Call again with confirm: true.`,
+    deleteSetDryRun: (id: string | undefined) => `🛑 dry-run — about to delete set ${id} and every video in it. Call again with confirm: true.`,
+    deleted: (id: string) => `✅ Deleted — ${id}`,
+  },
+);
 
 /** appstore_list_screenshots · appstore_upload_screenshot · appstore_delete_screenshot(_set) */
 export function registerScreenshotTools(server: ToolRegistrar) {
@@ -48,12 +104,12 @@ export function registerScreenshotTools(server: ToolRegistrar) {
     },
     async ({ localizationId, displayType, placementGroup, filePath, assetId }) => {
       if (placementGroup) {
-        if (displayType !== undefined) throw new Error('placementGroup과 displayType 중 하나만 지정하세요.');
+        if (displayType !== undefined) throw new Error(M().groupOrDisplay);
         return jsonResult(await uploadAndPlaceMedia({ localizationId, placementGroup, filePath, assetId, placementType: 'APP_SCREENSHOT' }));
       }
-      if (!displayType || !filePath || assetId !== undefined) throw new Error('기존 세트 업로드에는 displayType과 filePath가 필요합니다.');
+      if (!displayType || !filePath || assetId !== undefined) throw new Error(M().needDisplayAndFile);
       const result = await appstoreScreenshots.uploadScreenshot(localizationId, displayType, filePath);
-      return textResult(`✅ 스크린샷 업로드 완료 (${displayType})\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().shotUploaded(displayType, JSON.stringify(result, null, 2)));
     },
   );
 
@@ -63,7 +119,7 @@ export function registerScreenshotTools(server: ToolRegistrar) {
     { screenshotId: z.string().describe('기존 세트에 속한 스크린샷 ID (appstore_list_screenshots 첫 번째 결과)') },
     async ({ screenshotId }) => {
       const result = await appstoreScreenshots.deleteScreenshot(screenshotId);
-      return textResult(`✅ 스크린샷 삭제됨\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().shotDeleted(JSON.stringify(result, null, 2)));
     },
   );
 
@@ -73,7 +129,7 @@ export function registerScreenshotTools(server: ToolRegistrar) {
     { setId: z.string().describe('기존 스크린샷 셋 ID (appstore_list_screenshots 첫 번째 결과)') },
     async ({ setId }) => {
       const result = await appstoreScreenshots.deleteScreenshotSet(setId);
-      return textResult(`✅ 셋 삭제됨\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().setDeleted(JSON.stringify(result, null, 2)));
     },
   );
 }
@@ -104,27 +160,27 @@ export function registerPreviewTools(server: ToolRegistrar) {
     async ({ localizationId }) => {
       const { legacySets, placements } = await listProductPageMedia(localizationId, 'previews', previews.listPreviewSets);
       if (legacySets.length === 0 && placements.length === 0) {
-        return textResult('미리보기 세트 없음.');
+        return textResult(M().noPreviewSets);
       }
       const lines: string[] = [];
       for (const s of legacySets) {
-        lines.push(`${s.previewType ?? '?'} (set ${s.id}) — ${s.previews.length}개`);
+        lines.push(`${s.previewType ?? '?'} (set ${s.id}) — ${M().setCount(s.previews.length)}`);
         for (const p of s.previews) {
           lines.push(
-            `  ${p.id}: ${p.fileName ?? '?'} · ${p.state ?? '상태 미상'}` +
-              (p.previewFrameTimeCode ? ` · 포스터 ${p.previewFrameTimeCode}` : '') +
-              (p.videoUrl ? ' · 재생 가능' : ''),
+            `  ${p.id}: ${p.fileName ?? '?'} · ${p.state ?? M().stateUnknown}` +
+              (p.previewFrameTimeCode ? M().poster(p.previewFrameTimeCode) : '') +
+              (p.videoUrl ? M().playable : ''),
           );
         }
       }
       if (placements.length > 0) {
-        lines.push('App Asset Library 배치');
+        lines.push(M().libraryHeader);
         for (const placement of placements) {
           const { placementGroup, placementId, assetId, fileName, assetState, placementState, previewFrameTimeCode } = placement;
           lines.push(
-            `${placementGroup ?? '?'} (placement ${placementId}): ${fileName ?? '?'} · ${assetState ?? '에셋 상태 미상'} · ${placementState ?? '배치 상태 미상'}` +
+            `${placementGroup ?? '?'} (placement ${placementId}): ${fileName ?? '?'} · ${assetState ?? M().assetStateUnknown} · ${placementState ?? M().placementStateUnknown}` +
               (assetId ? ` · assetId ${assetId}` : '') +
-              (previewFrameTimeCode ? ` · 포스터 ${previewFrameTimeCode}` : ''),
+              (previewFrameTimeCode ? M().poster(previewFrameTimeCode) : ''),
           );
         }
       }
@@ -155,20 +211,20 @@ export function registerPreviewTools(server: ToolRegistrar) {
     },
     async ({ localizationId, previewType, placementGroup, filePath, assetId, previewFrameTimeCode }) => {
       if (placementGroup) {
-        if (previewType !== undefined) throw new Error('placementGroup과 previewType 중 하나만 지정하세요.');
+        if (previewType !== undefined) throw new Error(M().groupOrPreview);
         return jsonResult(await uploadAndPlaceMedia({
           localizationId, placementGroup, filePath, assetId, previewFrameTimeCode, placementType: 'APP_PREVIEW',
         }));
       }
-      if (!previewType || !filePath || assetId !== undefined) throw new Error('기존 세트 업로드에는 previewType과 filePath가 필요합니다.');
+      if (!previewType || !filePath || assetId !== undefined) throw new Error(M().needPreviewAndFile);
       const r = await previews.uploadPreview({ localizationId, previewType, filePath, previewFrameTimeCode });
       return textResult([
-        '✅ 미리보기 업로드 완료 (인코딩 대기)',
+        M().previewUploaded,
         `  id: ${r.id}`,
-        `  파일: ${r.fileName} (${(r.fileSize / 1024 / 1024).toFixed(1)} MB)`,
-        `  타입: ${r.previewType}`,
-        `  상태: ${r.state ?? '처리 중'}`,
-        'Apple 인코딩이 끝나야 노출된다 — appstore_list_previews 로 상태를 확인할 것.',
+        M().file(r.fileName, (r.fileSize / 1024 / 1024).toFixed(1)),
+        M().type(r.previewType),
+        M().state(r.state),
+        M().encodingNote,
       ]);
     },
   );
@@ -185,16 +241,16 @@ export function registerPreviewTools(server: ToolRegistrar) {
       confirm: z.boolean().optional().describe('true 명시 시에만 삭제'),
     },
     async ({ previewId, setId, confirm }) => {
-      if (!previewId && !setId) throw new Error('previewId 또는 setId 중 하나는 필요하다.');
+      if (!previewId && !setId) throw new Error(M().needPreviewOrSet);
       if (!confirm) {
         return textResult(previewId
-          ? `🛑 dry-run — 미리보기 ${previewId} 를 삭제할 참이다. confirm: true 로 다시 호출.`
-          : `🛑 dry-run — 세트 ${setId} 와 그 안의 동영상 전부를 삭제할 참이다. confirm: true 로 다시 호출.`);
+          ? M().deletePreviewDryRun(previewId)
+          : M().deleteSetDryRun(setId));
       }
       const r = previewId
         ? await previews.deletePreview(previewId)
         : await previews.deletePreviewSet(setId as string);
-      return textResult(`✅ 삭제 완료 — ${r.id}`);
+      return textResult(M().deleted(r.id));
     },
   );
 

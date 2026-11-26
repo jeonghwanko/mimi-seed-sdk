@@ -2,6 +2,12 @@
 // playstore/tools.ts 가 이 모듈을 그대로 re-export 한다 — 호출부는 tools.js 경로를 계속 쓴다.
 
 import type { OAuth2Client, JWT } from 'google-auth-library';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { badDate: (date: string) => `날짜는 YYYY-MM-DD 형식이어야 해: ${date}` },
+  { badDate: (date: string) => `Dates must be in YYYY-MM-DD format: ${date}` },
+);
 
 export type PlayVitalsMetricSet = 'anrRate' | 'crashRate' | 'errorCount';
 
@@ -35,7 +41,7 @@ const DEFAULT_METRICS: Record<PlayVitalsMetricSet, string[]> = {
 
 function dateToReportingDateTime(date: string, timeZone: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) throw new Error(`날짜는 YYYY-MM-DD 형식이어야 해: ${date}`);
+  if (!match) throw new Error(M().badDate(date));
   return {
     year: Number(match[1]),
     month: Number(match[2]),

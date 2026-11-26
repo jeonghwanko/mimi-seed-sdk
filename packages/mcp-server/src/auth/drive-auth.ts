@@ -5,6 +5,44 @@ import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialFile } from '#core/atomic-write.js';
 import type { ServiceAccountKey } from './bigquery-auth.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    badJson: 'JSON 파싱 실패 — 올바른 서비스 계정 키 파일이 아닙니다.',
+    notSaKey: '서비스 계정 키 형식이 아닙니다 (type="service_account", client_email, private_key 필요).',
+    get hint() {
+      return [
+        '❌ Google Drive 인증이 설정되지 않았어.',
+        '',
+        '방법 1 — Drive 서비스 계정 (권장: 기존 폴더·공유 드라이브, CI·클라우드):',
+        '  npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth',
+        `  (파일을 둘 수 없는 환경이면 키 JSON 본문을 환경 변수 ${DRIVE_SA_ENV} 에 넣는다)`,
+        '  그 다음 대상 폴더(또는 공유 드라이브)를 서비스 계정 이메일과 공유해.',
+        '',
+        '방법 2 — Google 계정 OAuth (mimi-seed 가 만든 파일·폴더만 다룸):',
+        '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth --domains drive',
+      ];
+    },
+  },
+  {
+    badJson: 'JSON parse failed — this is not a valid service account key file.',
+    notSaKey: 'Not a service account key (needs type="service_account", client_email, private_key).',
+    get hint() {
+      return [
+        '❌ Google Drive authentication is not set up.',
+        '',
+        'Option 1 — Drive service account (recommended: existing folders and shared drives, CI and cloud):',
+        '  npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth',
+        `  (where a file cannot be placed, put the key JSON body in the environment variable ${DRIVE_SA_ENV})`,
+        '  Then share the target folder (or shared drive) with the service account email.',
+        '',
+        'Option 2 — Google account OAuth (handles only files and folders mimi-seed created):',
+        '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth --domains drive',
+      ];
+    },
+  },
+);
 
 /**
  * Google Drive 인증 — 서비스 계정 우선, 없으면 사용자 OAuth(drive.file).
@@ -36,11 +74,11 @@ export function parseDriveServiceAccountJson(json: string): ServiceAccountKey {
   try {
     parsed = JSON.parse(json) as ServiceAccountKey;
   } catch {
-    throw new Error('JSON 파싱 실패 — 올바른 서비스 계정 키 파일이 아닙니다.');
+    throw new Error(M().badJson);
   }
   if (parsed.type !== 'service_account' || !parsed.client_email || !parsed.private_key) {
     throw new Error(
-      '서비스 계정 키 형식이 아닙니다 (type="service_account", client_email, private_key 필요).',
+      M().notSaKey,
     );
   }
   return parsed;
@@ -92,14 +130,7 @@ export function driveJwt(key: ServiceAccountKey): JWT {
   return newJWT({ email: key.client_email, key: key.private_key, scopes: DRIVE_SA_SCOPES });
 }
 
-export const DRIVE_AUTH_HINT = [
-  '❌ Google Drive 인증이 설정되지 않았어.',
-  '',
-  '방법 1 — Drive 서비스 계정 (권장: 기존 폴더·공유 드라이브, CI·클라우드):',
-  '  npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth',
-  `  (파일을 둘 수 없는 환경이면 키 JSON 본문을 환경 변수 ${DRIVE_SA_ENV} 에 넣는다)`,
-  '  그 다음 대상 폴더(또는 공유 드라이브)를 서비스 계정 이메일과 공유해.',
-  '',
-  '방법 2 — Google 계정 OAuth (mimi-seed 가 만든 파일·폴더만 다룸):',
-  '  npx -y @yoonion/mimi-seed-mcp mimi-seed-auth --domains drive',
-].join('\n');
+/** Drive 인증 안내 — 호출 시점의 언어로 만든다. */
+export function driveAuthHint(): string {
+  return M().hint.join('\n');
+}

@@ -13,6 +13,12 @@ import { AuthError, authText, classifyError, type AuthErrorPayload } from './err
 import { scopesForDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.js';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { changed: '요청을 준비하는 동안 Google 인증이 변경됐습니다. 같은 프로필로 다시 시도하세요.' },
+  { changed: 'Google authentication changed while the request was being prepared. Try again with the same profile.' },
+);
 
 export type { AuthDomainId } from './scopes.js';
 
@@ -200,7 +206,7 @@ export function getAuthenticatedClient(profile?: string, expectedTokens?: Stored
     tokens.access_token !== expectedTokens.access_token ||
     tokens.scope !== expectedTokens.scope
   )) {
-    throw new Error('요청을 준비하는 동안 Google 인증이 변경됐습니다. 같은 프로필로 다시 시도하세요.');
+    throw new Error(M().changed);
   }
 
   const client = createOAuth2Client(creds.clientId, creds.clientSecret);

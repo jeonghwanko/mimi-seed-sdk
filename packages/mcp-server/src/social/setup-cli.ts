@@ -172,7 +172,7 @@ async function setupFacebook(profile?: string): Promise<boolean> {
 
   // 토큰이 여러 페이지에 닿으면 connectFacebook 은 목록만 주고 저장하지 않는다.
   // 다시 실행하라고 내보내지 말고, 여기서 바로 골라 받는다.
-  if (!result.ok && result.text.includes('여러 페이지에')) {
+  if (!result.ok && result.needsPageChoice) {
     console.log('');
     console.log(indent(result.text));
     pageId = await ask(M.fbPickPage);

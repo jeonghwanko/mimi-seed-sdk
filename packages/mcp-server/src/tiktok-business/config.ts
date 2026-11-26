@@ -3,6 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { missing: 'TikTok Business 설정이 없습니다. 터미널에서 `mimi-seed auth tiktok`을 실행하세요.' },
+  { missing: 'No TikTok Business configuration. Run `mimi-seed auth tiktok` in a terminal.' },
+);
 
 export interface TikTokBusinessConfig {
   clientId: string;
@@ -41,7 +47,7 @@ export function requireTikTokBusinessConfig(): TikTokBusinessConfig {
   const config = loadTikTokBusinessConfig();
   if (!config) {
     assertCredentialFileReadable(TIKTOK_BUSINESS_CONFIG_PATH, '`mimi-seed auth tiktok`');
-    throw new Error('TikTok Business 설정이 없습니다. 터미널에서 `mimi-seed auth tiktok`을 실행하세요.');
+    throw new Error(M().missing);
   }
   return config;
 }

@@ -5,6 +5,16 @@ import { apiGet, apiPatch, apiPost } from './client.js';
 import { listAppInfoRecords, requireAppInfo } from './app-info.js';
 import type { AscListDocument, AscResource, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noFields: '수정할 필드가 없어 (name / subtitle / privacyPolicyUrl / privacyPolicyText 중 하나 이상).',
+  },
+  {
+    noFields: 'No fields to update (provide at least one of name / subtitle / privacyPolicyUrl / privacyPolicyText).',
+  },
+);
 
 // ─── 앱 ───
 
@@ -100,7 +110,7 @@ export async function updateAppInfoLocalization(localizationId: string, fields: 
     Object.entries(fields).filter(([, v]) => v !== undefined),
   );
   if (Object.keys(attributes).length === 0) {
-    throw new Error('수정할 필드가 없어 (name / subtitle / privacyPolicyUrl / privacyPolicyText 중 하나 이상).');
+    throw new Error(M().noFields);
   }
   return apiPatch(`/appInfoLocalizations/${encodePathSegment(localizationId)}`, {
     data: {

@@ -2,6 +2,12 @@ import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client } from 'google-auth-library';
 import { collectPages } from '../lib/paginate.js';
 import { resourceName } from '../lib/resource-id.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { accountId: 'GA4 계정 ID', propertyId: 'GA4 속성 ID' },
+  { accountId: 'GA4 account ID', propertyId: 'GA4 property ID' },
+);
 
 /**
  * Google Analytics 4 — Admin API(v1beta) + Data API(v1beta) 래퍼.
@@ -41,12 +47,12 @@ export type DataStreamPlatform = 'web' | 'android' | 'ios';
 
 /** '123' | 'accounts/123' → 'accounts/123' */
 export function normalizeAccountName(accountId: string): string {
-  return resourceName(accountId, 'accounts', 'GA4 계정 ID');
+  return resourceName(accountId, 'accounts', M().accountId);
 }
 
 /** '123' | 'properties/123' → 'properties/123' */
 export function normalizePropertyName(propertyId: string): string {
-  return resourceName(propertyId, 'properties', 'GA4 속성 ID');
+  return resourceName(propertyId, 'properties', M().propertyId);
 }
 
 /** 'my-project' | 'projects/my-project' → 'projects/my-project' */

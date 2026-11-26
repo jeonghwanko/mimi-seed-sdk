@@ -3,6 +3,18 @@
 
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import { publisher } from './edits.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    emptyTargeting: '대상(targeting)이 비어 있다 — allUsers / versionCodes / versionRange 중 하나는 필요하다.',
+    conflict: 'allUsers 와 versionCodes/versionRange 는 함께 쓸 수 없다.',
+  },
+  {
+    emptyTargeting: 'targeting is empty — one of allUsers / versionCodes / versionRange is required.',
+    conflict: 'allUsers cannot be combined with versionCodes/versionRange.',
+  },
+);
 
 // ─── 앱 복구 액션 (출시 후 긴급 대응) ───
 //
@@ -39,10 +51,10 @@ export function buildTargeting(t: RecoveryTargeting): Record<string, unknown> {
   if (t.regions?.length) targeting.regions = { regionCode: t.regions };
   if (t.sdkLevels?.length) targeting.androidSdks = { sdkLevels: t.sdkLevels };
   if (Object.keys(targeting).length === 0) {
-    throw new Error('대상(targeting)이 비어 있다 — allUsers / versionCodes / versionRange 중 하나는 필요하다.');
+    throw new Error(M().emptyTargeting);
   }
   if (t.allUsers && (t.versionCodes?.length || t.versionRange)) {
-    throw new Error('allUsers 와 versionCodes/versionRange 는 함께 쓸 수 없다.');
+    throw new Error(M().conflict);
   }
   return targeting;
 }

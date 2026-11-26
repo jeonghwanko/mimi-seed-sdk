@@ -6,6 +6,38 @@ import * as api from './api.js';
 import type { ConnectResult } from '../facebook/setup.js';
 import type { SocialConfigOptions } from '../social/profile-store.js';
 import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    userIdFailed: '❌ userId 자동 조회 실패',
+    userIdHint: 'userId를 명시적으로 전달하거나 토큰을 다시 확인하세요.',
+    connected: '✅ Threads 연결 확인 완료',
+    target: (t: string) => `   저장 대상: ${t}`,
+    account: (a: string) => `   계정: ${a}`,
+    expires: (d: string) => `   토큰 만료: ${d}`,
+    verifyFailed: '❌ 토큰 검증 실패',
+    verifyHint: '토큰을 다시 발급받거나 userId를 직접 지정해보세요.',
+    refreshed: '✅ Threads 토큰 갱신 완료',
+    newExpiry: (d: string) => `   새 만료일: ${d}`,
+    refreshFailed: '❌ Threads 토큰 자동 갱신 실패 — 기존 설정은 보존했습니다.',
+    refreshRecovery: '   복구: mimi-seed auth threads 로 브라우저에서 다시 로그인하세요.',
+  },
+  {
+    userIdFailed: '❌ Could not look up userId automatically',
+    userIdHint: 'Pass userId explicitly or check the token again.',
+    connected: '✅ Threads connection verified',
+    target: (t: string) => `   Saved to: ${t}`,
+    account: (a: string) => `   Account: ${a}`,
+    expires: (d: string) => `   Token expires: ${d}`,
+    verifyFailed: '❌ Token verification failed',
+    verifyHint: 'Issue a new token or specify userId directly.',
+    refreshed: '✅ Threads token refreshed',
+    newExpiry: (d: string) => `   New expiry: ${d}`,
+    refreshFailed: '❌ Automatic Threads token refresh failed — the existing settings were kept.',
+    refreshRecovery: '   Recovery: log in again in the browser with mimi-seed auth threads.',
+  },
+);
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -29,10 +61,10 @@ export async function connectThreads(
       return {
         ok: false,
         text: [
-          '❌ userId 자동 조회 실패',
+          M().userIdFailed,
           `   ${(err as Error).message}`,
           '',
-          'userId를 명시적으로 전달하거나 토큰을 다시 확인하세요.',
+          M().userIdHint,
         ].join('\n'),
       };
     }
@@ -53,11 +85,11 @@ export async function connectThreads(
     return {
       ok: true,
       text: [
-        '✅ Threads 연결 확인 완료',
-        `   저장 대상: ${socialTargetLabel(target)}`,
-        `   계정: @${account.username}${account.name ? ` (${account.name})` : ''}`,
+        M().connected,
+        M().target(socialTargetLabel(target)),
+        M().account(`@${account.username}${account.name ? ` (${account.name})` : ''}`),
         `   ID: ${account.id}`,
-        expiresAt ? `   토큰 만료: ${expiresAt.slice(0, 10)}` : '',
+        expiresAt ? M().expires(expiresAt.slice(0, 10)) : '',
       ]
         .filter(Boolean)
         .join('\n'),
@@ -67,11 +99,11 @@ export async function connectThreads(
     return {
       ok: false,
       text: [
-        '❌ 토큰 검증 실패',
+        M().verifyFailed,
         `   userId: ${resolvedUserId}`,
         `   ${(err as Error).message}`,
         '',
-        '토큰을 다시 발급받거나 userId를 직접 지정해보세요.',
+        M().verifyHint,
       ].join('\n'),
     };
   }
@@ -97,19 +129,19 @@ export async function refreshThreadsToken(
     return {
       ok: true,
       text: [
-        '✅ Threads 토큰 갱신 완료',
-        `   저장 대상: ${socialTargetLabel(target)}`,
-        `   계정: @${account.username}`,
-        `   새 만료일: ${expiresAt.slice(0, 10)}`,
+        M().refreshed,
+        M().target(socialTargetLabel(target)),
+        M().account(`@${account.username}`),
+        M().newExpiry(expiresAt.slice(0, 10)),
       ].join('\n'),
     };
   } catch (err) {
     return {
       ok: false,
       text: [
-        '❌ Threads 토큰 자동 갱신 실패 — 기존 설정은 보존했습니다.',
+        M().refreshFailed,
         `   ${(err as Error).message}`,
-        '   복구: mimi-seed auth threads 로 브라우저에서 다시 로그인하세요.',
+        M().refreshRecovery,
       ].join('\n'),
     };
   }

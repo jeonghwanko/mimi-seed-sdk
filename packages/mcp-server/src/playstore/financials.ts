@@ -16,6 +16,86 @@ import type { JWT } from 'google-auth-library';
 import { newJWT } from '../lib/google-auth-lite.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { requireServiceAccountJson } from '../helpers.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noBucket: (configPath: string) => [
+      '❌ Play 재무 리포트 버킷을 몰라 — API 로는 알아낼 수 없어.',
+      '',
+      'Play Console > 다운로드 보고서 > 재무 화면 아래쪽에 있는',
+      '  gs://pubsite_prod_XXXXXXXXXXXXXXXXXXX',
+      '이 버킷 이름을 한 번만 저장해 두면 이후 생략할 수 있어:',
+      `  ${configPath} 에 {"default": "pubsite_prod_..."}`,
+      '패키지마다 다르면 {"<packageName>": "pubsite_prod_..."} 로 키를 나눠도 돼.',
+      '또는 이 도구의 bucket 인자로 직접 넘겨.',
+      '',
+      '⚠️ 접근 권한은 **GCP IAM 이 아니라 Play Console 권한**이다 — 아래 403 안내 참고.',
+    ],
+    forbidden: [
+      '❌ 버킷 접근 거부 (403).',
+      '',
+      '⚠️ **GCP IAM 으로는 못 고친다.** pubsite_prod_* 버킷은 개발자 프로젝트가 아니라',
+      'Google 소유라, 프로젝트에 roles/storage.* 를 아무리 줘도 닿지 않는다.',
+      '접근은 오직 **Play Console 사용자 권한**으로 열린다:',
+      '',
+      '  Play Console > 사용자 및 권한 > 새 사용자 초대',
+      '  → 서비스 계정 이메일(...iam.gserviceaccount.com)을 그대로 초대하고',
+      '  → "앱 정보 보기(읽기 전용)" = 전체(Global)',
+      '  → "재무 데이터 보기" = **전체(Global)**  ← 재무 리포트는 이게 없으면 무조건 403',
+      '',
+      '반영에 몇 분 걸릴 수 있다. Play Developer API 접근(앱 게시용)과는 별개 권한이라,',
+      '릴리스가 잘 돌아간다고 해서 리포트가 열려 있는 것은 아니다.',
+    ],
+    badYearMonth: 'yearMonth 는 YYYYMM 또는 YYYY-MM 형식이어야 해.',
+    noReport: (yearMonth: string, reportType: string, files: string) => [
+      `❌ ${yearMonth} 의 ${reportType} 리포트가 버킷에 없어.`,
+      '',
+      'Play 재무 리포트는 **월 마감 후에야** 올라온다 — 이번 달 것은 아직 없는 게 정상이다.',
+      `버킷에 있는 파일: ${files || '(없음)'}`,
+    ],
+    notZip: 'ZIP 형식이 아니야 — 재무 리포트 파일이 손상됐을 수 있어.',
+    zipMethod: (method: number) => `지원하지 않는 ZIP 압축 방식(${method})이야.`,
+  },
+  {
+    noBucket: (configPath: string) => [
+      '❌ The Play financial report bucket is unknown — the API cannot discover it.',
+      '',
+      'At the bottom of Play Console > Download reports > Financial there is',
+      '  gs://pubsite_prod_XXXXXXXXXXXXXXXXXXX',
+      'Save this bucket name once and you can omit it afterwards:',
+      `  in ${configPath}: {"default": "pubsite_prod_..."}`,
+      'If it differs per package, you can split the keys as {"<packageName>": "pubsite_prod_..."}.',
+      'Or pass it directly in this tool\'s bucket argument.',
+      '',
+      '⚠️ Access is granted by **Play Console permissions, not GCP IAM** — see the 403 guidance below.',
+    ],
+    forbidden: [
+      '❌ Bucket access denied (403).',
+      '',
+      '⚠️ **GCP IAM cannot fix this.** pubsite_prod_* buckets are owned by Google, not by the developer',
+      'project, so no amount of roles/storage.* on the project reaches them.',
+      'Access is granted only through **Play Console user permissions**:',
+      '',
+      '  Play Console > Users and permissions > Invite new users',
+      '  → invite the service account email (...iam.gserviceaccount.com) as-is',
+      '  → "View app information (read-only)" = Global',
+      '  → "View financial data, orders, and cancellation survey responses" = **Global**  ← without this, financial reports always return 403',
+      '',
+      'It can take a few minutes to apply. It is a separate permission from Play Developer API access (for publishing),',
+      'so releases working does not mean reports are accessible.',
+    ],
+    badYearMonth: 'yearMonth must be in YYYYMM or YYYY-MM format.',
+    noReport: (yearMonth: string, reportType: string, files: string) => [
+      `❌ The ${reportType} report for ${yearMonth} is not in the bucket.`,
+      '',
+      'Play financial reports appear **only after the month closes** — it is normal that this month\'s report is not there yet.',
+      `Files in the bucket: ${files || '(none)'}`,
+    ],
+    notZip: 'Not a ZIP file — the financial report file may be corrupted.',
+    zipMethod: (method: number) => `Unsupported ZIP compression method (${method}).`,
+  },
+);
 
 const CONFIG_PATH = path.join(os.homedir(), '.mimi-seed', 'play-financials.json');
 const STORAGE_SCOPE = 'https://www.googleapis.com/auth/devstorage.read_only';
@@ -50,18 +130,7 @@ export function resolveBucket(explicit?: string, packageName?: string): string {
   if (stored) return normalizeBucket(stored);
 
   throw new Error(
-    [
-      '❌ Play 재무 리포트 버킷을 몰라 — API 로는 알아낼 수 없어.',
-      '',
-      'Play Console > 다운로드 보고서 > 재무 화면 아래쪽에 있는',
-      '  gs://pubsite_prod_XXXXXXXXXXXXXXXXXXX',
-      '이 버킷 이름을 한 번만 저장해 두면 이후 생략할 수 있어:',
-      `  ${CONFIG_PATH} 에 {"default": "pubsite_prod_..."}`,
-      '패키지마다 다르면 {"<packageName>": "pubsite_prod_..."} 로 키를 나눠도 돼.',
-      '또는 이 도구의 bucket 인자로 직접 넘겨.',
-      '',
-      '⚠️ 접근 권한은 **GCP IAM 이 아니라 Play Console 권한**이다 — 아래 403 안내 참고.',
-    ].join('\n'),
+    M().noBucket(CONFIG_PATH).join('\n'),
   );
 }
 
@@ -97,19 +166,7 @@ async function storageFetch(client: JWT, url: string, timeoutMs?: number): Promi
     if (response.status === 403) {
       throw new Error(
         [
-          '❌ 버킷 접근 거부 (403).',
-          '',
-          '⚠️ **GCP IAM 으로는 못 고친다.** pubsite_prod_* 버킷은 개발자 프로젝트가 아니라',
-          'Google 소유라, 프로젝트에 roles/storage.* 를 아무리 줘도 닿지 않는다.',
-          '접근은 오직 **Play Console 사용자 권한**으로 열린다:',
-          '',
-          '  Play Console > 사용자 및 권한 > 새 사용자 초대',
-          '  → 서비스 계정 이메일(...iam.gserviceaccount.com)을 그대로 초대하고',
-          '  → "앱 정보 보기(읽기 전용)" = 전체(Global)',
-          '  → "재무 데이터 보기" = **전체(Global)**  ← 재무 리포트는 이게 없으면 무조건 403',
-          '',
-          '반영에 몇 분 걸릴 수 있다. Play Developer API 접근(앱 게시용)과는 별개 권한이라,',
-          '릴리스가 잘 돌아간다고 해서 리포트가 열려 있는 것은 아니다.',
+          ...M().forbidden,
           '',
           body.slice(0, 500),
         ].join('\n'),
@@ -199,7 +256,7 @@ export async function getFinancialReport(options: {
 
   const yearMonth = options.yearMonth.replace('-', '');
   if (!/^\d{6}$/.test(yearMonth)) {
-    throw new Error('yearMonth 는 YYYYMM 또는 YYYY-MM 형식이어야 해.');
+    throw new Error(M().badYearMonth);
   }
 
   const { objects } = await listFinancialReports({
@@ -212,12 +269,7 @@ export async function getFinancialReport(options: {
   const targets = objects.filter((o) => o.name.includes(yearMonth));
   if (targets.length === 0) {
     throw new Error(
-      [
-        `❌ ${yearMonth} 의 ${reportType} 리포트가 버킷에 없어.`,
-        '',
-        'Play 재무 리포트는 **월 마감 후에야** 올라온다 — 이번 달 것은 아직 없는 게 정상이다.',
-        `버킷에 있는 파일: ${objects.slice(0, 10).map((o) => o.name).join(', ') || '(없음)'}`,
-      ].join('\n'),
+      M().noReport(yearMonth, reportType, objects.slice(0, 10).map((o) => o.name).join(', ')).join('\n'),
     );
   }
 
@@ -299,7 +351,7 @@ function summarize(rows: Array<Record<string, string>>) {
 }
 
 function toNumber(value: string | undefined): number {
-  const n = Number.parseFloat((value ?? '').replace(/[,"]/g, ''));
+  const n = Number.parseFloat((value ?? '').replace(/[,\x22]/g, '') /* \x22 = double quote; a literal one trips the i18n scanner */);
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -320,7 +372,7 @@ export function unzip(buffer: Buffer): Buffer[] {
       break;
     }
   }
-  if (eocd < 0) throw new Error('ZIP 형식이 아니야 — 재무 리포트 파일이 손상됐을 수 있어.');
+  if (eocd < 0) throw new Error(M().notZip);
 
   const entryCount = buffer.readUInt16LE(eocd + 10);
   let offset = buffer.readUInt32LE(eocd + 16);
@@ -344,7 +396,7 @@ export function unzip(buffer: Buffer): Buffer[] {
 
     if (method === 0) files.push(Buffer.from(data));
     else if (method === 8) files.push(zlib.inflateRawSync(data));
-    else throw new Error(`지원하지 않는 ZIP 압축 방식(${method})이야.`);
+    else throw new Error(M().zipMethod(method));
 
     offset += 46 + nameLength + extraLength + commentLength;
   }

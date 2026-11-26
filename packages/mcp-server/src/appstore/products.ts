@@ -4,6 +4,26 @@
 import { apiRequest, authHeadersOrThrow, V2_BASE, type UntypedAscJson } from './http.js';
 import { apiGet, apiPost } from './client.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    priceMatch: (target: number, matched: string) =>
+      `요청 $${target} → 매칭 $${matched} (Apple tier 제약). 의도와 다르면 Console에서 수정.`,
+    iapNoId: (json: string) => `IAP 생성 응답에 id 없음: ${json}`,
+    noPricePoint: (territory: string) => `${territory}에서 가격 point를 찾지 못함 — Console에서 수동 설정 필요.`,
+    groupFailed: (json: string) => `subscriptionGroup 생성 실패: ${json}`,
+    subNoId: (json: string) => `subscription 생성 응답에 id 없음: ${json}`,
+  },
+  {
+    priceMatch: (target: number, matched: string) =>
+      `Requested $${target} → matched $${matched} (Apple tier constraint). If this is not what you intended, fix it in the Console.`,
+    iapNoId: (json: string) => `IAP creation response has no id: ${json}`,
+    noPricePoint: (territory: string) => `No price point found in ${territory} — set it manually in the Console.`,
+    groupFailed: (json: string) => `subscriptionGroup creation failed: ${json}`,
+    subNoId: (json: string) => `subscription creation response has no id: ${json}`,
+  },
+);
 
 // ─── 인앱 구매 (IAP) 생성 ───
 // 2023년 출시된 IAP v2 API (POST /v2/inAppPurchases) 사용.
@@ -98,7 +118,7 @@ const PRICE_MATCH_WARN_THRESHOLD = 0.10;
 function priceMatchWarning(targetPrice: number, matched: number): string | undefined {
   const diff = Math.abs(matched - targetPrice);
   if (diff < PRICE_MATCH_WARN_THRESHOLD) return undefined;
-  return `요청 $${targetPrice} → 매칭 $${matched.toFixed(2)} (Apple tier 제약). 의도와 다르면 Console에서 수정.`;
+  return M().priceMatch(targetPrice, matched.toFixed(2));
 }
 
 export async function createInAppPurchase(
@@ -124,7 +144,7 @@ export async function createInAppPurchase(
     },
   });
   const iapId: string = created?.data?.id;
-  if (!iapId) throw new Error(`IAP 생성 응답에 id 없음: ${JSON.stringify(created)}`);
+  if (!iapId) throw new Error(M().iapNoId(JSON.stringify(created)));
 
   const consoleUrl = `https://appstoreconnect.apple.com/apps/${encodePathSegment(input.appId)}/distribution/iaps/${encodePathSegment(iapId)}`;
   const summary: CreatedIapSummary = {
@@ -165,7 +185,7 @@ export async function createInAppPurchase(
     );
     if (!matched) {
       summary.failedStep = 'priceSchedule';
-      summary.error = `${baseTerritory}에서 가격 point를 찾지 못함 — Console에서 수동 설정 필요.`;
+      summary.error = M().noPricePoint(baseTerritory);
       return summary;
     }
     summary.priceMatchWarning = priceMatchWarning(input.priceUsd, matched.customerPrice);
@@ -259,7 +279,7 @@ async function findOrCreateSubscriptionGroup(
     },
   });
   const id = created?.data?.id;
-  if (!id) throw new Error(`subscriptionGroup 생성 실패: ${JSON.stringify(created)}`);
+  if (!id) throw new Error(M().groupFailed(JSON.stringify(created)));
   return id;
 }
 
@@ -335,7 +355,7 @@ export async function createAutoRenewableSubscription(
   });
   const subscriptionId: string = created?.data?.id;
   if (!subscriptionId) {
-    throw new Error(`subscription 생성 응답에 id 없음: ${JSON.stringify(created)}`);
+    throw new Error(M().subNoId(JSON.stringify(created)));
   }
 
   const consoleUrl = `https://appstoreconnect.apple.com/apps/${encodePathSegment(input.appId)}/distribution/subscriptions/${encodePathSegment(subscriptionId)}`;
@@ -378,7 +398,7 @@ export async function createAutoRenewableSubscription(
     );
     if (!matched) {
       summary.failedStep = 'priceSchedule';
-      summary.error = `${baseTerritory}에서 가격 point를 찾지 못함 — Console에서 수동 설정 필요.`;
+      summary.error = M().noPricePoint(baseTerritory);
       return summary;
     }
     summary.priceMatchWarning = priceMatchWarning(input.priceUsd, matched.customerPrice);

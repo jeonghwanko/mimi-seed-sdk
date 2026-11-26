@@ -5,6 +5,42 @@ import { V1_BASE, apiRequest, authHeadersOrThrow } from './http.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { parseTsv, type ReportRow } from './sales.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    needKey: 'App Store Connect reportsKey 또는 기본 API 키가 필요합니다.',
+    collecting: 'Analytics 주간 데이터가 두 기간 이상 쌓인 뒤 다시 실행하세요.',
+    pageDecline: '제품 페이지 진입률이 하락했습니다. 아이콘·스크린샷 첫 장·부제 중 하나를 바꿔 Product Page Optimization 테스트를 시작하세요.',
+    pageHealthy: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 제품 페이지 진입률을 다음 실험 대상으로 삼으세요.',
+    acqDecline: '제품 페이지 조회 대비 다운로드 전환이 하락했습니다. 유입 소스별 전환을 나누고 가장 큰 하락 소스에 맞춘 커스텀 제품 페이지를 만드세요.',
+    acqHealthy: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 다운로드 전환을 유입 소스별로 나눠 다음 실험을 정하세요.',
+    monDecline: '다운로드당 수익이 하락했습니다. 구매 리포트에서 상품별 하락을 확인하고 가격·오퍼·구독 전환 중 한 가지를 실험하세요.',
+    monHealthy: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 다운로드당 수익을 상품별로 나눠 다음 가격·오퍼 실험을 정하세요.',
+    dataQuality: '비교 가능한 분모 데이터가 부족합니다. Engagement·주간 Downloads Detailed·Purchases 리포트가 생성되는지 확인하세요.',
+    noRequest: 'ONGOING Analytics report request가 없습니다.',
+    noRequestNext: 'createIfMissing=true와 confirmCreate=true로 다시 호출하세요.',
+    confirmCreate: 'Analytics report request 생성은 App Store Connect에 지속 리소스를 만듭니다.',
+    created: 'ONGOING Analytics report request를 만들었습니다. 최초 데이터는 보통 24~48시간 뒤 생성됩니다.',
+    noReports: '요청은 활성 상태지만 주간 Engagement·Downloads·Purchases 리포트가 아직 생성되지 않았습니다.',
+  },
+  {
+    needKey: 'An App Store Connect reportsKey or the default API key is required.',
+    collecting: 'Run again after at least two weeks of Analytics data have accumulated.',
+    pageDecline: 'The product page view rate dropped. Change one of the icon, first screenshot, or subtitle and start a Product Page Optimization test.',
+    pageHealthy: 'No weekly drop in the key conversion metrics. Make the product page view rate, which improved least, the next experiment target.',
+    acqDecline: 'Download conversion from product page views dropped. Split conversion by traffic source and create a custom product page for the source with the largest drop.',
+    acqHealthy: 'No weekly drop in the key conversion metrics. Split download conversion, which improved least, by traffic source to choose the next experiment.',
+    monDecline: 'Proceeds per download dropped. Check the per-product drop in the purchase report and experiment with one of price, offer, or subscription conversion.',
+    monHealthy: 'No weekly drop in the key conversion metrics. Split proceeds per download, which improved least, by product to choose the next price or offer experiment.',
+    dataQuality: 'Not enough comparable denominator data. Check that the Engagement, weekly Downloads Detailed, and Purchases reports are being generated.',
+    noRequest: 'There is no ONGOING Analytics report request.',
+    noRequestNext: 'Call again with createIfMissing=true and confirmCreate=true.',
+    confirmCreate: 'Creating an Analytics report request creates a persistent resource in App Store Connect.',
+    created: 'Created an ONGOING Analytics report request. The first data is usually generated in 24–48 hours.',
+    noReports: 'The request is active, but the weekly Engagement, Downloads, and Purchases reports have not been generated yet.',
+  },
+);
 
 interface JsonApiRow<T> {
   id: string;
@@ -65,7 +101,7 @@ const MAX_WEEKLY_INSTANCES = 8;
 
 async function reportHeaders(): Promise<Record<string, string>> {
   const auth = await getReportsAuthHeaders();
-  if (!auth) throw new Error('App Store Connect reportsKey 또는 기본 API 키가 필요합니다.');
+  if (!auth) throw new Error(M().needKey);
   return auth.headers;
 }
 
@@ -250,7 +286,7 @@ export function buildWeeklyInsight(input: {
     return {
       status: 'collecting',
       weeks: ordered,
-      recommendation: 'Analytics 주간 데이터가 두 기간 이상 쌓인 뒤 다시 실행하세요.',
+      recommendation: M().collecting,
     };
   }
   const previous = ordered.at(-2)!;
@@ -266,22 +302,22 @@ export function buildWeeklyInsight(input: {
     {
       area: 'product_page',
       changePercent: percentageChange(currentPageRate, previousPageRate),
-      declineRecommendation: '제품 페이지 진입률이 하락했습니다. 아이콘·스크린샷 첫 장·부제 중 하나를 바꿔 Product Page Optimization 테스트를 시작하세요.',
-      healthyRecommendation: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 제품 페이지 진입률을 다음 실험 대상으로 삼으세요.',
+      declineRecommendation: M().pageDecline,
+      healthyRecommendation: M().pageHealthy,
     },
     {
       area: 'acquisition',
       changePercent: percentageChange(currentDownloadRate, previousDownloadRate),
-      declineRecommendation: '제품 페이지 조회 대비 다운로드 전환이 하락했습니다. 유입 소스별 전환을 나누고 가장 큰 하락 소스에 맞춘 커스텀 제품 페이지를 만드세요.',
-      healthyRecommendation: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 다운로드 전환을 유입 소스별로 나눠 다음 실험을 정하세요.',
+      declineRecommendation: M().acqDecline,
+      healthyRecommendation: M().acqHealthy,
     },
     {
       area: 'monetization',
       changePercent: previous.available.purchases && current.available.purchases
         ? percentageChange(currentRevenuePerDownload, previousRevenuePerDownload)
         : null,
-      declineRecommendation: '다운로드당 수익이 하락했습니다. 구매 리포트에서 상품별 하락을 확인하고 가격·오퍼·구독 전환 중 한 가지를 실험하세요.',
-      healthyRecommendation: '핵심 전환 지표의 주간 하락은 없습니다. 가장 개선 폭이 작은 다운로드당 수익을 상품별로 나눠 다음 가격·오퍼 실험을 정하세요.',
+      declineRecommendation: M().monDecline,
+      healthyRecommendation: M().monHealthy,
     },
   ].filter((candidate) => candidate.changePercent !== null)
     .sort((a, b) => (a.changePercent ?? 0) - (b.changePercent ?? 0));
@@ -316,7 +352,7 @@ export function buildWeeklyInsight(input: {
       : {
           area: 'data_quality',
           changePercent: null,
-          recommendation: '비교 가능한 분모 데이터가 부족합니다. Engagement·주간 Downloads Detailed·Purchases 리포트가 생성되는지 확인하세요.',
+          recommendation: M().dataQuality,
         },
   };
 }
@@ -335,21 +371,21 @@ export async function getWeeklyInsight(input: {
     if (!input.createIfMissing) {
       return {
         status: 'setup_required',
-        message: 'ONGOING Analytics report request가 없습니다.',
-        nextAction: 'createIfMissing=true와 confirmCreate=true로 다시 호출하세요.',
+        message: M().noRequest,
+        nextAction: M().noRequestNext,
       };
     }
     if (!input.confirmCreate) {
       return {
         status: 'confirmation_required',
-        message: 'Analytics report request 생성은 App Store Connect에 지속 리소스를 만듭니다.',
+        message: M().confirmCreate,
       };
     }
     const created = await createOngoingRequest(input.appId);
     return {
       status: 'provisioning',
       requestId: created.id,
-      message: 'ONGOING Analytics report request를 만들었습니다. 최초 데이터는 보통 24~48시간 뒤 생성됩니다.',
+      message: M().created,
     };
   }
 
@@ -362,7 +398,7 @@ export async function getWeeklyInsight(input: {
     return {
       status: 'collecting',
       requestId: active.id,
-      message: '요청은 활성 상태지만 주간 Engagement·Downloads·Purchases 리포트가 아직 생성되지 않았습니다.',
+      message: M().noReports,
     };
   }
 

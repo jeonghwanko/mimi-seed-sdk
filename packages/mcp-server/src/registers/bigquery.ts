@@ -3,6 +3,48 @@ import { z } from 'zod';
 import * as bigquery from '../bigquery/tools.js';
 import { requireBigQueryAuth, resolveBigQueryAuth, type BigQueryAuth } from '../auth/bigquery-auth.js';
 import { jsonResult, errorResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    sa: (email: string) => `서비스 계정 ${email}`,
+    oauthUser: '현재 OAuth 사용자 계정',
+    denied: (projectId: string) => `❌ BigQuery 접근 거부 (project: ${projectId})`,
+    roles: (who: string, projectId: string) => [
+      `${who}에 다음 IAM 역할이 필요해 — 프로젝트 ${projectId}에 부여:`,
+      '  • roles/bigquery.jobUser    (쿼리 작업 생성)',
+      '  • roles/bigquery.dataViewer (데이터셋 읽기)',
+    ],
+    gcloud: 'gcloud 로 부여 (프로젝트 소유자 계정에서 1회):',
+    reauth: (msg: string) => [
+      `❌ BigQuery 인증 갱신 실패: ${msg}`,
+      '',
+      'Google Workspace 재인증 정책으로 OAuth 토큰 갱신이 막힌 상태일 수 있어.',
+      '서비스 계정은 이 정책의 영향을 받지 않아 — 등록 권장:',
+    ],
+    generic: (msg: string) => `❌ BigQuery 오류: ${msg}`,
+    statusHint: 'mimi-seed-bigquery-auth (서비스 계정) 또는 mimi-seed-auth (OAuth) 로 인증 필요',
+  },
+  {
+    sa: (email: string) => `Service account ${email}`,
+    oauthUser: 'The current OAuth user account',
+    denied: (projectId: string) => `❌ BigQuery access denied (project: ${projectId})`,
+    roles: (who: string, projectId: string) => [
+      `${who} needs the following IAM roles — grant them on project ${projectId}:`,
+      '  • roles/bigquery.jobUser    (create query jobs)',
+      '  • roles/bigquery.dataViewer (read datasets)',
+    ],
+    gcloud: 'Grant with gcloud (once, from a project owner account):',
+    reauth: (msg: string) => [
+      `❌ BigQuery authentication refresh failed: ${msg}`,
+      '',
+      'A Google Workspace reauthentication policy may be blocking the OAuth token refresh.',
+      'Service accounts are not affected by this policy — registering one is recommended:',
+    ],
+    generic: (msg: string) => `❌ BigQuery error: ${msg}`,
+    statusHint: 'Authenticate with mimi-seed-bigquery-auth (service account) or mimi-seed-auth (OAuth)',
+  },
+);
 
 /**
  * BigQuery 에러를 사람이 읽을 수 있게 가공.
@@ -17,20 +59,18 @@ function describeBqError(e: unknown, auth: BigQueryAuth, projectId: string): str
 
   if (is403) {
     const who = auth.clientEmail
-      ? `서비스 계정 ${auth.clientEmail}`
-      : '현재 OAuth 사용자 계정';
+      ? M().sa(auth.clientEmail)
+      : M().oauthUser;
     const lines = [
-      `❌ BigQuery 접근 거부 (project: ${projectId})`,
+      M().denied(projectId),
       `   ${msg}`,
       '',
-      `${who}에 다음 IAM 역할이 필요해 — 프로젝트 ${projectId}에 부여:`,
-      '  • roles/bigquery.jobUser    (쿼리 작업 생성)',
-      '  • roles/bigquery.dataViewer (데이터셋 읽기)',
+      ...M().roles(who, projectId),
     ];
     if (auth.clientEmail) {
       lines.push(
         '',
-        'gcloud 로 부여 (프로젝트 소유자 계정에서 1회):',
+        M().gcloud,
         `  gcloud projects add-iam-policy-binding ${projectId} \\`,
         `    --member="serviceAccount:${auth.clientEmail}" --role="roles/bigquery.jobUser"`,
         `  gcloud projects add-iam-policy-binding ${projectId} \\`,
@@ -43,15 +83,12 @@ function describeBqError(e: unknown, auth: BigQueryAuth, projectId: string): str
   // 토큰 만료/재인증 류 — 서비스 계정 등록 권유
   if (/invalid_rapt|rapt_required|invalid_grant|reauth/i.test(msg)) {
     return [
-      `❌ BigQuery 인증 갱신 실패: ${msg}`,
-      '',
-      'Google Workspace 재인증 정책으로 OAuth 토큰 갱신이 막힌 상태일 수 있어.',
-      '서비스 계정은 이 정책의 영향을 받지 않아 — 등록 권장:',
+      ...M().reauth(msg),
       '  npx -y @yoonion/mimi-seed-mcp mimi-seed-bigquery-auth',
     ].join('\n');
   }
 
-  return `❌ BigQuery 오류: ${msg}`;
+  return M().generic(msg);
 }
 
 export function registerBigqueryTools(server: ToolRegistrar) {
@@ -146,7 +183,7 @@ export function registerBigqueryTools(server: ToolRegistrar) {
       if (!auth) {
         return jsonResult({
           authenticated: false,
-          hint: 'mimi-seed-bigquery-auth (서비스 계정) 또는 mimi-seed-auth (OAuth) 로 인증 필요',
+          hint: M().statusHint,
         });
       }
       return jsonResult({

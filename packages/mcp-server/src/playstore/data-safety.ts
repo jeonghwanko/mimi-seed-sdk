@@ -2,6 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import { publisher } from './edits.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    needInput: 'csvPath 또는 csv 중 하나는 필요하다.',
+    notAbsolute: (p: string) => `csvPath 는 절대경로여야 한다: ${p}`,
+    empty: 'safetyLabels CSV 가 비어 있다.',
+    notCsv: 'CSV 로 보이지 않는다 — Play Console 에서 받은 데이터 안전 CSV 원문을 그대로 넣을 것.',
+  },
+  {
+    needInput: 'Either csvPath or csv is required.',
+    notAbsolute: (p: string) => `csvPath must be an absolute path: ${p}`,
+    empty: 'The safetyLabels CSV is empty.',
+    notCsv: 'This does not look like CSV — pass the data safety CSV downloaded from Play Console, unmodified.',
+  },
+);
 
 /**
  * playstore_upload_data_safety 의 입력 해석 — CSV 원문(csv) 또는 절대경로(csvPath) 중 하나.
@@ -11,9 +27,9 @@ import { publisher } from './edits.js';
  */
 export function readDataSafetyCsv(input: { csv?: string; csvPath?: string }): string {
   const { csv, csvPath } = input;
-  if (!csv && !csvPath) throw new Error('csvPath 또는 csv 중 하나는 필요하다.');
+  if (!csv && !csvPath) throw new Error(M().needInput);
   if (!csv && csvPath && !path.isAbsolute(csvPath)) {
-    throw new Error(`csvPath 는 절대경로여야 한다: ${csvPath}`);
+    throw new Error(M().notAbsolute(csvPath));
   }
   return csv ?? fs.readFileSync(csvPath as string, 'utf8');
 }
@@ -31,9 +47,9 @@ export async function uploadDataSafety(
   safetyLabelsCsv: string,
 ): Promise<{ packageName: string; bytes: number; lines: number }> {
   const csv = safetyLabelsCsv.trim();
-  if (!csv) throw new Error('safetyLabels CSV 가 비어 있다.');
+  if (!csv) throw new Error(M().empty);
   if (!csv.includes(',')) {
-    throw new Error('CSV 로 보이지 않는다 — Play Console 에서 받은 데이터 안전 CSV 원문을 그대로 넣을 것.');
+    throw new Error(M().notCsv);
   }
 
   await publisher().applications.dataSafety({

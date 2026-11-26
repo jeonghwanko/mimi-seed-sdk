@@ -4,6 +4,22 @@ import {
   saveSocialPlatformConfig,
   type SocialConfigOptions,
 } from '../social/profile-store.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    missing: (profileHint: string) =>
+      'Facebook 설정이 없습니다.\n' +
+      'facebook_save_config 도구로 먼저 설정해주세요.\n' +
+      `예: facebook_save_config(pageAccessToken="EAA...", pageId="..."${profileHint})`,
+  },
+  {
+    missing: (profileHint: string) =>
+      'No Facebook settings.\n' +
+      'Set them up first with the facebook_save_config tool.\n' +
+      `e.g. facebook_save_config(pageAccessToken="EAA...", pageId="..."${profileHint})`,
+  },
+);
 
 export interface FacebookConfig {
   pageAccessToken: string;
@@ -32,9 +48,7 @@ export function requireFacebookConfig(options: SocialConfigOptions = {}): Facebo
     const target = resolveSocialConfigTarget('facebook', options);
     const profileHint = target.profile ? `, profile="${target.profile}"` : '';
     throw new Error(
-      'Facebook 설정이 없습니다.\n' +
-      'facebook_save_config 도구로 먼저 설정해주세요.\n' +
-      `예: facebook_save_config(pageAccessToken="EAA...", pageId="..."${profileHint})`,
+      M().missing(profileHint),
     );
   }
   return cfg;

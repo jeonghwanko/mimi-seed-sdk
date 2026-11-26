@@ -13,6 +13,20 @@
 // (`__tests__/http-timeout.test.ts` 가 강제한다).
 
 import { endpointLabel as sharedEndpointLabel, isTimeoutAbort } from '#core/http-errors.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    externalServer: '외부 서버',
+    timeout: (label: string, sec: number) =>
+      `${label} 요청이 ${sec}초 안에 끝나지 않아 중단했습니다. ` + '네트워크 상태를 확인하고 다시 시도하세요.',
+  },
+  {
+    externalServer: 'external server',
+    timeout: (label: string, sec: number) =>
+      `The ${label} request did not finish within ${sec} seconds and was aborted. Check the network and try again.`,
+  },
+);
 
 /** JSON/메타데이터 API 의 기본 상한. 대부분의 Google·Apple·Meta·Jenkins 호출. */
 export const HTTP_TIMEOUT_MS = 60_000;
@@ -71,7 +85,7 @@ const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 /**
  * 에러 메시지에 쓸 엔드포인트 라벨 — 쿼리스트링(토큰)을 버리는 규칙은 CLI 래퍼와 공유한다(#core/http-errors.js).
  */
-const endpointLabel = (input: string | URL) => sharedEndpointLabel(input, '외부 서버');
+const endpointLabel = (input: string | URL) => sharedEndpointLabel(input, M().externalServer);
 
 /**
  * 본문을 다시 보낼 수 있는가.
@@ -178,8 +192,7 @@ export async function fetchWithTimeout(
       // 두 번 더 기다려도 얻는 게 없다 — 총 소요 시간만 배로 늘린다.
       if (isTimeoutAbort(error)) {
         throw new Error(
-          `${endpointLabel(input)} 요청이 ${Math.round(attemptTimeout / 1000)}초 안에 끝나지 않아 중단했습니다. ` +
-            '네트워크 상태를 확인하고 다시 시도하세요.',
+          M().timeout(endpointLabel(input), Math.round(attemptTimeout / 1000)),
           { cause: error },
         );
       }

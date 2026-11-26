@@ -1,6 +1,37 @@
 import type { JenkinsConfig } from './config.js';
 import { authHeaders, getCrumb } from './http.js';
+import { catalog } from '#core/lang.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+
+const M = catalog(
+  {
+    differentKind: (id: string, shown: string, existing: string, requested: string): string[] => [
+      `Jenkins credential "${id}" 가 이미 다른 종류로 존재합니다. / already exists as a different kind.`,
+      `   기존 / existing:  ${shown} (${existing})`,
+      `   요청 / requested: ${requested}`,
+      '',
+      '덮어쓰면 기존 값이 사라집니다. 다른 id 를 쓰거나, 정말 교체하려면 먼저 삭제하세요.',
+      'Replacing it would destroy the existing value — use a different id, or delete it first.',
+      'jenkins_list_credentials 로 현재 목록을 확인할 수 있습니다.',
+    ],
+    listFailed: (status: number) => `Jenkins credentials 조회 실패 (${status})`,
+    writeFailed: (what: string, status: number) => `Jenkins ${what} 실패 (${status})`,
+    deleteFailed: (status: number) => `Jenkins credential 삭제 실패 (${status})`,
+  },
+  {
+    differentKind: (id: string, shown: string, existing: string, requested: string): string[] => [
+      `Jenkins credential "${id}" already exists as a different kind.`,
+      `   existing:  ${shown} (${existing})`,
+      `   requested: ${requested}`,
+      '',
+      'Replacing it would destroy the existing value — use a different id, or delete it first.',
+      'Check the current list with jenkins_list_credentials.',
+    ],
+    listFailed: (status: number) => `Jenkins credentials list failed (${status})`,
+    writeFailed: (what: string, status: number) => `Jenkins ${what} failed (${status})`,
+    deleteFailed: (status: number) => `Jenkins credential delete failed (${status})`,
+  },
+);
 
 export interface JenkinsCredentialSummary {
   id: string;
@@ -170,15 +201,7 @@ function assertSameKind(id: string, existing: ExistingCredential, kind: Credenti
   if (kind === null || kind === wanted) return;
   const shown = existing.typeName || existing.className || kind;
   throw new Error(
-    [
-      `Jenkins credential "${id}" 가 이미 다른 종류로 존재합니다. / already exists as a different kind.`,
-      `   기존 / existing:  ${shown} (${kindLabel(kind)})`,
-      `   요청 / requested: ${kindLabel(wanted)}`,
-      '',
-      '덮어쓰면 기존 값이 사라집니다. 다른 id 를 쓰거나, 정말 교체하려면 먼저 삭제하세요.',
-      'Replacing it would destroy the existing value — use a different id, or delete it first.',
-      'jenkins_list_credentials 로 현재 목록을 확인할 수 있습니다.',
-    ].join('\n'),
+    M().differentKind(id, shown, kindLabel(kind), kindLabel(wanted)).join('\n'),
   );
 }
 
@@ -196,7 +219,7 @@ export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCreden
   const res = await fetchWithTimeout(`${storeBase(cfg.url)}/api/json?depth=1`, {
     headers: authHeaders(cfg),
   });
-  if (!res.ok) throw new Error(`Jenkins credentials 조회 실패 (${res.status})`);
+  if (!res.ok) throw new Error(M().listFailed(res.status));
   const data = (await res.json()) as {
     credentials?: Array<{ id: string; displayName: string; typeName: string }>;
   };
@@ -243,7 +266,7 @@ export async function upsertSecretText(
     body: new URLSearchParams({ json: JSON.stringify(payload) }).toString(),
   });
   if (!res.ok && res.status !== 302) {
-    throw new Error(`Jenkins credential ${exists ? 'update' : 'create'} 실패 (${res.status})`);
+    throw new Error(M().writeFailed(`credential ${exists ? 'update' : 'create'}`, res.status));
   }
   return exists ? 'updated' : 'created';
 }
@@ -299,7 +322,7 @@ export async function upsertSecretFile(
     HTTP_TRANSFER_TIMEOUT_MS,
   );
   if (!res.ok && res.status !== 302) {
-    throw new Error(`Jenkins secret file credential ${exists ? 'update' : 'create'} 실패 (${res.status})`);
+    throw new Error(M().writeFailed(`secret file credential ${exists ? 'update' : 'create'}`, res.status));
   }
   return exists ? 'updated' : 'created';
 }
@@ -314,6 +337,6 @@ export async function deleteCredential(cfg: JenkinsConfig, id: string): Promise<
     },
   });
   if (!res.ok && res.status !== 302) {
-    throw new Error(`Jenkins credential 삭제 실패 (${res.status})`);
+    throw new Error(M().deleteFailed(res.status));
   }
 }
