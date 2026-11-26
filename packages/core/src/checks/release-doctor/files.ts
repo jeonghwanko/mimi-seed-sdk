@@ -72,6 +72,7 @@ export const UNRESOLVED_CODES = new Set([
   'IOS_XCODE_UNRESOLVED',
   'IOS_XCODE_MIXED_PINS',
   'IOS_SDK_POLICY_REFRESH_REQUIRED',
+  'SCAN_PATHS_NOT_READ',
 ]);
 
 interface ConventionRoot {
@@ -192,8 +193,11 @@ export async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxD
   sourceScanTruncated: boolean;
   /** Convention-build roots that could not be read completely (over the walk bounds, or unreadable). */
   conventionTruncated: string[];
+  /** Folders and scan-relevant files of the project walk that could not be read (relative; `.` is the root). */
+  unread: string[];
 }> {
   const files: ProjectFile[] = [];
+  const unread: string[] = [];
   const conventionRoots: ConventionRoot[] = [];
   const sourceCandidates: Array<{ absolute: string; relative: string; depth: number; sample: boolean; demo: boolean }> = [];
   // `excluded`: inside a test/fixture/vendored tree or a nested repository (a directory with its own `.git`).
@@ -205,8 +209,9 @@ export async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxD
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
-      // TODO-risk: 읽지 못한 폴더(다른 사용자 소유의 볼륨 등)는 건너뛴다 — 그 안의 앱 모듈은 판정에서 빠진다.
-      // 모든 미독 폴더로 TARGET_SDK_OK 를 막으면 흔한 저장소가 영영 OK 를 못 받으므로, 막으려면 별도 finding 설계가 필요하다
+      // 읽지 못한 폴더(다른 사용자 소유의 볼륨 등) 안의 앱 모듈은 판정에서 빠진다 — unread 로 돌려주면
+      // scanReleaseDoctor 가 SCAN_PATHS_NOT_READ 로 알리고 보고서를 '확인 필요'로 둔다 (TARGET_SDK_OK 자체는 막지 않는다)
+      unread.push(path.relative(root, dir).replace(/\\/g, '/') || '.');
       return;
     }
     const nestedRepository = depth > 0 && entries.some((entry) => entry.name === '.git');
@@ -237,7 +242,8 @@ export async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxD
         try {
           files.push({ absolute, relative, text: await fs.readFile(absolute, 'utf8'), sample: sampleHere, demo });
         } catch {
-          // Unreadable files are ignored; other evidence can still produce a useful partial report.
+          // 다른 근거로 부분 보고서는 낼 수 있다 — 대신 unread 로 돌려줘 SCAN_PATHS_NOT_READ 로 알린다
+          unread.push(relative);
         }
         continue;
       }
@@ -266,6 +272,7 @@ export async function walk(root: string, maxSourceFiles = MAX_SOURCE_FILES, maxD
     fcmSources: await readFcmSources(prioritized.slice(0, maxSourceFiles)),
     sourceScanTruncated: prioritized.length > maxSourceFiles,
     conventionTruncated: convention.truncated,
+    unread: unread.sort(),
   };
 }
 

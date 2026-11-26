@@ -3,7 +3,7 @@
 
 import path from 'node:path';
 import type { ProjectFile, ReleaseDoctorFinding } from './types.js';
-import { isXcodeCloudScript, isXcodePinFile, stripComments } from './util.js';
+import { isXcodeCloudScript, isXcodePinFile, parseJsonWithComments, stripComments } from './util.js';
 
 // Apple's App Store Connect upload minimums. Each row cites the Apple Developer news post that announced it.
 // Apple announces the next minimum each spring, so the table is treated as stale from April 1 of the year after
@@ -41,6 +41,8 @@ interface XcodeEvidence {
   beta: boolean;
   /** From the repository root, outside the scanned --path: it may build a different app, so it never decides. */
   outside?: boolean;
+  /** The file could not be parsed, so any pin it holds is unknown: the verdict cannot be OK. */
+  unparsed?: boolean;
 }
 
 function xcodeEvidence(file: string, raw: string, version: string): XcodeEvidence {
@@ -57,10 +59,11 @@ function xcodeEvidence(file: string, raw: string, version: string): XcodeEvidenc
 function easXcodeEvidence(file: ProjectFile): XcodeEvidence[] {
   let json: unknown;
   try {
-    json = JSON.parse(file.text);
+    // EAS CLI accepts comments and trailing commas, so a valid eas.json is not always strict JSON.
+    json = parseJsonWithComments(file.text);
   } catch {
-    // TODO-risk: JSON.parse 로 못 읽는 eas.json(주석 등)의 ios.image 고정값은 근거에서 빠진다 — 다른 Xcode 고정값만으로 판정될 수 있다
-    return [];
+    // 그래도 못 읽으면 그 안의 ios.image 고정값을 모른다 — 근거 행으로 남겨 IOS_XCODE_OK 를 막는다(파서 메시지는 싣지 않는다)
+    return [{ file: file.relative, raw: 'could not be parsed; its ios.image pins were not read', beta: false, unparsed: true }];
   }
   const build = (json as { build?: unknown })?.build;
   if (!build || typeof build !== 'object') return [];
@@ -305,6 +308,24 @@ export function iosXcodeFindings(files: ProjectFile[], now: Date): ReleaseDoctor
           '어느 job 또는 lane이 App Store Connect에 업로드하는지는 저장소만으로 알 수 없습니다.',
         ].filter(Boolean).join(' '),
         action: `릴리스를 archive·업로드하는 job이 Xcode ${minimumXcode} 이상을 쓰는지 확인하세요. 낮은 버전은 테스트나 호환성 job에서만 괜찮습니다.`,
+      },
+    }];
+  }
+
+  const unparsed = evidence.filter((row) => row.unparsed);
+  if (unparsed.length > 0) {
+    return [{
+      code: 'IOS_XCODE_UNRESOLVED',
+      severity: 'info',
+      title: 'The Xcode version used for iOS release builds could not be fully resolved',
+      detail: `The pinned Xcode found meets the minimum (Xcode ${minimumXcode}, ${sdk} SDK), but ${describePins(unparsed)}, and a pin there may be older.`,
+      action: `Fix the file so it parses, or confirm the release build uses Xcode ${minimumXcode} or later (run \`xcodebuild -version\` on the build machine).`,
+      file: unparsed[0].file,
+      sourceUrl,
+      ko: {
+        title: 'iOS 릴리스 빌드의 Xcode 버전을 모두 확정하지 못함',
+        detail: `감지된 Xcode 고정값은 최소 기준(Xcode ${minimumXcode}, ${sdk} SDK)을 충족하지만, ${unparsed.map((row) => row.file).join(', ')} 파일을 해석하지 못해 그 안의 고정값은 확인하지 못했습니다. 더 낮은 버전일 수 있습니다.`,
+        action: `파일을 해석 가능하게 고치거나, 릴리스 빌드가 Xcode ${minimumXcode} 이상을 쓰는지 빌드 머신에서 \`xcodebuild -version\`으로 확인하세요.`,
       },
     }];
   }
