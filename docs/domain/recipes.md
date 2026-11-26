@@ -38,9 +38,10 @@
    you removed. `tool-text-en.test.ts` lists anything missing or stale. Keep tool and parameter names, `code`,
    URLs, and safety wording ("irreversible", "explicit approval", `confirm`) intact.
    **Output text** (what a handler returns, an error a user or agent reads) goes through
-   `catalog(ko, en)` from `#core/lang.js`. Read `M()` at call time, never at module load. In a file listed in
-   `output-i18n.test.ts`, a Korean literal outside the `ko` block fails the build. When you finish converting a
-   file, add it to that list.
+   `catalog(ko, en)` from `#core/lang.js`. Read `M()` at call time, never at module load. A Korean literal outside a `ko`
+   block anywhere in `src/` fails `output-i18n.test.ts`. If the Korean is genuinely not output (e.g. a prompt sent
+   to Claude whose reply language a parameter picks), add the exact literal and a reason to that test's `ALLOW`.
+   Don't branch on output text; use a flag or code.
    *New domain?* also add `registerXxxTools(registrar)` to **`src/server.ts`** — `index.ts` is only the stdio entry
    and the `SUBCOMMANDS` dispatch, so wiring it there registers nothing ([[architecture]]).
 3. **Manifest** — `mcp-server/tool-manifest.json`: add/remove the name under its domain and update `total`, then

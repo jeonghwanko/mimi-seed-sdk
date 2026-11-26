@@ -10,6 +10,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import path from 'node:path';
+import { catalog } from '#core/lang.js';
 import { parseJsonResponse, requireApiKey, AI_MODEL } from '../ai/client.js';
 import { readJson, requireAbsolutePath, writeJsonAtomic } from './files.js';
 import { assetManifestSchema, assetSchema, parseFile, projectSchema, timelineSchema } from './schemas.js';
@@ -30,6 +31,53 @@ const PROJECT_FILE = 'project.json';
 const ASSET_FILE = 'assets.json';
 const TIMELINE_FILE = 'timeline.json';
 
+const M = catalog(
+  {
+    noScenes: 'AI가 유효한 장면 목록을 만들지 못했습니다. 다시 시도하세요.',
+    projectExists: (projectPath: string) => `이미 영상 프로젝트가 있습니다: ${projectPath}\noverwrite=true로 명시해야 덮어씁니다.`,
+    aiProjectLabel: 'AI가 생성한 영상 프로젝트',
+    agentProjectLabel: '에이전트가 작성한 영상 프로젝트',
+    projectNotFound: (filePath: string) => `영상 프로젝트를 찾을 수 없습니다: ${filePath}`,
+    assetsMismatch: 'assets.json이 현재 project.json과 다른 프로젝트에 속합니다. 프로젝트를 다시 계획하거나 자산 매니페스트를 복구하세요.',
+    assetPathInvalid: (p: string) => `자산 파일은 존재하는 절대경로여야 합니다: ${p}`,
+    assetLabel: '등록할 영상 자산',
+    filePathInvalid: 'filePath는 존재하는 절대경로여야 합니다.',
+    noTimelineScenes: '타임라인에는 장면이 한 개 이상 필요합니다.',
+    unknownAsset: (id: string) => `등록되지 않은 assetId입니다: ${id}`,
+    notRenderable: (id: string) => `렌더링이 허용되지 않은 자산입니다: ${id}`,
+    sceneKind: (id: string) => `장면에는 이미지 또는 영상 자산만 사용할 수 있습니다: ${id}`,
+    sceneDuration: (id: string) => `장면 길이는 0보다 커야 합니다: ${id}`,
+    badAudio: (id: string) => `사용할 수 없는 오디오 자산입니다: ${id}`,
+    tooLong: (sec: number) => `타임라인 총 길이는 300초를 넘을 수 없습니다: ${sec}초`,
+    timelineLabel: '생성할 영상 타임라인',
+    timelineNotFound: (filePath: string) => `타임라인을 찾을 수 없습니다: ${filePath}`,
+    timelineMismatch: 'timeline.json이 현재 project.json과 다른 프로젝트에 속합니다. 타임라인을 다시 생성하세요.',
+    timelineSettings: 'timeline.json의 출력 설정이 현재 프로젝트 설정과 다릅니다. 타임라인을 다시 생성하세요.',
+  },
+  {
+    noScenes: 'The AI did not produce a valid scene list. Try again.',
+    projectExists: (projectPath: string) => `A video project already exists: ${projectPath}\nSet overwrite=true explicitly to overwrite it.`,
+    aiProjectLabel: 'AI-generated video project',
+    agentProjectLabel: 'Agent-written video project',
+    projectNotFound: (filePath: string) => `Video project not found: ${filePath}`,
+    assetsMismatch: 'assets.json belongs to a different project than the current project.json. Re-plan the project or restore the asset manifest.',
+    assetPathInvalid: (p: string) => `The asset file must be an existing absolute path: ${p}`,
+    assetLabel: 'Video asset to register',
+    filePathInvalid: 'filePath must be an existing absolute path.',
+    noTimelineScenes: 'A timeline needs at least one scene.',
+    unknownAsset: (id: string) => `Unregistered assetId: ${id}`,
+    notRenderable: (id: string) => `Asset not allowed for rendering: ${id}`,
+    sceneKind: (id: string) => `Scenes can use only image or video assets: ${id}`,
+    sceneDuration: (id: string) => `Scene duration must be greater than 0: ${id}`,
+    badAudio: (id: string) => `Unusable audio asset: ${id}`,
+    tooLong: (sec: number) => `Total timeline duration cannot exceed 300 seconds: ${sec}s`,
+    timelineLabel: 'Video timeline to create',
+    timelineNotFound: (filePath: string) => `Timeline not found: ${filePath}`,
+    timelineMismatch: 'timeline.json belongs to a different project than the current project.json. Regenerate the timeline.',
+    timelineSettings: 'The output settings in timeline.json differ from the current project settings. Regenerate the timeline.',
+  },
+);
+
 function dimensions(aspectRatio: VideoAspectRatio): { width: number; height: number } {
   if (aspectRatio === '16:9') return { width: 1920, height: 1080 };
   if (aspectRatio === '1:1') return { width: 1080, height: 1080 };
@@ -38,7 +86,7 @@ function dimensions(aspectRatio: VideoAspectRatio): { width: number; height: num
 
 function normalizeScenes(raw: Partial<VideoScenePlan>[], targetDurationSec: number): VideoScenePlan[] {
   if (!Array.isArray(raw) || raw.length === 0) {
-    throw new Error('AI가 유효한 장면 목록을 만들지 못했습니다. 다시 시도하세요.');
+    throw new Error(M().noScenes);
   }
   const maxScenes = Math.min(12, Math.max(1, Math.floor(targetDurationSec)));
   const scenes = raw.slice(0, maxScenes).map((scene, index) => ({
@@ -81,7 +129,7 @@ export async function planStory(input: PlanStoryInput): Promise<VideoProject> {
   const projectDir = requireAbsolutePath(input.projectDir, 'projectDir');
   const projectPath = path.join(projectDir, PROJECT_FILE);
   if (existsSync(projectPath) && !input.overwrite) {
-    throw new Error(`이미 영상 프로젝트가 있습니다: ${projectPath}\noverwrite=true로 명시해야 덮어씁니다.`);
+    throw new Error(M().projectExists(projectPath));
   }
 
   const client = await requireApiKey();
@@ -129,7 +177,7 @@ export async function planStory(input: PlanStoryInput): Promise<VideoProject> {
       style: input.style,
     },
     scenes: normalizeScenes(parsed.scenes ?? [], input.targetDurationSec),
-  }, 'AI가 생성한 영상 프로젝트');
+  }, M().aiProjectLabel);
 
   persistProject(projectDir, project, input.overwrite === true);
   return project;
@@ -183,7 +231,7 @@ export function savePlan(input: SavePlanInput): VideoProject {
   const projectDir = requireAbsolutePath(input.projectDir, 'projectDir');
   const projectPath = path.join(projectDir, PROJECT_FILE);
   if (existsSync(projectPath) && !input.overwrite) {
-    throw new Error(`이미 영상 프로젝트가 있습니다: ${projectPath}\noverwrite=true로 명시해야 덮어씁니다.`);
+    throw new Error(M().projectExists(projectPath));
   }
   const dims = dimensions(input.aspectRatio);
   const project = parseFile(projectSchema, {
@@ -208,7 +256,7 @@ export function savePlan(input: SavePlanInput): VideoProject {
       visualPrompt: scene.visualPrompt?.trim() ?? '',
       searchQuery: scene.searchQuery?.trim() || scene.visualPrompt?.trim() || '',
     })),
-  }, '에이전트가 작성한 영상 프로젝트');
+  }, M().agentProjectLabel);
 
   persistProject(projectDir, project, input.overwrite === true);
   return project;
@@ -217,7 +265,7 @@ export function savePlan(input: SavePlanInput): VideoProject {
 export function loadProject(projectDir: string): VideoProject {
   const dir = requireAbsolutePath(projectDir, 'projectDir');
   const filePath = path.join(dir, PROJECT_FILE);
-  if (!existsSync(filePath)) throw new Error(`영상 프로젝트를 찾을 수 없습니다: ${filePath}`);
+  if (!existsSync(filePath)) throw new Error(M().projectNotFound(filePath));
   return parseFile(projectSchema, readJson(filePath), filePath);
 }
 
@@ -228,7 +276,7 @@ export function loadAssets(projectDir: string): VideoAssetManifest {
   if (!existsSync(filePath)) return { version: 1, projectId: project.projectId, assets: [] };
   const manifest = parseFile(assetManifestSchema, readJson(filePath), filePath);
   if (manifest.projectId !== project.projectId) {
-    throw new Error('assets.json이 현재 project.json과 다른 프로젝트에 속합니다. 프로젝트를 다시 계획하거나 자산 매니페스트를 복구하세요.');
+    throw new Error(M().assetsMismatch);
   }
   return manifest;
 }
@@ -253,14 +301,14 @@ export function registerAsset(projectDir: string, asset: Omit<VideoAsset, 'creat
   const dir = requireAbsolutePath(projectDir, 'projectDir');
   loadProject(dir);
   if (!path.isAbsolute(asset.path) || !existsSync(asset.path) || !statSync(asset.path).isFile()) {
-    throw new Error(`자산 파일은 존재하는 절대경로여야 합니다: ${asset.path}`);
+    throw new Error(M().assetPathInvalid(asset.path));
   }
   const entry = parseFile(assetSchema, {
     ...asset,
     path: path.resolve(asset.path),
     sha256: sha256File(asset.path),
     createdAt: new Date().toISOString(),
-  }, '등록할 영상 자산');
+  }, M().assetLabel);
   const manifest = loadAssets(dir);
   manifest.assets = [...manifest.assets.filter((item) => item.id !== entry.id), entry];
   writeJsonAtomic(path.join(dir, ASSET_FILE), manifest);
@@ -280,7 +328,7 @@ export interface AddLocalAssetInput {
 export function addLocalAsset(input: AddLocalAssetInput): VideoAsset {
   const projectDir = requireAbsolutePath(input.projectDir, 'projectDir');
   if (!path.isAbsolute(input.filePath) || !existsSync(input.filePath)) {
-    throw new Error('filePath는 존재하는 절대경로여야 합니다.');
+    throw new Error(M().filePathInvalid);
   }
   const id = `local-${randomUUID()}`;
   const ext = path.extname(input.filePath).toLowerCase();
@@ -308,31 +356,31 @@ export function buildTimeline(
   const dir = requireAbsolutePath(projectDir, 'projectDir');
   const project = loadProject(dir);
   const manifest = loadAssets(dir);
-  if (scenes.length === 0) throw new Error('타임라인에는 장면이 한 개 이상 필요합니다.');
+  if (scenes.length === 0) throw new Error(M().noTimelineScenes);
 
   const byId = new Map(manifest.assets.map((asset) => [asset.id, asset]));
   for (const scene of scenes) {
     const asset = byId.get(scene.assetId);
-    if (!asset) throw new Error(`등록되지 않은 assetId입니다: ${scene.assetId}`);
+    if (!asset) throw new Error(M().unknownAsset(scene.assetId));
     if (!asset.allowedForRendering || asset.sourceType === 'reference-only') {
-      throw new Error(`렌더링이 허용되지 않은 자산입니다: ${scene.assetId}`);
+      throw new Error(M().notRenderable(scene.assetId));
     }
     if (asset.kind !== 'image' && asset.kind !== 'video') {
-      throw new Error(`장면에는 이미지 또는 영상 자산만 사용할 수 있습니다: ${scene.assetId}`);
+      throw new Error(M().sceneKind(scene.assetId));
     }
     if (!Number.isFinite(scene.durationSec) || scene.durationSec <= 0) {
-      throw new Error(`장면 길이는 0보다 커야 합니다: ${scene.id}`);
+      throw new Error(M().sceneDuration(scene.id));
     }
   }
   if (audioAssetId) {
     const audio = byId.get(audioAssetId);
     if (!audio || audio.kind !== 'audio' || !audio.allowedForRendering) {
-      throw new Error(`사용할 수 없는 오디오 자산입니다: ${audioAssetId}`);
+      throw new Error(M().badAudio(audioAssetId));
     }
   }
 
   const totalDurationSec = scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
-  if (totalDurationSec > 300) throw new Error(`타임라인 총 길이는 300초를 넘을 수 없습니다: ${totalDurationSec}초`);
+  if (totalDurationSec > 300) throw new Error(M().tooLong(totalDurationSec));
   const timeline = parseFile(timelineSchema, {
     version: 1,
     projectId: project.projectId,
@@ -344,7 +392,7 @@ export function buildTimeline(
     scenes,
     audioAssetId,
     captionStyle,
-  }, '생성할 영상 타임라인');
+  }, M().timelineLabel);
   writeJsonAtomic(path.join(dir, TIMELINE_FILE), timeline);
   return timeline;
 }
@@ -353,17 +401,17 @@ export function loadTimeline(projectDir: string): VideoTimeline {
   const dir = requireAbsolutePath(projectDir, 'projectDir');
   const project = loadProject(dir);
   const filePath = path.join(dir, TIMELINE_FILE);
-  if (!existsSync(filePath)) throw new Error(`타임라인을 찾을 수 없습니다: ${filePath}`);
+  if (!existsSync(filePath)) throw new Error(M().timelineNotFound(filePath));
   const timeline = parseFile(timelineSchema, readJson(filePath), filePath);
   if (timeline.projectId !== project.projectId) {
-    throw new Error('timeline.json이 현재 project.json과 다른 프로젝트에 속합니다. 타임라인을 다시 생성하세요.');
+    throw new Error(M().timelineMismatch);
   }
   if (
     timeline.width !== project.settings.width ||
     timeline.height !== project.settings.height ||
     timeline.fps !== project.settings.fps
   ) {
-    throw new Error('timeline.json의 출력 설정이 현재 프로젝트 설정과 다릅니다. 타임라인을 다시 생성하세요.');
+    throw new Error(M().timelineSettings);
   }
   return timeline;
 }

@@ -3,6 +3,28 @@ import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { assertCredentialFileReadable } from '../lib/json-file.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    missing: [
+      '❌ Google Ads 설정이 없어.',
+      '',
+      'googleads_save_config 도구로 먼저 설정해줘:',
+      '  - developerToken: Google Ads 콘솔 → 관리자 → API 센터에서 발급',
+      '  - customerId: Google Ads 계정 ID (예: 123-456-7890)',
+    ],
+  },
+  {
+    missing: [
+      '❌ No Google Ads settings.',
+      '',
+      'Set them up first with the googleads_save_config tool:',
+      '  - developerToken: issued in Google Ads console → Admin → API Center',
+      '  - customerId: Google Ads account ID (e.g. 123-456-7890)',
+    ],
+  },
+);
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CONFIG_PATH = path.join(CONFIG_DIR, 'google-ads.json');
@@ -60,13 +82,7 @@ export function requireConfig(): GoogleAdsConfig {
   if (!cfg) {
     assertCredentialFileReadable(CONFIG_PATH, 'googleads_save_config');
     throw new Error(
-      [
-        '❌ Google Ads 설정이 없어.',
-        '',
-        'googleads_save_config 도구로 먼저 설정해줘:',
-        '  - developerToken: Google Ads 콘솔 → 관리자 → API 센터에서 발급',
-        '  - customerId: Google Ads 계정 ID (예: 123-456-7890)',
-      ].join('\n'),
+      M().missing.join('\n'),
     );
   }
   return cfg;

@@ -2,6 +2,20 @@ import { z } from 'zod';
 import { encodePathSegment } from '../lib/url-path.js';
 import { isNotFound } from './http.js';
 import { appStorePagination, getAppStoreResponse, includedAppStoreResource, pageIsIncomplete } from './read-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    buildLinkMismatch: '버전 목록의 빌드 연결과 상세 조회 결과가 일치하지 않습니다.',
+    buildIdMismatch: '버전 목록과 상세 조회에서 서로 다른 빌드 ID가 반환되었습니다.',
+    noProcessingState: '연결된 빌드의 처리 상태가 응답에 없습니다.',
+  },
+  {
+    buildLinkMismatch: 'The build link in the version list does not match the detail lookup.',
+    buildIdMismatch: 'The version list and the detail lookup returned different build IDs.',
+    noProcessingState: 'The response has no processing state for the attached build.',
+  },
+);
 
 const editableStates = ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'METADATA_REJECTED', 'REJECTED'];
 
@@ -141,7 +155,7 @@ async function selectVersion(
 export async function resolveAppStoreVersionBuild(version: AppStoreVersionCandidate): Promise<AppStoreBuildReadiness> {
   if (version.build) return version.build;
   const missing: AppStoreBuildReadiness = version.linkedBuildId
-    ? { status: 'unknown', detail: '버전 목록의 빌드 연결과 상세 조회 결과가 일치하지 않습니다.' }
+    ? { status: 'unknown', detail: M().buildLinkMismatch }
     : { status: 'missing' };
 
   try {
@@ -150,10 +164,10 @@ export async function resolveAppStoreVersionBuild(version: AppStoreVersionCandid
     });
     if (!data) return missing;
     if (version.linkedBuildId && data.id !== version.linkedBuildId) {
-      return { status: 'unknown', detail: '버전 목록과 상세 조회에서 서로 다른 빌드 ID가 반환되었습니다.' };
+      return { status: 'unknown', detail: M().buildIdMismatch };
     }
     return buildReadiness(data)
-      ?? { status: 'unknown', detail: '연결된 빌드의 처리 상태가 응답에 없습니다.' };
+      ?? { status: 'unknown', detail: M().noProcessingState };
   } catch (error) {
     if (isNotFound(error)) return missing;
     return { status: 'unknown', detail: error instanceof Error ? error.message : String(error) };

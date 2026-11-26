@@ -12,6 +12,44 @@ import {
 import { requireAppStoreCreds } from '../../helpers.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
 import { appleCreationResult } from '../../lib/store-create-result.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    notFound: (id: string, type: string) => `상품을 찾을 수 없음: ${id} (${type})`,
+    reviewNoteUpdated: '✓ App Review 노트 수정 완료',
+    localizationSaved: (created: boolean) => `✓ 현지화 ${created ? '생성' : '수정'} 완료`,
+    screenshotUploaded: '✓ App Review 스크린샷 업로드 완료',
+    replaced: (id: string) => `교체됨 (이전 screenshotId: ${id})`,
+    verified: '✓ commit 후 조회 확인',
+    unverified: '⚠ commit은 성공했지만 후속 조회는 확인하지 못함',
+    submitted: '✓ 상품 심사 제출 완료 (Apple 심사 대기)',
+    standalone: '앱 버전과는 별개의 단독 제출이다. 버전 제출은 appstore_submit_for_review.',
+    needAppOrBundle: 'appId 또는 bundleId 중 하나는 반드시 제공해야 합니다.',
+    updateFailed: (err: string | undefined) => `❌ 수정 실패: ${err}`,
+    updated: (fields: string) => `✓ 수정 완료 (변경 필드: ${fields})`,
+    approvedHint: '\n승인된 상품은 API 삭제 불가 — App Store Connect → 상품 → "Remove from sale"',
+    deleteFailed: (err: string | undefined, hint: string) => `❌ 삭제 실패: ${err}${hint}`,
+    deleted: (id: string) => `✓ ${id} 삭제 완료`,
+  },
+  {
+    notFound: (id: string, type: string) => `Product not found: ${id} (${type})`,
+    reviewNoteUpdated: '✓ App Review note updated',
+    localizationSaved: (created: boolean) => `✓ Localization ${created ? 'created' : 'updated'}`,
+    screenshotUploaded: '✓ App Review screenshot uploaded',
+    replaced: (id: string) => `Replaced (previous screenshotId: ${id})`,
+    verified: '✓ Confirmed by a lookup after commit',
+    unverified: '⚠ The commit succeeded, but the follow-up lookup could not confirm it',
+    submitted: '✓ Product submitted for review (waiting for Apple review)',
+    standalone: 'This is a standalone submission, separate from the app version. To submit a version, use appstore_submit_for_review.',
+    needAppOrBundle: 'Either appId or bundleId must be provided.',
+    updateFailed: (err: string | undefined) => `❌ Update failed: ${err}`,
+    updated: (fields: string) => `✓ Update complete (changed fields: ${fields})`,
+    approvedHint: '\nApproved products cannot be deleted via the API — App Store Connect → the product → "Remove from sale"',
+    deleteFailed: (err: string | undefined, hint: string) => `❌ Delete failed: ${err}${hint}`,
+    deleted: (id: string) => `✓ ${id} deleted`,
+  },
+);
 
 /** appstore_create_inapp_purchase … appstore_add_product_to_review */
 export function registerProductTools(server: ToolRegistrar) {
@@ -139,7 +177,7 @@ export function registerProductTools(server: ToolRegistrar) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
+        return textResult(M().notFound(productId, productType));
       }
 
       const result = await appstoreProductReview.updateProductReviewNote({
@@ -148,7 +186,7 @@ export function registerProductTools(server: ToolRegistrar) {
         reviewNote,
       });
       return textResult([
-        '✓ App Review 노트 수정 완료',
+        M().reviewNoteUpdated,
         `productId: ${productId}`,
         `internalId: ${result.internalId}`,
         result.state ? `state: ${result.state}` : '',
@@ -171,7 +209,7 @@ export function registerProductTools(server: ToolRegistrar) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
+        return textResult(M().notFound(productId, productType));
       }
 
       const localizations = await appstoreProductLocalization.listProductLocalizations({
@@ -208,7 +246,7 @@ export function registerProductTools(server: ToolRegistrar) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
+        return textResult(M().notFound(productId, productType));
       }
 
       const result = await appstoreProductLocalization.upsertProductLocalization({
@@ -219,7 +257,7 @@ export function registerProductTools(server: ToolRegistrar) {
         description,
       });
       return textResult([
-        `✓ 현지화 ${result.created ? '생성' : '수정'} 완료`,
+        M().localizationSaved(result.created),
         `productId: ${productId}`,
         `locale: ${result.locale}`,
         result.name ? `name: ${result.name}` : '',
@@ -249,7 +287,7 @@ export function registerProductTools(server: ToolRegistrar) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
+        return textResult(M().notFound(productId, productType));
       }
 
       const result = await appstoreProductReview.uploadProductReviewScreenshot({
@@ -259,14 +297,14 @@ export function registerProductTools(server: ToolRegistrar) {
         replace,
       });
       return textResult([
-        '✓ App Review 스크린샷 업로드 완료',
+        M().screenshotUploaded,
         `productId: ${productId}`,
         `internalId: ${result.internalId}`,
         `screenshotId: ${result.id}`,
-        result.replacedId ? `교체됨 (이전 screenshotId: ${result.replacedId})` : '',
+        result.replacedId ? M().replaced(result.replacedId) : '',
         `file: ${result.fileName} (${result.fileSize} bytes)`,
         result.state ? `state: ${result.state}` : '',
-        result.verified ? '✓ commit 후 조회 확인' : '⚠ commit은 성공했지만 후속 조회는 확인하지 못함',
+        result.verified ? M().verified : M().unverified,
       ].filter(Boolean));
     },
   );
@@ -293,7 +331,7 @@ export function registerProductTools(server: ToolRegistrar) {
       });
       const product = products.find((item) => item.productId === productId && item.type === productType);
       if (!product) {
-        return textResult(`상품을 찾을 수 없음: ${productId} (${productType})`);
+        return textResult(M().notFound(productId, productType));
       }
 
       const result = await appstore.addProductToReviewSubmission({
@@ -301,12 +339,12 @@ export function registerProductTools(server: ToolRegistrar) {
         productType,
       });
       return textResult([
-        '✓ 상품 심사 제출 완료 (Apple 심사 대기)',
+        M().submitted,
         `productId: ${productId}`,
         `endpoint: ${result.endpoint}`,
         result.submissionId ? `submissionId: ${result.submissionId}` : '',
         '',
-        '앱 버전과는 별개의 단독 제출이다. 버전 제출은 appstore_submit_for_review.',
+        M().standalone,
       ].filter(Boolean));
     },
   );
@@ -327,7 +365,7 @@ export function registerProductEditTools(server: ToolRegistrar) {
     },
     async ({ appId, bundleId, productId, productType, name }) => {
       if (!appId && !bundleId) {
-        throw new Error('appId 또는 bundleId 중 하나는 반드시 제공해야 합니다.');
+        throw new Error(M().needAppOrBundle);
       }
       const creds = requireAppStoreCreds();
       const result = await updateAppleProduct({
@@ -335,9 +373,9 @@ export function registerProductEditTools(server: ToolRegistrar) {
         keyId: creds.keyId, issuerId: creds.issuerId, privateKey: creds.privateKey,
       });
       if (!result.success) {
-        return textResult(`❌ 수정 실패: ${result.error}`);
+        return textResult(M().updateFailed(result.error));
       }
-      return textResult(`✓ 수정 완료 (변경 필드: ${result.updated.join(', ') || 'none'})`);
+      return textResult(M().updated(result.updated.join(', ') || 'none'));
     },
   );
 
@@ -352,7 +390,7 @@ export function registerProductEditTools(server: ToolRegistrar) {
     },
     async ({ appId, bundleId, productId, productType }) => {
       if (!appId && !bundleId) {
-        throw new Error('appId 또는 bundleId 중 하나는 반드시 제공해야 합니다.');
+        throw new Error(M().needAppOrBundle);
       }
       const creds = requireAppStoreCreds();
       const result = await deleteAppleProduct({
@@ -361,11 +399,11 @@ export function registerProductEditTools(server: ToolRegistrar) {
       });
       if (!result.success) {
         const hint = result.errorType === 'CANNOT_DELETE'
-          ? '\n승인된 상품은 API 삭제 불가 — App Store Connect → 상품 → "Remove from sale"'
+          ? M().approvedHint
           : '';
-        return textResult(`❌ 삭제 실패: ${result.error}${hint}`);
+        return textResult(M().deleteFailed(result.error, hint));
       }
-      return textResult(`✓ ${productId} 삭제 완료`);
+      return textResult(M().deleted(productId));
     },
   );
 }

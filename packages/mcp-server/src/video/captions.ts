@@ -1,4 +1,10 @@
+import { catalog } from '#core/lang.js';
 import type { VideoCaptionStyle, VideoTimeline } from './types.js';
+
+const M = catalog(
+  { badColor: (hex: string) => `잘못된 색상 형식입니다(#RRGGBB): ${hex}` },
+  { badColor: (hex: string) => `Invalid color format (#RRGGBB): ${hex}` },
+);
 
 /**
  * 쇼츠 자막 스타일 시스템 — SRT + force_style(Arial 18px) 하드코딩을 대체한다.
@@ -44,7 +50,7 @@ export function resolveCaptionStyle(
 /** #RRGGBB → ASS &HAABBGGRR. alpha 00=불투명, FF=투명. */
 export function assColor(hex: string, alpha = '00'): string {
   const match = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(hex);
-  if (!match) throw new Error(`잘못된 색상 형식입니다(#RRGGBB): ${hex}`);
+  if (!match) throw new Error(M().badColor(hex));
   const [, r, g, b] = match;
   return `&H${alpha}${b}${g}${r}`.toUpperCase();
 }

@@ -5,6 +5,68 @@ import * as appstore from '../../appstore/tools.js';
 import * as testflight from '../../appstore/testflight.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
 import { betaStatusText } from '../../appstore/messages.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    reviewDetailUpdated: (id: string) => `✅ 베타 심사 정보 갱신 (${id})`,
+    passwordSet: '  demoAccountPassword: (설정됨)',
+    testInfoSaved: (created: boolean, locale: string, id: string) => `✅ 테스트 정보 ${created ? '생성' : '수정'} — ${locale} (${id})`,
+    whatToTestSaved: (created: boolean, locale: string, id: string) => `✅ What to Test ${created ? '생성' : '수정'} — ${locale} (${id})`,
+    badExternalState: (state: string, note: string) => `외부 상태가 ${state} — ${note || '제출 가능 상태가 아니다'}`,
+    noWhatToTest: 'What to Test 가 비어 있다',
+    reviewDetailMissing: (fields: string) => `베타 심사 정보 누락: ${fields}`,
+    submitDryRun: '🛑 베타 심사 제출 dry-run — 아직 제출하지 않았다.',
+    build: (buildId: string, state: string) => `  빌드: ${buildId} (${state})`,
+    blockers: '  블로커:',
+    noBlockers: '  블로커 없음.',
+    fixFirst: '위 항목을 먼저 해결할 것.',
+    submitConfirm: '제출하려면 confirm: true 로 다시 호출.',
+    submitted: '✅ 베타 심사 제출',
+    state: (s: string | null | undefined) => `  상태: ${s ?? '(응답에 없음)'}`,
+    checkProgress: '진행 상황은 appstore_beta_status 로 확인.',
+    dryRun: `🛑 dry-run — 아직 실행하지 않았다.`,
+    groupBuild: (groupId: string, add: boolean, buildId: string) => `  그룹 ${groupId} ${add ? '←' : '↛'} 빌드 ${buildId}`,
+    externalDistributes: '  외부 그룹이면 이 순간 테스터에게 배포된다.',
+    noLongerInstallable: '  테스터는 이 빌드를 더 이상 설치할 수 없게 된다.',
+    confirmToRun: '실행하려면 confirm: true 로 다시 호출.',
+    groupDone: (groupId: string, add: boolean, buildId: string) => `✅ 그룹 ${groupId} ${add ? '에 빌드 추가' : '에서 빌드 제거'} — ${buildId}`,
+    inviteDryRun: (n: number) => `🛑 dry-run — ${n}명, 아직 초대하지 않았다.`,
+    inviteConfirm: '실행하려면 confirm: true 로 다시 호출. 초대 메일이 즉시 발송된다.',
+    inviteResult: (ok: number, failed: number) => `테스터 초대: 성공 ${ok} / 실패 ${failed}`,
+    notifyDryRun: (buildId: string) => `🛑 dry-run — 빌드 ${buildId} 의 테스터 전원에게 알림을 보낼 참이다. confirm: true 로 다시 호출.`,
+    notified: (id: string) => `✅ 알림 발송 (${id})`,
+  },
+  {
+    reviewDetailUpdated: (id: string) => `✅ Beta review details updated (${id})`,
+    passwordSet: '  demoAccountPassword: (set)',
+    testInfoSaved: (created: boolean, locale: string, id: string) => `✅ Test information ${created ? 'created' : 'updated'} — ${locale} (${id})`,
+    whatToTestSaved: (created: boolean, locale: string, id: string) => `✅ What to Test ${created ? 'created' : 'updated'} — ${locale} (${id})`,
+    badExternalState: (state: string, note: string) => `External state is ${state} — ${note || 'not in a submittable state'}`,
+    noWhatToTest: 'What to Test is empty',
+    reviewDetailMissing: (fields: string) => `Beta review details missing: ${fields}`,
+    submitDryRun: '🛑 Beta review submission dry-run — not submitted yet.',
+    build: (buildId: string, state: string) => `  Build: ${buildId} (${state})`,
+    blockers: '  Blockers:',
+    noBlockers: '  No blockers.',
+    fixFirst: 'Resolve the items above first.',
+    submitConfirm: 'To submit, call again with confirm: true.',
+    submitted: '✅ Submitted for beta review',
+    state: (s: string | null | undefined) => `  State: ${s ?? '(not in the response)'}`,
+    checkProgress: 'Check progress with appstore_beta_status.',
+    dryRun: `🛑 dry-run — not run yet.`,
+    groupBuild: (groupId: string, add: boolean, buildId: string) => `  Group ${groupId} ${add ? '←' : '↛'} build ${buildId}`,
+    externalDistributes: '  If it is an external group, the build is distributed to testers at this moment.',
+    noLongerInstallable: '  Testers will no longer be able to install this build.',
+    confirmToRun: 'To run it, call again with confirm: true.',
+    groupDone: (groupId: string, add: boolean, buildId: string) => `✅ Build ${add ? 'added to' : 'removed from'} group ${groupId} — ${buildId}`,
+    inviteDryRun: (n: number) => `🛑 dry-run — ${n} testers, not invited yet.`,
+    inviteConfirm: 'To run it, call again with confirm: true. Invitation emails are sent immediately.',
+    inviteResult: (ok: number, failed: number) => `Tester invites: ${ok} succeeded / ${failed} failed`,
+    notifyDryRun: (buildId: string) => `🛑 dry-run — about to notify all testers of build ${buildId}. Call again with confirm: true.`,
+    notified: (id: string) => `✅ Notification sent (${id})`,
+  },
+);
 
 /** ASC 속성값을 한 줄로. 객체가 오면 String() 이 '[object Object]' 를 뱉으므로 JSON 으로. */
 function stringifyAttr(value: unknown): string {
@@ -80,8 +142,8 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
     async ({ appId, ...fields }) => {
       const r = await testflight.updateBetaReviewDetail({ appId, fields });
       const changed = Object.keys(fields).filter((k) => (fields as Record<string, unknown>)[k] !== undefined);
-      return textResult([`✅ 베타 심사 정보 갱신 (${r.id})`, ...changed.map((k) =>
-        k === 'demoAccountPassword' ? '  demoAccountPassword: (설정됨)' : `  ${k}: ${stringifyAttr(r.attributes[k])}`,
+      return textResult([M().reviewDetailUpdated(r.id), ...changed.map((k) =>
+        k === 'demoAccountPassword' ? M().passwordSet : `  ${k}: ${stringifyAttr(r.attributes[k])}`,
       )]);
     },
   );
@@ -103,7 +165,7 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
     },
     async ({ appId, locale, ...fields }) => {
       const r = await testflight.upsertBetaTestInfo({ appId, locale, fields });
-      return textResult(`✅ 테스트 정보 ${r.created ? '생성' : '수정'} — ${r.locale} (${r.id})`);
+      return textResult(M().testInfoSaved(r.created, r.locale, r.id));
     },
   );
 
@@ -121,7 +183,7 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
     },
     async ({ buildId, locale, whatsNew }) => {
       const r = await testflight.upsertWhatsToTest({ buildId, locale, whatsNew });
-      return textResult(`✅ What to Test ${r.created ? '생성' : '수정'} — ${r.locale} (${r.id})`);
+      return textResult(M().whatToTestSaved(r.created, r.locale, r.id));
     },
   );
 
@@ -143,27 +205,27 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
         const s = await testflight.getBetaStatus({ buildId, appId });
         const blockers: string[] = [];
         if (s.externalState !== 'READY_FOR_BETA_SUBMISSION') {
-          blockers.push(`외부 상태가 ${s.externalState ?? '?'} — ${s.note || '제출 가능 상태가 아니다'}`);
+          blockers.push(M().badExternalState(s.externalState ?? '?', s.note ?? ''));
         }
-        if (s.whatsToTestLocales.length === 0) blockers.push('What to Test 가 비어 있다');
+        if (s.whatsToTestLocales.length === 0) blockers.push(M().noWhatToTest);
         if (s.reviewDetail && !s.reviewDetail.complete) {
-          blockers.push(`베타 심사 정보 누락: ${s.reviewDetail.missing.join(', ')}`);
+          blockers.push(M().reviewDetailMissing(s.reviewDetail.missing.join(', ')));
         }
         return textResult([
-          '🛑 베타 심사 제출 dry-run — 아직 제출하지 않았다.',
-          `  빌드: ${buildId} (${s.externalState ?? '?'})`,
-          blockers.length ? '  블로커:' : '  블로커 없음.',
+          M().submitDryRun,
+          M().build(buildId, s.externalState ?? '?'),
+          blockers.length ? M().blockers : M().noBlockers,
           ...blockers.map((b) => `    - ${b}`),
           '',
-          blockers.length ? '위 항목을 먼저 해결할 것.' : '제출하려면 confirm: true 로 다시 호출.',
+          blockers.length ? M().fixFirst : M().submitConfirm,
         ]);
       }
       const r = await testflight.submitBetaReview(buildId);
       return textResult([
-        '✅ 베타 심사 제출',
+        M().submitted,
         `  submissionId: ${r.submissionId}`,
-        `  상태: ${r.state ?? '(응답에 없음)'}`,
-        '진행 상황은 appstore_beta_status 로 확인.',
+        M().state(r.state),
+        M().checkProgress,
       ]);
     },
   );
@@ -184,17 +246,17 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
     async ({ groupId, buildId, action, confirm }) => {
       if (!confirm) {
         return textResult([
-          `🛑 dry-run — 아직 실행하지 않았다.`,
-          `  그룹 ${groupId} ${action === 'add' ? '←' : '↛'} 빌드 ${buildId}`,
+          M().dryRun,
+          M().groupBuild(groupId, action === 'add', buildId),
           action === 'add'
-            ? '  외부 그룹이면 이 순간 테스터에게 배포된다.'
-            : '  테스터는 이 빌드를 더 이상 설치할 수 없게 된다.',
+            ? M().externalDistributes
+            : M().noLongerInstallable,
           '',
-          '실행하려면 confirm: true 로 다시 호출.',
+          M().confirmToRun,
         ]);
       }
       const r = await testflight.setBetaGroupBuild({ groupId, buildId, action });
-      return textResult(`✅ 그룹 ${r.groupId} ${r.action === 'add' ? '에 빌드 추가' : '에서 빌드 제거'} — ${r.buildId}`);
+      return textResult(M().groupDone(r.groupId, r.action === 'add', r.buildId));
     },
   );
 
@@ -222,16 +284,16 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
     async ({ groupId, testers, confirm }) => {
       if (!confirm) {
         return textResult([
-          `🛑 dry-run — ${testers.length}명, 아직 초대하지 않았다.`,
+          M().inviteDryRun(testers.length),
           ...testers.map((t) => `  ${t.email}`),
           '',
-          '실행하려면 confirm: true 로 다시 호출. 초대 메일이 즉시 발송된다.',
+          M().inviteConfirm,
         ]);
       }
       const results = await testflight.addBetaTesters({ groupId, testers });
       const ok = results.filter((r) => r.ok).length;
       return textResult([
-        `테스터 초대: 성공 ${ok} / 실패 ${results.length - ok}`,
+        M().inviteResult(ok, results.length - ok),
         ...results.filter((r) => !r.ok).map((r) => `  ✗ ${r.email}: ${r.error}`),
       ]);
     },
@@ -250,10 +312,10 @@ export function registerBetaTestingTools(server: ToolRegistrar) {
     },
     async ({ buildId, confirm }) => {
       if (!confirm) {
-        return textResult(`🛑 dry-run — 빌드 ${buildId} 의 테스터 전원에게 알림을 보낼 참이다. confirm: true 로 다시 호출.`);
+        return textResult(M().notifyDryRun(buildId));
       }
       const r = await testflight.notifyBetaTesters(buildId);
-      return textResult(`✅ 알림 발송 (${r.notificationId})`);
+      return textResult(M().notified(r.notificationId));
     },
   );
 }

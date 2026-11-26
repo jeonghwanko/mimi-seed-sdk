@@ -1,3 +1,15 @@
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    repeated: '목록 API 가 같은 nextPageToken 을 반복해 페이지 순회를 중단했습니다.',
+    tooMany: (n: number) => `목록이 ${n}페이지를 넘어 순회를 중단했습니다 — 결과가 잘리지 않도록 범위를 좁혀 다시 조회하세요.`,
+  },
+  {
+    repeated: 'The list API repeated the same nextPageToken, so paging stopped.',
+    tooMany: (n: number) => `The list exceeded ${n} pages, so paging stopped — narrow the range and query again so the results are not truncated.`,
+  },
+);
 // nextPageToken 을 끝까지 따라가는 수집기.
 //
 // 왜 필요한가: IAM 서비스 계정·Service Usage·Play 상품/구독 목록은 첫 페이지만 읽고
@@ -36,7 +48,7 @@ export async function collectPagesUpTo<T>(
     items.push(...result.items);
     const next = result.nextPageToken || undefined;
     if (!next) return { items, truncated: false };
-    if (seen.has(next)) throw new Error('목록 API 가 같은 nextPageToken 을 반복해 페이지 순회를 중단했습니다.');
+    if (seen.has(next)) throw new Error(M().repeated);
     seen.add(next);
     token = next;
   }
@@ -50,7 +62,7 @@ export async function collectPages<T>(
 ): Promise<T[]> {
   const { items, truncated } = await collectPagesUpTo(fetchPage, maxPages);
   if (truncated) {
-    throw new Error(`목록이 ${maxPages}페이지를 넘어 순회를 중단했습니다 — 결과가 잘리지 않도록 범위를 좁혀 다시 조회하세요.`);
+    throw new Error(M().tooMany(maxPages));
   }
   return items;
 }

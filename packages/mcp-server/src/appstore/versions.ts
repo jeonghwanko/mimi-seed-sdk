@@ -4,6 +4,28 @@
 import { apiGet, apiPatch, apiPost } from './client.js';
 import type { AscListDocument, AscResource, AscSingleDocument, AscToOne } from './types.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noValidBuild: (appId: string, n: number) =>
+      `appId=${appId} 에 VALID 빌드가 없어요 (최근 ${n}개 확인). 빌드 PROCESSING 완료 대기 필요.`,
+    noBuildAboveMin: (min: number, valid: string) => `minBuildNumber=${min} 이상 VALID 빌드가 없어요. VALID 빌드: ${valid}`,
+    none: '(없음)',
+    localeNotFound: (locale: string, versionId: string, available: string) =>
+      `로캘 "${locale}"을 버전 ${versionId}에서 찾을 수 없어. 가능한 로캘: ${available}`,
+    noAppOrPlatform: (versionId: string) => `appStoreVersion ${versionId}에서 app 또는 platform을 찾지 못했어. 버전 ID 확인 필요.`,
+  },
+  {
+    noValidBuild: (appId: string, n: number) =>
+      `appId=${appId} has no VALID build (checked the latest ${n}). Wait for build PROCESSING to finish.`,
+    noBuildAboveMin: (min: number, valid: string) => `No VALID build at or above minBuildNumber=${min}. VALID builds: ${valid}`,
+    none: '(none)',
+    localeNotFound: (locale: string, versionId: string, available: string) =>
+      `Locale "${locale}" not found in version ${versionId}. Available locales: ${available}`,
+    noAppOrPlatform: (versionId: string) => `Could not find app or platform for appStoreVersion ${versionId}. Check the version ID.`,
+  },
+);
 
 // ─── 버전 ───
 
@@ -141,7 +163,7 @@ export async function attachLatestValidBuild(
   const valid = builds.filter((b: BuildRow) => b.processingState === 'VALID');
   if (valid.length === 0) {
     throw new Error(
-      `appId=${appId} 에 VALID 빌드가 없어요 (최근 ${builds.length}개 확인). 빌드 PROCESSING 완료 대기 필요.`,
+      M().noValidBuild(appId, builds.length),
     );
   }
   let candidates: BuildRow[] = valid;
@@ -150,7 +172,7 @@ export async function attachLatestValidBuild(
     candidates = valid.filter((b: BuildRow) => Number(b.version) >= min);
     if (candidates.length === 0) {
       throw new Error(
-        `minBuildNumber=${min} 이상 VALID 빌드가 없어요. VALID 빌드: ${valid.map((b: BuildRow) => b.version).join(', ')}`,
+        M().noBuildAboveMin(min, valid.map((b: BuildRow) => b.version).join(', ')),
       );
     }
   }
@@ -230,9 +252,9 @@ export async function updateVersionWhatsNew(
   const localizations = await getVersionLocalizations(versionId);
   const target = localizations.find((l) => l.locale === locale);
   if (!target) {
-    const available = localizations.map((l) => l.locale).join(', ') || '(없음)';
+    const available = localizations.map((l) => l.locale).join(', ') || M().none;
     throw new Error(
-      `로캘 "${locale}"을 버전 ${versionId}에서 찾을 수 없어. 가능한 로캘: ${available}`,
+      M().localeNotFound(locale, versionId, available),
     );
   }
   return updateVersionLocalization(target.id, fields);
@@ -350,7 +372,7 @@ export function requireVersionAppAndPlatform(
   const app = version?.relationships?.app?.data;
   if (version?.id !== versionId || version.type !== 'appStoreVersions' || app?.type !== 'apps'
       || typeof app.id !== 'string' || !app.id || typeof platform !== 'string' || !platform) {
-    throw new Error(`appStoreVersion ${versionId}에서 app 또는 platform을 찾지 못했어. 버전 ID 확인 필요.`);
+    throw new Error(M().noAppOrPlatform(versionId));
   }
   return { appId: app.id, platform };
 }

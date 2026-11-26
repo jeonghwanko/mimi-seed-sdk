@@ -1,3 +1,5 @@
+import { catalog } from '#core/lang.js';
+
 /**
  * Google OAuth "권한 도메인" → 스코프 매핑의 SSOT.
  *
@@ -17,6 +19,36 @@
  * 않아서 유지하되, `gcp` 도메인으로 격리해 그 도구를 쓰는 사용자만 요청하게 한다.
  */
 
+/** 도메인 요약 — 사람이 읽는 안내 문구라 언어를 따른다 (AUTH_DOMAINS[id].summary 가 호출 시점에 고른다). */
+const SUMMARY = catalog(
+  {
+    firebase: 'firebase_* — 프로젝트/앱/설정 조회·생성 (프로젝트 신규 생성·서비스 활성화는 gcp 도 필요)',
+    gcp: 'iam_* (서비스 계정·키·IAM 바인딩 — IAM API 는 이 스코프의 좁은 대안이 없음), firebase 프로젝트 생성·서비스 활성화, BigQuery OAuth fallback',
+    admob: 'admob_* — 수익 리포트, 앱·광고 단위 생성',
+    playstore: 'playstore_* — OAuth 로 하는 Play Console 작업 + Android vitals 통계',
+    googleads: 'googleads_* — 캠페인·UAC 리포트',
+    gsc: 'gsc_* — 사이트·사이트맵·검색 성과 (사이트맵 제출 포함)',
+    gsc_readonly: '사이트·사이트맵·URL 색인 상태·검색 성과 조회',
+    ga4: 'ga4_* — property/data stream 생성·조회 + 리포트',
+    youtube: 'youtube_* — 영상 업로드·처리 상태 조회·공개 상태 변경',
+    youtube_analytics: 'youtube_get_channel·youtube_list_videos·youtube_get_analytics_report — 채널·영상·성과 읽기',
+    drive: 'drive_* — mimi-seed 가 만든 파일·폴더 업로드·갱신·정리 (기존 폴더·공유 드라이브는 Drive 서비스 계정)',
+  },
+  {
+    firebase: 'firebase_* — read/create projects/apps/config (creating a new project and enabling services also need gcp)',
+    gcp: 'iam_* (service accounts, keys, IAM bindings — the IAM API has no narrower alternative to this scope), firebase project creation and service enablement, BigQuery OAuth fallback',
+    admob: 'admob_* — earnings reports, create apps and ad units',
+    playstore: 'playstore_* — Play Console work over OAuth + Android vitals statistics',
+    googleads: 'googleads_* — campaign and UAC reports',
+    gsc: 'gsc_* — sites, sitemaps, search performance (including sitemap submission)',
+    gsc_readonly: 'Read sites, sitemaps, URL index status, and search performance',
+    ga4: 'ga4_* — create/read properties and data streams + reports',
+    youtube: 'youtube_* — video upload, processing status, privacy status changes',
+    youtube_analytics: 'youtube_get_channel·youtube_list_videos·youtube_get_analytics_report — read channel, videos, and performance',
+    drive: 'drive_* — upload, update, and clean up files and folders mimi-seed created (existing folders and shared drives use the Drive service account)',
+  },
+);
+
 export interface AuthDomainDef {
   /** 사람이 읽을 라벨 (동의 화면 아님 — CLI/도구 안내용) */
   label: string;
@@ -29,13 +61,12 @@ export const AUTH_DOMAINS = {
   firebase: {
     label: 'Firebase',
     scopes: ['https://www.googleapis.com/auth/firebase'],
-    summary: 'firebase_* — 프로젝트/앱/설정 조회·생성 (프로젝트 신규 생성·서비스 활성화는 gcp 도 필요)',
+    get summary() { return SUMMARY().firebase; },
   },
   gcp: {
     label: 'Google Cloud (cloud-platform)',
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-    summary:
-      'iam_* (서비스 계정·키·IAM 바인딩 — IAM API 는 이 스코프의 좁은 대안이 없음), firebase 프로젝트 생성·서비스 활성화, BigQuery OAuth fallback',
+    get summary() { return SUMMARY().gcp; },
   },
   admob: {
     label: 'AdMob',
@@ -43,7 +74,7 @@ export const AUTH_DOMAINS = {
       'https://www.googleapis.com/auth/admob.readonly',
       'https://www.googleapis.com/auth/admob.monetization',
     ],
-    summary: 'admob_* — 수익 리포트, 앱·광고 단위 생성',
+    get summary() { return SUMMARY().admob; },
   },
   playstore: {
     label: 'Play Store',
@@ -54,22 +85,22 @@ export const AUTH_DOMAINS = {
       // 403(ACCESS_TOKEN_SCOPE_INSUFFICIENT)으로 죽고, 다른 Play 도구는 멀쩡해 원인 추적이 어렵다.
       'https://www.googleapis.com/auth/playdeveloperreporting',
     ],
-    summary: 'playstore_* — OAuth 로 하는 Play Console 작업 + Android vitals 통계',
+    get summary() { return SUMMARY().playstore; },
   },
   googleads: {
     label: 'Google Ads',
     scopes: ['https://www.googleapis.com/auth/adwords'],
-    summary: 'googleads_* — 캠페인·UAC 리포트',
+    get summary() { return SUMMARY().googleads; },
   },
   gsc: {
     label: 'Search Console',
     scopes: ['https://www.googleapis.com/auth/webmasters'],
-    summary: 'gsc_* — 사이트·사이트맵·검색 성과 (사이트맵 제출 포함)',
+    get summary() { return SUMMARY().gsc; },
   },
   gsc_readonly: {
     label: 'Search Console (read-only)',
     scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
-    summary: '사이트·사이트맵·URL 색인 상태·검색 성과 조회',
+    get summary() { return SUMMARY().gsc_readonly; },
   },
   ga4: {
     label: 'Google Analytics (GA4)',
@@ -80,12 +111,12 @@ export const AUTH_DOMAINS = {
       // (ga4/tools.ts 의 GA4_DATA_SCOPE 주석, 2026-07 실사고 참고.)
       'https://www.googleapis.com/auth/analytics.readonly',
     ],
-    summary: 'ga4_* — property/data stream 생성·조회 + 리포트',
+    get summary() { return SUMMARY().ga4; },
   },
   youtube: {
     label: 'YouTube',
     scopes: ['https://www.googleapis.com/auth/youtube.force-ssl'],
-    summary: 'youtube_* — 영상 업로드·처리 상태 조회·공개 상태 변경',
+    get summary() { return SUMMARY().youtube; },
   },
   youtube_analytics: {
     label: 'YouTube Analytics (read-only)',
@@ -93,7 +124,7 @@ export const AUTH_DOMAINS = {
       'https://www.googleapis.com/auth/youtube.readonly',
       'https://www.googleapis.com/auth/yt-analytics.readonly',
     ],
-    summary: 'youtube_get_channel·youtube_list_videos·youtube_get_analytics_report — 채널·영상·성과 읽기',
+    get summary() { return SUMMARY().youtube_analytics; },
   },
   drive: {
     label: 'Google Drive (drive.file)',
@@ -101,8 +132,7 @@ export const AUTH_DOMAINS = {
     // 기존 폴더·공유 드라이브 전체를 다루려면 Drive 서비스 계정(mimi-seed-drive-auth)을 쓴다.
     // 전체 drive 스코프는 제한(restricted) 스코프라 OAuth 앱 보안 심사가 필요해 여기 넣지 않는다.
     scopes: ['https://www.googleapis.com/auth/drive.file'],
-    summary:
-      'drive_* — mimi-seed 가 만든 파일·폴더 업로드·갱신·정리 (기존 폴더·공유 드라이브는 Drive 서비스 계정)',
+    get summary() { return SUMMARY().drive; },
   },
 } as const satisfies Record<string, AuthDomainDef>;
 

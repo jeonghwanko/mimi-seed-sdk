@@ -7,6 +7,40 @@ import { friendlyGoogleError } from '../lib/google-errors.js';
 import { mediaUploadOptions } from '../lib/google-timeouts.js';
 import { validateVideo } from './render.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    confirmVisible: (status: string) => `${status} 게시에는 confirmVisible=true가 필요합니다.`,
+    filePathInvalid: 'filePath는 존재하는 절대경로여야 합니다.',
+    emptyFile: '업로드할 영상 파일이 비어 있거나 파일이 아닙니다.',
+    formats: '지원 영상 형식은 .mp4, .mov, .webm입니다.',
+    tagsLength: 'tags의 전체 길이는 쉼표를 포함해 500자 이하여야 합니다.',
+    shortsUnreadable: '쇼츠 규격을 확인할 영상 정보를 읽지 못했습니다.',
+    shortsAspect: 'shortsOnly=true일 때 영상은 정사각형 또는 세로형이어야 합니다.',
+    shortsDuration: 'YouTube Shorts 영상은 180초 이하여야 합니다.',
+    notFound: (videoId: string) => `YouTube 영상을 찾지 못했습니다: ${videoId}`,
+    titleLength: 'title은 1~100자여야 합니다.',
+    descriptionLength: 'description은 5,000자 이하여야 합니다.',
+    noVideoStream: '업로드 파일에 비디오 스트림이 없습니다.',
+    noVideoId: 'YouTube 업로드 응답에 videoId가 없습니다.',
+  },
+  {
+    confirmVisible: (status: string) => `Publishing as ${status} requires confirmVisible=true.`,
+    filePathInvalid: 'filePath must be an existing absolute path.',
+    emptyFile: 'The video file to upload is empty or not a file.',
+    formats: 'Supported video formats are .mp4, .mov, and .webm.',
+    tagsLength: 'The total length of tags, including commas, must be 500 characters or less.',
+    shortsUnreadable: 'Could not read the video information needed to check the Shorts format.',
+    shortsAspect: 'When shortsOnly=true, the video must be square or vertical.',
+    shortsDuration: 'YouTube Shorts videos must be 180 seconds or less.',
+    notFound: (videoId: string) => `YouTube video not found: ${videoId}`,
+    titleLength: 'title must be 1-100 characters.',
+    descriptionLength: 'description must be 5,000 characters or less.',
+    noVideoStream: 'The upload file has no video stream.',
+    noVideoId: 'The YouTube upload response has no videoId.',
+  },
+);
 
 export const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 
@@ -37,16 +71,16 @@ export interface UpdateYouTubePrivacyInput {
 
 function assertVisibilityConfirmed(privacyStatus: YouTubePrivacyStatus, confirmVisible?: boolean): void {
   if (privacyStatus !== 'private' && confirmVisible !== true) {
-    throw new Error(`${privacyStatus} 게시에는 confirmVisible=true가 필요합니다.`);
+    throw new Error(M().confirmVisible(privacyStatus));
   }
 }
 
 function assertUploadFile(filePath: string): { size: number; mimeType: string } {
   if (!path.isAbsolute(filePath) || !existsSync(filePath)) {
-    throw new Error('filePath는 존재하는 절대경로여야 합니다.');
+    throw new Error(M().filePathInvalid);
   }
   const stat = statSync(filePath);
-  if (!stat.isFile() || stat.size <= 0) throw new Error('업로드할 영상 파일이 비어 있거나 파일이 아닙니다.');
+  if (!stat.isFile() || stat.size <= 0) throw new Error(M().emptyFile);
   const ext = path.extname(filePath).toLowerCase();
   const mimeType = ext === '.mp4'
     ? 'video/mp4'
@@ -55,12 +89,12 @@ function assertUploadFile(filePath: string): { size: number; mimeType: string } 
       : ext === '.webm'
         ? 'video/webm'
         : null;
-  if (!mimeType) throw new Error('지원 영상 형식은 .mp4, .mov, .webm입니다.');
+  if (!mimeType) throw new Error(M().formats);
   return { size: stat.size, mimeType };
 }
 
 function assertTags(tags: string[] = []): void {
-  if (tags.join(',').length > 500) throw new Error('tags의 전체 길이는 쉼표를 포함해 500자 이하여야 합니다.');
+  if (tags.join(',').length > 500) throw new Error(M().tagsLength);
 }
 
 function videoFacts(validation: Awaited<ReturnType<typeof validateVideo>>): {
@@ -84,10 +118,10 @@ function videoFacts(validation: Awaited<ReturnType<typeof validateVideo>>): {
 
 function assertShortsCompatible(facts: ReturnType<typeof videoFacts>): void {
   if (!facts.width || !facts.height || !facts.durationSec) {
-    throw new Error('쇼츠 규격을 확인할 영상 정보를 읽지 못했습니다.');
+    throw new Error(M().shortsUnreadable);
   }
-  if (facts.width > facts.height) throw new Error('shortsOnly=true일 때 영상은 정사각형 또는 세로형이어야 합니다.');
-  if (facts.durationSec > 180) throw new Error('YouTube Shorts 영상은 180초 이하여야 합니다.');
+  if (facts.width > facts.height) throw new Error(M().shortsAspect);
+  if (facts.durationSec > 180) throw new Error(M().shortsDuration);
 }
 
 function safeStatus(video: youtube_v3.Schema$Video) {
@@ -120,10 +154,10 @@ export async function getYouTubeVideoStatus(auth: OAuth2Client, videoId: string)
       id: [videoId],
     });
     const video = response.data.items?.[0];
-    if (!video) throw new Error(`YouTube 영상을 찾지 못했습니다: ${videoId}`);
+    if (!video) throw new Error(M().notFound(videoId));
     return safeStatus(video);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('YouTube 영상을 찾지 못했습니다')) throw error;
+    if (error instanceof Error && error.message === M().notFound(videoId)) throw error;
     throw friendlyGoogleError(error);
   }
 }
@@ -134,15 +168,15 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
   const privacyStatus = input.privacyStatus ?? 'private';
   assertVisibilityConfirmed(privacyStatus, input.confirmVisible);
   const file = assertUploadFile(input.filePath);
-  if (!input.title.trim() || input.title.length > 100) throw new Error('title은 1~100자여야 합니다.');
-  if ((input.description?.length ?? 0) > 5_000) throw new Error('description은 5,000자 이하여야 합니다.');
+  if (!input.title.trim() || input.title.length > 100) throw new Error(M().titleLength);
+  if ((input.description?.length ?? 0) > 5_000) throw new Error(M().descriptionLength);
   assertTags(input.tags);
 
   const validation = await validateVideo(input.filePath);
   const facts = videoFacts(validation);
   if (!validation.streams.some((item) =>
     typeof item === 'object' && item !== null && (item as Record<string, unknown>).codec_type === 'video')) {
-    throw new Error('업로드 파일에 비디오 스트림이 없습니다.');
+    throw new Error(M().noVideoStream);
   }
   if (input.shortsOnly) assertShortsCompatible(facts);
 
@@ -174,7 +208,7 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
       },
     }, mediaUploadOptions());
     const videoId = response.data.id;
-    if (!videoId) throw new Error('YouTube 업로드 응답에 videoId가 없습니다.');
+    if (!videoId) throw new Error(M().noVideoId);
     return {
       ...safeStatus(response.data),
       authenticatedChannel: channel,
@@ -194,7 +228,7 @@ export async function updateYouTubeVideoPrivacy(auth: OAuth2Client, input: Updat
   try {
     const currentResponse = await youtube.videos.list({ part: ['status'], id: [input.videoId] });
     const current = currentResponse.data.items?.[0];
-    if (!current) throw new Error(`YouTube 영상을 찾지 못했습니다: ${input.videoId}`);
+    if (!current) throw new Error(M().notFound(input.videoId));
     await youtube.videos.update({
       part: ['status'],
       requestBody: {

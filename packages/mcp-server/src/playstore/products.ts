@@ -4,6 +4,18 @@
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import { collectPagesUpTo } from '../lib/paginate.js';
 import { publisher } from './edits.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    titleRequired: (lang: string | null | undefined) => `새 로케일(${lang})을 만들려면 title 이 필요해.`,
+    benefitsSubOnly: 'benefits 는 구독 상품에만 쓸 수 있어.',
+  },
+  {
+    titleRequired: (lang: string | null | undefined) => `title is required to create a new locale (${lang}).`,
+    benefitsSubOnly: 'benefits can only be used for subscription products.',
+  },
+);
 
 // ─── 인앱 상품 조회 ───
 
@@ -94,7 +106,7 @@ function mergeListings(
     const target = found ?? { languageCode: next.languageCode };
     if (!found) {
       if (!next.title) {
-        throw new Error(`새 로케일(${next.languageCode})을 만들려면 title 이 필요해.`);
+        throw new Error(M().titleRequired(next.languageCode));
       }
       merged.push(target);
       created.push(next.languageCode);
@@ -105,7 +117,7 @@ function mergeListings(
     if (next.description !== undefined) target.description = next.description;
     if (next.benefits !== undefined) {
       if (!opts.allowBenefits) {
-        throw new Error('benefits 는 구독 상품에만 쓸 수 있어.');
+        throw new Error(M().benefitsSubOnly);
       }
       target.benefits = next.benefits;
     }

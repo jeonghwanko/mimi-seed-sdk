@@ -3,6 +3,16 @@ import type { ToolRegistrar } from '../../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as appstore from '../../appstore/tools.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    replied: (id: string, json: string) => `✅ 리뷰 ${id}에 답변 등록됐어.\n\n${json}`,
+  },
+  {
+    replied: (id: string, json: string) => `✅ Reply posted to review ${id}.\n\n${json}`,
+  },
+);
 
 /** appstore_list_reviews · appstore_reply_review */
 export function registerCustomerReviewTools(server: ToolRegistrar) {
@@ -39,7 +49,7 @@ export function registerCustomerReviewTools(server: ToolRegistrar) {
     },
     async ({ reviewId, responseBody }) => {
       const result = await appstore.createReviewResponse(reviewId, responseBody);
-      return textResult(`✅ 리뷰 ${reviewId}에 답변 등록됐어.\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().replied(reviewId, JSON.stringify(result, null, 2)));
     },
   );
 }

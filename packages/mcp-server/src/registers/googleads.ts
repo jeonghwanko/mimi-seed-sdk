@@ -4,6 +4,30 @@ import { requireAuth } from '../helpers.js';
 import { saveConfig, loadConfig, requireConfig } from '../googleads/config.js';
 import * as googleads from '../googleads/tools.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    saved: '✅ Google Ads 설정 저장 완료.',
+    savedNext: [
+      '이제 googleads_list_campaigns 나 googleads_get_uac_report 를 사용할 수 있어.',
+      '',
+      '⚠️  Google Ads API는 adwords OAuth 스코프가 필요해.',
+      '기존 토큰에 스코프가 없으면 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth 로 재인증해줘.',
+    ],
+    missing: '❌ Google Ads 설정 없음. googleads_save_config 로 먼저 설정해.',
+  },
+  {
+    saved: '✅ Google Ads settings saved.',
+    savedNext: [
+      'googleads_list_campaigns and googleads_get_uac_report are now available.',
+      '',
+      '⚠️  The Google Ads API needs the adwords OAuth scope.',
+      'If the existing token lacks the scope, reauthenticate with npx -y @yoonion/mimi-seed-mcp mimi-seed-auth.',
+    ],
+    missing: '❌ No Google Ads settings. Set them up first with googleads_save_config.',
+  },
+);
 
 export function registerGoogleAdsTools(server: ToolRegistrar) {
   server.tool(
@@ -17,14 +41,11 @@ export function registerGoogleAdsTools(server: ToolRegistrar) {
     async ({ developerToken, customerId, loginCustomerId }) => {
       saveConfig({ developerToken, customerId, loginCustomerId });
       return textResult([
-        '✅ Google Ads 설정 저장 완료.',
+        M().saved,
         `  customerId: ${customerId}`,
         loginCustomerId ? `  loginCustomerId: ${loginCustomerId}` : '',
         '',
-        '이제 googleads_list_campaigns 나 googleads_get_uac_report 를 사용할 수 있어.',
-        '',
-        '⚠️  Google Ads API는 adwords OAuth 스코프가 필요해.',
-        '기존 토큰에 스코프가 없으면 npx -y @yoonion/mimi-seed-mcp mimi-seed-auth 로 재인증해줘.',
+        ...M().savedNext,
       ].filter(Boolean));
     },
   );
@@ -122,7 +143,7 @@ export function registerGoogleAdsTools(server: ToolRegistrar) {
     async () => {
       const cfg = loadConfig();
       if (!cfg) {
-        return textResult('❌ Google Ads 설정 없음. googleads_save_config 로 먼저 설정해.');
+        return textResult(M().missing);
       }
       return jsonResult({
         status: 'configured',

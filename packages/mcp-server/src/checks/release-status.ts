@@ -1,15 +1,27 @@
 import { resolveAppStoreVersionBuild, selectAppStoreVersionForStatus, type AppStorePlatform } from '../appstore/release-target.js';
 import { requirePlayStoreAuth } from '../helpers.js';
 import { listTracks } from '../playstore/tools.js';
+import { catalog } from '#core/lang.js';
+
+const T = catalog(
+  {
+    ambiguous: '일치하는 App Store 버전이 여러 개입니다. appStorePlatform을 지정하거나 버전 ID로 appstore_release_status를 호출하세요.',
+    incomplete: 'App Store 버전 목록이 불완전하여 대상을 확인할 수 없습니다.',
+  },
+  {
+    ambiguous: 'Multiple App Store versions match. Set appStorePlatform, or call appstore_release_status with the version ID.',
+    incomplete: 'The App Store version list is incomplete, so the target cannot be determined.',
+  },
+);
 
 async function readAppStoreStatus(appId: string, version: string, platform?: AppStorePlatform) {
   const selection = await selectAppStoreVersionForStatus(appId, version, platform);
   if (selection.status === 'missing') return { found: false };
   if (selection.status === 'ambiguous') {
-    return { error: '일치하는 App Store 버전이 여러 개입니다. appStorePlatform을 지정하거나 버전 ID로 appstore_release_status를 호출하세요.' };
+    return { error: T().ambiguous };
   }
   if (selection.status === 'incomplete') {
-    return { error: 'App Store 버전 목록이 불완전하여 대상을 확인할 수 없습니다.' };
+    return { error: T().incomplete };
   }
 
   const selected = selection.version;

@@ -4,6 +4,26 @@ import { z } from 'zod';
 import * as appstore from '../../appstore/tools.js';
 import * as appstoreSales from '../../appstore/sales.js';
 import { jsonResult, textResult } from '../../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    valid: '✓ App Store Connect 인증 유효',
+    appCount: (n: number) => `   접근 가능 앱: ${n}개`,
+    example: (name: string) => `   예: ${name}`,
+    reports: (icon: string, detail: string) => `${icon} 매출 리포트: ${detail}`,
+    roleHint: '   → 키 롤은 나중에 못 바꾸는 경우가 있다. 그때는 위 롤로 새 키를 발급해 다시 등록할 것.',
+    failed: (stage: string, http: string) => `✗ 검증 실패 (stage: ${stage}${http})`,
+  },
+  {
+    valid: '✓ App Store Connect credentials are valid',
+    appCount: (n: number) => `   Accessible apps: ${n}`,
+    example: (name: string) => `   e.g. ${name}`,
+    reports: (icon: string, detail: string) => `${icon} Sales reports: ${detail}`,
+    roleHint: '   → A key\'s role sometimes cannot be changed later. In that case, issue a new key with the role above and register it again.',
+    failed: (stage: string, http: string) => `✗ Verification failed (stage: ${stage}${http})`,
+  },
+);
 
 /** appstore_list_apps · appstore_verify_credentials · appstore_get_app */
 export function registerAppTools(server: ToolRegistrar) {
@@ -34,17 +54,17 @@ export function registerAppTools(server: ToolRegistrar) {
         const reports = await appstoreSales.probeReportsAccess();
         const reportsIcon = reports.status === 'ok' ? '✓' : reports.status === 'forbidden' ? '✗' : '·';
         return textResult([
-          '✓ App Store Connect 인증 유효',
-          r.appCount != null ? `   접근 가능 앱: ${r.appCount}개` : '',
-          r.firstApp ? `   예: ${r.firstApp.name ?? r.firstApp.id}` : '',
-          `${reportsIcon} 매출 리포트: ${reports.detail}`,
+          M().valid,
+          r.appCount != null ? M().appCount(r.appCount) : '',
+          r.firstApp ? M().example(r.firstApp.name ?? r.firstApp.id) : '',
+          M().reports(reportsIcon, reports.detail),
           reports.status === 'forbidden'
-            ? '   → 키 롤은 나중에 못 바꾸는 경우가 있다. 그때는 위 롤로 새 키를 발급해 다시 등록할 것.'
+            ? M().roleHint
             : '',
         ].filter(Boolean));
       }
       return textResult([
-        `✗ 검증 실패 (stage: ${r.stage}${r.httpStatus ? `, HTTP ${r.httpStatus}` : ''})`,
+        M().failed(r.stage, r.httpStatus ? `, HTTP ${r.httpStatus}` : ''),
         '',
         r.message,
       ]);

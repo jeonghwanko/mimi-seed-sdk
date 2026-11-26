@@ -10,6 +10,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { writeCredentialFile } from '#core/atomic-write.js';
 import { resolveInsideDir } from '../lib/path-containment.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    keyLabel: '서비스 계정 키',
+    both: 'serviceAccountJson 과 serviceAccountJsonPath 중 하나만 주세요.',
+    neither: 'serviceAccountJsonPath(권장 — iam_create_key 가 돌려준 ~/.mimi-seed/keys/ 경로) 또는 serviceAccountJson 이 필요합니다.',
+  },
+  {
+    keyLabel: 'Service account key',
+    both: 'Give only one of serviceAccountJson and serviceAccountJsonPath.',
+    neither: 'serviceAccountJsonPath (recommended — the ~/.mimi-seed/keys/ path returned by iam_create_key) or serviceAccountJson is required.',
+  },
+);
 
 /** 호출 시점에 계산한다 — 테스트가 홈 디렉터리를 바꿀 수 있어야 한다. */
 export function serviceAccountKeysDir(): string {
@@ -33,7 +47,7 @@ export function saveServiceAccountKey(json: string, clientEmail: string | undefi
 /** ~/.mimi-seed/keys/ 안의 .json 만 읽는다. 그 밖의 경로는 거부. */
 export function readServiceAccountKeyFile(filePath: string): string {
   const real = resolveInsideDir(serviceAccountKeysDir(), filePath, {
-    label: '서비스 계정 키',
+    label: M().keyLabel,
     extensions: ['.json'],
   });
   return fs.readFileSync(real, 'utf8');
@@ -45,11 +59,11 @@ export function readServiceAccountKeyFile(filePath: string): string {
  */
 export function resolveServiceAccountJsonInput(input: { json?: string; jsonPath?: string }): string {
   if (input.json && input.jsonPath) {
-    throw new Error('serviceAccountJson 과 serviceAccountJsonPath 중 하나만 주세요.');
+    throw new Error(M().both);
   }
   if (input.jsonPath) return readServiceAccountKeyFile(input.jsonPath);
   if (input.json) return input.json;
   throw new Error(
-    'serviceAccountJsonPath(권장 — iam_create_key 가 돌려준 ~/.mimi-seed/keys/ 경로) 또는 serviceAccountJson 이 필요합니다.',
+    M().neither,
   );
 }

@@ -10,6 +10,24 @@ import {
   recoveryActionsText, recoveryCreateDryRunLines, recoveryCreatedLines,
 } from '../../playstore/messages.js';
 import { playstore } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    none: '복구 액션 없음.',
+    deployDryRun: (id: string) => `🛑 dry-run — 복구 액션 ${id} 를 배포할 참이다. 대상 사용자에게 원격 업데이트가 나간다. confirm: true 로 다시 호출.`,
+    deployed: (id: string | null | undefined) => `✅ 복구 액션 배포 — ${id}`,
+    cancelDryRun: (id: string) => `🛑 dry-run — 복구 액션 ${id} 를 취소할 참이다. 이미 적용된 기기는 되돌아가지 않는다. confirm: true 로 다시 호출.`,
+    cancelled: (id: string | null | undefined) => `✅ 복구 액션 취소 — ${id}`,
+  },
+  {
+    none: 'No recovery actions.',
+    deployDryRun: (id: string) => `🛑 dry-run — about to deploy recovery action ${id}. A remote update goes out to the targeted users. Call again with confirm: true.`,
+    deployed: (id: string | null | undefined) => `✅ Recovery action deployed — ${id}`,
+    cancelDryRun: (id: string) => `🛑 dry-run — about to cancel recovery action ${id}. Devices that already applied it are not reverted. Call again with confirm: true.`,
+    cancelled: (id: string | null | undefined) => `✅ Recovery action cancelled — ${id}`,
+  },
+);
 
 /**
  * playstore_list_recovery_actions
@@ -32,7 +50,7 @@ export function registerRecoveryTools(server: ToolRegistrar) {
     async ({ packageName, versionCode }) => {
       const auth = await requirePlayStoreAuth(packageName);
       const rows = await playstore.listRecoveryActions(auth, packageName, versionCode);
-      if (rows.length === 0) return textResult('복구 액션 없음.');
+      if (rows.length === 0) return textResult(M().none);
       return textResult(recoveryActionsText(rows));
     },
   );
@@ -88,11 +106,11 @@ export function registerRecoveryTools(server: ToolRegistrar) {
     },
     async ({ packageName, appRecoveryId, confirm }) => {
       if (!confirm) {
-        return textResult(`🛑 dry-run — 복구 액션 ${appRecoveryId} 를 배포할 참이다. 대상 사용자에게 원격 업데이트가 나간다. confirm: true 로 다시 호출.`);
+        return textResult(M().deployDryRun(appRecoveryId));
       }
       const auth = await requirePlayStoreAuth(packageName);
       const r = await playstore.deployRecoveryAction(auth, packageName, appRecoveryId);
-      return textResult(`✅ 복구 액션 배포 — ${r.appRecoveryId}`);
+      return textResult(M().deployed(r.appRecoveryId));
     },
   );
 
@@ -110,11 +128,11 @@ export function registerRecoveryTools(server: ToolRegistrar) {
     },
     async ({ packageName, appRecoveryId, confirm }) => {
       if (!confirm) {
-        return textResult(`🛑 dry-run — 복구 액션 ${appRecoveryId} 를 취소할 참이다. 이미 적용된 기기는 되돌아가지 않는다. confirm: true 로 다시 호출.`);
+        return textResult(M().cancelDryRun(appRecoveryId));
       }
       const auth = await requirePlayStoreAuth(packageName);
       const r = await playstore.cancelRecoveryAction(auth, packageName, appRecoveryId);
-      return textResult(`✅ 복구 액션 취소 — ${r.appRecoveryId}`);
+      return textResult(M().cancelled(r.appRecoveryId));
     },
   );
 }

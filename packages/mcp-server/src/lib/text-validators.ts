@@ -8,6 +8,8 @@
  * 위해 실측으로 거부된 패턴만 포함한다.
  */
 
+import { catalog } from "#core/lang.js";
+
 export type ValidationCode = "HTML_TAG" | "LENGTH_EXCEEDED" | "BACKSLASH_PRICE";
 
 export interface ValidationIssue {
@@ -36,6 +38,24 @@ const HTML_TAG_PATTERN = /<\/?[a-zA-Z][^>]*>/g;
 // 역슬래시 + 숫자 + (선택적 통화 단위) 패턴 (memory: reference_appstore_whatsnew_blacklist).
 const BACKSLASH_PRICE_PATTERN = /\\\d[\d,]*(?:원|won|krw)?/gi;
 
+// ── 메시지 (도구 거부 응답에 노출 — 사용자 언어를 따른다) ─────────────
+const V = catalog(
+  {
+    htmlTag: (tag: string) => `HTML 태그 '${tag}' 가 포함됐어요 — App Store / Play 모두 마크업 거부`,
+    tooLong: (label: string, length: number, limit: number) => `${label} 길이 ${length}자 — ${limit}자 이하로 줄여주세요`,
+    backslashPrice: (match: string) => `'${match}' 처럼 역슬래시 + 숫자(가격) 표기는 Play Store 가 홍보 정책으로 거부할 수 있어요`,
+    passed: "검증 통과",
+    near: (excerpt: string) => ` — 근처: ${excerpt}`,
+  },
+  {
+    htmlTag: (tag: string) => `Contains the HTML tag '${tag}' — both App Store and Play reject markup`,
+    tooLong: (label: string, length: number, limit: number) => `${label} length ${length} characters — shorten it to ${limit} characters or fewer`,
+    backslashPrice: (match: string) => `A backslash + number (price) notation such as '${match}' can be rejected by Play Store under its promotional policy`,
+    passed: "Validation passed",
+    near: (excerpt: string) => ` — near: ${excerpt}`,
+  },
+);
+
 // ── 헬퍼 ──────────────────────────────────────────────────────────
 function makeExcerpt(text: string, pos: number, radius = 10): string {
   const start = Math.max(0, pos - radius);
@@ -52,7 +72,7 @@ function lintHtmlTags(text: string): ValidationIssue[] {
   while ((m = HTML_TAG_PATTERN.exec(text)) !== null) {
     issues.push({
       code: "HTML_TAG",
-      message: `HTML 태그 '${m[0]}' 가 포함됐어요 — App Store / Play 모두 마크업 거부`,
+      message: V().htmlTag(m[0]),
       position: m.index,
       excerpt: makeExcerpt(text, m.index),
     });
@@ -67,7 +87,7 @@ function lintLength(text: string, limit: number, label: string): ValidationIssue
   return [
     {
       code: "LENGTH_EXCEEDED",
-      message: `${label} 길이 ${text.length}자 — ${limit}자 이하로 줄여주세요`,
+      message: V().tooLong(label, text.length, limit),
     },
   ];
 }
@@ -79,7 +99,7 @@ function lintBackslashPrice(text: string): ValidationIssue[] {
   while ((m = BACKSLASH_PRICE_PATTERN.exec(text)) !== null) {
     issues.push({
       code: "BACKSLASH_PRICE",
-      message: `'${m[0]}' 처럼 역슬래시 + 숫자(가격) 표기는 Play Store 가 홍보 정책으로 거부할 수 있어요`,
+      message: V().backslashPrice(m[0]),
       position: m.index,
       excerpt: makeExcerpt(text, m.index),
     });
@@ -111,11 +131,11 @@ export function validatePlayReleaseNotes(text: string): ValidationResult {
 
 /** 사용자 친화 메시지로 포맷. MCP 도구가 거부 응답에 그대로 노출. */
 export function formatIssuesForUser(issues: ValidationIssue[]): string {
-  if (issues.length === 0) return "검증 통과";
+  if (issues.length === 0) return V().passed;
   return issues
     .map((i) => {
       const loc = i.position !== undefined ? ` (pos ${i.position})` : "";
-      const ex = i.excerpt ? ` — 근처: ${JSON.stringify(i.excerpt)}` : "";
+      const ex = i.excerpt ? V().near(JSON.stringify(i.excerpt)) : "";
       return `[${i.code}] ${i.message}${loc}${ex}`;
     })
     .join("\n");

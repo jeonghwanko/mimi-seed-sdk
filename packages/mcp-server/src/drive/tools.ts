@@ -12,6 +12,78 @@ import {
   withCause,
 } from '../lib/google-errors.js';
 import type { DriveAuthSource } from '../auth/drive-auth.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    badId: (what: string) => `${what} 형식이 올바르지 않아: 영숫자·_·- 만 쓰는 Drive ID 여야 해.`,
+    noQuota: [
+      '❌ 서비스 계정은 자기 저장 공간이 없어서 "내 드라이브"에는 파일을 만들 수 없어.',
+      '→ 공유 드라이브 안의 폴더에 올리거나(서비스 계정을 공유 드라이브 멤버로 추가),',
+      '  사용자 OAuth(mimi-seed-auth --domains drive)를 써.',
+    ],
+    notFoundSa: (clientEmail: string | null | undefined) => [
+      `❌ 파일·폴더를 찾을 수 없어 — 없거나 서비스 계정${clientEmail ? `(${clientEmail})` : ''}과 공유되지 않았어.`,
+      '→ Drive 에서 대상 폴더(또는 공유 드라이브)를 이 서비스 계정 이메일과 공유해 (편집자 이상).',
+    ],
+    notFoundOauth: [
+      '❌ 파일·폴더를 찾을 수 없어.',
+      '→ OAuth(drive.file) 권한은 mimi-seed 가 만든 파일·폴더만 볼 수 있어.',
+      '  기존 폴더를 다루려면 Drive 서비스 계정을 써: npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth',
+    ],
+    noWrite: '❌ 이 파일·폴더에 쓸 권한이 없어.',
+    noWriteSa: '→ 폴더 공유 권한을 "편집자"(공유 드라이브는 "콘텐츠 관리자") 이상으로 올려.',
+    noWriteOauth: '→ 이 Google 계정의 권한을 확인하거나 Drive 서비스 계정을 써.',
+    generic: (text: string, tail: string) => `❌ Google Drive 오류: ${text}${tail}`,
+    empty: (what: string) => `${what} 이 비어 있어.`,
+    tooLong: (what: string) => `${what} 은 255자 이하여야 해.`,
+    folderName: '폴더 이름',
+    fileName: '파일 이름',
+    notAbsolute: 'filePath 는 절대 경로여야 해.',
+    notFile: (p: string) => `파일이 아니야: ${p}`,
+    unreadable: (p: string) => `파일을 읽을 수 없어: ${p}`,
+    emptyFile: (p: string) => `빈 파일은 올리지 않아: ${p}`,
+    conflict: (name: string, id: string) =>
+      `같은 폴더에 "${name}" 이 이미 있어 (fileId ${id}). ` +
+      '내용을 바꾸려면 drive_update_file_content, 하나 더 만들려면 onConflict="create_new".',
+    folderContent: '폴더에는 내용을 올릴 수 없어.',
+    nothingToChange: '바꿀 항목(name, description, moveToFolderId)이 하나도 없어.',
+  },
+  {
+    badId: (what: string) => `Invalid ${what} format: it must be a Drive ID of letters, digits, _ and - only.`,
+    noQuota: [
+      '❌ A service account has no storage of its own, so it cannot create files in "My Drive".',
+      '→ Upload into a folder inside a shared drive (add the service account as a shared drive member),',
+      '  or use user OAuth (mimi-seed-auth --domains drive).',
+    ],
+    notFoundSa: (clientEmail: string | null | undefined) => [
+      `❌ File or folder not found — it does not exist or is not shared with the service account${clientEmail ? ` (${clientEmail})` : ''}.`,
+      '→ In Drive, share the target folder (or shared drive) with this service account email (Editor or higher).',
+    ],
+    notFoundOauth: [
+      '❌ File or folder not found.',
+      '→ The OAuth (drive.file) permission sees only files and folders mimi-seed created.',
+      '  To work with existing folders, use the Drive service account: npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth',
+    ],
+    noWrite: '❌ No permission to write to this file or folder.',
+    noWriteSa: '→ Raise the folder sharing permission to "Editor" (on a shared drive, "Content manager") or higher.',
+    noWriteOauth: "→ Check this Google account's permissions or use the Drive service account.",
+    generic: (text: string, tail: string) => `❌ Google Drive error: ${text}${tail}`,
+    empty: (what: string) => `${what} is empty.`,
+    tooLong: (what: string) => `${what} must be 255 characters or fewer.`,
+    folderName: 'Folder name',
+    fileName: 'File name',
+    notAbsolute: 'filePath must be an absolute path.',
+    notFile: (p: string) => `Not a file: ${p}`,
+    unreadable: (p: string) => `Cannot read the file: ${p}`,
+    emptyFile: (p: string) => `Empty files are not uploaded: ${p}`,
+    conflict: (name: string, id: string) =>
+      `"${name}" already exists in the same folder (fileId ${id}). ` +
+      'To replace its content use drive_update_file_content; to create another one use onConflict="create_new".',
+    folderContent: 'Cannot upload content to a folder.',
+    nothingToChange: 'Nothing to change (name, description, moveToFolderId).',
+  },
+);
 
 /**
  * Google Drive v3 래퍼 — 파일·폴더 조회, 업로드, 내용 갱신, 이름 변경·이동, 휴지통.
@@ -35,12 +107,12 @@ const FIELDS =
 export const DRIVE_ID_RE = /^(root|[A-Za-z0-9_-]{10,200})$/;
 
 function assertDriveId(id: string, what: string): void {
-  if (!DRIVE_ID_RE.test(id)) throw new Error(`${what} 형식이 올바르지 않아: 영숫자·_·- 만 쓰는 Drive ID 여야 해.`);
+  if (!DRIVE_ID_RE.test(id)) throw new Error(M().badId(what));
 }
 
 /** files.list q 문자열 리터럴 이스케이프 (\ 와 ' ). */
 export function escapeQueryValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return value.replace(/\\/g, '\\\\').replace(/\x27/g, "\\'");
 }
 
 function drive(auth: DriveClient) {
@@ -99,42 +171,29 @@ export function driveError(e: unknown, source?: DriveAuthSource, clientEmail?: s
   if (/storageQuotaExceeded|do not have storage quota/i.test(both)) {
     return withCause(
       new Error(
-        [
-          '❌ 서비스 계정은 자기 저장 공간이 없어서 "내 드라이브"에는 파일을 만들 수 없어.',
-          '→ 공유 드라이브 안의 폴더에 올리거나(서비스 계정을 공유 드라이브 멤버로 추가),',
-          '  사용자 OAuth(mimi-seed-auth --domains drive)를 써.',
-        ].join('\n') + tail,
+        M().noQuota.join('\n') + tail,
       ),
       e,
     );
   }
   if (status === 404 || /notFound|File not found/i.test(both)) {
     const lines = isSa
-      ? [
-          `❌ 파일·폴더를 찾을 수 없어 — 없거나 서비스 계정${clientEmail ? `(${clientEmail})` : ''}과 공유되지 않았어.`,
-          '→ Drive 에서 대상 폴더(또는 공유 드라이브)를 이 서비스 계정 이메일과 공유해 (편집자 이상).',
-        ]
-      : [
-          '❌ 파일·폴더를 찾을 수 없어.',
-          '→ OAuth(drive.file) 권한은 mimi-seed 가 만든 파일·폴더만 볼 수 있어.',
-          '  기존 폴더를 다루려면 Drive 서비스 계정을 써: npx -y @yoonion/mimi-seed-mcp mimi-seed-drive-auth',
-        ];
+      ? M().notFoundSa(clientEmail)
+      : M().notFoundOauth;
     return withCause(new Error(lines.join('\n') + tail), e);
   }
   if (status === 403 || /insufficientFilePermissions|forbidden|permission/i.test(both)) {
     return withCause(
       new Error(
         [
-          '❌ 이 파일·폴더에 쓸 권한이 없어.',
-          isSa
-            ? '→ 폴더 공유 권한을 "편집자"(공유 드라이브는 "콘텐츠 관리자") 이상으로 올려.'
-            : '→ 이 Google 계정의 권한을 확인하거나 Drive 서비스 계정을 써.',
+          M().noWrite,
+          isSa ? M().noWriteSa : M().noWriteOauth,
         ].join('\n') + tail,
       ),
       e,
     );
   }
-  return withCause(new Error(`❌ Google Drive 오류: ${text}${detail && !text.includes(detail) ? `\nGoogle API: ${detail}` : ''}`), e);
+  return withCause(new Error(M().generic(text, detail && !text.includes(detail) ? `\nGoogle API: ${detail}` : '')), e);
 }
 
 export interface ListFilesInput {
@@ -202,8 +261,8 @@ async function findChildByName(
 
 function cleanName(name: string, what: string): string {
   const trimmed = name.trim();
-  if (!trimmed) throw new Error(`${what} 이 비어 있어.`);
-  if (trimmed.length > 255) throw new Error(`${what} 은 255자 이하여야 해.`);
+  if (!trimmed) throw new Error(M().empty(what));
+  if (trimmed.length > 255) throw new Error(M().tooLong(what));
   return trimmed;
 }
 
@@ -215,7 +274,7 @@ export interface CreateFolderInput {
 }
 
 export async function createFolder(auth: DriveClient, input: CreateFolderInput) {
-  const name = cleanName(input.name, '폴더 이름');
+  const name = cleanName(input.name, M().folderName);
   const parentId = input.parentId ?? 'root';
   assertDriveId(parentId, 'parentId');
   if (input.reuseExisting !== false) {
@@ -252,17 +311,17 @@ export interface LocalFile {
 
 /** 업로드할 로컬 파일 점검 — 절대 경로, 일반 파일, 비어 있지 않음. */
 export function inspectLocalFile(filePath: string, mimeType?: string): LocalFile {
-  if (!path.isAbsolute(filePath)) throw new Error('filePath 는 절대 경로여야 해.');
+  if (!path.isAbsolute(filePath)) throw new Error(M().notAbsolute);
   let size: number;
   try {
     const stat = statSync(filePath);
     if (!stat.isFile()) throw new Error('not-a-file');
     size = stat.size;
   } catch (e) {
-    if (e instanceof Error && e.message === 'not-a-file') throw new Error(`파일이 아니야: ${filePath}`, { cause: e });
-    throw new Error(`파일을 읽을 수 없어: ${filePath}`, { cause: e });
+    if (e instanceof Error && e.message === 'not-a-file') throw new Error(M().notFile(filePath), { cause: e });
+    throw new Error(M().unreadable(filePath), { cause: e });
   }
-  if (size === 0) throw new Error(`빈 파일은 올리지 않아: ${filePath}`);
+  if (size === 0) throw new Error(M().emptyFile(filePath));
   return { path: filePath, size, mimeType: mimeType ?? guessMimeType(filePath) };
 }
 
@@ -293,15 +352,14 @@ export interface UploadFileInput {
 
 export async function uploadFile(auth: DriveClient, input: UploadFileInput) {
   const local = inspectLocalFile(input.filePath, input.mimeType);
-  const name = cleanName(input.name ?? path.basename(input.filePath), '파일 이름');
+  const name = cleanName(input.name ?? path.basename(input.filePath), M().fileName);
   const parentId = input.parentId ?? 'root';
   assertDriveId(parentId, 'parentId');
   if (input.onConflict !== 'create_new') {
     const existing = await findChildByName(auth, parentId, name, 'file');
     if (existing) {
       throw new Error(
-        `같은 폴더에 "${name}" 이 이미 있어 (fileId ${existing.id}). ` +
-          '내용을 바꾸려면 drive_update_file_content, 하나 더 만들려면 onConflict="create_new".',
+        M().conflict(name, existing.id),
       );
     }
   }
@@ -328,7 +386,7 @@ export interface UpdateContentInput {
 export async function updateFileContent(auth: DriveClient, input: UpdateContentInput) {
   const local = inspectLocalFile(input.filePath, input.mimeType);
   const before = await getFile(auth, input.fileId);
-  if (before.isFolder) throw new Error('폴더에는 내용을 올릴 수 없어.');
+  if (before.isFolder) throw new Error(M().folderContent);
   const res = await drive(auth).files.update(
     {
       fileId: input.fileId,
@@ -352,7 +410,7 @@ export interface UpdateMetadataInput {
 /** 이름·설명 변경, 다른 폴더로 이동. 하나 이상 바꿔야 한다. */
 export async function updateFileMetadata(auth: DriveClient, input: UpdateMetadataInput) {
   if (input.name === undefined && input.description === undefined && input.moveToFolderId === undefined) {
-    throw new Error('바꿀 항목(name, description, moveToFolderId)이 하나도 없어.');
+    throw new Error(M().nothingToChange);
   }
   const before = await getFile(auth, input.fileId);
   let addParents: string | undefined;
@@ -365,7 +423,7 @@ export async function updateFileMetadata(auth: DriveClient, input: UpdateMetadat
     }
   }
   const requestBody: drive_v3.Schema$File = {};
-  if (input.name !== undefined) requestBody.name = cleanName(input.name, '파일 이름');
+  if (input.name !== undefined) requestBody.name = cleanName(input.name, M().fileName);
   if (input.description !== undefined) requestBody.description = input.description;
   const res = await drive(auth).files.update({
     fileId: input.fileId,

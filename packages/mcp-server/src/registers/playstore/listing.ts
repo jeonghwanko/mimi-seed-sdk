@@ -10,6 +10,16 @@ import { jsonResult, textResult } from '../../lib/mcp-response.js';
 import { readDataSafetyCsv } from '../../playstore/data-safety.js';
 import { dataSafetyDryRunLines, dataSafetyUploadedLines } from '../../playstore/messages.js';
 import { playstore } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    updated: (json: string) => `수정 완료:\n${json}`,
+  },
+  {
+    updated: (json: string) => `Update complete:\n${json}`,
+  },
+);
 
 /**
  * playstore_get_app
@@ -46,7 +56,7 @@ export function registerListingTools(server: ToolRegistrar) {
       const result = await playstore.updateAppDetails(auth, packageName, {
         contactEmail, contactPhone, contactWebsite, defaultLanguage,
       });
-      return textResult(`수정 완료:\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().updated(JSON.stringify(result, null, 2)));
     },
   );
 
@@ -79,7 +89,7 @@ export function registerListingTools(server: ToolRegistrar) {
       const result = await playstore.updateListing(auth, packageName, language, {
         title, shortDescription, fullDescription,
       });
-      return textResult(`수정 완료:\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().updated(JSON.stringify(result, null, 2)));
     },
   );
 

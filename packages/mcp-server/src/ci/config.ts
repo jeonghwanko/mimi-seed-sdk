@@ -2,9 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
+import { catalog } from '#core/lang.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const CI_CONFIG_PATH = path.join(CONFIG_DIR, 'ci.json');
+
+const M = catalog(
+  { notConfigured: 'CI 설정이 없습니다.\n' + 'ci_save_config 도구로 먼저 설정해주세요.\n' + '예시:\n' },
+  { notConfigured: 'CI is not configured.\n' + 'Configure it first with the ci_save_config tool.\n' + 'Example:\n' },
+);
 
 // ci.json 의 모양은 CLI 와 공유한다 — 두 패키지가 모두 쓰는 문서화된 예외다(pitfalls §12).
 import type { CiConfig } from '#core/ci.js';
@@ -28,9 +34,7 @@ export function requireCiConfig(): CiConfig {
   if (!cfg) {
     assertCredentialFileReadable(CI_CONFIG_PATH, 'ci_save_config');
     throw new Error(
-      'CI 설정이 없습니다.\n' +
-      'ci_save_config 도구로 먼저 설정해주세요.\n' +
-      '예시:\n' +
+      M().notConfigured +
       '  GitHub: ci_save_config(provider="github", token=<GitHub token>, owner="my-org", repo="my-app")\n' +
       '  GitLab: ci_save_config(provider="gitlab", token=<GitLab token>, owner="my-group", repo="my-app")',
     );

@@ -3,6 +3,36 @@
 
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import { publisher, withEdit, type EditCommitInfo } from './edits.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noRelease: (track: string) => `${track} 트랙에 릴리스가 없어.`,
+    versionNotFound: (versionCode: string, track: string, available: string) =>
+      `versionCode "${versionCode}"를 ${track} 트랙에서 찾을 수 없어. 가능한 릴리스: ${available}`,
+    sendForReview: 'Play Console 에서 "변경사항 검토 후 게시"(심사를 위해 전송)를 눌러야 심사가 시작된다.',
+    sameTrack: 'fromTrack과 toTrack이 같아. 다른 트랙으로 promote 해야 의미 있어.',
+    badFraction: 'status="inProgress"일 때 userFraction은 0과 1 사이 필수 (예: 0.1 → 10%).',
+    placeholderNotes: (fromTrack: string, list: string, toTrack: string) =>
+      `${fromTrack} 의 릴리스 노트가 버전 문자열뿐이라 플레이스홀더로 보인다 ` +
+      `(${list}). ` +
+      `이대로 ${toTrack} 에 덮어쓰면 기존 노트가 사라진다 — releaseNotes 를 직접 넘기거나 copyReleaseNotes:false 를 고려할 것.`,
+    noNotes: (toTrack: string) => `${toTrack} 에 릴리스 노트 없이 승격됐다 — 스토어의 "새로운 기능"이 비어 보인다.`,
+  },
+  {
+    noRelease: (track: string) => `The ${track} track has no releases.`,
+    versionNotFound: (versionCode: string, track: string, available: string) =>
+      `versionCode "${versionCode}" was not found on the ${track} track. Available releases: ${available}`,
+    sendForReview: 'Review starts only after you click "Send changes for review" (send for review) in Play Console.',
+    sameTrack: 'fromTrack and toTrack are the same. Promote to a different track for it to have any effect.',
+    badFraction: 'When status="inProgress", userFraction is required and must be between 0 and 1 (e.g. 0.1 → 10%).',
+    placeholderNotes: (fromTrack: string, list: string, toTrack: string) =>
+      `The release notes on ${fromTrack} are only a version string and look like placeholders ` +
+      `(${list}). ` +
+      `Overwriting ${toTrack} with them as-is erases the existing notes — pass releaseNotes directly or consider copyReleaseNotes:false.`,
+    noNotes: (toTrack: string) => `Promoted to ${toTrack} without release notes — "What's new" on the store will look empty.`,
+  },
+);
 
 // ─── 트랙 목록 (릴리스 현황) ───
 
@@ -49,7 +79,7 @@ export async function updateReleaseNotes(
       });
       const releases = current.data.releases ?? [];
       if (releases.length === 0) {
-        throw new Error(`${track} 트랙에 릴리스가 없어.`);
+        throw new Error(M().noRelease(track));
       }
 
       const target = releases.find((r) =>
@@ -62,7 +92,7 @@ export async function updateReleaseNotes(
           status: r.status,
         }));
         throw new Error(
-          `versionCode "${versionCode}"를 ${track} 트랙에서 찾을 수 없어. 가능한 릴리스: ${JSON.stringify(available)}`,
+          M().versionNotFound(versionCode, track, JSON.stringify(available)),
         );
       }
 
@@ -102,7 +132,7 @@ export async function updateLatestReleaseNotes(
       });
       const releases = current.data.releases ?? [];
       if (releases.length === 0) {
-        throw new Error(`${track} 트랙에 릴리스가 없어.`);
+        throw new Error(M().noRelease(track));
       }
 
       const maxVc = (r: typeof releases[number]) =>
@@ -154,7 +184,7 @@ export async function submitRelease(
       });
       const releases = current.data.releases ?? [];
       if (releases.length === 0) {
-        throw new Error(`${track} 트랙에 릴리스가 없어.`);
+        throw new Error(M().noRelease(track));
       }
 
       const target = releases.find((r) =>
@@ -167,7 +197,7 @@ export async function submitRelease(
           status: r.status,
         }));
         throw new Error(
-          `versionCode "${versionCode}"를 ${track} 트랙에서 찾을 수 없어. 가능한 릴리스: ${JSON.stringify(available)}`,
+          M().versionNotFound(versionCode, track, JSON.stringify(available)),
         );
       }
 
@@ -200,7 +230,7 @@ export async function submitRelease(
     ...out,
     changesNotSentForReview: commitInfo.changesNotSentForReview,
     nextAction: commitInfo.changesNotSentForReview
-      ? 'Play Console 에서 "변경사항 검토 후 게시"(심사를 위해 전송)를 눌러야 심사가 시작된다.'
+      ? M().sendForReview
       : undefined,
   };
 }
@@ -239,10 +269,10 @@ export async function promoteRelease(
   } = options;
 
   if (fromTrack === toTrack) {
-    throw new Error('fromTrack과 toTrack이 같아. 다른 트랙으로 promote 해야 의미 있어.');
+    throw new Error(M().sameTrack);
   }
   if (status === 'inProgress' && (userFraction == null || userFraction <= 0 || userFraction >= 1)) {
-    throw new Error('status="inProgress"일 때 userFraction은 0과 1 사이 필수 (예: 0.1 → 10%).');
+    throw new Error(M().badFraction);
   }
 
   let commitInfo: EditCommitInfo = { changesNotSentForReview: false };
@@ -267,7 +297,7 @@ export async function promoteRelease(
           status: r.status,
         }));
         throw new Error(
-          `versionCode "${versionCode}"를 ${fromTrack} 트랙에서 찾을 수 없어. 가능한 릴리스: ${JSON.stringify(available)}`,
+          M().versionNotFound(versionCode, fromTrack, JSON.stringify(available)),
         );
       }
 
@@ -296,9 +326,7 @@ export async function promoteRelease(
         );
         if (placeholder.length > 0) {
           warnings.push(
-            `${fromTrack} 의 릴리스 노트가 버전 문자열뿐이라 플레이스홀더로 보인다 ` +
-            `(${placeholder.map((n) => `${n.language}="${n.text}"`).join(', ')}). ` +
-            `이대로 ${toTrack} 에 덮어쓰면 기존 노트가 사라진다 — releaseNotes 를 직접 넘기거나 copyReleaseNotes:false 를 고려할 것.`,
+            M().placeholderNotes(fromTrack, placeholder.map((n) => `${n.language}="${n.text}"`).join(', '), toTrack),
           );
         }
       }
@@ -349,7 +377,7 @@ export async function promoteRelease(
   );
 
   if ((out.releaseNotesLanguages ?? []).length === 0) {
-    warnings.push(`${toTrack} 에 릴리스 노트 없이 승격됐다 — 스토어의 "새로운 기능"이 비어 보인다.`);
+    warnings.push(M().noNotes(toTrack));
   }
 
   return {
@@ -357,7 +385,7 @@ export async function promoteRelease(
     changesNotSentForReview: commitInfo.changesNotSentForReview,
     // Play 가 자동 심사 전송을 거부한 경우, 사람이 콘솔에서 눌러야 실제 심사가 시작된다.
     nextAction: commitInfo.changesNotSentForReview
-      ? 'Play Console 에서 "변경사항 검토 후 게시"(심사를 위해 전송)를 눌러야 심사가 시작된다.'
+      ? M().sendForReview
       : undefined,
     warnings: warnings.length ? warnings : undefined,
   };

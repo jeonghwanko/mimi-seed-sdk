@@ -10,8 +10,32 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
+import { catalog } from '#core/lang.js';
 import { resolveInsideDir } from '../lib/path-containment.js';
 import type { GeneratedKeystore } from './keystore.js';
+
+const M = catalog(
+  {
+    keystoreBoth: 'keystore_base64 와 keystore_path 중 하나만 주세요.',
+    keystoreNone: 'keystore_path(권장) 또는 keystore_base64 가 필요합니다.',
+    secretBoth: 'secret 과 secret_file 중 하나만 주세요.',
+    fieldNeeded: 'secret_file 을 쓰면 secret_field 도 필요합니다.',
+    secretNone: 'secret_file + secret_field(권장) 또는 secret 이 필요합니다.',
+    secretLabel: '서명 비밀 파일',
+    readFailed: (file: string) => `서명 비밀 파일을 읽지 못했습니다: ${file}`,
+    fieldMissing: (field: string, file: string) => `서명 비밀 파일에 ${field} 값이 없습니다: ${file}`,
+  },
+  {
+    keystoreBoth: 'Give only one of keystore_base64 and keystore_path.',
+    keystoreNone: 'keystore_path (recommended) or keystore_base64 is required.',
+    secretBoth: 'Give only one of secret and secret_file.',
+    fieldNeeded: 'secret_file also requires secret_field.',
+    secretNone: 'secret_file + secret_field (recommended) or secret is required.',
+    secretLabel: 'signing secrets file',
+    readFailed: (file: string) => `Could not read the signing secrets file: ${file}`,
+    fieldMissing: (field: string, file: string) => `The signing secrets file has no ${field} value: ${file}`,
+  },
+);
 
 export const KEYSTORE_FILE = 'upload.jks';
 export const SIGNING_SECRETS_FILE = 'signing.json';
@@ -59,10 +83,10 @@ export function readKeystoreBase64(filePath: string): string {
 
 /** jenkins_upload_keystore 입력 → base64. 직접 값(기존 호환)과 경로 중 정확히 하나. */
 export function resolveKeystoreInput(input: { base64?: string; path?: string }): string {
-  if (input.base64 && input.path) throw new Error('keystore_base64 와 keystore_path 중 하나만 주세요.');
+  if (input.base64 && input.path) throw new Error(M().keystoreBoth);
   if (input.path) return readKeystoreBase64(input.path);
   if (input.base64) return input.base64;
-  throw new Error('keystore_path(권장) 또는 keystore_base64 가 필요합니다.');
+  throw new Error(M().keystoreNone);
 }
 
 /** jenkins_create_credential 입력 → 비밀값. 직접 값(기존 호환)과 파일+필드 중 정확히 하나. */
@@ -71,29 +95,29 @@ export function resolveSecretInput(input: {
   secretFile?: string;
   secretField?: SigningSecretField;
 }): string {
-  if (input.secret !== undefined && input.secretFile) throw new Error('secret 과 secret_file 중 하나만 주세요.');
+  if (input.secret !== undefined && input.secretFile) throw new Error(M().secretBoth);
   if (input.secretFile) {
-    if (!input.secretField) throw new Error('secret_file 을 쓰면 secret_field 도 필요합니다.');
+    if (!input.secretField) throw new Error(M().fieldNeeded);
     return readSigningSecret(input.secretFile, input.secretField);
   }
   // 빈 문자열도 값이다 — main 의 `secret: z.string()` 은 ""(예: 비워 둔 플레이스홀더)를 그대로
   // 저장했다. 없음(undefined)과 빈 값을 구분한다.
   if (input.secret !== undefined) return input.secret;
-  throw new Error('secret_file + secret_field(권장) 또는 secret 이 필요합니다.');
+  throw new Error(M().secretNone);
 }
 
 /** ~/.mimi-seed/keystores/ 안의 signing.json 에서 한 필드만 꺼낸다. */
 export function readSigningSecret(filePath: string, field: SigningSecretField): string {
-  const real = resolveInsideDir(keystoresDir(), filePath, { label: '서명 비밀 파일', extensions: ['.json'] });
+  const real = resolveInsideDir(keystoresDir(), filePath, { label: M().secretLabel, extensions: ['.json'] });
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(fs.readFileSync(real, 'utf8')) as Record<string, unknown>;
   } catch {
-    throw new Error(`서명 비밀 파일을 읽지 못했습니다: ${filePath}`);
+    throw new Error(M().readFailed(filePath));
   }
   const value = parsed[field];
   if (typeof value !== 'string' || !value) {
-    throw new Error(`서명 비밀 파일에 ${field} 값이 없습니다: ${filePath}`);
+    throw new Error(M().fieldMissing(field, filePath));
   }
   return value;
 }

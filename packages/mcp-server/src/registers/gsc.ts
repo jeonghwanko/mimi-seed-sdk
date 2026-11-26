@@ -5,6 +5,12 @@ import { GSC_READ_SCOPES, GSC_WRITE_SCOPE } from '../auth/scopes.js';
 import { requireAuth } from '../helpers.js';
 import * as gsc from '../gsc/tools.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { submitted: (s: string) => `✅ 사이트맵 제출 완료.\n  ${s}\n\n처리 상태는 gsc_get_sitemap으로 확인해.` },
+  { submitted: (s: string) => `✅ Sitemap submitted.\n  ${s}\n\nCheck the processing status with gsc_get_sitemap.` },
+);
 
 const SITE_URL_DESC =
   "Search Console 속성 식별자. 도메인 속성은 'sc-domain:example.com', URL 접두어 속성은 'https://example.com/' 형식.";
@@ -63,7 +69,7 @@ export function registerGscTools(server: ToolRegistrar) {
     async ({ siteUrl, feedpath, profile }) => {
       const auth = await requireAuth(GSC_WRITE_SCOPE, profile);
       const result = await gsc.submitSitemap(auth, siteUrl, feedpath);
-      return textResult(`✅ 사이트맵 제출 완료.\n  ${result.submitted}\n\n처리 상태는 gsc_get_sitemap으로 확인해.`);
+      return textResult(M().submitted(result.submitted));
     },
   );
 

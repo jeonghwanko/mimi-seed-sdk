@@ -1,5 +1,20 @@
 import { requireApiKey, parseJsonResponse, LOCALE_NAMES, AI_MODEL } from './client.js';
 import { RELEASE_NOTES_MAX_TOKENS, RELEASE_NOTE_TONES, type ReleaseNoteTone } from '#core/ai.js';
+import { catalog } from '#core/lang.js';
+
+// Output framing only. The prompt text below stays Korean on purpose (the MCP generator is Korean-first; see #core/ai.js).
+const M = catalog(
+  {
+    toneLabels: { concise: '간결한 버전', detailed: '상세 버전', marketing: '마케팅 버전' } satisfies Record<ReleaseNoteTone, string>,
+    header: (n: number) => `🤖 AI 릴리즈 노트 생성 완료 (커밋 ${n}개 분석)\n`,
+    localized: '─── 다국어 ───',
+  },
+  {
+    toneLabels: { concise: 'Concise', detailed: 'Detailed', marketing: 'Marketing' },
+    header: (n: number) => `🤖 AI release notes generated (${n} commits analyzed)\n`,
+    localized: '─── Localized ───',
+  },
+);
 
 export interface CommitEntry {
   hash?: string;
@@ -80,8 +95,8 @@ ${commitsText}
 }
 
 export function formatGeneratedNotes(result: GeneratedReleaseNotes): string {
-  const toneLabels: Record<string, string> = { concise: '간결한 버전', detailed: '상세 버전', marketing: '마케팅 버전' } satisfies Record<ReleaseNoteTone, string>;
-  const lines: string[] = [`🤖 AI 릴리즈 노트 생성 완료 (커밋 ${result.rawCommitsUsed}개 분석)\n`];
+  const toneLabels: Record<string, string> = M().toneLabels;
+  const lines: string[] = [M().header(result.rawCommitsUsed)];
 
   for (const tone of result.tones) {
     lines.push(`─── ${toneLabels[tone.name] ?? tone.name} ───`);
@@ -90,7 +105,7 @@ export function formatGeneratedNotes(result: GeneratedReleaseNotes): string {
   }
 
   if (Object.keys(result.localized).length > 0) {
-    lines.push('─── 다국어 ───');
+    lines.push(M().localized);
     for (const [locale, text] of Object.entries(result.localized)) {
       lines.push(`[${locale}]`);
       lines.push(text);

@@ -9,6 +9,26 @@
 import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 import { requireAppInfo } from './app-info.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    nothingToChange: '바꿀 항목이 하나도 없다 — declaration 에 최소 한 필드는 넣어야 한다.',
+    noDeclaration: '❌ 이 앱에는 연령 등급 선언 리소스가 없다.',
+    noDeclarationHint: 'App Store Connect 에서 앱을 한 번 연 뒤 다시 시도하거나, appInfo 상태를 확인할 것.',
+    verifyFailed: (id: string) => `연령등급 변경 요청 후 대상 선언 ${id}의 저장 결과를 확인할 수 없습니다.`,
+    exportNoId: (json: string) => `수출 규정 선언 생성 응답에 id 가 없다: ${json}`,
+    noFields: '바꿀 필드가 없음',
+  },
+  {
+    nothingToChange: 'Nothing to change — declaration must contain at least one field.',
+    noDeclaration: '❌ This app has no age rating declaration resource.',
+    noDeclarationHint: 'Open the app once in App Store Connect and try again, or check the appInfo state.',
+    verifyFailed: (id: string) => `Cannot confirm the saved result of target declaration ${id} after the age rating update request.`,
+    exportNoId: (json: string) => `Export compliance declaration creation response has no id: ${json}`,
+    noFields: 'No fields to change',
+  },
+);
 
 /** Apple 이 쓰는 빈도 척도. 필드마다 같은 enum 을 쓴다. */
 export type Frequency = 'NONE' | 'INFREQUENT_OR_MILD' | 'FREQUENT_OR_INTENSE' | 'INFREQUENT' | 'FREQUENT';
@@ -78,15 +98,15 @@ export async function updateAgeRating(args: {
     Object.entries(declaration).filter(([, v]) => v !== undefined),
   );
   if (Object.keys(attributes).length === 0) {
-    throw new Error('바꿀 항목이 하나도 없다 — declaration 에 최소 한 필드는 넣어야 한다.');
+    throw new Error(M().nothingToChange);
   }
 
   const current = await getAgeRating(appId);
   if (!current.declarationId) {
     throw new Error(
       [
-        '❌ 이 앱에는 연령 등급 선언 리소스가 없다.',
-        'App Store Connect 에서 앱을 한 번 연 뒤 다시 시도하거나, appInfo 상태를 확인할 것.',
+        M().noDeclaration,
+        M().noDeclarationHint,
       ].join('\n'),
     );
   }
@@ -95,7 +115,7 @@ export async function updateAgeRating(args: {
     data: { type: 'ageRatingDeclarations', id: current.declarationId, attributes },
   });
 
-  const verificationError = `연령등급 변경 요청 후 대상 선언 ${current.declarationId}의 저장 결과를 확인할 수 없습니다.`;
+  const verificationError = M().verifyFailed(current.declarationId);
   const after = await readAppInfoAgeRating(current.appInfoId).catch((error: unknown) => {
     throw new Error(verificationError, { cause: error });
   });
@@ -133,7 +153,7 @@ export async function declareEncryption(args: {
     },
   );
   const declarationId = created.data?.id;
-  if (!declarationId) throw new Error(`수출 규정 선언 생성 응답에 id 가 없다: ${JSON.stringify(created)}`);
+  if (!declarationId) throw new Error(M().exportNoId(JSON.stringify(created)));
 
   if (buildIds.length > 0) {
     await send(V1_BASE, 'POST', `/appEncryptionDeclarations/${encodePathSegment(declarationId)}/relationships/builds`, {
@@ -217,7 +237,7 @@ export async function setTerritoryAvailability(args: {
     if (t.releaseDate !== undefined) attributes.releaseDate = t.releaseDate;
     if (t.preOrderEnabled !== undefined) attributes.preOrderEnabled = t.preOrderEnabled;
     if (Object.keys(attributes).length === 0) {
-      results.push({ id: t.id, ok: false, error: '바꿀 필드가 없음' });
+      results.push({ id: t.id, ok: false, error: M().noFields });
       continue;
     }
     try {

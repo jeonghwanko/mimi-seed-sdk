@@ -7,6 +7,34 @@ export type { AppStoreProductType } from './http.js';
 import type { AppStoreProductType } from './http.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    notHttps: (protocol: string) => `HTTPS가 아닌 업로드 URL은 거부해: ${protocol}`,
+    badRange: (offset: number, length: number, fileSize: number) =>
+      `잘못된 업로드 청크 범위: offset=${offset}, ` + `length=${length}, fileSize=${fileSize}`,
+    chunkFailed: (offset: number, length: number, status: number, body: string) =>
+      `청크 업로드 실패 (offset=${offset}, length=${length}): ` + `${status} ${body}`,
+    notAbsolute: (filePath: string) => `절대 경로가 필요해: ${filePath}`,
+    noFile: (filePath: string) => `파일이 존재하지 않아: ${filePath}`,
+    pngJpgOnly: (fileName: string) => `PNG/JPG 파일만 업로드할 수 있어: ${fileName}`,
+    emptyFile: (fileName: string) => `빈 파일은 업로드할 수 없어: ${fileName}`,
+    noOps: 'uploadOperations가 비어있음 — Apple API 응답 형식 확인 필요.',
+  },
+  {
+    notHttps: (protocol: string) => `Refusing a non-HTTPS upload URL: ${protocol}`,
+    badRange: (offset: number, length: number, fileSize: number) =>
+      `Invalid upload chunk range: offset=${offset}, ` + `length=${length}, fileSize=${fileSize}`,
+    chunkFailed: (offset: number, length: number, status: number, body: string) =>
+      `Chunk upload failed (offset=${offset}, length=${length}): ` + `${status} ${body}`,
+    notAbsolute: (filePath: string) => `An absolute path is required: ${filePath}`,
+    noFile: (filePath: string) => `File does not exist: ${filePath}`,
+    pngJpgOnly: (fileName: string) => `Only PNG/JPG files can be uploaded: ${fileName}`,
+    emptyFile: (fileName: string) => `Cannot upload an empty file: ${fileName}`,
+    noOps: 'uploadOperations is empty — check the Apple API response format.',
+  },
+);
 
 interface UploadOperation {
   method: string;
@@ -80,7 +108,7 @@ async function uploadChunks(buffer: Buffer, operations: UploadOperation[]): Prom
   for (const operation of operations) {
     const uploadUrl = new URL(operation.url);
     if (uploadUrl.protocol !== 'https:') {
-      throw new Error(`HTTPS가 아닌 업로드 URL은 거부해: ${uploadUrl.protocol}`);
+      throw new Error(M().notHttps(uploadUrl.protocol));
     }
     if (
       operation.offset < 0 ||
@@ -88,8 +116,7 @@ async function uploadChunks(buffer: Buffer, operations: UploadOperation[]): Prom
       operation.offset + operation.length > buffer.length
     ) {
       throw new Error(
-        `잘못된 업로드 청크 범위: offset=${operation.offset}, ` +
-          `length=${operation.length}, fileSize=${buffer.length}`,
+        M().badRange(operation.offset, operation.length, buffer.length),
       );
     }
     const chunk = buffer.subarray(operation.offset, operation.offset + operation.length);
@@ -103,8 +130,7 @@ async function uploadChunks(buffer: Buffer, operations: UploadOperation[]): Prom
     if (!response.ok) {
       const body = await response.text();
       throw new Error(
-        `청크 업로드 실패 (offset=${operation.offset}, length=${operation.length}): ` +
-          `${response.status} ${body}`,
+        M().chunkFailed(operation.offset, operation.length, response.status, body),
       );
     }
   }
@@ -159,20 +185,20 @@ export async function uploadProductReviewScreenshot(args: {
 }> {
   const { internalId, productType, filePath, replace = false } = args;
   if (!path.isAbsolute(filePath)) {
-    throw new Error(`절대 경로가 필요해: ${filePath}`);
+    throw new Error(M().notAbsolute(filePath));
   }
   if (!fs.existsSync(filePath)) {
-    throw new Error(`파일이 존재하지 않아: ${filePath}`);
+    throw new Error(M().noFile(filePath));
   }
 
   const buffer = fs.readFileSync(filePath);
   const fileName = path.basename(filePath);
   const fileSize = buffer.length;
   if (!/\.(png|jpe?g)$/i.test(fileName)) {
-    throw new Error(`PNG/JPG 파일만 업로드할 수 있어: ${fileName}`);
+    throw new Error(M().pngJpgOnly(fileName));
   }
   if (fileSize === 0) {
-    throw new Error(`빈 파일은 업로드할 수 없어: ${fileName}`);
+    throw new Error(M().emptyFile(fileName));
   }
   const checksum = crypto.createHash('md5').update(buffer).digest('hex');
   const resource = reviewScreenshotResource(productType);
@@ -210,7 +236,7 @@ export async function uploadProductReviewScreenshot(args: {
     await apiRequest(V1_BASE, `${resource.path}/${encodePathSegment(screenshotId)}`, authHeaders, {
       method: 'DELETE',
     }).catch(() => undefined);
-    throw new Error('uploadOperations가 비어있음 — Apple API 응답 형식 확인 필요.');
+    throw new Error(M().noOps);
   }
 
   try {

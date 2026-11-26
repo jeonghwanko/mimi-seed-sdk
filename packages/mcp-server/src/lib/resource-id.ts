@@ -1,3 +1,17 @@
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    invalid: (label: string, v: string) =>
+      `${label} 형식이 올바르지 않습니다: ${v} — ` + '영숫자와 - _ . : @ 만 쓸 수 있고 / 나 . / .. 단독 값은 허용하지 않습니다.',
+    unusable: (label: string, v: string) => `${label} 로 쓸 수 없는 값입니다: ${v}`,
+  },
+  {
+    invalid: (label: string, v: string) =>
+      `Invalid ${label} format: ${v} — only letters, digits, and - _ . : @ are allowed; / and a bare . or .. are not.`,
+    unusable: (label: string, v: string) => `Value cannot be used as ${label}: ${v}`,
+  },
+);
 // Google API 리소스 이름 검증 — `projects/${projectId}/androidApps/${appId}` 같은 문자열용.
 //
 // 왜 인코딩이 아니라 검증인가: googleapis 는 `name`/`parent`/`resource`/`projectId` 등을
@@ -27,8 +41,7 @@ export function resourceSegment(value: string, label = 'ID'): string {
     || !SEGMENT.test(value)
   ) {
     throw new Error(
-      `${label} 형식이 올바르지 않습니다: ${JSON.stringify(String(value).slice(0, 80))} — `
-      + '영숫자와 - _ . : @ 만 쓸 수 있고 / 나 . / .. 단독 값은 허용하지 않습니다.',
+      M().invalid(label, JSON.stringify(String(value).slice(0, 80))),
     );
   }
   return value;
@@ -40,7 +53,7 @@ export function resourceSegment(value: string, label = 'ID'): string {
  */
 export function notDotSegment(value: string, label = 'ID'): string {
   if (value === '' || value === '.' || value === '..') {
-    throw new Error(`${label} 로 쓸 수 없는 값입니다: ${JSON.stringify(value)}`);
+    throw new Error(M().unusable(label, JSON.stringify(value)));
   }
   return value;
 }

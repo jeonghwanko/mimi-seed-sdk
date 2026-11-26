@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
 import type { TikTokBusinessConfig } from './config.js';
 import type {
   TikTokEnvelope,
@@ -9,6 +10,19 @@ import type {
 } from './types.js';
 
 export const TIKTOK_API_BASE = 'https://business-api.tiktok.com/open_api/v1.3';
+
+const M = catalog(
+  {
+    unparseable: (endpoint: string, status: number) => `TikTok ${endpoint} 응답을 해석하지 못했습니다 (HTTP ${status}).`,
+    failed: (endpoint: string, detail: string, code: unknown) => `TikTok ${endpoint} 실패: ${detail} (code ${String(code)})`,
+    noTokenFields: (endpoint: string) => `TikTok ${endpoint} 응답에 필수 토큰 필드가 없습니다.`,
+  },
+  {
+    unparseable: (endpoint: string, status: number) => `Could not parse the TikTok ${endpoint} response (HTTP ${status}).`,
+    failed: (endpoint: string, detail: string, code: unknown) => `TikTok ${endpoint} failed: ${detail} (code ${String(code)})`,
+    noTokenFields: (endpoint: string) => `The TikTok ${endpoint} response is missing required token fields.`,
+  },
+);
 
 export class TikTokApiError extends Error {
   constructor(
@@ -27,11 +41,11 @@ function parseEnvelope<T>(text: string, status: number, endpoint: string): TikTo
   try {
     body = JSON.parse(text) as TikTokEnvelope<T>;
   } catch {
-    throw new TikTokApiError(`TikTok ${endpoint} 응답을 해석하지 못했습니다 (HTTP ${status}).`);
+    throw new TikTokApiError(M().unparseable(endpoint, status));
   }
   if (status < 200 || status >= 300 || body.code !== 0) {
     throw new TikTokApiError(
-      `TikTok ${endpoint} 실패: ${body.message || `HTTP ${status}`} (code ${body.code})`,
+      M().failed(endpoint, body.message || `HTTP ${status}`, body.code),
       body.code,
       body.request_id,
     );
@@ -47,7 +61,7 @@ async function tokenPost(endpoint: string, payload: Record<string, string>): Pro
   });
   const envelope = parseEnvelope<TikTokTokenData>(await response.text(), response.status, endpoint);
   if (!envelope.data?.access_token || !envelope.data.refresh_token || !envelope.data.open_id) {
-    throw new TikTokApiError(`TikTok ${endpoint} 응답에 필수 토큰 필드가 없습니다.`);
+    throw new TikTokApiError(M().noTokenFields(endpoint));
   }
   return envelope.data;
 }

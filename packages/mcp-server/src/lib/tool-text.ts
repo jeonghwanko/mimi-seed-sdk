@@ -55,7 +55,7 @@ export function localizeToolList(server: McpServer, translate: TranslateText): b
   const handlers = (server.server as unknown as { _requestHandlers?: Map<string, RequestHandler> })._requestHandlers;
   const original = handlers?.get('tools/list');
   if (!handlers || !original) {
-    console.error('[mimi-seed] tools/list 핸들러를 찾지 못해 도구 설명을 번역하지 않습니다 (MCP SDK 내부 구조 변경?).');
+    console.error('[mimi-seed] tools/list handler not found; tool descriptions will not be translated (MCP SDK internals changed?).');
     return false;
   }
   handlers.set('tools/list', async (request, extra) => {

@@ -12,6 +12,61 @@ import { apiPatch, apiPost } from './client.js';
 import { V1_BASE, apiRequest, authHeadersOrThrow, isNotFound } from './http.js';
 import { appStoreResourceRef, appStoreToOne, getAppStoreResponse, includedAppStoreResource } from './read-response.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    /** 각 상태가 "지금 출시" 요청을 받을 수 있는지 + 사람이 읽을 설명. */
+    stateNote: {
+      PENDING_DEVELOPER_RELEASE: '심사 통과 후 개발자 출시 대기 — 지금 출시할 수 있다.',
+      PENDING_APPLE_RELEASE: '예약 출시 대기 — Apple 이 earliestReleaseDate 에 출시한다.',
+      READY_FOR_SALE: '이미 출시됨.',
+      WAITING_FOR_REVIEW: '심사 대기열에 있음.',
+      IN_REVIEW: '심사 진행 중.',
+      PREPARE_FOR_SUBMISSION: '아직 제출 전 — appstore_submit_for_review 먼저.',
+      DEVELOPER_REJECTED: '개발자가 회수함 — 다시 제출해야 한다.',
+      REJECTED: 'Apple 이 거절함 — 수정 후 재제출.',
+      METADATA_REJECTED: '메타데이터 거절 — 수정 후 재제출.',
+    },
+    wrongVersion: 'App Store Connect에서 요청한 버전과 다른 버전을 반환했습니다.',
+    phasedMismatch: 'App Store Connect의 단계적 출시 연결과 상세 조회 결과가 일치하지 않습니다.',
+    unknownParen: '(알 수 없음)',
+    unknown: '알 수 없음',
+    cannotRelease: (state: string) => `❌ 지금 출시할 수 없는 상태다: ${state}`,
+    releaseOnlyPending: '출시 요청은 심사를 통과해 PENDING_DEVELOPER_RELEASE 로 대기 중인 버전에만 보낼 수 있다.',
+    scheduledNeedsDate: 'releaseType=SCHEDULED 에는 earliestReleaseDate(ISO 8601, 미래 시각)가 필요하다.',
+    noPhased: (state: string) => `❌ 이 버전에는 단계적 출시가 설정돼 있지 않다 (버전 상태: ${state}).`,
+    enableFirst: '먼저 action="enable" 로 켜야 한다.',
+    phasedStateMissing: '단계적 출시의 변경된 상태가 응답에 없습니다.',
+    phasedUnverified: (reason: string) =>
+      `단계적 출시 변경 요청이 접수됐지만 결과를 확인할 수 없습니다. 상태를 먼저 조회하세요. 원인: ${reason}`,
+  },
+  {
+    stateNote: {
+      PENDING_DEVELOPER_RELEASE: 'Approved, waiting for developer release — can be released now.',
+      PENDING_APPLE_RELEASE: 'Waiting for scheduled release — Apple releases it at earliestReleaseDate.',
+      READY_FOR_SALE: 'Already released.',
+      WAITING_FOR_REVIEW: 'Waiting for Review.',
+      IN_REVIEW: 'In Review.',
+      PREPARE_FOR_SUBMISSION: 'Not submitted yet — call appstore_submit_for_review first.',
+      DEVELOPER_REJECTED: 'Withdrawn by the developer — must be submitted again.',
+      REJECTED: 'Rejected by Apple — fix and resubmit.',
+      METADATA_REJECTED: 'Metadata Rejected — fix and resubmit.',
+    },
+    wrongVersion: 'App Store Connect returned a different version from the one requested.',
+    phasedMismatch: 'The App Store Connect phased release link does not match the detail lookup.',
+    unknownParen: '(unknown)',
+    unknown: 'unknown',
+    cannotRelease: (state: string) => `❌ Cannot release in the current state: ${state}`,
+    releaseOnlyPending: 'A release request can only be sent for a version that passed review and is waiting in PENDING_DEVELOPER_RELEASE.',
+    scheduledNeedsDate: 'releaseType=SCHEDULED requires earliestReleaseDate (ISO 8601, a future time).',
+    noPhased: (state: string) => `❌ This version has no phased release configured (version state: ${state}).`,
+    enableFirst: 'Turn it on first with action="enable".',
+    phasedStateMissing: 'The response does not contain the changed phased release state.',
+    phasedUnverified: (reason: string) =>
+      `The phased release change request was accepted, but the result cannot be confirmed. Check the status first. Cause: ${reason}`,
+  },
+);
 
 export type AppleReleaseType = 'MANUAL' | 'AFTER_APPROVAL' | 'SCHEDULED';
 export type PhasedReleaseState = 'INACTIVE' | 'ACTIVE' | 'PAUSED' | 'COMPLETE';
@@ -34,18 +89,6 @@ export interface PhasedReleaseSummary {
   totalPauseDuration?: number;
 }
 
-/** 각 상태가 "지금 출시" 요청을 받을 수 있는지 + 사람이 읽을 설명. */
-const STATE_NOTE: Record<string, string> = {
-  PENDING_DEVELOPER_RELEASE: '심사 통과 후 개발자 출시 대기 — 지금 출시할 수 있다.',
-  PENDING_APPLE_RELEASE: '예약 출시 대기 — Apple 이 earliestReleaseDate 에 출시한다.',
-  READY_FOR_SALE: '이미 출시됨.',
-  WAITING_FOR_REVIEW: '심사 대기열에 있음.',
-  IN_REVIEW: '심사 진행 중.',
-  PREPARE_FOR_SUBMISSION: '아직 제출 전 — appstore_submit_for_review 먼저.',
-  DEVELOPER_REJECTED: '개발자가 회수함 — 다시 제출해야 한다.',
-  REJECTED: 'Apple 이 거절함 — 수정 후 재제출.',
-  METADATA_REJECTED: '메타데이터 거절 — 수정 후 재제출.',
-};
 
 const phasedType = 'appStoreVersionPhasedReleases';
 const phasedRelation = 'appStoreVersionPhasedRelease';
@@ -85,7 +128,7 @@ async function readVersion(versionId: string, includePhased = false) {
     'fields[appStoreVersions]': includePhased ? `${fields},${phasedRelation}` : fields,
     ...(includePhased ? { include: phasedRelation, [`fields[${phasedType}]`]: phasedFields } : {}),
   });
-  if (document.data.id !== versionId) throw new Error('App Store Connect에서 요청한 버전과 다른 버전을 반환했습니다.');
+  if (document.data.id !== versionId) throw new Error(M().wrongVersion);
   return document;
 }
 
@@ -122,7 +165,7 @@ async function getPhasedRelease(versionId: string, linkedId?: string): Promise<P
       phasedResponse, `/appStoreVersions/${encodePathSegment(versionId)}/appStoreVersionPhasedRelease`,
       { [`fields[${phasedType}]`]: phasedFields },
     );
-    if (linkedId && data?.id !== linkedId) throw new Error('App Store Connect의 단계적 출시 연결과 상세 조회 결과가 일치하지 않습니다.');
+    if (linkedId && data?.id !== linkedId) throw new Error(M().phasedMismatch);
     return data ? phasedSummary(data) : null;
   } catch (err) {
     if (!linkedId && isNotFound(err)) return null;
@@ -131,7 +174,7 @@ async function getPhasedRelease(versionId: string, linkedId?: string): Promise<P
 }
 
 export function stateNote(state?: string): string {
-  return (state && STATE_NOTE[state]) || '';
+  return (state && (M().stateNote as Record<string, string>)[state]) || '';
 }
 
 /** 버전 상태 + 단계적 출시 상태를 한 번에. 쓰기 전 미리보기용. */
@@ -158,10 +201,10 @@ export async function requestRelease(versionId: string): Promise<VersionReleaseS
   if (version.state !== 'PENDING_DEVELOPER_RELEASE') {
     throw new Error(
       [
-        `❌ 지금 출시할 수 없는 상태다: ${version.state ?? '(알 수 없음)'}`,
+        M().cannotRelease(version.state ?? M().unknownParen),
         stateNote(version.state),
         '',
-        '출시 요청은 심사를 통과해 PENDING_DEVELOPER_RELEASE 로 대기 중인 버전에만 보낼 수 있다.',
+        M().releaseOnlyPending,
       ]
         .filter(Boolean)
         .join('\n'),
@@ -190,7 +233,7 @@ export async function updateReleaseType(args: {
 }): Promise<VersionReleaseSummary> {
   const { versionId, releaseType, earliestReleaseDate } = args;
   if (releaseType === 'SCHEDULED' && !earliestReleaseDate) {
-    throw new Error('releaseType=SCHEDULED 에는 earliestReleaseDate(ISO 8601, 미래 시각)가 필요하다.');
+    throw new Error(M().scheduledNeedsDate);
   }
 
   const attributes: Record<string, unknown> = { releaseType };
@@ -241,8 +284,8 @@ export async function setPhasedRelease(args: {
   if (!current) {
     throw new Error(
       [
-        `❌ 이 버전에는 단계적 출시가 설정돼 있지 않다 (버전 상태: ${version.state ?? '알 수 없음'}).`,
-        '먼저 action="enable" 로 켜야 한다.',
+        M().noPhased(version.state ?? M().unknown),
+        M().enableFirst,
       ].join('\n'),
     );
   }
@@ -264,12 +307,12 @@ async function verifyPhasedChange(versionId: string, id?: string, expectedState?
   try {
     const phased = await getPhasedRelease(versionId, id);
     if (!phased || (expectedState && phased.state !== expectedState)) {
-      throw new Error('단계적 출시의 변경된 상태가 응답에 없습니다.');
+      throw new Error(M().phasedStateMissing);
     }
     return phased;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`단계적 출시 변경 요청이 접수됐지만 결과를 확인할 수 없습니다. 상태를 먼저 조회하세요. 원인: ${reason}`, { cause: error });
+    throw new Error(M().phasedUnverified(reason), { cause: error });
   }
 }
 

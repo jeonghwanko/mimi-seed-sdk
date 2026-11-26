@@ -6,6 +6,12 @@ import os from 'node:os';
 import { PLAY_DEVELOPER_REPORTING_SCOPE } from './scopes.js';
 import { writeCredentialFile } from '#core/atomic-write.js';
 import { assertAndroidPackageName, isValidAndroidPackageName } from '../lib/package-name.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { outside: (dir: string) => `서비스 계정 경로가 ${dir} 밖을 가리킵니다.` },
+  { outside: (dir: string) => `The service account path points outside ${dir}.` },
+);
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const SA_DIR = path.join(CONFIG_DIR, 'play-service-accounts');
@@ -21,7 +27,7 @@ export function serviceAccountPathForPackage(packageName: string): string {
   const dir = path.resolve(SA_DIR);
   const resolved = path.resolve(dir, `${packageName}.json`);
   if (path.dirname(resolved) !== dir) {
-    throw new Error(`서비스 계정 경로가 ${dir} 밖을 가리킵니다.`);
+    throw new Error(M().outside(dir));
   }
   return resolved;
 }

@@ -26,12 +26,18 @@ import {
   uploadYouTubeVideo,
 } from '../video/youtube-publish.js';
 import { jsonResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { httpOnly: 'HTTP(S) URL만 허용합니다.' },
+  { httpOnly: 'Only HTTP(S) URLs are allowed.' },
+);
 
 const absolutePath = z.string().min(1).describe('절대경로. 상대경로는 허용하지 않습니다.');
 const httpUrl = z.string().url().refine((value) => {
   const protocol = new URL(value).protocol;
   return protocol === 'https:' || protocol === 'http:';
-}, 'HTTP(S) URL만 허용합니다.');
+}, { error: () => M().httpOnly });
 
 export function registerVideoTools(server: ToolRegistrar) {
   server.tool(

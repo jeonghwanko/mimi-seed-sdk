@@ -4,6 +4,18 @@ import { z } from 'zod';
 import { parseJsonResponse, requireApiKey, AI_MODEL } from '../ai/client.js';
 import { readJson, writeJsonAtomic } from './files.js';
 import { loadProject, sha256File } from './project.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    nothing: '종합할 리서치가 없습니다. 먼저 YouTube/Pexels 검색을 실행하거나 observations를 제공하세요.',
+    requiredLimitation: '실제 영상 프레임이나 오디오는 분석하지 않았으며, 메타데이터와 사용자 관찰만 종합했습니다.',
+  },
+  {
+    nothing: 'No research to synthesize. Run a YouTube/Pexels search first or provide observations.',
+    requiredLimitation: 'Actual video frames and audio were not analyzed; only metadata and user observations were synthesized.',
+  },
+);
 
 const briefSchema = z.object({
   summary: z.string().min(1).max(10_000),
@@ -73,7 +85,7 @@ export async function synthesizeResearch(input: SynthesizeResearchInput): Promis
   const pexels = existsSync(pexelsPath) ? readJson(pexelsPath) : { results: [] };
   const observations = (input.observations ?? []).slice(0, 20);
   if (!existsSync(youtubePath) && !existsSync(pexelsPath) && observations.length === 0) {
-    throw new Error('종합할 리서치가 없습니다. 먼저 YouTube/Pexels 검색을 실행하거나 observations를 제공하세요.');
+    throw new Error(M().nothing);
   }
 
   const data = JSON.stringify({ youtube, pexels, observations }).slice(0, 120_000);
@@ -108,7 +120,7 @@ export async function synthesizeResearch(input: SynthesizeResearchInput): Promis
   const parsed = briefSchema.parse(parseJsonResponse<unknown>(responseText));
   const allowedUrls = urlsFromResearch(youtube, pexels, observations);
   const limitations = [...parsed.limitations];
-  const requiredLimitation = '실제 영상 프레임이나 오디오는 분석하지 않았으며, 메타데이터와 사용자 관찰만 종합했습니다.';
+  const requiredLimitation = M().requiredLimitation;
   if (!limitations.includes(requiredLimitation)) limitations.unshift(requiredLimitation);
   const brief: ResearchBrief = {
     ...parsed,

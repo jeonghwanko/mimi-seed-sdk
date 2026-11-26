@@ -4,6 +4,48 @@ import * as iam from '../iam/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    saCreated: '✓ 서비스 계정 생성 완료',
+    saNext: (email: string | null | undefined) => [
+      '다음 단계:',
+      `1. \`iam_create_key("${email}")\` — JSON 키 발급`,
+      `2. \`playstore_verify_service_account\` 로 Play Console 권한까지 확인 (Play Console에서 수동으로 이메일 초대 + 'View financial data' 권한 부여는 별도)`,
+    ],
+    keyCreated: '✓ 새 키 발급 완료 — 개인키는 파일로만 저장했습니다 (응답에 싣지 않음).',
+    keyNext: (p: string) => [
+      `**저장 경로**: \`${p}\` (0600)`,
+      '',
+      '다음 단계 — JSON 을 복사하지 말고 경로를 넘기세요:',
+      `- 로컬 등록: \`playstore_register_service_account(packageName, serviceAccountJsonPath="${p}")\``,
+      `- Jenkins 업로드: \`jenkins_upload_playstore_sa(package_name, service_account_json_path="${p}")\``,
+      '- 서버 env(예: onesub `GOOGLE_SERVICE_ACCOUNT_KEY`)에 넣을 때는 사용자가 터미널에서 직접:',
+    ],
+    bindingAdded: (member: string, role: string) => `✓ 바인딩 추가: \`${member}\` → \`${role}\``,
+    bindingExists: (member: string, role: string) => `• 이미 존재: \`${member}\` → \`${role}\` (no-op)`,
+  },
+  {
+    saCreated: '✓ Service account created',
+    saNext: (email: string | null | undefined) => [
+      'Next steps:',
+      `1. \`iam_create_key("${email}")\` — issue a JSON key`,
+      `2. Verify Play Console permissions with \`playstore_verify_service_account\` (inviting the email in Play Console and granting the 'View financial data' permission are separate manual steps)`,
+    ],
+    keyCreated: '✓ New key issued — the private key was saved only to a file (not included in the response).',
+    keyNext: (p: string) => [
+      `**Saved to**: \`${p}\` (0600)`,
+      '',
+      'Next steps — pass the path; do not copy the JSON:',
+      `- Local registration: \`playstore_register_service_account(packageName, serviceAccountJsonPath="${p}")\``,
+      `- Jenkins upload: \`jenkins_upload_playstore_sa(package_name, service_account_json_path="${p}")\``,
+      '- To put it in a server env (e.g. onesub `GOOGLE_SERVICE_ACCOUNT_KEY`), the user runs this in a terminal:',
+    ],
+    bindingAdded: (member: string, role: string) => `✓ Binding added: \`${member}\` → \`${role}\``,
+    bindingExists: (member: string, role: string) => `• Already exists: \`${member}\` → \`${role}\` (no-op)`,
+  },
+);
 
 export function registerIamTools(server: ToolRegistrar) {
   server.tool(
@@ -34,15 +76,13 @@ export function registerIamTools(server: ToolRegistrar) {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const account = await iam.createServiceAccount(auth, projectId, accountId, displayName);
       return textResult([
-        '✓ 서비스 계정 생성 완료',
+        M().saCreated,
         '',
         `**email**: \`${account.email}\``,
         `**displayName**: ${account.displayName}`,
         `**uniqueId**: \`${account.uniqueId}\``,
         '',
-        '다음 단계:',
-        `1. \`iam_create_key("${account.email}")\` — JSON 키 발급`,
-        `2. \`playstore_verify_service_account\` 로 Play Console 권한까지 확인 (Play Console에서 수동으로 이메일 초대 + 'View financial data' 권한 부여는 별도)`,
+        ...M().saNext(account.email),
       ]);
     },
   );
@@ -75,17 +115,12 @@ export function registerIamTools(server: ToolRegistrar) {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const key = await iam.createServiceAccountKeyFile(auth, serviceAccount);
       return textResult([
-        '✓ 새 키 발급 완료 — 개인키는 파일로만 저장했습니다 (응답에 싣지 않음).',
+        M().keyCreated,
         '',
         `**keyId**: \`${key.keyId}\``,
         `**clientEmail**: \`${key.clientEmail}\``,
         `**projectId**: \`${key.projectId}\``,
-        `**저장 경로**: \`${key.path}\` (0600)`,
-        '',
-        '다음 단계 — JSON 을 복사하지 말고 경로를 넘기세요:',
-        `- 로컬 등록: \`playstore_register_service_account(packageName, serviceAccountJsonPath="${key.path}")\``,
-        `- Jenkins 업로드: \`jenkins_upload_playstore_sa(package_name, service_account_json_path="${key.path}")\``,
-        '- 서버 env(예: onesub `GOOGLE_SERVICE_ACCOUNT_KEY`)에 넣을 때는 사용자가 터미널에서 직접:',
+        ...M().keyNext(key.path),
         '```bash',
         `jq -c . "${key.path}"`,
         '```',
@@ -111,8 +146,8 @@ export function registerIamTools(server: ToolRegistrar) {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const result = await iam.addProjectIamPolicyBinding(auth, projectId, member, role);
       return textResult(result.added
-        ? `✓ 바인딩 추가: \`${member}\` → \`${role}\``
-        : `• 이미 존재: \`${member}\` → \`${role}\` (no-op)`);
+        ? M().bindingAdded(member, role)
+        : M().bindingExists(member, role));
     },
   );
 }

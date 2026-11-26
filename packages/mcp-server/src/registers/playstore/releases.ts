@@ -10,6 +10,26 @@ import { releaseReadinessResult, releaseReadinessShape } from '../../checks/rele
 import { validatePlayReleaseNotes, formatIssuesForUser } from '../../lib/text-validators.js';
 import { textResult, errorResult } from '../../lib/mcp-response.js';
 import { playstore } from './shared.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    syncConflict: '❌ versionCode 와 syncTracks 는 함께 쓸 수 없다 — API 호출 안 함. syncTracks 는 트랙별 최신 릴리스에 적용하므로 versionCode 를 빼고 호출하거나, 트랙마다 versionCode 를 지정해 따로 호출하세요.',
+    lintFailed: (issues: string) => `❌ 릴리스 노트 사전 검증 실패 — API 호출 안 함\n\n${issues}\n\n수정 후 다시 호출해주세요.`,
+    notesApplied: (head: string, json: string) => `✅ ${head} 노트 반영\n\n${json}`,
+    notesAppliedLatest: (head: string) => `✅ ${head} 노트 반영`,
+    syncApplied: (t: string, codes: string) => `  ↳ sync ${t} (versionCodes=${codes}) 반영`,
+    syncFailed: (t: string, msg: string) => `  ↳ sync ${t} 실패: ${msg}`,
+  },
+  {
+    syncConflict: '❌ versionCode and syncTracks cannot be used together — no API call made. syncTracks applies to the latest release of each track, so call without versionCode, or call separately per track with a versionCode each.',
+    lintFailed: (issues: string) => `❌ Release notes pre-validation failed — no API call made\n\n${issues}\n\nFix them and call again.`,
+    notesApplied: (head: string, json: string) => `✅ ${head} notes applied\n\n${json}`,
+    notesAppliedLatest: (head: string) => `✅ ${head} notes applied`,
+    syncApplied: (t: string, codes: string) => `  ↳ sync ${t} (versionCodes=${codes}) applied`,
+    syncFailed: (t: string, msg: string) => `  ↳ sync ${t} failed: ${msg}`,
+  },
+);
 
 /** playstore_update_release_notes */
 export function registerReleaseNotesTool(server: ToolRegistrar) {
@@ -34,12 +54,12 @@ export function registerReleaseNotesTool(server: ToolRegistrar) {
     },
     async ({ packageName, track, versionCode, language, text, syncTracks }) => {
       if (versionCode !== undefined && syncTracks && syncTracks.length > 0) {
-        return errorResult('❌ versionCode 와 syncTracks 는 함께 쓸 수 없다 — API 호출 안 함. syncTracks 는 트랙별 최신 릴리스에 적용하므로 versionCode 를 빼고 호출하거나, 트랙마다 versionCode 를 지정해 따로 호출하세요.');
+        return errorResult(M().syncConflict);
       }
       // ── 사전 lint — 500자 / HTML / 역슬래시 가격(\5000원) round-trip 차단.
       const validation = validatePlayReleaseNotes(text);
       if (!validation.ok) {
-        return errorResult(`❌ 릴리스 노트 사전 검증 실패 — API 호출 안 함\n\n${formatIssuesForUser(validation.issues)}\n\n수정 후 다시 호출해주세요.`);
+        return errorResult(M().lintFailed(formatIssuesForUser(validation.issues)));
       }
       const auth = await requirePlayStoreAuth(packageName);
 
@@ -47,13 +67,13 @@ export function registerReleaseNotesTool(server: ToolRegistrar) {
       // 응답 모양은 병합 전 playstore_update_release_notes 그대로다 — 파싱하는 호출자가 있다.
       if (versionCode !== undefined) {
         const result = await playstore.updateReleaseNotes(auth, packageName, track, versionCode, language, text);
-        return textResult(`✅ ${packageName} ${track} v${versionCode} ${language} 노트 반영\n\n${JSON.stringify(result, null, 2)}`);
+        return textResult(M().notesApplied(`${packageName} ${track} v${versionCode} ${language}`, JSON.stringify(result, null, 2)));
       }
 
       // versionCode 생략 = 트랙 최신 릴리스 (0.20.0 에서 합친 옛 latest 전용 도구의 경로·응답 모양 그대로).
       const primaryResult = await playstore.updateLatestReleaseNotes(auth, packageName, track, language, text);
       const lines: string[] = [
-        `✅ ${packageName} ${track} (versionCodes=${JSON.stringify(primaryResult.updatedVersionCodes)}) ${language} 노트 반영`,
+        M().notesAppliedLatest(`${packageName} ${track} (versionCodes=${JSON.stringify(primaryResult.updatedVersionCodes)}) ${language}`),
       ];
       const allResults: Record<string, unknown> = { [track]: primaryResult };
 
@@ -64,11 +84,11 @@ export function registerReleaseNotesTool(server: ToolRegistrar) {
           try {
             const r = await playstore.updateLatestReleaseNotes(auth, packageName, t, language, text);
             allResults[t] = r;
-            lines.push(`  ↳ sync ${t} (versionCodes=${JSON.stringify(r.updatedVersionCodes)}) 반영`);
+            lines.push(M().syncApplied(t, JSON.stringify(r.updatedVersionCodes)));
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             allResults[t] = { error: msg };
-            lines.push(`  ↳ sync ${t} 실패: ${msg}`);
+            lines.push(M().syncFailed(t, msg));
           }
         }
       }

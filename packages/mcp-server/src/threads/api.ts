@@ -2,6 +2,26 @@ import type { ThreadsConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noUserId: 'Threads user ID를 조회하지 못했습니다. 토큰에 threads_basic 권한이 있는지 확인하세요.',
+    refreshUnparsable: 'Threads 토큰 갱신 응답을 해석하지 못했습니다. 새 토큰을 발급해 다시 연결하세요.',
+    refreshIncomplete: 'Threads 토큰 갱신 응답에 access_token 또는 expires_in이 없습니다.',
+    mediaFailed: (status: string, msg?: string) => `미디어 처리 실패 (${status})${msg ? `: ${msg}` : ''}`,
+    mediaTimeout: '미디어 처리 대기 시간 초과 (60초). 잠시 후 다시 시도하세요.',
+    carouselCount: (n: number) => `캐러셀은 2~20장의 이미지가 필요합니다 (받은 수: ${n}).`,
+  },
+  {
+    noUserId: 'Could not look up the Threads user ID. Check that the token has the threads_basic permission.',
+    refreshUnparsable: 'Could not parse the Threads token refresh response. Issue a new token and connect again.',
+    refreshIncomplete: 'The Threads token refresh response has no access_token or expires_in.',
+    mediaFailed: (status: string, msg?: string) => `Media processing failed (${status})${msg ? `: ${msg}` : ''}`,
+    mediaTimeout: 'Timed out waiting for media processing (60 seconds). Try again shortly.',
+    carouselCount: (n: number) => `A carousel needs 2–20 images (received: ${n}).`,
+  },
+);
 
 // Threads Graph API. Instagram 과 달리 base 가 하나뿐이라 토큰 prefix 분기가 없다.
 //   graph.threads.net/v1.0
@@ -76,7 +96,7 @@ export async function fetchUserId(accessToken: string): Promise<string> {
   );
   if (!res.id) {
     throw new Error(
-      'Threads user ID를 조회하지 못했습니다. 토큰에 threads_basic 권한이 있는지 확인하세요.',
+      M().noUserId,
     );
   }
   return res.id;
@@ -111,10 +131,10 @@ export async function refreshAccessToken(accessToken: string): Promise<Refreshed
   try {
     parsed = JSON.parse(text) as typeof parsed;
   } catch {
-    throw new Error('Threads 토큰 갱신 응답을 해석하지 못했습니다. 새 토큰을 발급해 다시 연결하세요.');
+    throw new Error(M().refreshUnparsable);
   }
   if (!parsed.access_token || !Number.isFinite(parsed.expires_in) || parsed.expires_in! <= 0) {
-    throw new Error('Threads 토큰 갱신 응답에 access_token 또는 expires_in이 없습니다.');
+    throw new Error(M().refreshIncomplete);
   }
   return { accessToken: parsed.access_token, expiresInSeconds: parsed.expires_in! };
 }
@@ -150,11 +170,11 @@ async function waitForContainer(cfg: ThreadsConfig, containerId: string): Promis
     );
     if (status === 'FINISHED') return;
     if (status === 'ERROR' || status === 'EXPIRED') {
-      throw new Error(`미디어 처리 실패 (${status})${error_message ? `: ${error_message}` : ''}`);
+      throw new Error(M().mediaFailed(status, error_message));
     }
     await new Promise((r) => setTimeout(r, INTERVAL_MS));
   }
-  throw new Error('미디어 처리 대기 시간 초과 (60초). 잠시 후 다시 시도하세요.');
+  throw new Error(M().mediaTimeout);
 }
 
 async function publish(cfg: ThreadsConfig, creationId: string): Promise<PublishResult> {
@@ -223,7 +243,7 @@ export async function postCarousel(
   text: string,
 ): Promise<PublishResult> {
   if (imageUrls.length < 2 || imageUrls.length > 20) {
-    throw new Error(`캐러셀은 2~20장의 이미지가 필요합니다 (받은 수: ${imageUrls.length}).`);
+    throw new Error(M().carouselCount(imageUrls.length));
   }
 
   // Step 1: 각 이미지를 children container 로 생성 (sequential — 부분 실패 시 명확)

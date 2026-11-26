@@ -2,6 +2,26 @@ import type { InstagramConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noBusinessAccount:
+      'Facebook Page에 연결된 Instagram Business Account를 찾지 못했습니다.\n' +
+      'Facebook Page → Settings → Linked Accounts에서 IG 계정을 연결하세요.',
+    mediaFailed: (s: string) => `Instagram 미디어 처리 실패 (${s}).`,
+    mediaTimeout: 'Instagram 미디어 처리 대기 시간 초과 (60초). 잠시 후 다시 시도하세요.',
+    carouselCount: (n: number) => `캐러셀은 2~10장의 이미지가 필요합니다 (받은 수: ${n}).`,
+  },
+  {
+    noBusinessAccount:
+      'No Instagram Business Account linked to the Facebook Page was found.\n' +
+      'Link the IG account under Facebook Page → Settings → Linked Accounts.',
+    mediaFailed: (s: string) => `Instagram media processing failed (${s}).`,
+    mediaTimeout: 'Timed out waiting for Instagram media processing (60 seconds). Try again shortly.',
+    carouselCount: (n: number) => `A carousel needs 2–10 images (received: ${n}).`,
+  },
+);
 
 // 두 가지 Meta API:
 //   IGAA... = Instagram API with Instagram Login (2024 신규) — graph.instagram.com
@@ -98,8 +118,7 @@ export async function fetchUserId(accessToken: string): Promise<string> {
   const id = res.data?.[0]?.instagram_business_account?.id;
   if (!id) {
     throw new Error(
-      'Facebook Page에 연결된 Instagram Business Account를 찾지 못했습니다.\n' +
-      'Facebook Page → Settings → Linked Accounts에서 IG 계정을 연결하세요.',
+      M().noBusinessAccount,
     );
   }
   return id;
@@ -124,11 +143,11 @@ async function waitForContainer(cfg: InstagramConfig, containerId: string): Prom
     const current = status_code ?? status;
     if (current === 'FINISHED') return;
     if (current === 'ERROR' || current === 'EXPIRED') {
-      throw new Error(`Instagram 미디어 처리 실패 (${current}).`);
+      throw new Error(M().mediaFailed(current));
     }
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
   }
-  throw new Error('Instagram 미디어 처리 대기 시간 초과 (60초). 잠시 후 다시 시도하세요.');
+  throw new Error(M().mediaTimeout);
 }
 
 async function fetchPermalink(cfg: InstagramConfig, mediaId: string): Promise<string | undefined> {
@@ -177,7 +196,7 @@ export async function postCarousel(
   caption: string,
 ): Promise<PublishResult> {
   if (imageUrls.length < 2 || imageUrls.length > 10) {
-    throw new Error(`캐러셀은 2~10장의 이미지가 필요합니다 (받은 수: ${imageUrls.length}).`);
+    throw new Error(M().carouselCount(imageUrls.length));
   }
 
   // Step 1: 각 이미지를 children container로 생성 (sequential — 일부 실패 시 부분 결과 명확)

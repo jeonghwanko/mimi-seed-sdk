@@ -15,10 +15,50 @@ import { writeJsonAtomic } from './files.js';
 import { loadProject, registerAsset } from './project.js';
 import type { VideoAsset } from './types.js';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    envRequired: (name: string) => `❌ ${name} 환경변수가 필요합니다.`,
+    apiFailed: (status: number, message: string) => `외부 API 요청 실패 (${status}): ${message}`,
+    noQueries: '검색어가 없습니다. queries를 전달하거나 프로젝트 장면에 searchQuery를 추가하세요.',
+    noQueriesShort: '검색어가 없습니다.',
+    badPexelsUrl: (host: string) => `허용되지 않은 Pexels 미디어 URL입니다: ${host}`,
+    noLocation: 'Pexels 리디렉션 응답에 Location 헤더가 없습니다.',
+    tooManyRedirects: 'Pexels 자산 리디렉션이 3회를 초과했습니다.',
+    noBody: '다운로드 응답에 본문이 없습니다.',
+    overLimit: (mb: number) => `자산이 ${mb}MB 제한을 초과합니다.`,
+    selectCount: '한 번에 1~5개 자산을 선택하세요.',
+    downloadFailed: (status: number, id: number) => `Pexels 자산 다운로드 실패 (${status}): ${id}`,
+    notMp4: (contentType: string) => `Pexels 자산이 MP4 응답이 아닙니다: ${contentType}`,
+    over100: (id: number) => `자산이 100MB 제한을 초과합니다: ${id}`,
+    badSignature: (id: number) => `Pexels 자산이 유효한 MP4 시그니처를 갖지 않습니다: ${id}`,
+    noImageData: '이미지 생성 응답에 이미지 데이터가 없습니다.',
+    badPng: '이미지 생성 응답이 유효한 50MB 이하 PNG가 아닙니다.',
+  },
+  {
+    envRequired: (name: string) => `❌ The ${name} environment variable is required.`,
+    apiFailed: (status: number, message: string) => `External API request failed (${status}): ${message}`,
+    noQueries: 'No search queries. Pass queries or add searchQuery to the project scenes.',
+    noQueriesShort: 'No search queries.',
+    badPexelsUrl: (host: string) => `Pexels media URL not allowed: ${host}`,
+    noLocation: 'The Pexels redirect response has no Location header.',
+    tooManyRedirects: 'Pexels asset redirects exceeded 3.',
+    noBody: 'The download response has no body.',
+    overLimit: (mb: number) => `The asset exceeds the ${mb}MB limit.`,
+    selectCount: 'Select 1-5 assets at a time.',
+    downloadFailed: (status: number, id: number) => `Pexels asset download failed (${status}): ${id}`,
+    notMp4: (contentType: string) => `The Pexels asset is not an MP4 response: ${contentType}`,
+    over100: (id: number) => `The asset exceeds the 100MB limit: ${id}`,
+    badSignature: (id: number) => `The Pexels asset does not have a valid MP4 signature: ${id}`,
+    noImageData: 'The image generation response has no image data.',
+    badPng: 'The image generation response is not a valid PNG of 50MB or less.',
+  },
+);
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`❌ ${name} 환경변수가 필요합니다.`);
+  if (!value) throw new Error(M().envRequired(name));
   return value;
 }
 
@@ -35,7 +75,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     const message = typeof body === 'object' && body !== null && 'error' in body
       ? JSON.stringify((body).error)
       : String(body).slice(0, 500);
-    throw new Error(`외부 API 요청 실패 (${response.status}): ${message}`);
+    throw new Error(M().apiFailed(response.status, message));
   }
   return body as T;
 }
@@ -102,7 +142,7 @@ export async function researchYouTube(input: ResearchYouTubeInput): Promise<YouT
   const queries = (input.queries?.length ? input.queries : project.scenes.map((scene) => scene.searchQuery))
     .filter(Boolean)
     .slice(0, 5);
-  if (queries.length === 0) throw new Error('검색어가 없습니다. queries를 전달하거나 프로젝트 장면에 searchQuery를 추가하세요.');
+  if (queries.length === 0) throw new Error(M().noQueries);
 
   const references: YouTubeReference[] = [];
   for (const query of queries) {
@@ -208,7 +248,7 @@ export async function searchStock(input: SearchStockInput): Promise<PexelsVideoR
   const queries = (input.queries?.length ? input.queries : project.scenes.map((scene) => scene.searchQuery))
     .filter(Boolean)
     .slice(0, 10);
-  if (queries.length === 0) throw new Error('검색어가 없습니다.');
+  if (queries.length === 0) throw new Error(M().noQueriesShort);
 
   const results: PexelsVideoResult[] = [];
   for (const query of queries) {
@@ -255,7 +295,7 @@ const PEXELS_MEDIA_HOSTS = new Set([
 function validatePexelsUrl(value: string): URL {
   const url = new URL(value);
   if (url.protocol !== 'https:' || !PEXELS_MEDIA_HOSTS.has(url.hostname)) {
-    throw new Error(`허용되지 않은 Pexels 미디어 URL입니다: ${url.hostname}`);
+    throw new Error(M().badPexelsUrl(url.hostname));
   }
   return url;
 }
@@ -267,15 +307,15 @@ async function fetchPexelsMedia(value: string): Promise<Response> {
     const response = await fetchWithTimeout(current, { redirect: 'manual' }, HTTP_TRANSFER_TIMEOUT_MS);
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get('location');
-    if (!location) throw new Error('Pexels 리디렉션 응답에 Location 헤더가 없습니다.');
+    if (!location) throw new Error(M().noLocation);
     await response.body?.cancel();
     current = validatePexelsUrl(new URL(location, current).toString());
   }
-  throw new Error('Pexels 자산 리디렉션이 3회를 초과했습니다.');
+  throw new Error(M().tooManyRedirects);
 }
 
 async function downloadLimited(response: Response, destination: string, maxBytes: number): Promise<void> {
-  if (!response.body) throw new Error('다운로드 응답에 본문이 없습니다.');
+  if (!response.body) throw new Error(M().noBody);
   const tempPath = `${destination}.${randomUUID()}.tmp`;
   const writer = createWriteStream(tempPath, { flags: 'wx' });
   const reader = response.body.getReader();
@@ -287,7 +327,7 @@ async function downloadLimited(response: Response, destination: string, maxBytes
       total += value.byteLength;
       if (total > maxBytes) {
         await reader.cancel();
-        throw new Error(`자산이 ${Math.round(maxBytes / 1024 / 1024)}MB 제한을 초과합니다.`);
+        throw new Error(M().overLimit(Math.round(maxBytes / 1024 / 1024)));
       }
       if (!writer.write(Buffer.from(value))) await once(writer, 'drain');
     }
@@ -331,25 +371,25 @@ export async function downloadStockAssets(
   selections: DownloadStockSelection[],
 ): Promise<VideoAsset[]> {
   loadProject(projectDir);
-  if (selections.length === 0 || selections.length > 5) throw new Error('한 번에 1~5개 자산을 선택하세요.');
+  if (selections.length === 0 || selections.length > 5) throw new Error(M().selectCount);
   const assets: VideoAsset[] = [];
   for (const selection of selections) {
     const url = validatePexelsUrl(selection.downloadUrl);
     const response = await fetchPexelsMedia(url.toString());
-    if (!response.ok) throw new Error(`Pexels 자산 다운로드 실패 (${response.status}): ${selection.id}`);
+    if (!response.ok) throw new Error(M().downloadFailed(response.status, selection.id));
     const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
     if (contentType !== 'video/mp4' && contentType !== 'application/octet-stream') {
-      throw new Error(`Pexels 자산이 MP4 응답이 아닙니다: ${contentType ?? 'unknown'}`);
+      throw new Error(M().notMp4(contentType ?? 'unknown'));
     }
     const length = Number(response.headers.get('content-length') ?? 0);
-    if (length > 100 * 1024 * 1024) throw new Error(`자산이 100MB 제한을 초과합니다: ${selection.id}`);
+    if (length > 100 * 1024 * 1024) throw new Error(M().over100(selection.id));
     const id = `pexels-${selection.id}-${randomUUID().slice(0, 8)}`;
     const destination = path.join(path.resolve(projectDir), 'assets', 'stock', `${id}.mp4`);
     mkdirSync(path.dirname(destination), { recursive: true });
     await downloadLimited(response, destination, 100 * 1024 * 1024);
     if (!hasMp4Signature(destination)) {
       unlinkSync(destination);
-      throw new Error(`Pexels 자산이 유효한 MP4 시그니처를 갖지 않습니다: ${selection.id}`);
+      throw new Error(M().badSignature(selection.id));
     }
     assets.push(registerAsset(projectDir, {
       id,
@@ -402,11 +442,11 @@ export async function generateImage(input: GenerateImageInput): Promise<VideoAss
     }),
   });
   const base64 = data.data?.[0]?.b64_json;
-  if (!base64) throw new Error('이미지 생성 응답에 이미지 데이터가 없습니다.');
+  if (!base64) throw new Error(M().noImageData);
   const bytes = Buffer.from(base64, 'base64');
   const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (bytes.length === 0 || bytes.length > 50 * 1024 * 1024 || !bytes.subarray(0, 8).equals(pngSignature)) {
-    throw new Error('이미지 생성 응답이 유효한 50MB 이하 PNG가 아닙니다.');
+    throw new Error(M().badPng);
   }
   const id = `openai-${randomUUID()}`;
   const safeName = (input.name ?? id).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || id;

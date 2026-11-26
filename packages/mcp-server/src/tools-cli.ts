@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
-import { resolveLang } from '#core/lang.js';
+import { resolveLang, catalog } from '#core/lang.js';
 import { printJson } from './lib/cli-args.js';
 import { readToolManifest } from './lib/package-root.js';
 import { buildToolMenu, formatToolMenu, selectToolMenu } from './lib/tool-menu.js';
 import { resolveToolsets } from './lib/toolsets.js';
+
+const M = catalog(
+  { invalid: '목록에서 고른 번호 또는 서비스 ID를 쉼표로 구분해 입력하세요.', prompt: '번호 또는 ID (예 1,2) > ' },
+  { invalid: 'Enter menu numbers or service IDs separated by commas.', prompt: 'Numbers or IDs (e.g. 1,2) > ' },
+);
 
 async function main(args: string[]) {
   const lang = resolveLang();
@@ -19,9 +24,7 @@ async function main(args: string[]) {
   const selection = resolveToolsets(process.env, manifest);
   for (const warning of selection.warnings) console.error(warning);
   const menu = buildToolMenu(manifest, selection, lang);
-  const invalid = lang === 'ko'
-    ? '목록에서 고른 번호 또는 서비스 ID를 쉼표로 구분해 입력하세요.'
-    : 'Enter menu numbers or service IDs separated by commas.';
+  const invalid = M().invalid;
 
   if (args.length === 2) {
     const selected = selectToolMenu(menu, args[1]);
@@ -33,7 +36,7 @@ async function main(args: string[]) {
   console.log(formatToolMenu(menu, lang));
   if (!process.stdin.isTTY || !process.stdout.isTTY || process.env.CI) return;
   const readline = createInterface({ input: process.stdin, output: process.stdout });
-  readline.setPrompt(lang === 'ko' ? '번호 또는 ID (예 1,2) > ' : 'Numbers or IDs (e.g. 1,2) > ');
+  readline.setPrompt(M().prompt);
   readline.on('SIGINT', () => readline.close());
   try {
     readline.prompt();

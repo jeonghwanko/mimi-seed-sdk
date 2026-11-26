@@ -2,6 +2,20 @@ import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as naver from '../naver/tools.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    submitted: (status: number) => `✅ 네이버 IndexNow 제출 완료 (HTTP ${status}${status === 202 ? ' — 접수됨, 키 검증 대기' : ''}).`,
+    summary: (host: string, n: number, keyLocation: string) => `  호스트: ${host} · URL ${n}개 · 키 파일: ${keyLocation}`,
+    next: '수집 여부는 서치어드바이저 콘솔(요청 → 웹 페이지 수집 / 리포트)에서 확인해. 제출은 수집을 앞당길 뿐 색인을 보장하지 않아 — naver_check_page 로 막는 요소가 없는지 먼저 봐.',
+  },
+  {
+    submitted: (status: number) => `✅ Naver IndexNow submission done (HTTP ${status}${status === 202 ? ' — accepted, key validation pending' : ''}).`,
+    summary: (host: string, n: number, keyLocation: string) => `  Host: ${host} · ${n} URLs · key file: ${keyLocation}`,
+    next: 'Check whether pages were crawled in the Naver Search Advisor console (Request → Web page crawl / Report). Submitting only speeds up crawling and does not guarantee indexing — first check with naver_check_page that nothing blocks it.',
+  },
+);
 
 export function registerNaverTools(server: ToolRegistrar) {
   server.tool(
@@ -24,10 +38,10 @@ export function registerNaverTools(server: ToolRegistrar) {
     async ({ urls, key, keyLocation }) => {
       const r = await naver.submitIndexNow({ urls, key, keyLocation });
       return textResult([
-        `✅ 네이버 IndexNow 제출 완료 (HTTP ${r.status}${r.status === 202 ? ' — 접수됨, 키 검증 대기' : ''}).`,
-        `  호스트: ${r.host} · URL ${r.submitted}개 · 키 파일: ${r.keyLocation}`,
+        M().submitted(r.status),
+        M().summary(r.host, r.submitted, r.keyLocation),
         '',
-        '수집 여부는 서치어드바이저 콘솔(요청 → 웹 페이지 수집 / 리포트)에서 확인해. 제출은 수집을 앞당길 뿐 색인을 보장하지 않아 — naver_check_page 로 막는 요소가 없는지 먼저 봐.',
+        M().next,
       ]);
     },
   );

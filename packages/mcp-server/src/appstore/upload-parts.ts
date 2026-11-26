@@ -1,5 +1,21 @@
 import fs from 'node:fs';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    shortRead: (offset: number, length: number, bytesRead: number) =>
+      `파일을 읽는 중 크기가 어긋났다 (offset ${offset}: ${length} 바이트 요청, ${bytesRead} 읽음). ` +
+      '업로드 도중 파일이 바뀌었을 수 있다 — 파일을 확인하고 다시 시도할 것.',
+    uploadFailed: (offset: number, status: number, body: string) => `미디어 업로드 실패 (offset ${offset}): ${status} ${body}`,
+  },
+  {
+    shortRead: (offset: number, length: number, bytesRead: number) =>
+      `File size mismatch while reading (offset ${offset}: requested ${length} bytes, read ${bytesRead}). ` +
+      'The file may have changed during the upload — check the file and try again.',
+    uploadFailed: (offset: number, status: number, body: string) => `Media upload failed (offset ${offset}): ${status} ${body}`,
+  },
+);
 
 export interface UploadOperation {
   method: string;
@@ -26,8 +42,7 @@ export async function uploadFileParts(
       // 여기서 즉시 멈추는 게 그 추적 불가능한 실패보다 낫다.
       if (bytesRead !== op.length) {
         throw new Error(
-          `파일을 읽는 중 크기가 어긋났다 (offset ${op.offset}: ${op.length} 바이트 요청, ${bytesRead} 읽음). ` +
-            '업로드 도중 파일이 바뀌었을 수 있다 — 파일을 확인하고 다시 시도할 것.',
+          M().shortRead(op.offset, op.length, bytesRead),
         );
       }
       const headers: Record<string, string> = {};
@@ -38,7 +53,7 @@ export async function uploadFileParts(
         HTTP_TRANSFER_TIMEOUT_MS,
       );
       if (!res.ok) {
-        throw new Error(`미디어 업로드 실패 (offset ${op.offset}): ${res.status} ${await res.text()}`);
+        throw new Error(M().uploadFailed(op.offset, res.status, await res.text()));
       }
     }
   } finally {

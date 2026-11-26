@@ -4,6 +4,22 @@ import { encodePathSegment } from '../lib/url-path.js';
 import { isNotFound } from './http.js';
 import { appStoreNextPagePath, appStorePagination, appStoreResourceRef, appStoreToOne, getAppStoreResponse, includedAppStoreResource, pageIsIncomplete } from './read-response.js';
 import { requireVersionAppAndPlatform } from './versions.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    incompleteLocalizations: 'App Store Connect에서 출시 노트의 전체 로케일을 확인할 수 없습니다.',
+    buildMismatch: 'App Store Connect의 빌드 연결과 상세 조회 결과가 일치하지 않습니다.',
+    localeMismatch: 'App Store Connect의 로케일 연결과 상세 조회 결과가 일치하지 않습니다.',
+    noVersionState: 'App Store Connect에서 심사 대상의 버전명과 상태를 확인할 수 없습니다.',
+  },
+  {
+    incompleteLocalizations: 'Cannot confirm every release-notes locale in App Store Connect.',
+    buildMismatch: 'The App Store Connect build link does not match the detail lookup.',
+    localeMismatch: 'The App Store Connect locale links do not match the detail lookup.',
+    noVersionState: 'Cannot confirm the version string and state of the review target in App Store Connect.',
+  },
+);
 
 const buildFields = 'version,uploadedDate,processingState';
 const localizationFields = 'locale,whatsNew';
@@ -44,7 +60,6 @@ const localizationResource = appStoreResourceRef.extend({
 });
 const localizationLinkage = appStorePagination.extend({ data: z.array(appStoreResourceRef) });
 const localizationPage = appStorePagination.extend({ data: z.array(localizationResource) });
-const incompleteLocalizations = 'App Store Connect에서 출시 노트의 전체 로케일을 확인할 수 없습니다.';
 
 type PreviewDocument = z.infer<typeof previewVersion>;
 
@@ -57,7 +72,7 @@ async function readPreviewBuild(path: string, document: PreviewDocument) {
 
   try {
     const { data } = await getAppStoreResponse(previewBuildResponse, `${path}/build`, { 'fields[builds]': buildFields });
-    if (ref && data?.id !== ref.id) throw new Error('App Store Connect의 빌드 연결과 상세 조회 결과가 일치하지 않습니다.');
+    if (ref && data?.id !== ref.id) throw new Error(M().buildMismatch);
     return data ?? undefined;
   } catch (error) {
     if (!ref && isNotFound(error)) return undefined;
@@ -90,17 +105,17 @@ async function readPreviewLocalizations(path: string, document: PreviewDocument)
     const page = await getAppStoreResponse(localizationPage, next ?? endpoint, next ? undefined : params);
     for (const { id, attributes } of page.data) {
       const locale = attributes.locale.toLowerCase();
-      if (ids.has(id) || locales.has(locale)) throw new Error(incompleteLocalizations);
+      if (ids.has(id) || locales.has(locale)) throw new Error(M().incompleteLocalizations);
       ids.add(id);
       locales.add(locale);
     }
     total = Math.max(total, page.meta?.paging?.total ?? 0);
     const nextLink = page.links?.next;
-    if (!nextLink && (pageIsIncomplete(page, ids.size) || total > ids.size)) throw new Error(incompleteLocalizations);
+    if (!nextLink && (pageIsIncomplete(page, ids.size) || total > ids.size)) throw new Error(M().incompleteLocalizations);
     return { items: page.data, nextPageToken: nextLink ? appStoreNextPagePath(endpoint, nextLink) : undefined };
   });
   if (link?.data.some(({ id, type }) => type === localizationType && !ids.has(id))) {
-    throw new Error('App Store Connect의 로케일 연결과 상세 조회 결과가 일치하지 않습니다.');
+    throw new Error(M().localeMismatch);
   }
   return rows;
 }
@@ -121,7 +136,7 @@ export async function buildSubmitForReviewPreview(versionId: string) {
   const versionString = attributes?.versionString;
   const state = attributes?.appStoreState ?? attributes?.appVersionState;
   if (!versionString?.trim() || !state?.trim()) {
-    throw new Error('App Store Connect에서 심사 대상의 버전명과 상태를 확인할 수 없습니다.');
+    throw new Error(M().noVersionState);
   }
   const [build, localizations] = await Promise.all([
     readPreviewBuild(path, document),

@@ -11,8 +11,8 @@
 //
 // mcp-server 도 이 함수로 언어를 고른다: 도구 · 파라미터 설명(lib/tool-text.ts — 원문 한국어, en 이면
 // i18n/tools-en 번역표), 도구 메뉴 리소스, 인증 에러 문구(auth/errors.ts 의 authText())와 OAuth 콜백 페이지.
-// 도구가 **돌려주는** 텍스트는 catalog()(아래)로 옮기는 중이다 — 공통 경로(dry-run preview · 에러 변환 · 인증 안내 ·
-// mimi_seed_status · prompts · 리소스)는 끝났고, 도메인별 출력은 mcp-server output-i18n.test.ts 의 목록이 늘며 옮겨진다.
+// 도구가 **돌려주는** 텍스트도 catalog()(아래)로 언어를 따른다 — mcp-server output-i18n.test.ts 가 src 전체에서
+// ko 블록 밖 한국어를 막는다(출력이 아닌 한국어 — AI 프롬프트 등 — 만 이유와 함께 예외).
 // settings.json 의 **쓰기**는 CLI(settings.ts)가 소유한다.
 
 import fs from 'node:fs';

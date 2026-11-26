@@ -1,4 +1,18 @@
 import { fetchWithTimeout } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    unreachable: (base: string, d: string) => `mcp-auth-config fetch failed (${base} 접속 불가: ${d})`,
+    notJson: (d: string) => `mcp-auth-config fetch failed (응답이 JSON 이 아님: ${d})`,
+    empty: 'mcp-auth-config fetch failed (서버 응답에 clientId/clientSecret 비어 있음)',
+  },
+  {
+    unreachable: (base: string, d: string) => `mcp-auth-config fetch failed (cannot reach ${base}: ${d})`,
+    notJson: (d: string) => `mcp-auth-config fetch failed (response is not JSON: ${d})`,
+    empty: 'mcp-auth-config fetch failed (clientId/clientSecret empty in the server response)',
+  },
+);
 
 const WEB_BASE =
   process.env.MIMI_SEED_WEB_BASE ?? 'https://mimi-seed.pryzm.gg';
@@ -33,7 +47,7 @@ export async function getMcpOAuthClient(): Promise<{
     res = await fetchWithTimeout(`${WEB_BASE}/api/mcp-auth-config`, {}, 10_000);
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
-    throw new Error(`mcp-auth-config fetch failed (${WEB_BASE} 접속 불가: ${detail})`, { cause: e });
+    throw new Error(M().unreachable(WEB_BASE, detail), { cause: e });
   }
   if (!res.ok) throw new Error(`mcp-auth-config fetch failed (${res.status})`);
 
@@ -44,11 +58,11 @@ export async function getMcpOAuthClient(): Promise<{
     data = (await res.json()) as { clientId?: string; clientSecret?: string } | null;
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
-    throw new Error(`mcp-auth-config fetch failed (응답이 JSON 이 아님: ${detail})`, { cause: e });
+    throw new Error(M().notJson(detail), { cause: e });
   }
   // 빈 값 200 응답(서버 env 미설정)을 캐싱하면 프로세스 수명 내내 invalid_client 로 오진된다.
   if (!data || typeof data !== 'object' || !data.clientId || !data.clientSecret) {
-    throw new Error('mcp-auth-config fetch failed (서버 응답에 clientId/clientSecret 비어 있음)');
+    throw new Error(M().empty);
   }
   _cached = { clientId: data.clientId, clientSecret: data.clientSecret };
   return _cached;

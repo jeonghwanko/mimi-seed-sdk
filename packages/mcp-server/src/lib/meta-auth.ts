@@ -1,3 +1,25 @@
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    expired: (fix: string) => `❌ 토큰 만료 — ${fix}`,
+    expiring: (days: number, fix: string) => `⚠️ 토큰 ${days}일 남음 — 지금 갱신 권장: ${fix}`,
+    fresh: (days: number) => `토큰: ${days}일 남음`,
+    unknown: (fix: string) => `⚠️ 토큰 만료일 미상 — 계정 조회로 검증하고 필요하면 ${fix}`,
+    revoked: (label: string) => `❌ ${label} 연결이 만료되었거나 취소되었습니다.`,
+    recovery: (fix: string) => `복구: ${fix}`,
+    metaResponse: (msg: string) => `Meta 응답: ${msg}`,
+  },
+  {
+    expired: (fix: string) => `❌ Token expired — ${fix}`,
+    expiring: (days: number, fix: string) => `⚠️ Token has ${days} day(s) left — refresh now: ${fix}`,
+    fresh: (days: number) => `Token: ${days} day(s) left`,
+    unknown: (fix: string) => `⚠️ Token expiry unknown — verify by fetching the account and, if needed, ${fix}`,
+    revoked: (label: string) => `❌ The ${label} connection has expired or was revoked.`,
+    recovery: (fix: string) => `Recovery: ${fix}`,
+    metaResponse: (msg: string) => `Meta response: ${msg}`,
+  },
+);
 export type MetaPlatform = 'facebook' | 'instagram' | 'threads';
 
 const LABEL: Record<MetaPlatform, string> = {
@@ -36,12 +58,12 @@ export function metaTokenFreshness(
 
 export function metaExpiryMessage(expiresAt: string | undefined, fix: string): string {
   const freshness = metaTokenFreshness(expiresAt);
-  if (freshness.state === 'expired') return `❌ 토큰 만료 — ${fix}`;
+  if (freshness.state === 'expired') return M().expired(fix);
   if (freshness.state === 'expiring') {
-    return `⚠️ 토큰 ${freshness.daysRemaining}일 남음 — 지금 갱신 권장: ${fix}`;
+    return M().expiring(freshness.daysRemaining ?? 0, fix);
   }
-  if (freshness.state === 'fresh') return `토큰: ${freshness.daysRemaining}일 남음`;
-  return `⚠️ 토큰 만료일 미상 — 계정 조회로 검증하고 필요하면 ${fix}`;
+  if (freshness.state === 'fresh') return M().fresh(freshness.daysRemaining ?? 0);
+  return M().unknown(fix);
 }
 
 /** Provider 원문은 유지하되 access token 모양은 절대 오류 메시지에 남기지 않는다. */
@@ -53,7 +75,7 @@ export function redactMetaSecrets(message: string): string {
     .replace(/\bTH[A-Za-z0-9_|-]{8,}\b/g, '[REDACTED]');
 }
 
-/** Meta OAuth 만료/철회를 사용자가 바로 복구할 수 있는 명령으로 번역한다. */
+/** Translates a Meta OAuth expiry/revocation into a command the user can run to recover right away. */
 export function metaApiError(
   platform: MetaPlatform,
   status: number,
@@ -71,9 +93,9 @@ export function metaApiError(
   if (needsReconnect) {
     return new Error(
       [
-        `❌ ${LABEL[platform]} 연결이 만료되었거나 취소되었습니다.`,
-        `복구: ${FIX[platform]}`,
-        `Meta 응답: ${safeMessage}`,
+        M().revoked(LABEL[platform]),
+        M().recovery(FIX[platform]),
+        M().metaResponse(safeMessage),
       ].join('\n'),
     );
   }

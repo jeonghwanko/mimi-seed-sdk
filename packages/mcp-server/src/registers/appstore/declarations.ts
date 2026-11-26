@@ -3,6 +3,56 @@ import type { ToolRegistrar } from '../../lib/tool-registrar.js';
 import { z } from 'zod';
 import * as appstoreDeclarations from '../../appstore/declarations.js';
 import { textResult } from '../../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    ageHeader: (appInfoId: string, decl: string | null | undefined) =>
+      `연령 등급 선언 (appInfo ${appInfoId}${decl ? ` · declaration ${decl}` : ' · 선언 없음'})`,
+    noAnswers: '  (아직 답변된 항목 없음)',
+    ageUpdated: (n: number, decl: string) => `✅ 연령 등급 갱신 (${n}개 항목) — declaration ${decl}`,
+    encCreated: '✅ 수출 규정 선언 생성',
+    state: (s: string | null | undefined) => `  상태: ${s ?? '(응답에 없음)'}`,
+    attached: (n: number) => `  연결된 빌드: ${n}개`,
+    inReview: '  Apple 검토 중 — 승인되면 빌드에 반영된다.',
+    availHeader: (id: string | null | undefined) => `판매 지역 (availability ${id ?? '없음'})`,
+    availCounts: (on: number, off: number) => `  판매 중: ${on}개 · 중지: ${off}개`,
+    autoNew: (v: boolean | undefined) => `  신규 지역 자동 포함: ${v === undefined ? '알 수 없음' : v}`,
+    onSale: '판매',
+    offSale: '중지',
+    releaseDate: (d: string) => ` · 출시일 ${d}`,
+    preOrder: ' · 사전주문',
+    terrDryRun: (n: number) => `🛑 dry-run — ${n}개 지역, 아직 바꾸지 않았다.`,
+    kvAvailable: (v: boolean) => `판매=${v}`,
+    kvReleaseDate: (d: string) => `출시일=${d}`,
+    kvPreOrder: (v: boolean) => `사전주문=${v}`,
+    confirmToRun: '실행하려면 confirm: true 로 다시 호출.',
+    terrResult: (ok: number, failed: number) => `지역 변경: 성공 ${ok} / 실패 ${failed}`,
+  },
+  {
+    ageHeader: (appInfoId: string, decl: string | null | undefined) =>
+      `Age rating declaration (appInfo ${appInfoId}${decl ? ` · declaration ${decl}` : ' · no declaration'})`,
+    noAnswers: '  (no items answered yet)',
+    ageUpdated: (n: number, decl: string) => `✅ Age rating updated (${n} items) — declaration ${decl}`,
+    encCreated: '✅ Export compliance declaration created',
+    state: (s: string | null | undefined) => `  State: ${s ?? '(not in the response)'}`,
+    attached: (n: number) => `  Attached builds: ${n}`,
+    inReview: '  Under Apple review — applied to the builds once approved.',
+    availHeader: (id: string | null | undefined) => `Sales territories (availability ${id ?? 'none'})`,
+    availCounts: (on: number, off: number) => `  Available: ${on} · Unavailable: ${off}`,
+    autoNew: (v: boolean | undefined) => `  Auto-include new territories: ${v === undefined ? 'unknown' : v}`,
+    onSale: 'available',
+    offSale: 'unavailable',
+    releaseDate: (d: string) => ` · release date ${d}`,
+    preOrder: ' · pre-order',
+    terrDryRun: (n: number) => `🛑 dry-run — ${n} territories, nothing changed yet.`,
+    kvAvailable: (v: boolean) => `available=${v}`,
+    kvReleaseDate: (d: string) => `releaseDate=${d}`,
+    kvPreOrder: (v: boolean) => `preOrder=${v}`,
+    confirmToRun: 'To run it, call again with confirm: true.',
+    terrResult: (ok: number, failed: number) => `Territory changes: ${ok} succeeded / ${failed} failed`,
+  },
+);
 
 /** appstore_{get,update}_age_rating · appstore_declare_encryption · appstore_get_availability · appstore_set_territory_availability */
 export function registerDeclarationTools(server: ToolRegistrar) {
@@ -21,9 +71,9 @@ export function registerDeclarationTools(server: ToolRegistrar) {
       const { appInfoId, declarationId, declaration } = await appstoreDeclarations.getAgeRating(appId);
       const filled = Object.entries(declaration).filter(([, v]) => v !== undefined && v !== null);
       return textResult([
-        `연령 등급 선언 (appInfo ${appInfoId}${declarationId ? ` · declaration ${declarationId}` : ' · 선언 없음'})`,
+        M().ageHeader(appInfoId, declarationId),
         ...filled.map(([k, v]) => `  ${k}: ${v}`),
-        filled.length === 0 ? '  (아직 답변된 항목 없음)' : '',
+        filled.length === 0 ? M().noAnswers : '',
       ].filter(Boolean));
     },
   );
@@ -88,7 +138,7 @@ export function registerDeclarationTools(server: ToolRegistrar) {
         (k) => (declaration as Record<string, unknown>)[k] !== undefined,
       );
       return textResult([
-        `✅ 연령 등급 갱신 (${changed.length}개 항목) — declaration ${declarationId}`,
+        M().ageUpdated(changed.length, declarationId),
         ...changed.map((k) => `  ${k}: ${String(after[k])}`),
       ]);
     },
@@ -116,11 +166,11 @@ export function registerDeclarationTools(server: ToolRegistrar) {
     async ({ appId, buildIds, ...attrs }) => {
       const r = await appstoreDeclarations.declareEncryption({ appId, buildIds, ...attrs });
       return textResult([
-        '✅ 수출 규정 선언 생성',
+        M().encCreated,
         `  declarationId: ${r.declarationId}`,
-        `  상태: ${r.state ?? '(응답에 없음)'}`,
-        `  연결된 빌드: ${r.attachedBuilds}개`,
-        r.state === 'IN_REVIEW' ? '  Apple 검토 중 — 승인되면 빌드에 반영된다.' : '',
+        M().state(r.state),
+        M().attached(r.attachedBuilds),
+        r.state === 'IN_REVIEW' ? M().inReview : '',
       ].filter(Boolean));
     },
   );
@@ -139,16 +189,16 @@ export function registerDeclarationTools(server: ToolRegistrar) {
     async ({ appId, includeTerritories }) => {
       const r = await appstoreDeclarations.getAvailability({ appId, includeTerritories });
       const lines = [
-        `판매 지역 (availability ${r.availabilityId ?? '없음'})`,
-        `  판매 중: ${r.availableCount}개 · 중지: ${r.unavailableCount}개`,
-        `  신규 지역 자동 포함: ${r.availableInNewTerritories === undefined ? '알 수 없음' : r.availableInNewTerritories}`,
+        M().availHeader(r.availabilityId),
+        M().availCounts(r.availableCount, r.unavailableCount),
+        M().autoNew(r.availableInNewTerritories),
       ];
       if (r.territories) {
         for (const t of r.territories) {
           lines.push(
-            `  ${t.id}: ${t.available ? '판매' : '중지'}` +
-              (t.releaseDate ? ` · 출시일 ${t.releaseDate}` : '') +
-              (t.preOrderEnabled ? ' · 사전주문' : ''),
+            `  ${t.id}: ${t.available ? M().onSale : M().offSale}` +
+              (t.releaseDate ? M().releaseDate(t.releaseDate) : '') +
+              (t.preOrderEnabled ? M().preOrder : ''),
           );
         }
       }
@@ -181,24 +231,24 @@ export function registerDeclarationTools(server: ToolRegistrar) {
     async ({ territories, confirm }) => {
       if (!confirm) {
         return textResult([
-          `🛑 dry-run — ${territories.length}개 지역, 아직 바꾸지 않았다.`,
+          M().terrDryRun(territories.length),
           ...territories.map(
             (t) =>
               `  ${t.id}: ` +
               [
-                t.available === undefined ? '' : `판매=${t.available}`,
-                t.releaseDate ? `출시일=${t.releaseDate}` : '',
-                t.preOrderEnabled === undefined ? '' : `사전주문=${t.preOrderEnabled}`,
+                t.available === undefined ? '' : M().kvAvailable(t.available),
+                t.releaseDate ? M().kvReleaseDate(t.releaseDate) : '',
+                t.preOrderEnabled === undefined ? '' : M().kvPreOrder(t.preOrderEnabled),
               ].filter(Boolean).join(' · '),
           ),
           '',
-          '실행하려면 confirm: true 로 다시 호출.',
+          M().confirmToRun,
         ]);
       }
       const results = await appstoreDeclarations.setTerritoryAvailability({ territories });
       const ok = results.filter((r) => r.ok).length;
       return textResult([
-        `지역 변경: 성공 ${ok} / 실패 ${results.length - ok}`,
+        M().terrResult(ok, results.length - ok),
         ...results.filter((r) => !r.ok).map((r) => `  ✗ ${r.id}: ${r.error}`),
       ]);
     },

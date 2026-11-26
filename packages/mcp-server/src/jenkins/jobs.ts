@@ -1,6 +1,24 @@
 import type { JenkinsConfig } from './config.js';
 import { authHeaders, baseUrl, createItemUrl, getCrumb, jenkinsError, jobUrl } from './http.js';
 import { fetchWithTimeout } from '../lib/http.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    listFailed: 'Jenkins 잡 목록 조회 실패',
+    existsFailed: (job: string) => `Jenkins 잡 존재 확인 실패: ${job}`,
+    configFailed: (job: string) => `Jenkins 잡 config 조회 실패: ${job}`,
+    createFailed: (job: string) => `Jenkins 잡 생성 실패: ${job}`,
+    updateFailed: (job: string) => `Jenkins 잡 수정 실패: ${job}`,
+  },
+  {
+    listFailed: 'Jenkins job list failed',
+    existsFailed: (job: string) => `Jenkins job existence check failed: ${job}`,
+    configFailed: (job: string) => `Jenkins job config read failed: ${job}`,
+    createFailed: (job: string) => `Jenkins job create failed: ${job}`,
+    updateFailed: (job: string) => `Jenkins job update failed: ${job}`,
+  },
+);
 
 export interface JenkinsJobSummary {
   name: string;
@@ -18,7 +36,7 @@ export async function listJobs(cfg: JenkinsConfig, folder?: string): Promise<Jen
   const res = await fetchWithTimeout(`${root}/api/json?tree=jobs[name,url,color]`, {
     headers: authHeaders(cfg),
   });
-  if (!res.ok) throw await jenkinsError('Jenkins 잡 목록 조회 실패', res);
+  if (!res.ok) throw await jenkinsError(M().listFailed, res);
   const data = (await res.json()) as { jobs?: JenkinsJobSummary[] };
   return data.jobs ?? [];
 }
@@ -33,7 +51,7 @@ export async function jobExists(cfg: JenkinsConfig, jobPath: string): Promise<bo
   });
   if (res.ok) return true;
   if (res.status === 404) return false;
-  throw await jenkinsError(`Jenkins 잡 존재 확인 실패: ${jobPath}`, res);
+  throw await jenkinsError(M().existsFailed(jobPath), res);
 }
 
 /** 잡의 config.xml 원문. 백업하거나 수정 전 현재 상태를 확인할 때 쓴다. */
@@ -41,7 +59,7 @@ export async function getJobConfig(cfg: JenkinsConfig, jobPath: string): Promise
   const res = await fetchWithTimeout(`${jobUrl(cfg, jobPath)}/config.xml`, {
     headers: authHeaders(cfg),
   });
-  if (!res.ok) throw await jenkinsError(`Jenkins 잡 config 조회 실패: ${jobPath}`, res);
+  if (!res.ok) throw await jenkinsError(M().configFailed(jobPath), res);
   return res.text();
 }
 
@@ -64,7 +82,7 @@ export async function createJob(
     },
     body: configXml,
   });
-  if (!res.ok) throw await jenkinsError(`Jenkins 잡 생성 실패: ${jobPath}`, res);
+  if (!res.ok) throw await jenkinsError(M().createFailed(jobPath), res);
 }
 
 /** 기존 잡의 config.xml 교체. 잡이 없으면 404. */
@@ -83,7 +101,7 @@ export async function updateJob(
     },
     body: configXml,
   });
-  if (!res.ok) throw await jenkinsError(`Jenkins 잡 수정 실패: ${jobPath}`, res);
+  if (!res.ok) throw await jenkinsError(M().updateFailed(jobPath), res);
 }
 
 /** 있으면 수정, 없으면 생성. Jenkinsfile/job-config.xml 을 레포에서 밀어넣을 때 쓴다. */

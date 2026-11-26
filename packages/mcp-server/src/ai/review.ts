@@ -1,5 +1,22 @@
 import { requireApiKey, parseJsonResponse, LOCALE_NAMES, AI_MODEL } from './client.js';
 import { detectReviewSentiment, REVIEW_REPLY_MAX_TOKENS, type ReviewSentiment, type ReviewTone } from '#core/ai.js';
+import { catalog } from '#core/lang.js';
+
+// Output framing only. The prompt text below stays Korean: the reply language is chosen by the `language` param.
+const M = catalog(
+  {
+    note: '이 답변은 AI가 생성한 초안입니다. 게시 전 반드시 검토하세요.',
+    header: '💬 AI 리뷰 답변 초안\n',
+    suggested: (tone: string, language: string) => `─── 제안 답변 (${tone} / ${language}) ───`,
+    approval: '게시 요청이 있으면 원래 스토어에서 해당 리뷰의 미리보기를 보여주고 명시 승인을 받으세요.',
+  },
+  {
+    note: 'This reply is an AI-generated draft. You must review it before posting.',
+    header: '💬 AI review reply draft\n',
+    suggested: (tone: string, language: string) => `─── Suggested reply (${tone} / ${language}) ───`,
+    approval: 'If asked to post it, show a preview of that review from the original store and get explicit approval.',
+  },
+);
 
 export interface ReviewReplyResult {
   suggested: string;
@@ -54,18 +71,18 @@ export async function generateReviewReply(opts: {
     suggested: parsed.reply,
     tone,
     language,
-    note: '이 답변은 AI가 생성한 초안입니다. 게시 전 반드시 검토하세요.',
+    note: M().note,
   };
 }
 
 export function formatReviewReply(result: ReviewReplyResult): string {
   return [
-    '💬 AI 리뷰 답변 초안\n',
-    `─── 제안 답변 (${result.tone} / ${result.language}) ───`,
+    M().header,
+    M().suggested(result.tone, result.language),
     result.suggested,
     '',
     `⚠ ${result.note}`,
     '',
-    '게시 요청이 있으면 원래 스토어에서 해당 리뷰의 미리보기를 보여주고 명시 승인을 받으세요.',
+    M().approval,
   ].join('\n');
 }

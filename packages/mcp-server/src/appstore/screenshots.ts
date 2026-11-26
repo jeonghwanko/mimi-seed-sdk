@@ -7,6 +7,26 @@ import crypto from 'node:crypto';
 import { fetchWithTimeout, HTTP_TRANSFER_TIMEOUT_MS } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import type { AscListDocument, AscResource, AscToMany } from './types.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    authNeeded: '❌ App Store Connect 인증이 필요해.',
+    runInTerminal: '터미널에서 실행:',
+    chunkFailed: (offset: number, length: number, status: number, text: string) =>
+      `청크 업로드 실패 (offset=${offset}, length=${length}): ${status} ${text}`,
+    noFile: (filePath: string) => `파일이 존재하지 않아: ${filePath}`,
+    noOps: 'uploadOperations가 비어있음 — Apple API 응답 형식 확인 필요.',
+  },
+  {
+    authNeeded: '❌ App Store Connect authentication is required.',
+    runInTerminal: 'Run in a terminal:',
+    chunkFailed: (offset: number, length: number, status: number, text: string) =>
+      `Chunk upload failed (offset=${offset}, length=${length}): ${status} ${text}`,
+    noFile: (filePath: string) => `File does not exist: ${filePath}`,
+    noOps: 'uploadOperations is empty — check the Apple API response format.',
+  },
+);
 
 /**
  * App Store Connect API — Screenshot upload
@@ -35,9 +55,9 @@ async function authHeadersOrThrow(): Promise<Record<string, string>> {
   if (!headers) {
     throw new Error(
       [
-        '❌ App Store Connect 인증이 필요해.',
+        M().authNeeded,
         '',
-        '터미널에서 실행:',
+        M().runInTerminal,
         '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
       ].join('\n'),
     );
@@ -196,7 +216,7 @@ async function uploadChunks(filePath: string, ops: UploadOperation[]): Promise<v
     );
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`청크 업로드 실패 (offset=${op.offset}, length=${op.length}): ${res.status} ${text}`);
+      throw new Error(M().chunkFailed(op.offset, op.length, res.status, text));
     }
   }
 }
@@ -209,7 +229,7 @@ export async function uploadScreenshot(
   filePath: string,
 ): Promise<{ id: string; fileName: string; fileSize: number; displayType: string }> {
   if (!fs.existsSync(filePath)) {
-    throw new Error(`파일이 존재하지 않아: ${filePath}`);
+    throw new Error(M().noFile(filePath));
   }
   const absPath = path.resolve(filePath);
   const buf = fs.readFileSync(absPath);
@@ -236,7 +256,7 @@ export async function uploadScreenshot(
   const screenshotId = reserved.data.id;
   const ops: UploadOperation[] = reserved.data.attributes?.uploadOperations ?? [];
   if (ops.length === 0) {
-    throw new Error('uploadOperations가 비어있음 — Apple API 응답 형식 확인 필요.');
+    throw new Error(M().noOps);
   }
 
   // upload

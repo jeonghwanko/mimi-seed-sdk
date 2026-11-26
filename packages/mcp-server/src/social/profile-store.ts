@@ -8,6 +8,28 @@ import {
   type SocialPlatform,
 } from '#core/project-manifest.js';
 import { writeCredentialJson } from '#core/atomic-write.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    invalidId:
+      '소셜 프로필 ID가 올바르지 않습니다. ' +
+      '영문자·숫자로 시작하는 1~64자의 영문자/숫자/점/밑줄/하이픈만 사용할 수 있습니다.',
+    notObject: '객체 형식이 아닙니다.',
+    unreadable: (file: string, msg: string) => `기존 소셜 프로필 파일을 읽을 수 없어 덮어쓰지 않았습니다: ${file} ` + `(${msg})`,
+    profile: (id: string) => `프로필 '${id}'`,
+    defaultProfile: '기본 프로필',
+  },
+  {
+    invalidId:
+      'Invalid social profile ID. ' +
+      'Use 1–64 characters of letters, digits, dots, underscores, or hyphens, starting with a letter or digit.',
+    notObject: 'It is not an object.',
+    unreadable: (file: string, msg: string) => `Could not read the existing social profile file, so it was not overwritten: ${file} (${msg})`,
+    profile: (id: string) => `profile '${id}'`,
+    defaultProfile: 'default profile',
+  },
+);
 
 export interface SocialConfigOptions {
   /** 명시하면 프로젝트 매니페스트 매핑보다 우선한다. */
@@ -28,8 +50,7 @@ type SocialProfileDocument = Partial<Record<SocialPlatform, unknown>>;
 function validateProfileId(profile: string): string {
   if (!isValidSocialProfileId(profile)) {
     throw new Error(
-      '소셜 프로필 ID가 올바르지 않습니다. ' +
-      '영문자·숫자로 시작하는 1~64자의 영문자/숫자/점/밑줄/하이픈만 사용할 수 있습니다.',
+      M().invalidId,
     );
   }
   return profile;
@@ -86,13 +107,12 @@ export function saveSocialPlatformConfig<T extends object>(
       try {
         const parsed = JSON.parse(fs.readFileSync(target.filePath, 'utf-8')) as unknown;
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error('객체 형식이 아닙니다.');
+          throw new Error(M().notObject);
         }
         existing = parsed;
       } catch (error) {
         throw new Error(
-          `기존 소셜 프로필 파일을 읽을 수 없어 덮어쓰지 않았습니다: ${target.filePath} ` +
-          `(${error instanceof Error ? error.message : String(error)})`,
+          M().unreadable(target.filePath, error instanceof Error ? error.message : String(error)),
           { cause: error },
         );
       }
@@ -105,5 +125,5 @@ export function saveSocialPlatformConfig<T extends object>(
 }
 
 export function socialTargetLabel(target: SocialConfigTarget): string {
-  return target.profile ? `프로필 '${target.profile}'` : '기본 프로필';
+  return target.profile ? M().profile(target.profile) : M().defaultProfile;
 }

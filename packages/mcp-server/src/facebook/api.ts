@@ -2,6 +2,12 @@ import type { FacebookConfig } from './config.js';
 import { metaApiError } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  { imageCount: '이미지는 2~10장이어야 합니다.' },
+  { imageCount: 'There must be 2–10 images.' },
+);
 
 const BASE = 'https://graph.facebook.com/v21.0';
 
@@ -93,7 +99,7 @@ export async function postMultiPhoto(
   caption: string,
 ): Promise<PostResult> {
   if (imageUrls.length < 2 || imageUrls.length > 10) {
-    throw new Error('이미지는 2~10장이어야 합니다.');
+    throw new Error(M().imageCount);
   }
 
   // Step 1: upload each as unpublished photo

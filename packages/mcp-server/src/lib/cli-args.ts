@@ -1,3 +1,19 @@
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    valueMissing: (name: string) =>
+      `--${name} 에 값이 필요합니다 (값 없이 단독으로 쓰였습니다). 값이 '--'로 시작하면 --${name}=값 형태로 쓰세요.`,
+    required: (name: string) => `--${name} 가 필요합니다.`,
+    unknown: (cmd: string) => `❌ 알 수 없는 서브커맨드: ${cmd}\n\n`,
+  },
+  {
+    valueMissing: (name: string) =>
+      `--${name} needs a value (it was given alone, with no value). If the value starts with '--', write it as --${name}=value.`,
+    required: (name: string) => `--${name} is required.`,
+    unknown: (cmd: string) => `❌ Unknown subcommand: ${cmd}\n\n`,
+  },
+);
 // 도메인별 sub-CLI(mimi-seed-firebase / -admob / -ga4)가 공유하는 최소 argv 파서.
 // `mimi-seed <domain> <subcommand> [--flag value] [--bool]` 형태를 파싱한다.
 // 실제 사용자 진입점은 cli 패키지의 `mimi-seed <domain> ...` 이고, 그게 npx 로
@@ -55,10 +71,10 @@ export function requireFlag(p: ParsedArgs, name: string): string {
   if (v === undefined || v === '') {
     if (p.bools.has(name)) {
       throw new CliUsageError(
-        `--${name} 에 값이 필요합니다 (값 없이 단독으로 쓰였습니다). 값이 '--'로 시작하면 --${name}=값 형태로 쓰세요.`,
+        M().valueMissing(name),
       );
     }
-    throw new CliUsageError(`--${name} 가 필요합니다.`);
+    throw new CliUsageError(M().required(name));
   }
   return v;
 }
@@ -103,7 +119,7 @@ export async function runDomainCli(opts: {
 
   const handler = opts.handlers[p.command];
   if (!handler) {
-    process.stderr.write(`❌ 알 수 없는 서브커맨드: ${p.command}\n\n` + opts.help + '\n');
+    process.stderr.write(M().unknown(p.command) + opts.help + '\n');
     process.exit(1);
   }
 

@@ -4,6 +4,20 @@
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import { publisher } from './edits.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    pageFailed: (page: number, n: number, reason: string) => `${page}페이지 조회 실패로 ${n}건까지만 가져왔다 (${reason})`,
+    tokenLoop: '같은 페이지 토큰이 반복되어 조회를 중단했습니다.',
+    pageCap: (max: number, n: number) => `페이지 상한(${max}페이지)에 걸려 최근 ${n}건까지만 가져왔다`,
+  },
+  {
+    pageFailed: (page: number, n: number, reason: string) => `Fetching page ${page} failed, so only ${n} reviews were fetched (${reason})`,
+    tokenLoop: 'Stopped fetching because the same page token repeated.',
+    pageCap: (max: number, n: number) => `Hit the page limit (${max} pages), so only the latest ${n} reviews were fetched`,
+  },
+);
 
 // ─── 리뷰 조회 ───
 
@@ -47,16 +61,16 @@ async function fetchAllReviews(
     } catch (err) {
       if (page === 0) throw err;
       const reason = err instanceof Error ? err.message : String(err);
-      return { reviews: all, truncated: `${page + 1}페이지 조회 실패로 ${all.length}건까지만 가져왔다 (${reason})` };
+      return { reviews: all, truncated: M().pageFailed(page + 1, all.length, reason) };
     }
     all.push(...result.reviews);
     const next = result.nextPageToken;
     if (!next) return { reviews: all, truncated: null };
-    if (seen.has(next)) return { reviews: all, truncated: '같은 페이지 토큰이 반복되어 조회를 중단했습니다.' };
+    if (seen.has(next)) return { reviews: all, truncated: M().tokenLoop };
     seen.add(next);
     token = next;
   }
-  return { reviews: all, truncated: `페이지 상한(${REVIEW_MAX_PAGES}페이지)에 걸려 최근 ${all.length}건까지만 가져왔다` };
+  return { reviews: all, truncated: M().pageCap(REVIEW_MAX_PAGES, all.length) };
 }
 
 type DevComment = { text?: string | null; lastModified?: { seconds?: string | null } | null };
@@ -93,7 +107,7 @@ export async function listReviewsPage(
   const summaries = page.reviews.map(toReviewSummary);
   const reviews = unansweredOnly ? summaries.filter((review) => review.developerComment === null) : summaries;
   if (page.nextPageToken && page.nextPageToken === pageToken) {
-    return { reviews, nextPageToken: null, warning: '같은 페이지 토큰이 반복되어 조회를 중단했습니다.' };
+    return { reviews, nextPageToken: null, warning: M().tokenLoop };
   }
   return { reviews, nextPageToken: page.nextPageToken };
 }

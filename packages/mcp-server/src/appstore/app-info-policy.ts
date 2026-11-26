@@ -3,6 +3,16 @@ import { encodePathSegment } from '../lib/url-path.js';
 import { isNotFound } from './http.js';
 import type { AppStorePlatform } from './release-target.js';
 import { appStorePagination, getAppStoreResponse, pageIsIncomplete } from './read-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    incomplete: 'App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.',
+  },
+  {
+    incomplete: 'The App Store Connect privacy localization list is incomplete.',
+  },
+);
 
 const privacyFields = 'privacyPolicyUrl,privacyPolicyText';
 const ageRatingFields = 'userGeneratedContent,socialMedia,socialMediaAgeRestricted,ageAssurance';
@@ -102,7 +112,7 @@ export async function readAppInfoPrivacy(appInfoId: string, platform: AppStorePl
   );
   if (localizations.data.some(({ attributes }) => hasPrivacyPolicy(platform, attributes))) return true;
   if (pageIsIncomplete(localizations, localizations.data.length)) {
-    throw new Error('App Store Connect의 개인정보 로컬라이제이션 목록이 불완전합니다.');
+    throw new Error(M().incomplete);
   }
   return false;
 }

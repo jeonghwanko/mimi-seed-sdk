@@ -5,6 +5,72 @@ import * as appstore from '../../appstore/tools.js';
 import * as appstoreRelease from '../../appstore/release.js';
 import { jsonResult, textResult, errorResult } from '../../lib/mcp-response.js';
 import { releaseStatusText } from '../../appstore/messages.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    created: (v: string, platform: string, build: string, json: string) =>
+      `✅ 버전 ${v} (${platform}) 생성됨${build ? ` + 빌드 ${build} 연결됨` : ''}.\n\n${json}`,
+    minBuildNeedsAuto: '❌ minBuildNumber 는 buildId 생략(최신 VALID 빌드 자동 선택) 시에만 쓸 수 있다 — API 호출 안 함.',
+    buildAttached: (buildId: string, versionId: string, json: string) => `✅ 빌드 ${buildId}가 버전 ${versionId}에 연결됐어.\n\n${json}`,
+    latestAttached: (num: string, id: string, versionId: string, json: string) =>
+      `✅ 최신 VALID 빌드 #${num} (id=${id}) 가 버전 ${versionId} 에 연결됐어.\n\n${json}`,
+    versionStringChanged: '✓ 버전 문자열 변경 완료',
+    canAttachNow: '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_build — buildId 생략 시 최신 VALID 빌드).',
+    releaseDryRun: '🛑 출시 dry-run — 아직 출시하지 않았다.',
+    version: (v: string) => `  버전: ${v}`,
+    state: (s: string) => `  상태: ${s}`,
+    unknown: '알 수 없음',
+    lookupFailed: '조회 실패',
+    phased: (s: string) => `  단계적 출시: ${s}`,
+    phasedOff: '  단계적 출시: 꺼짐',
+    releaseConfirm: '실제 출시하려면 confirm: true 로 다시 호출. 실행 즉시 공개된다.',
+    notReleasable: '지금은 출시할 수 없는 상태다. PENDING_DEVELOPER_RELEASE 여야 한다.',
+    releaseSent: '✅ 출시 요청 전송',
+    releaseLag: 'App Store 반영에는 보통 수십 분~수 시간이 걸린다. appstore_release_status 로 확인.',
+    releaseTypeChanged: '✅ 출시 방식 변경',
+    releaseType: (t: string) => `  출시 방식: ${t}`,
+    scheduledAt: (t: string) => `  예약 시각: ${t}`,
+    phasedStatus: '단계적 출시 상태',
+    actionDryRun: (action: string) => `🛑 ${action} dry-run — 아직 실행하지 않았다.`,
+    day: (n: number) => ` (${n}일째/7일)`,
+    phasedConfirm: '실행하려면 confirm: true 로 다시 호출. 남은 사용자 전체에게 즉시 공개된다.',
+    phasedDone: (action: string) => `✅ 단계적 출시: ${action}`,
+    currentState: (s: string) => `  현재 상태: ${s}`,
+    phasedRemoved: '  단계적 출시 제거됨 (전체 공개)',
+  },
+  {
+    created: (v: string, platform: string, build: string, json: string) =>
+      `✅ Version ${v} (${platform}) created${build ? ` + build ${build} attached` : ''}.\n\n${json}`,
+    minBuildNeedsAuto: '❌ minBuildNumber can only be used when buildId is omitted (auto-select of the latest VALID build) — no API call made.',
+    buildAttached: (buildId: string, versionId: string, json: string) => `✅ Build ${buildId} attached to version ${versionId}.\n\n${json}`,
+    latestAttached: (num: string, id: string, versionId: string, json: string) =>
+      `✅ Latest VALID build #${num} (id=${id}) attached to version ${versionId}.\n\n${json}`,
+    versionStringChanged: '✓ Version string changed',
+    canAttachNow: 'You can now attach a build of the same version (appstore_attach_build — latest VALID build when buildId is omitted).',
+    releaseDryRun: '🛑 Release dry-run — not released yet.',
+    version: (v: string) => `  Version: ${v}`,
+    state: (s: string) => `  State: ${s}`,
+    unknown: 'unknown',
+    lookupFailed: 'lookup failed',
+    phased: (s: string) => `  Phased release: ${s}`,
+    phasedOff: '  Phased release: off',
+    releaseConfirm: 'To actually release, call again with confirm: true. It goes public immediately.',
+    notReleasable: 'It cannot be released right now. It must be PENDING_DEVELOPER_RELEASE.',
+    releaseSent: '✅ Release request sent',
+    releaseLag: 'It usually takes tens of minutes to a few hours to appear on the App Store. Check with appstore_release_status.',
+    releaseTypeChanged: '✅ Release type changed',
+    releaseType: (t: string) => `  Release type: ${t}`,
+    scheduledAt: (t: string) => `  Scheduled for: ${t}`,
+    phasedStatus: 'Phased release status',
+    actionDryRun: (action: string) => `🛑 ${action} dry-run — not run yet.`,
+    day: (n: number) => ` (day ${n}/7)`,
+    phasedConfirm: 'To run it, call again with confirm: true. It goes public to all remaining users immediately.',
+    phasedDone: (action: string) => `✅ Phased release: ${action}`,
+    currentState: (s: string) => `  Current state: ${s}`,
+    phasedRemoved: '  Phased release removed (public to all)',
+  },
+);
 
 const applePlatform = z.enum(['IOS', 'MAC_OS', 'TV_OS', 'VISION_OS']);
 
@@ -62,7 +128,7 @@ export function registerVersionTools(server: ToolRegistrar) {
         earliestReleaseDate,
         buildId,
       });
-      return textResult(`✅ 버전 ${versionString} (${platform}) 생성됨${buildId ? ` + 빌드 ${buildId} 연결됨` : ''}.\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().created(versionString, platform, buildId ?? '', JSON.stringify(result, null, 2)));
     },
   );
 
@@ -85,13 +151,13 @@ export function registerVersionTools(server: ToolRegistrar) {
       // 빈 문자열도 '지정됨' 으로 본다 — 병합 전처럼 API 가 거부하게 두고, 최신 빌드로 몰래 바꿔 붙이지 않는다.
       if (buildId !== undefined) {
         if (minBuildNumber !== undefined) {
-          return errorResult('❌ minBuildNumber 는 buildId 생략(최신 VALID 빌드 자동 선택) 시에만 쓸 수 있다 — API 호출 안 함.');
+          return errorResult(M().minBuildNeedsAuto);
         }
         const result = await appstore.attachBuildToVersion(versionId, buildId);
-        return textResult(`✅ 빌드 ${buildId}가 버전 ${versionId}에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`);
+        return textResult(M().buildAttached(buildId, versionId, JSON.stringify(result, null, 2)));
       }
       const result = await appstore.attachLatestValidBuild(versionId, { minBuildNumber });
-      return textResult(`✅ 최신 VALID 빌드 #${result.buildNumber} (id=${result.attachedBuildId}) 가 버전 ${versionId} 에 연결됐어.\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().latestAttached(String(result.buildNumber), String(result.attachedBuildId), versionId, JSON.stringify(result, null, 2)));
     },
   );
 }
@@ -112,11 +178,11 @@ export function registerVersionStringTool(server: ToolRegistrar) {
     async ({ versionId, versionString }) => {
       const result = await appstore.updateVersionString(versionId, versionString);
       return textResult([
-        '✓ 버전 문자열 변경 완료',
+        M().versionStringChanged,
         `versionId: ${result.versionId}`,
         `versionString: ${result.versionString}`,
         result.state ? `state: ${result.state}` : '',
-        '이제 같은 버전의 빌드를 attach 할 수 있다 (appstore_attach_build — buildId 생략 시 최신 VALID 빌드).',
+        M().canAttachNow,
       ].filter(Boolean));
     },
   );
@@ -163,22 +229,22 @@ export function registerReleaseTools(server: ToolRegistrar) {
         const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
         const ready = version.state === 'PENDING_DEVELOPER_RELEASE';
         return textResult([
-          '🛑 출시 dry-run — 아직 출시하지 않았다.',
-          `  버전: ${version.versionString ?? versionId}`,
-          `  상태: ${version.state ?? '알 수 없음'}${note ? ` — ${note}` : ''}`,
-          phased ? `  단계적 출시: ${phased.state ?? '?'}` : '  단계적 출시: 꺼짐',
+          M().releaseDryRun,
+          M().version(version.versionString ?? versionId),
+          M().state(`${version.state ?? M().unknown}${note ? ` — ${note}` : ''}`),
+          phased ? M().phased(phased.state ?? '?') : M().phasedOff,
           '',
           ready
-            ? '실제 출시하려면 confirm: true 로 다시 호출. 실행 즉시 공개된다.'
-            : '지금은 출시할 수 없는 상태다. PENDING_DEVELOPER_RELEASE 여야 한다.',
+            ? M().releaseConfirm
+            : M().notReleasable,
         ]);
       }
       const after = await appstoreRelease.requestRelease(versionId);
       return textResult([
-        '✅ 출시 요청 전송',
-        `  버전: ${after.versionString ?? versionId}`,
-        `  상태: ${after.state ?? '조회 실패'}`,
-        'App Store 반영에는 보통 수십 분~수 시간이 걸린다. appstore_release_status 로 확인.',
+        M().releaseSent,
+        M().version(after.versionString ?? versionId),
+        M().state(after.state ?? M().lookupFailed),
+        M().releaseLag,
       ]);
     },
   );
@@ -205,11 +271,11 @@ export function registerReleaseTools(server: ToolRegistrar) {
     async ({ versionId, releaseType, earliestReleaseDate }) => {
       const after = await appstoreRelease.updateReleaseType({ versionId, releaseType, earliestReleaseDate });
       return textResult([
-        '✅ 출시 방식 변경',
-        `  버전: ${after.versionString ?? versionId}`,
-        `  출시 방식: ${after.releaseType ?? releaseType}`,
-        after.earliestReleaseDate ? `  예약 시각: ${after.earliestReleaseDate}` : '',
-        `  상태: ${after.state ?? '알 수 없음'}`,
+        M().releaseTypeChanged,
+        M().version(after.versionString ?? versionId),
+        M().releaseType(after.releaseType ?? releaseType),
+        after.earliestReleaseDate ? M().scheduledAt(after.earliestReleaseDate) : '',
+        M().state(after.state ?? M().unknown),
       ].filter(Boolean));
     },
   );
@@ -238,25 +304,25 @@ export function registerReleaseTools(server: ToolRegistrar) {
         const { version, phased, note } = await appstoreRelease.getReleaseStatus(versionId);
         const header =
           action === 'status'
-            ? '단계적 출시 상태'
-            : `🛑 ${action} dry-run — 아직 실행하지 않았다.`;
+            ? M().phasedStatus
+            : M().actionDryRun(action);
         return textResult([
           header,
-          `  버전: ${version.versionString ?? versionId} (${version.state ?? '?'}${note ? ` — ${note}` : ''})`,
+          M().version(`${version.versionString ?? versionId} (${version.state ?? '?'}${note ? ` — ${note}` : ''})`),
           phased
-            ? `  단계적 출시: ${phased.state ?? '?'}` +
-              (phased.currentDayNumber ? ` (${phased.currentDayNumber}일째/7일)` : '')
-            : '  단계적 출시: 꺼짐',
+            ? M().phased(phased.state ?? '?') +
+              (phased.currentDayNumber ? M().day(phased.currentDayNumber) : '')
+            : M().phasedOff,
           action === 'status'
             ? ''
-            : '실행하려면 confirm: true 로 다시 호출. 남은 사용자 전체에게 즉시 공개된다.',
+            : M().phasedConfirm,
         ].filter(Boolean));
       }
 
       const { phased } = await appstoreRelease.setPhasedRelease({ versionId, action });
       return textResult([
-        `✅ 단계적 출시: ${action}`,
-        phased ? `  현재 상태: ${phased.state ?? '?'}` : '  단계적 출시 제거됨 (전체 공개)',
+        M().phasedDone(action),
+        phased ? M().currentState(phased.state ?? '?') : M().phasedRemoved,
       ]);
     },
   );

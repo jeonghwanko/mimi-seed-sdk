@@ -3,10 +3,30 @@ import path from 'node:path';
 import os from 'node:os';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import type { JenkinsConfig } from '#core/jenkins.js';
+import { catalog } from '#core/lang.js';
 import { assertCredentialFileReadable, jsonFileProblem } from '../lib/json-file.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimi-seed');
 const JENKINS_CONFIG_PATH = path.join(CONFIG_DIR, 'jenkins.json');
+
+const M = catalog(
+  {
+    plainHttp: (host: string) =>
+      `⚠️ ${host} 는 사설망 주소가 아닌데 http 입니다 — API 토큰이 암호화 없이 전송됩니다. 가능하면 https URL 을 쓰세요.`,
+    notConfigured:
+      'Jenkins 설정이 없습니다.\n' +
+      'jenkins_save_config 도구로 먼저 설정해주세요.\n' +
+      '예시:\n',
+  },
+  {
+    plainHttp: (host: string) =>
+      `⚠️ ${host} is not a private-network address but uses http — the API token is sent unencrypted. Use an https URL if possible.`,
+    notConfigured:
+      'Jenkins is not configured.\n' +
+      'Configure it first with the jenkins_save_config tool.\n' +
+      'Example:\n',
+  },
+);
 
 // jenkins.json 의 모양은 이 파일을 읽는 CLI 와 공유한다 (#core/jenkins.js).
 export type { JenkinsConfig } from '#core/jenkins.js';
@@ -70,7 +90,7 @@ export function jenkinsUrlWarning(url: string): string | null {
     return null;
   }
   if (parsed.protocol !== 'http:' || isPrivateHost(parsed.hostname)) return null;
-  return `⚠️ ${parsed.host} 는 사설망 주소가 아닌데 http 입니다 — API 토큰이 암호화 없이 전송됩니다. 가능하면 https URL 을 쓰세요.`;
+  return M().plainHttp(parsed.host);
 }
 
 /** jenkins.json 이 있는데 읽을 수 없으면 그 이유 (없음·정상이면 null). */
@@ -84,9 +104,7 @@ export function requireJenkinsConfig(): JenkinsConfig {
   if (!cfg) {
     assertCredentialFileReadable(JENKINS_CONFIG_PATH, 'jenkins_save_config');
     throw new Error(
-      'Jenkins 설정이 없습니다.\n' +
-      'jenkins_save_config 도구로 먼저 설정해주세요.\n' +
-      '예시:\n' +
+      M().notConfigured +
       '  jenkins_save_config(url="https://jenkins.example.com", username="admin", token=<Jenkins API token>)',
     );
   }

@@ -5,8 +5,13 @@
 import { requireAuth } from '../helpers.js';
 import * as admob from './tools.js';
 import { runDomainCli, requireFlag, flag, CliUsageError } from '../lib/cli-args.js';
+import { catalog } from '#core/lang.js';
 
-const HELP = `
+const HELP = catalog(
+  {
+    badPlatform: '--platform 은 ANDROID | IOS 여야 합니다.',
+    badFormat: (formats: string) => `--format 은 ${formats} 중 하나여야 합니다.`,
+    text: `
   💰 mimi-seed-admob — AdMob attach
 
   사용법:
@@ -26,7 +31,34 @@ const HELP = `
         광고 단위 생성. ⚠️ v1beta Limited Access — 403 가능
 
   인증: npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
-`;
+`,
+  },
+  {
+    badPlatform: '--platform must be ANDROID | IOS.',
+    badFormat: (formats: string) => `--format must be one of ${formats}.`,
+    text: `
+  💰 mimi-seed-admob — AdMob attach
+
+  Usage:
+    mimi-seed admob accounts
+        List AdMob accounts (find the accountId — accounts/pub-XXXX)
+
+    mimi-seed admob apps --account <id>
+    mimi-seed admob ad-units --account <id>
+        List registered apps / ad units
+
+    mimi-seed admob create-app --account <id> --platform <ANDROID|IOS> --name <displayName>
+                               [--store-id com.x.y | 123456789]
+        Register an app (links the store listing when store-id is given). ⚠️ v1beta Limited Access — may return 403
+
+    mimi-seed admob create-ad-unit --account <id> --app <appId> --name <name>
+                                   --format <BANNER|INTERSTITIAL|REWARDED|REWARDED_INTERSTITIAL|APP_OPEN|NATIVE>
+        Create an ad unit. ⚠️ v1beta Limited Access — may return 403
+
+  Auth: npx -y @yoonion/mimi-seed-mcp mimi-seed-auth
+`,
+  },
+);
 
 const AD_FORMATS = ['BANNER', 'INTERSTITIAL', 'REWARDED', 'REWARDED_INTERSTITIAL', 'APP_OPEN', 'NATIVE'];
 
@@ -34,7 +66,7 @@ const AD_FORMATS = ['BANNER', 'INTERSTITIAL', 'REWARDED', 'REWARDED_INTERSTITIAL
 void runDomainCli({
   binName: 'mimi-seed-admob',
   argv: process.argv.slice(2),
-  help: HELP,
+  help: HELP().text,
   handlers: {
     accounts: async () => admob.listAccounts(await requireAuth()),
     apps: async (p) => admob.listApps(await requireAuth(), requireFlag(p, 'account')),
@@ -42,7 +74,7 @@ void runDomainCli({
     'create-app': async (p) => {
       const platform = requireFlag(p, 'platform').toUpperCase();
       if (platform !== 'ANDROID' && platform !== 'IOS') {
-        throw new CliUsageError('--platform 은 ANDROID | IOS 여야 합니다.');
+        throw new CliUsageError(HELP().badPlatform);
       }
       return admob.createApp(
         await requireAuth(),
@@ -55,7 +87,7 @@ void runDomainCli({
     'create-ad-unit': async (p) => {
       const format = requireFlag(p, 'format').toUpperCase();
       if (!AD_FORMATS.includes(format)) {
-        throw new CliUsageError(`--format 은 ${AD_FORMATS.join(' | ')} 중 하나여야 합니다.`);
+        throw new CliUsageError(HELP().badFormat(AD_FORMATS.join(' | ')));
       }
       return admob.createAdUnit(
         await requireAuth(),

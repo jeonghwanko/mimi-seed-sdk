@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { catalog } from '#core/lang.js';
 import { formatAss, resolveCaptionStyle } from './captions.js';
 import { readJson, writeJsonAtomic } from './files.js';
 import { loadAssets, loadProject, loadTimeline } from './project.js';
@@ -22,6 +23,57 @@ import { parseFile, renderJobSchema } from './schemas.js';
 import type { VideoAsset, VideoRenderJob } from './types.js';
 
 const execFileAsync = promisify(execFile);
+
+const M = catalog(
+  {
+    sceneAsset: (id: string) => `렌더링할 수 없는 장면 자산입니다: ${id}`,
+    audioAsset: (id: string) => `렌더링할 수 없는 오디오 자산입니다: ${id}`,
+    ffmpegPathInvalid: (why: string, ffmpegPath: string) => `ffmpegPath 는 로컬 ffmpeg 실행 파일(ffmpeg 또는 ffmpeg.exe)의 절대경로여야 합니다 (${why}): ${ffmpegPath}`,
+    whyUnc: 'UNC·네트워크·장치 경로는 허용하지 않음',
+    whyNul: 'NUL 문자',
+    whyNotAbsolute: '로컬 절대경로가 아님',
+    whyName: '파일 이름이 ffmpeg 가 아님',
+    whyMissing: '파일이 없음',
+    whyLinkNetwork: '링크가 네트워크 경로를 가리킴',
+    whyLinkName: '링크 대상 이름이 ffmpeg 가 아님',
+    whyNotFile: '일반 파일이 아님',
+    ffmpegUnavailable: (command: string) => `FFmpeg를 실행할 수 없습니다: ${command}\nFFmpeg를 설치해 PATH 에 두거나 MIMI_SEED_FFMPEG_PATH (ffprobe 는 MIMI_SEED_FFPROBE_PATH) 환경변수에 절대경로를 지정하세요. / Install FFmpeg on PATH or set MIMI_SEED_FFMPEG_PATH (and MIMI_SEED_FFPROBE_PATH) to its absolute path.`,
+    renderRunning: (lockPath: string) => `같은 출력 파일의 렌더 작업이 이미 실행 중입니다: ${lockPath}`,
+    outputExists: (outputPath: string) => `출력 파일이 이미 존재합니다: ${outputPath}\noverwriteOutput=true로 명시해야 덮어씁니다.`,
+    ffmpegExit: (code: number | null) => `FFmpeg가 종료 코드 ${code}로 실패했습니다.`,
+    jobNotFound: (jobId: string) => `렌더 작업을 찾을 수 없습니다: ${jobId}`,
+    queuedStale: '렌더 작업이 시작 대기 상태에서 중단되었습니다. 다시 렌더하세요.',
+    runningDead: '렌더 프로세스가 더 이상 실행 중이지 않습니다. 호스트 또는 MCP가 중단되었을 수 있습니다.',
+    filePathInvalid: 'filePath는 존재하는 절대경로여야 합니다.',
+    noVideoStream: '비디오 스트림이 없습니다.',
+    codec: (codec: string) => `권장 코덱 H.264가 아닙니다: ${codec}`,
+    pixFmt: (fmt: string) => `권장 픽셀 포맷 yuv420p가 아닙니다: ${fmt}`,
+  },
+  {
+    sceneAsset: (id: string) => `Scene asset cannot be rendered: ${id}`,
+    audioAsset: (id: string) => `Audio asset cannot be rendered: ${id}`,
+    ffmpegPathInvalid: (why: string, ffmpegPath: string) => `ffmpegPath must be the absolute path of a local ffmpeg executable (ffmpeg or ffmpeg.exe) (${why}): ${ffmpegPath}`,
+    whyUnc: 'UNC, network, and device paths are not allowed',
+    whyNul: 'NUL character',
+    whyNotAbsolute: 'not a local absolute path',
+    whyName: 'file name is not ffmpeg',
+    whyMissing: 'file does not exist',
+    whyLinkNetwork: 'link points to a network path',
+    whyLinkName: 'link target name is not ffmpeg',
+    whyNotFile: 'not a regular file',
+    ffmpegUnavailable: (command: string) => `Cannot run FFmpeg: ${command}\nInstall FFmpeg on PATH or set MIMI_SEED_FFMPEG_PATH (and MIMI_SEED_FFPROBE_PATH) to its absolute path.`,
+    renderRunning: (lockPath: string) => `A render job for the same output file is already running: ${lockPath}`,
+    outputExists: (outputPath: string) => `The output file already exists: ${outputPath}\nSet overwriteOutput=true explicitly to overwrite it.`,
+    ffmpegExit: (code: number | null) => `FFmpeg failed with exit code ${code}.`,
+    jobNotFound: (jobId: string) => `Render job not found: ${jobId}`,
+    queuedStale: 'The render job stopped while waiting to start. Render again.',
+    runningDead: 'The render process is no longer running. The host or the MCP server may have stopped.',
+    filePathInvalid: 'filePath must be an existing absolute path.',
+    noVideoStream: 'No video stream.',
+    codec: (codec: string) => `Not the recommended codec H.264: ${codec}`,
+    pixFmt: (fmt: string) => `Not the recommended pixel format yuv420p: ${fmt}`,
+  },
+);
 
 function jobPath(projectDir: string, jobId: string): string {
   return path.join(path.resolve(projectDir), '.jobs', `${jobId}.json`);
@@ -81,7 +133,7 @@ export function buildFfmpegPlan(
   const assets = timeline.scenes.map((scene) => {
     const asset = byId.get(scene.assetId);
     if (!asset || !asset.allowedForRendering || !existsSync(asset.path)) {
-      throw new Error(`렌더링할 수 없는 장면 자산입니다: ${scene.assetId}`);
+      throw new Error(M().sceneAsset(scene.assetId));
     }
     return asset;
   });
@@ -98,7 +150,7 @@ export function buildFfmpegPlan(
   if (timeline.audioAssetId) {
     const audio = byId.get(timeline.audioAssetId);
     if (!audio || audio.kind !== 'audio' || !audio.allowedForRendering || !existsSync(audio.path)) {
-      throw new Error(`렌더링할 수 없는 오디오 자산입니다: ${timeline.audioAssetId}`);
+      throw new Error(M().audioAsset(timeline.audioAssetId));
     }
     audioIndex = assets.length;
     args.push('-stream_loop', '-1', '-i', audio.path);
@@ -158,28 +210,28 @@ const FFMPEG_BASENAME = /^ffmpeg(\.exe)?$/i;
  */
 export function assertFfmpegPath(ffmpegPath: string): string {
   const reject = (why: string): never => {
-    throw new Error(`ffmpegPath 는 로컬 ffmpeg 실행 파일(ffmpeg 또는 ffmpeg.exe)의 절대경로여야 합니다 (${why}): ${ffmpegPath}`);
+    throw new Error(M().ffmpegPathInvalid(why, ffmpegPath));
   };
   // 구분자는 양쪽 다 본다 — POSIX 의 path.basename 은 백슬래시를 구분자로 보지 않는다.
   const baseName = (p: string) => p.split(/[\\/]/).pop() ?? '';
-  if (/^[\\/]{2}/.test(ffmpegPath)) reject('UNC·네트워크·장치 경로는 허용하지 않음');
-  if (ffmpegPath.includes('\0')) reject('NUL 문자');
+  if (/^[\\/]{2}/.test(ffmpegPath)) reject(M().whyUnc);
+  if (ffmpegPath.includes('\0')) reject(M().whyNul);
   const localAbsolute = process.platform === 'win32'
     ? /^[A-Za-z]:[\\/]/.test(ffmpegPath)
     : ffmpegPath.startsWith('/');
-  if (!localAbsolute) reject('로컬 절대경로가 아님');
-  if (!FFMPEG_BASENAME.test(baseName(ffmpegPath))) reject('파일 이름이 ffmpeg 가 아님');
+  if (!localAbsolute) reject(M().whyNotAbsolute);
+  if (!FFMPEG_BASENAME.test(baseName(ffmpegPath))) reject(M().whyName);
 
   let real: string;
   try {
     real = realpathSync(ffmpegPath);
   } catch {
-    return reject('파일이 없음');
+    return reject(M().whyMissing);
   }
   // 심볼릭 링크·정션이 네트워크 경로나 다른 실행 파일로 이어지는 경우도 막는다.
-  if (/^[\\/]{2}/.test(real)) reject('링크가 네트워크 경로를 가리킴');
-  if (!FFMPEG_BASENAME.test(baseName(real))) reject('링크 대상 이름이 ffmpeg 가 아님');
-  if (!statSync(real).isFile()) reject('일반 파일이 아님');
+  if (/^[\\/]{2}/.test(real)) reject(M().whyLinkNetwork);
+  if (!FFMPEG_BASENAME.test(baseName(real))) reject(M().whyLinkName);
+  if (!statSync(real).isFile()) reject(M().whyNotFile);
   return real;
 }
 
@@ -187,7 +239,7 @@ async function verifyExecutable(command: string): Promise<void> {
   try {
     await execFileAsync(command, ['-version'], { timeout: 10_000, windowsHide: true });
   } catch (error) {
-    throw new Error(`FFmpeg를 실행할 수 없습니다: ${command}\nFFmpeg를 설치해 PATH 에 두거나 MIMI_SEED_FFMPEG_PATH (ffprobe 는 MIMI_SEED_FFPROBE_PATH) 환경변수에 절대경로를 지정하세요. / Install FFmpeg on PATH or set MIMI_SEED_FFMPEG_PATH (and MIMI_SEED_FFPROBE_PATH) to its absolute path.`, { cause: error });
+    throw new Error(M().ffmpegUnavailable(command), { cause: error });
   }
 }
 
@@ -226,7 +278,7 @@ function acquireOutputLock(lockPath: string, projectDir: string, jobId: string):
   } catch {
     active = false;
   }
-  if (active) throw new Error(`같은 출력 파일의 렌더 작업이 이미 실행 중입니다: ${lockPath}`);
+  if (active) throw new Error(M().renderRunning(lockPath));
   unlinkSync(lockPath);
   tryCreate();
 }
@@ -245,7 +297,7 @@ export async function startRender(input: StartRenderInput): Promise<VideoRenderJ
   const finalName = safeOutputName.toLowerCase().endsWith('.mp4') ? safeOutputName : `${safeOutputName}.mp4`;
   const outputPath = path.join(projectDir, 'render', finalName);
   if (existsSync(outputPath) && !input.overwriteOutput) {
-    throw new Error(`출력 파일이 이미 존재합니다: ${outputPath}\noverwriteOutput=true로 명시해야 덮어씁니다.`);
+    throw new Error(M().outputExists(outputPath));
   }
   const id = randomUUID();
   const logPath = path.join(projectDir, '.jobs', `${id}.log`);
@@ -305,7 +357,7 @@ export async function startRender(input: StartRenderInput): Promise<VideoRenderJ
     finalize({
       status: code === 0 ? 'completed' : 'failed',
       exitCode: code,
-      error: code === 0 ? undefined : `FFmpeg가 종료 코드 ${code}로 실패했습니다.`,
+      error: code === 0 ? undefined : M().ffmpegExit(code),
     });
   });
   return JSON.parse(readFileSync(jobPath(projectDir, id), 'utf8')) as VideoRenderJob;
@@ -313,7 +365,7 @@ export async function startRender(input: StartRenderInput): Promise<VideoRenderJ
 
 export function getRenderJob(projectDir: string, jobId: string): VideoRenderJob & { logTail?: string } {
   const filePath = jobPath(projectDir, jobId);
-  if (!existsSync(filePath)) throw new Error(`렌더 작업을 찾을 수 없습니다: ${jobId}`);
+  if (!existsSync(filePath)) throw new Error(M().jobNotFound(jobId));
   let job = parseFile(renderJobSchema, readJson(filePath), filePath);
   const queuedStale = job.status === 'queued' && Date.now() - Date.parse(job.updatedAt) >= 60_000;
   const runningDead = job.status === 'running' &&
@@ -323,8 +375,8 @@ export function getRenderJob(projectDir: string, jobId: string): VideoRenderJob 
     job = updateJob(projectDir, jobId, {
       status: 'failed',
       error: queuedStale
-        ? '렌더 작업이 시작 대기 상태에서 중단되었습니다. 다시 렌더하세요.'
-        : '렌더 프로세스가 더 이상 실행 중이지 않습니다. 호스트 또는 MCP가 중단되었을 수 있습니다.',
+        ? M().queuedStale
+        : M().runningDead,
     });
     const lockPath = `${job.outputPath}.render.lock`;
     try {
@@ -358,7 +410,7 @@ export async function validateVideo(
   ffmpegPath?: string,
 ): Promise<{ valid: boolean; format: unknown; streams: unknown[]; issues: string[] }> {
   if (!path.isAbsolute(filePath) || !existsSync(filePath)) {
-    throw new Error('filePath는 존재하는 절대경로여야 합니다.');
+    throw new Error(M().filePathInvalid);
   }
   const ffprobe = ffprobeFor(ffmpegPath);
   const { stdout } = await execFileAsync(ffprobe, [
@@ -371,9 +423,9 @@ export async function validateVideo(
   const streams = data.streams ?? [];
   const video = streams.find((stream) => stream.codec_type === 'video');
   const issues: string[] = [];
-  if (!video) issues.push('비디오 스트림이 없습니다.');
-  if (video && video.codec_name !== 'h264') issues.push(`권장 코덱 H.264가 아닙니다: ${String(video.codec_name)}`);
-  if (video && video.pix_fmt !== 'yuv420p') issues.push(`권장 픽셀 포맷 yuv420p가 아닙니다: ${String(video.pix_fmt)}`);
+  if (!video) issues.push(M().noVideoStream);
+  if (video && video.codec_name !== 'h264') issues.push(M().codec(String(video.codec_name)));
+  if (video && video.pix_fmt !== 'yuv420p') issues.push(M().pixFmt(String(video.pix_fmt)));
   return { valid: issues.length === 0, format: data.format ?? {}, streams, issues };
 }
 

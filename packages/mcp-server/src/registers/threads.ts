@@ -7,6 +7,30 @@ import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { resolveSocialConfigTarget, socialTargetLabel } from '../social/profile-store.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    bio: (b: string) => `   소개: ${b}`,
+    posted: '✅ 게시 완료',
+    carousel: (n: number) => `✅ 캐러셀 ${n}장 게시 완료`,
+    videoPosted: '✅ 영상 게시 완료',
+    notSet: (t: string) => `❌ Threads ${t} 미설정 → threads_save_config 또는 mimi-seed auth threads`,
+    connected: '✅ Threads 연결됨',
+    target: (t: string) => `   대상: ${t}`,
+    noUsername: '(username 미저장)',
+  },
+  {
+    bio: (b: string) => `   Bio: ${b}`,
+    posted: '✅ Posted',
+    carousel: (n: number) => `✅ Posted a ${n}-image carousel`,
+    videoPosted: '✅ Video posted',
+    notSet: (t: string) => `❌ Threads ${t} not set up → threads_save_config or mimi-seed auth threads`,
+    connected: '✅ Threads connected',
+    target: (t: string) => `   Target: ${t}`,
+    noUsername: '(username not saved)',
+  },
+);
 
 export function registerThreadsTools(server: ToolRegistrar) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
@@ -62,7 +86,7 @@ export function registerThreadsTools(server: ToolRegistrar) {
       return textResult([
         `@${account.username}${account.name ? ` (${account.name})` : ''}`,
         `   ID: ${account.id}`,
-        account.threads_biography ? `   소개: ${account.threads_biography}` : '',
+        account.threads_biography ? M().bio(account.threads_biography) : '',
         `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,
       ].filter(Boolean));
     },
@@ -85,7 +109,7 @@ export function registerThreadsTools(server: ToolRegistrar) {
       const cfg = requireThreadsConfig({ profile });
       const result = await api.postText(cfg, text, imageUrl);
       return textResult([
-        '✅ 게시 완료',
+        M().posted,
         `   media_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));
@@ -108,7 +132,7 @@ export function registerThreadsTools(server: ToolRegistrar) {
       const cfg = requireThreadsConfig({ profile });
       const result = await api.postCarousel(cfg, imageUrls, text);
       return textResult([
-        `✅ 캐러셀 ${imageUrls.length}장 게시 완료`,
+        M().carousel(imageUrls.length),
         `   media_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));
@@ -133,7 +157,7 @@ export function registerThreadsTools(server: ToolRegistrar) {
       const cfg = requireThreadsConfig({ profile });
       const result = await api.postVideo(cfg, videoUrl, text, altText);
       return textResult([
-        '✅ 영상 게시 완료',
+        M().videoPosted,
         `   media_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));
@@ -150,12 +174,12 @@ export function registerThreadsTools(server: ToolRegistrar) {
       const target = resolveSocialConfigTarget('threads', options);
       const cfg = loadThreadsConfig(options);
       if (!cfg) {
-        return textResult(`❌ Threads ${socialTargetLabel(target)} 미설정 → threads_save_config 또는 mimi-seed auth threads`);
+        return textResult(M().notSet(socialTargetLabel(target)));
       }
       return textResult([
-        '✅ Threads 연결됨',
-        `   대상: ${socialTargetLabel(target)}`,
-        `   @${cfg.username ?? '(username 미저장)'}`,
+        M().connected,
+        M().target(socialTargetLabel(target)),
+        `   @${cfg.username ?? M().noUsername}`,
         `   userId: ${cfg.userId}`,
         `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth threads')}`,
       ].filter(Boolean));

@@ -8,6 +8,24 @@ import { friendlyGoogleError } from '../lib/google-errors.js';
 import { wrapDomain } from '../lib/wrap-domain.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
 import { getRemoteConfigOverview } from '../firebase/remote-config.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    projectIdFormat: '소문자로 시작, 소문자/숫자/하이픈 6-30자 (끝에 하이픈 불가)',
+    created: (id: string | null | undefined) => `✓ Firebase 프로젝트 생성 완료: \`${id}\``,
+    nextSteps: '다음 단계:',
+    step3: '3. firebase_get_android_config / firebase_get_ios_config 로 설정 파일 다운로드',
+    deleted: (json: string) => `삭제 완료: ${json}`,
+  },
+  {
+    projectIdFormat: 'Starts with a lowercase letter; 6-30 lowercase letters/digits/hyphens (no trailing hyphen)',
+    created: (id: string | null | undefined) => `✓ Firebase project created: \`${id}\``,
+    nextSteps: 'Next steps:',
+    step3: '3. Download the config files with firebase_get_android_config / firebase_get_ios_config',
+    deleted: (json: string) => `Deleted: ${json}`,
+  },
+);
 
 // 모든 firebase tools 호출을 친절 에러로 감싸는 프록시 — 17개 핸들러에 개별
 // try/catch 없이 raw GaxiosError(API 미활성화/프로젝트 없음/billing/권한)를
@@ -69,7 +87,7 @@ export function registerFirebaseTools(server: ToolRegistrar) {
     {
       projectId: z
         .string()
-        .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, '소문자로 시작, 소문자/숫자/하이픈 6-30자 (끝에 하이픈 불가)')
+        .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, { error: () => M().projectIdFormat })
         .describe('새로 만들 GCP/Firebase 프로젝트 ID (예: my-app-prod)'),
       displayName: z.string().describe('프로젝트 표시 이름'),
       parent: z
@@ -82,15 +100,15 @@ export function registerFirebaseTools(server: ToolRegistrar) {
       const auth = await requireAuth(CLOUD_PLATFORM_SCOPE);
       const project = await firebase.createProject(auth, projectId, displayName, { parent });
       return textResult([
-        `✓ Firebase 프로젝트 생성 완료: \`${project.projectId}\``,
+        M().created(project.projectId),
         '',
         `**displayName**: ${project.displayName}`,
         `**projectNumber**: ${project.projectNumber}`,
         '',
-        '다음 단계:',
+        M().nextSteps,
         `1. firebase_create_android_app("${project.projectId}", packageName, displayName)`,
         `2. firebase_create_ios_app("${project.projectId}", bundleId, displayName)`,
-        '3. firebase_get_android_config / firebase_get_ios_config 로 설정 파일 다운로드',
+        M().step3,
       ]);
     },
   );
@@ -145,7 +163,7 @@ export function registerFirebaseTools(server: ToolRegistrar) {
     async ({ projectId, appId }) => {
       const auth = await requireAuth();
       const result = await firebase.deleteAndroidApp(auth, projectId, appId);
-      return textResult(`삭제 완료: ${JSON.stringify(result)}`);
+      return textResult(M().deleted(JSON.stringify(result)));
     },
   );
 
@@ -199,7 +217,7 @@ export function registerFirebaseTools(server: ToolRegistrar) {
     async ({ projectId, appId }) => {
       const auth = await requireAuth();
       const result = await firebase.deleteIosApp(auth, projectId, appId);
-      return textResult(`삭제 완료: ${JSON.stringify(result)}`);
+      return textResult(M().deleted(JSON.stringify(result)));
     },
   );
 
@@ -252,7 +270,7 @@ export function registerFirebaseTools(server: ToolRegistrar) {
     async ({ projectId, appId }) => {
       const auth = await requireAuth();
       const result = await firebase.deleteWebApp(auth, projectId, appId);
-      return textResult(`삭제 완료: ${JSON.stringify(result)}`);
+      return textResult(M().deleted(JSON.stringify(result)));
     },
   );
 

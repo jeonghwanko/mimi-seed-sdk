@@ -17,6 +17,26 @@ import { fetchWithTimeout } from '../lib/http.js';
 import { uploadFileParts, type UploadOperation } from './upload-parts.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import type { AscListDocument, AscResource, AscSingleDocument, AscToMany } from './types.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    authNeeded: '❌ App Store Connect 인증이 필요해.',
+    runInTerminal: '터미널에서 실행:',
+    notAbsolute: (filePath: string) => `filePath 는 절대경로여야 한다: ${filePath}`,
+    noFile: (filePath: string) => `파일이 존재하지 않는다: ${filePath}`,
+    empty: '빈 파일이다.',
+    noOps: 'uploadOperations 가 비어 있다 — Apple 응답 형식 확인 필요.',
+  },
+  {
+    authNeeded: '❌ App Store Connect authentication is required.',
+    runInTerminal: 'Run in a terminal:',
+    notAbsolute: (filePath: string) => `filePath must be an absolute path: ${filePath}`,
+    noFile: (filePath: string) => `File does not exist: ${filePath}`,
+    empty: 'The file is empty.',
+    noOps: 'uploadOperations is empty — check the Apple response format.',
+  },
+);
 
 const BASE = 'https://api.appstoreconnect.apple.com/v1';
 
@@ -25,9 +45,9 @@ async function req<T = unknown>(pathOrUrl: string, init: RequestInit = {}): Prom
   if (!headers) {
     throw new Error(
       [
-        '❌ App Store Connect 인증이 필요해.',
+        M().authNeeded,
         '',
-        '터미널에서 실행:',
+        M().runInTerminal,
         '  npx -p @yoonion/mimi-seed-mcp mimi-seed-appstore-auth',
       ].join('\n'),
     );
@@ -143,12 +163,12 @@ export async function uploadPreview(args: {
 }): Promise<{ id: string; fileName: string; fileSize: number; previewType: string; state?: string }> {
   const { localizationId, previewType, filePath, previewFrameTimeCode } = args;
 
-  if (!path.isAbsolute(filePath)) throw new Error(`filePath 는 절대경로여야 한다: ${filePath}`);
-  if (!fs.existsSync(filePath)) throw new Error(`파일이 존재하지 않는다: ${filePath}`);
+  if (!path.isAbsolute(filePath)) throw new Error(M().notAbsolute(filePath));
+  if (!fs.existsSync(filePath)) throw new Error(M().noFile(filePath));
 
   const fileName = path.basename(filePath);
   const fileSize = fs.statSync(filePath).size;
-  if (fileSize === 0) throw new Error('빈 파일이다.');
+  if (fileSize === 0) throw new Error(M().empty);
 
   const setId = await ensurePreviewSet(localizationId, previewType);
   const mimeType = guessMimeType(fileName);
@@ -172,7 +192,7 @@ export async function uploadPreview(args: {
 
   const previewId = reserved.data.id;
   const ops: UploadOperation[] = reserved.data.attributes?.uploadOperations ?? [];
-  if (ops.length === 0) throw new Error('uploadOperations 가 비어 있다 — Apple 응답 형식 확인 필요.');
+  if (ops.length === 0) throw new Error(M().noOps);
 
   await uploadFileParts(filePath, ops);
 

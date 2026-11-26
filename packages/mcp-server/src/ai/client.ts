@@ -1,5 +1,41 @@
 import type { Anthropic } from '@anthropic-ai/sdk';
 import { isMissingAnthropicSdk } from '#core/ai.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    sdkMissing: [
+      '❌ @anthropic-ai/sdk 가 설치되어 있지 않습니다.',
+      '같은 npm 프로젝트나 전역 경로에서 @yoonion/mimi-seed-mcp 를 --include=optional 로 다시 설치하세요.',
+    ],
+    keyMissing: [
+      '❌ ANTHROPIC_API_KEY 환경변수가 필요합니다.',
+      '',
+      '설정 방법:',
+      '  export ANTHROPIC_API_KEY=sk-ant-...',
+      '',
+      '또는 Claude Desktop MCP 설정에서:',
+      '  "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }',
+    ],
+    parseFailed: 'AI 응답 파싱 실패. 다시 시도하세요.',
+  },
+  {
+    sdkMissing: [
+      '❌ @anthropic-ai/sdk is not installed.',
+      'Reinstall @yoonion/mimi-seed-mcp with --include=optional in the same npm project or global path.',
+    ],
+    keyMissing: [
+      '❌ The ANTHROPIC_API_KEY environment variable is required.',
+      '',
+      'How to set it:',
+      '  export ANTHROPIC_API_KEY=sk-ant-...',
+      '',
+      'Or in the Claude Desktop MCP config:',
+      '  "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }',
+    ],
+    parseFailed: 'Failed to parse the AI response. Try again.',
+  },
+);
 
 /**
  * Claude 모델 id — ai/*, video/* 가 모두 이 이름으로 쓴다. 값은 CLI 와 공유하는 packages/core 의
@@ -23,10 +59,7 @@ async function loadAnthropic(): Promise<typeof import('@anthropic-ai/sdk').Anthr
   } catch (error) {
     if (isMissingAnthropicSdk(error)) {
       throw new Error(
-        [
-          '❌ @anthropic-ai/sdk 가 설치되어 있지 않습니다.',
-          '같은 npm 프로젝트나 전역 경로에서 @yoonion/mimi-seed-mcp 를 --include=optional 로 다시 설치하세요.',
-        ].join('\n'),
+        M().sdkMissing.join('\n'),
         { cause: error },
       );
     }
@@ -38,15 +71,7 @@ export async function requireApiKey(): Promise<Anthropic> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     throw new Error(
-      [
-        '❌ ANTHROPIC_API_KEY 환경변수가 필요합니다.',
-        '',
-        '설정 방법:',
-        '  export ANTHROPIC_API_KEY=sk-ant-...',
-        '',
-        '또는 Claude Desktop MCP 설정에서:',
-        '  "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }',
-      ].join('\n'),
+      M().keyMissing.join('\n'),
     );
   }
   const AnthropicSdk = await loadAnthropic();
@@ -55,6 +80,6 @@ export async function requireApiKey(): Promise<Anthropic> {
 
 export function parseJsonResponse<T>(text: string): T {
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('AI 응답 파싱 실패. 다시 시도하세요.');
+  if (!match) throw new Error(M().parseFailed);
   return JSON.parse(match[0]) as T;
 }

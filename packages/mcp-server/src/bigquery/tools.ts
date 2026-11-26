@@ -1,6 +1,38 @@
 import { google } from '../lib/googleapis-lite.js';
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import { bqDatasetId, bqJobId, bqProjectId, bqTableId } from './ids.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    multiStatement:
+      'bigquery_run_query 는 단일 SELECT 문만 실행한다 — 여러 문장(스크립트)은 허용하지 않음. ' +
+      'CREATE TEMP FUNCTION …; SELECT … 처럼 임시 함수를 앞에 두는 스크립트도 거부된다 — 식을 쿼리 안에 인라인하거나 BigQuery 콘솔에서 실행할 것.',
+    notSelect: (first: string | undefined) =>
+      `bigquery_run_query 는 읽기 전용이다 — SELECT / WITH / FROM(파이프 문법) 으로 시작하는 쿼리만 허용 (받은 문장: ${first ?? '(비어 있음)'}). ` +
+      'DML/DDL 은 BigQuery 콘솔이나 bq CLI 에서 직접 실행할 것.',
+    dryRunNotSelect: (type: string) =>
+      `bigquery_run_query 는 읽기 전용(SELECT)만 실행합니다 — 이 쿼리의 문장 유형: ${type}. `
+      + '데이터를 바꾸는 쿼리는 BigQuery 콘솔이나 bq CLI 에서 직접 실행하세요.',
+    incomplete: (sec: number, jobId: string | null | undefined) =>
+      `쿼리가 ${sec}초 안에 끝나지 않았습니다 — rows 는 비어 있으며 결과가 아닙니다. `
+      + (jobId ? `작업 ID ${jobId} 는 BigQuery 에서 계속 실행 중일 수 있습니다.` : ''),
+  },
+  {
+    multiStatement:
+      'bigquery_run_query runs a single SELECT statement only — multiple statements (scripts) are not allowed. ' +
+      'Scripts that put a temporary function first, such as CREATE TEMP FUNCTION …; SELECT …, are also rejected — inline the expression in the query or run it in the BigQuery console.',
+    notSelect: (first: string | undefined) =>
+      `bigquery_run_query is read-only — only queries that start with SELECT / WITH / FROM (pipe syntax) are allowed (received statement: ${first ?? '(empty)'}). ` +
+      'Run DML/DDL directly in the BigQuery console or the bq CLI.',
+    dryRunNotSelect: (type: string) =>
+      `bigquery_run_query runs read-only (SELECT) queries only — this query's statement type: ${type}. `
+      + 'Run queries that change data directly in the BigQuery console or the bq CLI.',
+    incomplete: (sec: number, jobId: string | null | undefined) =>
+      `The query did not finish within ${sec} seconds — rows is empty and is not the result. `
+      + (jobId ? `Job ID ${jobId} may still be running in BigQuery.` : ''),
+  },
+);
 
 /** BigQuery 호출에 쓰이는 인증 클라이언트 — 사용자 OAuth 또는 서비스 계정 JWT. */
 export type BigQueryAuthClient = OAuth2Client | JWT;
@@ -55,16 +87,14 @@ export function assertSelectOnlyQuery(query: string): void {
   const body = stripSqlNoise(query).trim().replace(/;\s*$/, '').trim();
   if (body.includes(';')) {
     throw new Error(
-      'bigquery_run_query 는 단일 SELECT 문만 실행한다 — 여러 문장(스크립트)은 허용하지 않음. ' +
-        'CREATE TEMP FUNCTION …; SELECT … 처럼 임시 함수를 앞에 두는 스크립트도 거부된다 — 식을 쿼리 안에 인라인하거나 BigQuery 콘솔에서 실행할 것.',
+      M().multiStatement,
     );
   }
   const first = /^[(\s]*([a-z_]+)/i.exec(body)?.[1]?.toUpperCase();
   // FROM 은 파이프 문법(FROM t |> WHERE … |> SELECT …) 의 시작이다 — 파이프 연산자는 전부 조회용이다.
   if (first !== 'SELECT' && first !== 'WITH' && first !== 'FROM') {
     throw new Error(
-      `bigquery_run_query 는 읽기 전용이다 — SELECT / WITH / FROM(파이프 문법) 으로 시작하는 쿼리만 허용 (받은 문장: ${first ?? '(비어 있음)'}). ` +
-        'DML/DDL 은 BigQuery 콘솔이나 bq CLI 에서 직접 실행할 것.',
+      M().notSelect(first),
     );
   }
 }
@@ -105,8 +135,7 @@ export async function assertSelectOnly(
   const statementType = res.data.statistics?.query?.statementType ?? 'UNKNOWN';
   if (statementType !== 'SELECT') {
     throw new ReadOnlyQueryError(
-      `bigquery_run_query 는 읽기 전용(SELECT)만 실행합니다 — 이 쿼리의 문장 유형: ${statementType}. `
-      + '데이터를 바꾸는 쿼리는 BigQuery 콘솔이나 bq CLI 에서 직접 실행하세요.',
+      M().dryRunNotSelect(statementType),
     );
   }
 }
@@ -176,8 +205,7 @@ export async function runQuery(
     ...(incomplete && {
       jobId: jobId ?? null,
       note:
-        `쿼리가 ${Math.round((30_000 + budget) / 1000)}초 안에 끝나지 않았습니다 — rows 는 비어 있으며 결과가 아닙니다. `
-        + (jobId ? `작업 ID ${jobId} 는 BigQuery 에서 계속 실행 중일 수 있습니다.` : ''),
+        M().incomplete(Math.round((30_000 + budget) / 1000), jobId),
     }),
   };
 }

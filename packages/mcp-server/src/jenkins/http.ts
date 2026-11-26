@@ -1,6 +1,9 @@
 import type { JenkinsConfig } from './config.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog({ emptyJob: '잡 이름이 비어 있습니다.' }, { emptyJob: 'The job name is empty.' });
 
 export function basicAuth(username: string, token: string): string {
   return 'Basic ' + Buffer.from(`${username}:${token}`).toString('base64');
@@ -30,7 +33,8 @@ export type CrumbResult =
   | { kind: 'failed'; status?: number };
 
 /** 헤더 이름·값으로 안전한가 — 서버가 준 문자열을 그대로 헤더에 넣으면 fetch 가 요청 도중 던질 수 있다. */
-const CRUMB_FIELD = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/;
+// \x27 = ' and \x60 = ` — written as escapes so string-literal scanners don't misread the regex.
+const CRUMB_FIELD = /^[A-Za-z0-9!#$%&\x27*+.^_\x60|~-]{1,128}$/;
 const CRUMB_VALUE = /^[\x21-\x7e]{1,512}$/;
 
 /**
@@ -95,7 +99,7 @@ export function isStrictJobPath(jobPath: string): boolean {
  */
 export function jobUrl(cfg: JenkinsConfig, jobPath: string): string {
   const segments = jobPath.split('/').filter(Boolean);
-  if (segments.length === 0) throw new Error('잡 이름이 비어 있습니다.');
+  if (segments.length === 0) throw new Error(M().emptyJob);
   const suffix = segments.map((s) => `job/${encodePathSegment(s)}`).join('/');
   return `${baseUrl(cfg)}/${suffix}`;
 }
@@ -106,7 +110,7 @@ export function jobUrl(cfg: JenkinsConfig, jobPath: string): string {
  */
 export function createItemUrl(cfg: JenkinsConfig, jobPath: string): string {
   const segments = jobPath.split('/').filter(Boolean);
-  if (segments.length === 0) throw new Error('잡 이름이 비어 있습니다.');
+  if (segments.length === 0) throw new Error(M().emptyJob);
   const leaf = segments.pop() as string;
   const parent = segments.length ? jobUrl(cfg, segments.join('/')) : baseUrl(cfg);
   return `${parent}/createItem?name=${encodeURIComponent(leaf)}`;

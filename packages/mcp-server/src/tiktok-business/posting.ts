@@ -17,6 +17,84 @@ import { validateVideo } from '../video/render.js';
 import { TikTokApiError, getPublishStatus, getVideoSettings, publishVideo } from './api.js';
 import { ensureTikTokPublishConfig } from './auth.js';
 import type { TikTokPostInfo, TikTokPublishRequest, TikTokVideoSettings } from './types.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    invalidHttps: (field: string) => `${field}는 유효한 HTTPS URL이어야 합니다.`,
+    notHttps: (field: string) => `${field}는 HTTPS URL이어야 합니다.`,
+    captionLength: 'TikTok caption은 UTF-16 기준 2,200자 이하여야 합니다.',
+    mentions: 'TikTok caption의 멘션은 최대 30개입니다.',
+    noVideoStream: '업로드 파일에 비디오 스트림이 없습니다.',
+    noMetadata: 'TikTok 규격 검사에 필요한 영상 메타데이터를 읽지 못했습니다.',
+    size: 'TikTok 영상은 0바이트 초과, 1GB 이하여야 합니다.',
+    duration: 'TikTok 영상 길이는 3~600초여야 합니다.',
+    accountMax: (sec: string, max: number) => `영상 길이 ${sec}초가 계정 한도 ${max}초를 초과합니다.`,
+    dimensions: 'TikTok 영상의 가로·세로는 각각 최소 360px이어야 합니다.',
+    fps: 'TikTok 영상 FPS는 23~60이어야 합니다.',
+    thumbnailOffset: 'thumbnailOffsetMs는 영상 길이를 초과할 수 없습니다.',
+    sourcePath: 'sourceFilePath는 존재하는 절대경로여야 합니다.',
+    sourceNotFile: 'sourceFilePath는 파일이어야 합니다.',
+    formats: 'TikTok 지원 영상 형식은 .mp4, .mov, .webm입니다.',
+    lockExists: '동일 영상의 게시 예약이 이미 존재합니다. 감사 로그와 TikTok 상태를 먼저 확인하세요.',
+    duplicatePlan: (state: string, publishId: string) =>
+      `동일 영상의 기존 게시 기록이 있습니다 (state=${state}, publishId=${publishId}). `
+      + '중복 자동 게시를 차단했습니다.',
+    warnings: [
+      'videoUrl은 TikTok API for Business 앱에 등록·검증된 도메인의 HTTPS URL이어야 합니다.',
+      'videoUrl은 리디렉션 없이 영상에 직접 2xx로 응답해야 합니다. TikTok은 3xx 리디렉션을 따라가지 않습니다.',
+      'URL은 TikTok이 가져갈 때까지 최소 30분 이상 유효해야 합니다.',
+      '이 계획은 공개 게시이며 30분 뒤 만료됩니다.',
+    ],
+    badPlanId: 'planId 형식이 올바르지 않습니다.',
+    planNotFound: (planId: string) => `TikTok 게시 계획을 찾지 못했습니다: ${planId}`,
+    planExpired: 'TikTok 게시 계획이 만료되었습니다. 다시 계획을 생성하세요.',
+    confirmRequired: '공개 게시에는 같은 턴의 명시 승인 후 confirmPublish=true가 필요합니다.',
+    accountMismatch: '게시 계획을 만든 TikTok 계정과 현재 연결 계정이 다릅니다.',
+    duplicateBlocked: (state: string) => `중복 게시 차단: 기존 기록 state=${state}.`,
+    outcomeUnknown: (error: string) => `${error} 게시 결과가 불명확하므로 자동 재시도하지 마세요.`,
+    noShareId: 'TikTok 성공 응답에 share_id/publish_id가 없어 게시 결과를 확인할 수 없습니다.',
+    noRetry: (error: string) => `${error} 자동 재시도하지 마세요.`,
+    auditFailed: 'TikTok은 게시 요청을 수락했지만 로컬 감사 로그 갱신에 실패했습니다. 자동 재시도하지 마세요.',
+  },
+  {
+    invalidHttps: (field: string) => `${field} must be a valid HTTPS URL.`,
+    notHttps: (field: string) => `${field} must be an HTTPS URL.`,
+    captionLength: 'The TikTok caption must be 2,200 characters or less (UTF-16).',
+    mentions: 'A TikTok caption can have at most 30 mentions.',
+    noVideoStream: 'The upload file has no video stream.',
+    noMetadata: 'Could not read the video metadata needed for the TikTok format check.',
+    size: 'A TikTok video must be larger than 0 bytes and at most 1GB.',
+    duration: 'A TikTok video must be 3-600 seconds long.',
+    accountMax: (sec: string, max: number) => `The video duration of ${sec}s exceeds the account limit of ${max}s.`,
+    dimensions: 'A TikTok video must be at least 360px in both width and height.',
+    fps: 'TikTok video FPS must be 23-60.',
+    thumbnailOffset: 'thumbnailOffsetMs cannot exceed the video duration.',
+    sourcePath: 'sourceFilePath must be an existing absolute path.',
+    sourceNotFile: 'sourceFilePath must be a file.',
+    formats: 'Supported TikTok video formats are .mp4, .mov, and .webm.',
+    lockExists: 'A publish reservation for the same video already exists. Check the audit log and the TikTok status first.',
+    duplicatePlan: (state: string, publishId: string) =>
+      `A previous publish record exists for the same video (state=${state}, publishId=${publishId}). `
+      + 'Duplicate automatic publishing was blocked.',
+    warnings: [
+      'videoUrl must be an HTTPS URL on a domain registered and verified in the TikTok API for Business app.',
+      'videoUrl must respond with 2xx directly with the video, with no redirect. TikTok does not follow 3xx redirects.',
+      'The URL must stay valid for at least 30 minutes until TikTok fetches it.',
+      'This plan is a public post and expires in 30 minutes.',
+    ],
+    badPlanId: 'Invalid planId format.',
+    planNotFound: (planId: string) => `TikTok publish plan not found: ${planId}`,
+    planExpired: 'The TikTok publish plan has expired. Create a new plan.',
+    confirmRequired: 'A public post requires confirmPublish=true after the user\'s explicit approval in the same turn.',
+    accountMismatch: 'The TikTok account that created the publish plan differs from the currently connected account.',
+    duplicateBlocked: (state: string) => `Duplicate publish blocked: existing record state=${state}.`,
+    outcomeUnknown: (error: string) => `${error} The publish outcome is unknown, so do not retry automatically.`,
+    noShareId: 'The TikTok success response has no share_id/publish_id, so the publish outcome cannot be confirmed.',
+    noRetry: (error: string) => `${error} Do not retry automatically.`,
+    auditFailed: 'TikTok accepted the publish request, but updating the local audit log failed. Do not retry automatically.',
+  },
+);
 
 const STATE_DIR = path.join(os.homedir(), '.mimi-seed', 'tiktok-business');
 const PLAN_DIR = path.join(STATE_DIR, 'plans');
@@ -89,9 +167,9 @@ function assertHttpsUrl(value: string, field: string): void {
   try {
     url = new URL(value);
   } catch {
-    throw new Error(`${field}는 유효한 HTTPS URL이어야 합니다.`);
+    throw new Error(M().invalidHttps(field));
   }
-  if (url.protocol !== 'https:') throw new Error(`${field}는 HTTPS URL이어야 합니다.`);
+  if (url.protocol !== 'https:') throw new Error(M().notHttps(field));
 }
 
 function safeUrl(value: string): string {
@@ -104,8 +182,8 @@ function countMentions(caption: string): number {
 }
 
 function assertCaption(caption: string): void {
-  if (caption.length > 2_200) throw new Error('TikTok caption은 UTF-16 기준 2,200자 이하여야 합니다.');
-  if (countMentions(caption) > 30) throw new Error('TikTok caption의 멘션은 최대 30개입니다.');
+  if (caption.length > 2_200) throw new Error(M().captionLength);
+  if (countMentions(caption) > 30) throw new Error(M().mentions);
 }
 
 function numberValue(value: unknown): number {
@@ -128,7 +206,7 @@ function factsFromValidation(
     typeof item === 'object' && item !== null && (item as Record<string, unknown>).codec_type === 'video',
   ) as Record<string, unknown> | undefined;
   const format = validation.format as Record<string, unknown>;
-  if (!stream) throw new Error('업로드 파일에 비디오 스트림이 없습니다.');
+  if (!stream) throw new Error(M().noVideoStream);
   const facts: VideoFacts = {
     sizeBytes: statSync(sourceFilePath).size,
     width: numberValue(stream.width),
@@ -139,37 +217,37 @@ function factsFromValidation(
     codec: typeof stream.codec_name === 'string' ? stream.codec_name : undefined,
   };
   if (Object.values(facts).slice(0, 5).some((value) => typeof value !== 'number' || !Number.isFinite(value))) {
-    throw new Error('TikTok 규격 검사에 필요한 영상 메타데이터를 읽지 못했습니다.');
+    throw new Error(M().noMetadata);
   }
   return facts;
 }
 
 function assertVideoFacts(facts: VideoFacts, settings: TikTokVideoSettings): void {
-  if (facts.sizeBytes <= 0 || facts.sizeBytes > MAX_FILE_BYTES) throw new Error('TikTok 영상은 0바이트 초과, 1GB 이하여야 합니다.');
-  if (facts.durationSec < 3 || facts.durationSec > 600) throw new Error('TikTok 영상 길이는 3~600초여야 합니다.');
+  if (facts.sizeBytes <= 0 || facts.sizeBytes > MAX_FILE_BYTES) throw new Error(M().size);
+  if (facts.durationSec < 3 || facts.durationSec > 600) throw new Error(M().duration);
   const accountMax = Number(settings.max_video_post_duration_sec);
   if (Number.isFinite(accountMax) && facts.durationSec > accountMax) {
-    throw new Error(`영상 길이 ${facts.durationSec.toFixed(1)}초가 계정 한도 ${accountMax}초를 초과합니다.`);
+    throw new Error(M().accountMax(facts.durationSec.toFixed(1), accountMax));
   }
-  if (facts.width < 360 || facts.height < 360) throw new Error('TikTok 영상의 가로·세로는 각각 최소 360px이어야 합니다.');
-  if (facts.fps < 23 || facts.fps > 60) throw new Error('TikTok 영상 FPS는 23~60이어야 합니다.');
+  if (facts.width < 360 || facts.height < 360) throw new Error(M().dimensions);
+  if (facts.fps < 23 || facts.fps > 60) throw new Error(M().fps);
 }
 
 function assertThumbnailOffset(thumbnailOffsetMs: number | undefined, durationSec: number): void {
   if (thumbnailOffsetMs !== undefined && thumbnailOffsetMs > durationSec * 1000) {
-    throw new Error('thumbnailOffsetMs는 영상 길이를 초과할 수 없습니다.');
+    throw new Error(M().thumbnailOffset);
   }
 }
 
 function assertSourceFile(sourceFilePath: string): void {
   if (!path.isAbsolute(sourceFilePath) || !existsSync(sourceFilePath)) {
-    throw new Error('sourceFilePath는 존재하는 절대경로여야 합니다.');
+    throw new Error(M().sourcePath);
   }
   const stat = statSync(sourceFilePath);
-  if (!stat.isFile()) throw new Error('sourceFilePath는 파일이어야 합니다.');
+  if (!stat.isFile()) throw new Error(M().sourceNotFile);
   const ext = path.extname(sourceFilePath).toLowerCase();
   if (!['.mp4', '.mov', '.webm'].includes(ext)) {
-    throw new Error('TikTok 지원 영상 형식은 .mp4, .mov, .webm입니다.');
+    throw new Error(M().formats);
   }
 }
 
@@ -206,7 +284,7 @@ function acquirePublishLock(openId: string, contentHash: string, lockDir = LOCK_
     descriptor = openSync(publishLockPath(openId, contentHash, lockDir), 'wx', CREDENTIAL_FILE_MODE);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new Error('동일 영상의 게시 예약이 이미 존재합니다. 감사 로그와 TikTok 상태를 먼저 확인하세요.', {
+      throw new Error(M().lockExists, {
         cause: error,
       });
     }
@@ -264,10 +342,7 @@ export async function planVideoPost(input: PlanVideoPostInput): Promise<TikTokPo
   const contentHash = await sha256File(input.sourceFilePath);
   const duplicate = existingBlockingAudit(config.openId, contentHash);
   if (duplicate) {
-    throw new Error(
-      `동일 영상의 기존 게시 기록이 있습니다 (state=${duplicate.state}, publishId=${duplicate.publishId ?? 'unknown'}). ` +
-      '중복 자동 게시를 차단했습니다.',
-    );
+    throw new Error(M().duplicatePlan(duplicate.state, duplicate.publishId ?? 'unknown'));
   }
 
   const request: TikTokPublishRequest = {
@@ -291,32 +366,27 @@ export async function planVideoPost(input: PlanVideoPostInput): Promise<TikTokPo
     videoFacts: facts,
     request,
     settings,
-    warnings: [
-      'videoUrl은 TikTok API for Business 앱에 등록·검증된 도메인의 HTTPS URL이어야 합니다.',
-      'videoUrl은 리디렉션 없이 영상에 직접 2xx로 응답해야 합니다. TikTok은 3xx 리디렉션을 따라가지 않습니다.',
-      'URL은 TikTok이 가져갈 때까지 최소 30분 이상 유효해야 합니다.',
-      '이 계획은 공개 게시이며 30분 뒤 만료됩니다.',
-    ],
+    warnings: [...M().warnings],
   };
   privateWrite(planPath(planId), plan);
   return plan;
 }
 
 export function loadPostPlan(planId: string): TikTokPostPlan {
-  if (!/^[a-f0-9]{32}$/.test(planId)) throw new Error('planId 형식이 올바르지 않습니다.');
+  if (!/^[a-f0-9]{32}$/.test(planId)) throw new Error(M().badPlanId);
   const plan = readJson<TikTokPostPlan>(planPath(planId));
-  if (!plan) throw new Error(`TikTok 게시 계획을 찾지 못했습니다: ${planId}`);
-  if (Date.parse(plan.expiresAt) <= Date.now()) throw new Error('TikTok 게시 계획이 만료되었습니다. 다시 계획을 생성하세요.');
+  if (!plan) throw new Error(M().planNotFound(planId));
+  if (Date.parse(plan.expiresAt) <= Date.now()) throw new Error(M().planExpired);
   return plan;
 }
 
 export async function publishPlannedVideo(planId: string, confirmPublish: boolean) {
-  if (!confirmPublish) throw new Error('공개 게시에는 같은 턴의 명시 승인 후 confirmPublish=true가 필요합니다.');
+  if (!confirmPublish) throw new Error(M().confirmRequired);
   const plan = loadPostPlan(planId);
   const config = await ensureTikTokPublishConfig();
-  if (config.openId !== plan.openId) throw new Error('게시 계획을 만든 TikTok 계정과 현재 연결 계정이 다릅니다.');
+  if (config.openId !== plan.openId) throw new Error(M().accountMismatch);
   const duplicate = existingBlockingAudit(plan.openId, plan.contentHash);
-  if (duplicate) throw new Error(`중복 게시 차단: 기존 기록 state=${duplicate.state}.`);
+  if (duplicate) throw new Error(M().duplicateBlocked(duplicate.state));
 
   acquirePublishLock(plan.openId, plan.contentHash);
 
@@ -355,20 +425,20 @@ export async function publishPlannedVideo(planId: string, confirmPublish: boolea
     if (knownFailure) {
       releasePublishLock(plan.openId, plan.contentHash);
     } else {
-      throw new Error(`${audit.error} 게시 결과가 불명확하므로 자동 재시도하지 마세요.`, { cause: error });
+      throw new Error(M().outcomeUnknown(audit.error ?? ''), { cause: error });
     }
     throw error;
   }
 
   const publishId = result.share_id ?? result.publish_id;
   if (!publishId) {
-    const error = 'TikTok 성공 응답에 share_id/publish_id가 없어 게시 결과를 확인할 수 없습니다.';
+    const error = M().noShareId;
     privateWrite(auditPath(plan.openId, plan.contentHash), {
       ...baseAudit,
       updatedAt: new Date().toISOString(),
       error,
     });
-    throw new TikTokApiError(`${error} 자동 재시도하지 마세요.`, undefined, undefined, true);
+    throw new TikTokApiError(M().noRetry(error), undefined, undefined, true);
   }
 
   const audit: TikTokPublishAudit = {
@@ -380,7 +450,7 @@ export async function publishPlannedVideo(planId: string, confirmPublish: boolea
   try {
     privateWrite(auditPath(plan.openId, plan.contentHash), audit);
   } catch (error) {
-    throw new Error('TikTok은 게시 요청을 수락했지만 로컬 감사 로그 갱신에 실패했습니다. 자동 재시도하지 마세요.', {
+    throw new Error(M().auditFailed, {
       cause: error,
     });
   }

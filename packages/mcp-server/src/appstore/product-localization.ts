@@ -1,6 +1,18 @@
 import { V1_BASE, V2_BASE, apiRequest, authHeadersOrThrow } from './http.js';
 import type { AppStoreProductType } from './http.js';
 import { encodePathSegment } from '../lib/url-path.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    needOne: 'name 또는 description 중 하나는 있어야 해.',
+    needName: (locale: string) => `새 로케일(${locale})을 만들려면 name 이 필요해.`,
+  },
+  {
+    needOne: 'Provide at least one of name or description.',
+    needName: (locale: string) => `name is required to create a new locale (${locale}).`,
+  },
+);
 
 /**
  * IAP/구독 상품의 App Store 현지화(표시 이름·설명).
@@ -105,7 +117,7 @@ export async function upsertProductLocalization(args: {
 }): Promise<ProductLocalization & { created: boolean }> {
   const { internalId, productType, locale, name, description } = args;
   if (!name && description === undefined) {
-    throw new Error('name 또는 description 중 하나는 있어야 해.');
+    throw new Error(M().needOne);
   }
 
   const resource = localizationResource(productType);
@@ -138,7 +150,7 @@ export async function upsertProductLocalization(args: {
   }
 
   if (!name) {
-    throw new Error(`새 로케일(${locale})을 만들려면 name 이 필요해.`);
+    throw new Error(M().needName(locale));
   }
   const attributes: Record<string, string> = { locale, name };
   if (description !== undefined) attributes.description = description;

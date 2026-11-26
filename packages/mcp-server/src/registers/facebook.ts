@@ -6,6 +6,32 @@ import * as api from '../facebook/api.js';
 import { metaExpiryMessage } from '../lib/meta-auth.js';
 import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noPages: '접근 가능한 페이지가 없습니다. pages_show_list 권한이 있는 토큰인지 확인하세요.',
+    pages: (n: number) => `접근 가능한 페이지 ${n}개:`,
+    category: (c: string) => `   카테고리: ${c}`,
+    followers: (n: string) => `   팔로워: ${n}`,
+    likes: (n: string) => `   좋아요: ${n}`,
+    posted: `✅ 게시 완료`,
+    postedMany: (n: number) => `✅ ${n}장 게시 완료`,
+    noConfig: '저장된 Facebook 설정 없음. facebook_save_config로 등록하세요.',
+    page: (name: string | undefined, id: string) => `페이지: ${name ?? '(미확인)'} (${id})`,
+  },
+  {
+    noPages: 'No accessible pages. Check that the token has the pages_show_list permission.',
+    pages: (n: number) => `${n} accessible page(s):`,
+    category: (c: string) => `   Category: ${c}`,
+    followers: (n: string) => `   Followers: ${n}`,
+    likes: (n: string) => `   Likes: ${n}`,
+    posted: `✅ Posted`,
+    postedMany: (n: number) => `✅ Posted ${n} images`,
+    noConfig: 'No saved Facebook settings. Register them with facebook_save_config.',
+    page: (name: string | undefined, id: string) => `Page: ${name ?? '(unknown)'} (${id})`,
+  },
+);
 
 export function registerFacebookTools(server: ToolRegistrar) {
   const profileSchema = z.string().regex(SOCIAL_PROFILE_ID_PATTERN).optional().describe(
@@ -42,10 +68,10 @@ export function registerFacebookTools(server: ToolRegistrar) {
     async ({ userAccessToken }) => {
       const pages = await api.listAccessiblePages(userAccessToken);
       if (pages.length === 0) {
-        return textResult('접근 가능한 페이지가 없습니다. pages_show_list 권한이 있는 토큰인지 확인하세요.');
+        return textResult(M().noPages);
       }
       return textResult([
-        `접근 가능한 페이지 ${pages.length}개:`,
+        M().pages(pages.length),
         ...pages.map(p => `  • ${p.name} (ID: ${p.id})${p.category ? ` — ${p.category}` : ''}`),
       ]);
     },
@@ -60,9 +86,9 @@ export function registerFacebookTools(server: ToolRegistrar) {
       const page = await api.getPage(cfg);
       return textResult([
         `${page.name} (ID: ${page.id})`,
-        page.category ? `   카테고리: ${page.category}` : '',
-        page.followers_count !== undefined ? `   팔로워: ${page.followers_count.toLocaleString()}` : '',
-        page.fan_count !== undefined ? `   좋아요: ${page.fan_count.toLocaleString()}` : '',
+        page.category ? M().category(page.category) : '',
+        page.followers_count !== undefined ? M().followers(page.followers_count.toLocaleString()) : '',
+        page.fan_count !== undefined ? M().likes(page.fan_count.toLocaleString()) : '',
         `   ${metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth facebook')}`,
       ].filter(Boolean));
     },
@@ -83,7 +109,7 @@ export function registerFacebookTools(server: ToolRegistrar) {
       const cfg = requireFacebookConfig({ profile });
       const result = await api.postPhoto(cfg, imageUrl, caption);
       return textResult([
-        `✅ 게시 완료`,
+        M().posted,
         `   post_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));
@@ -106,7 +132,7 @@ export function registerFacebookTools(server: ToolRegistrar) {
       const cfg = requireFacebookConfig({ profile });
       const result = await api.postMultiPhoto(cfg, imageUrls, caption);
       return textResult([
-        `✅ ${imageUrls.length}장 게시 완료`,
+        M().postedMany(imageUrls.length),
         `   post_id: ${result.id}`,
         result.permalink ? `   URL: ${result.permalink}` : '',
       ].filter(Boolean));
@@ -121,10 +147,10 @@ export function registerFacebookTools(server: ToolRegistrar) {
     async ({ profile }) => {
       const cfg = loadFacebookConfig({ profile });
       if (!cfg) {
-        return textResult('저장된 Facebook 설정 없음. facebook_save_config로 등록하세요.');
+        return textResult(M().noConfig);
       }
       return textResult([
-        `페이지: ${cfg.pageName ?? '(미확인)'} (${cfg.pageId})`,
+        M().page(cfg.pageName, cfg.pageId),
         metaExpiryMessage(cfg.expiresAt, 'mimi-seed auth facebook'),
       ].filter(Boolean));
     },

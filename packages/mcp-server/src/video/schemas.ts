@@ -1,4 +1,22 @@
 import { z } from 'zod';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    sceneTotalMismatch: '장면 길이 합계가 targetDurationSec와 다릅니다.',
+    referenceOnlyRender: 'reference-only 자산은 렌더링을 허용할 수 없습니다.',
+    hexFormat: '#RRGGBB 형식이어야 합니다.',
+    timelineTotalMismatch: 'totalDurationSec가 장면 길이 합계와 다릅니다.',
+    fileInvalid: (filePath: string, issues: string) => `영상 프로젝트 파일 검증 실패: ${filePath}\n${issues}`,
+  },
+  {
+    sceneTotalMismatch: 'The sum of scene durations differs from targetDurationSec.',
+    referenceOnlyRender: 'A reference-only asset cannot be allowed for rendering.',
+    hexFormat: 'Must be in #RRGGBB format.',
+    timelineTotalMismatch: 'totalDurationSec differs from the sum of scene durations.',
+    fileInvalid: (filePath: string, issues: string) => `Video project file validation failed: ${filePath}\n${issues}`,
+  },
+);
 
 export const aspectRatioSchema = z.enum(['9:16', '16:9', '1:1']);
 export const assetKindSchema = z.enum(['image', 'video', 'audio']);
@@ -32,7 +50,7 @@ export const projectSchema = z.object({
 }).superRefine((project, ctx) => {
   const total = project.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   if (Math.abs(total - project.settings.targetDurationSec) > 0.11) {
-    ctx.addIssue({ code: 'custom', message: '장면 길이 합계가 targetDurationSec와 다릅니다.' });
+    ctx.addIssue({ code: 'custom', message: M().sceneTotalMismatch });
   }
 });
 
@@ -52,7 +70,7 @@ export const assetSchema = z.object({
   prompt: z.string().max(100_000).optional(),
 }).superRefine((asset, ctx) => {
   if (asset.sourceType === 'reference-only' && asset.allowedForRendering) {
-    ctx.addIssue({ code: 'custom', message: 'reference-only 자산은 렌더링을 허용할 수 없습니다.' });
+    ctx.addIssue({ code: 'custom', message: M().referenceOnlyRender });
   }
 });
 
@@ -62,7 +80,7 @@ export const assetManifestSchema = z.object({
   assets: z.array(assetSchema).max(10_000),
 });
 
-export const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, '#RRGGBB 형식이어야 합니다.');
+export const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, { error: () => M().hexFormat });
 
 export const captionStyleSchema = z.object({
   preset: z.enum(['shorts', 'box']).optional(),
@@ -96,7 +114,7 @@ export const timelineSchema = z.object({
 }).superRefine((timeline, ctx) => {
   const calculated = timeline.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
   if (Math.abs(calculated - timeline.totalDurationSec) > 0.01) {
-    ctx.addIssue({ code: 'custom', message: 'totalDurationSec가 장면 길이 합계와 다릅니다.' });
+    ctx.addIssue({ code: 'custom', message: M().timelineTotalMismatch });
   }
 });
 
@@ -117,7 +135,7 @@ export function parseFile<T>(schema: z.ZodType<T>, value: unknown, filePath: str
   const result = schema.safeParse(value);
   if (!result.success) {
     const issues = result.error.issues.slice(0, 10).map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`);
-    throw new Error(`영상 프로젝트 파일 검증 실패: ${filePath}\n${issues.join('\n')}`);
+    throw new Error(M().fileInvalid(filePath, issues.join('\n')));
   }
   return result.data;
 }

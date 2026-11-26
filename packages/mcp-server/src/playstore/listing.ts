@@ -4,6 +4,16 @@
 import type { OAuth2Client, JWT } from 'google-auth-library';
 import { extractHttpStatus } from '../lib/google-errors.js';
 import { publisher, withEdit } from './edits.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noListing: (lang: string) => `Google Play ${lang} 리스팅이 아직 없어요. 새 언어를 만들려면 title, shortDescription, fullDescription을 모두 보내야 해요.`,
+  },
+  {
+    noListing: (lang: string) => `There is no Google Play ${lang} listing yet. To create a new language, send all of title, shortDescription, and fullDescription.`,
+  },
+);
 
 // ─── 앱 목록 ───
 
@@ -97,7 +107,7 @@ export async function updateListing(
         const { title, shortDescription, fullDescription } = data;
         if (!title || !shortDescription || !fullDescription) {
           throw new Error(
-            `Google Play ${language} 리스팅이 아직 없어요. 새 언어를 만들려면 title, shortDescription, fullDescription을 모두 보내야 해요.`,
+            M().noListing(language),
             { cause: error },
           );
         }

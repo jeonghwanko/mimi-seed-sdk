@@ -6,6 +6,34 @@ import { buildAppStoreReleasePlan } from '../../checks/plan.js';
 import { appStoreRiskPolicyShape, releaseReadinessResult, releaseReadinessShape } from '../../checks/release-readiness.js';
 import { textResult } from '../../lib/mcp-response.js';
 import { reviewSubmissionsText, submitForReviewDryRunText } from '../../appstore/messages.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    itemRemoved: '✓ 묶음에서 항목 제거됨',
+    canReattach: '항목이 버전이었다면 이제 다른 묶음에 붙일 수 있다 (appstore_submit_for_review).',
+    versionAdded: '✓ 묶음에 앱 버전 추가됨',
+    itemCount: (n: number) => `현재 묶음 항목 수: ${n}개`,
+    checkCount: '제출 전 항목 수를 확인할 것 — 첫 심사라면 상품들이 함께 들어 있어야 한다.',
+    submitted: (versionId: string, state: string, json: string) =>
+      `✅ 버전 ${versionId} 심사 제출 완료 (state: ${state}). App Store Connect에서 진행 상태 확인 가능.\n\n${json}`,
+    cancelled: `✅ 심사 철회 완료`,
+    backToPrepare: (versionId: string) => `  버전 ${versionId}이(가) PREPARE_FOR_SUBMISSION 상태로 복귀됨.`,
+    canResubmit: `  메타데이터/빌드 수정 후 appstore_submit_for_review로 재제출 가능.`,
+  },
+  {
+    itemRemoved: '✓ Item removed from the submission',
+    canReattach: 'If the item was a version, it can now be attached to another submission (appstore_submit_for_review).',
+    versionAdded: '✓ App version added to the submission',
+    itemCount: (n: number) => `Items in the submission now: ${n}`,
+    checkCount: 'Check the item count before submitting — for a first review, the products must be in it too.',
+    submitted: (versionId: string, state: string, json: string) =>
+      `✅ Version ${versionId} submitted for review (state: ${state}). You can check progress in App Store Connect.\n\n${json}`,
+    cancelled: `✅ Review submission cancelled`,
+    backToPrepare: (versionId: string) => `  Version ${versionId} returned to PREPARE_FOR_SUBMISSION.`,
+    canResubmit: `  After fixing the metadata/build, you can resubmit with appstore_submit_for_review.`,
+  },
+);
 
 /** appstore_list_review_submissions · appstore_remove_review_submission_item · appstore_add_version_to_review_submission */
 export function registerReviewSubmissionItemTools(server: ToolRegistrar) {
@@ -42,10 +70,10 @@ export function registerReviewSubmissionItemTools(server: ToolRegistrar) {
     async ({ itemId }) => {
       const result = await appstore.removeReviewSubmissionItem(itemId);
       return textResult([
-        '✓ 묶음에서 항목 제거됨',
+        M().itemRemoved,
         `itemId: ${result.itemId}`,
         result.state ? `state: ${result.state}` : '',
-        '항목이 버전이었다면 이제 다른 묶음에 붙일 수 있다 (appstore_submit_for_review).',
+        M().canReattach,
       ].filter(Boolean));
     },
   );
@@ -66,12 +94,12 @@ export function registerReviewSubmissionItemTools(server: ToolRegistrar) {
     async ({ submissionId, versionId }) => {
       const result = await appstore.addVersionToReviewSubmission({ submissionId, versionId });
       return textResult([
-        '✓ 묶음에 앱 버전 추가됨',
+        M().versionAdded,
         `submissionId: ${result.submissionId}`,
         `versionId: ${result.versionId}`,
         result.itemId ? `itemId: ${result.itemId}` : '',
-        `현재 묶음 항목 수: ${result.itemCount}개`,
-        '제출 전 항목 수를 확인할 것 — 첫 심사라면 상품들이 함께 들어 있어야 한다.',
+        M().itemCount(result.itemCount),
+        M().checkCount,
       ].filter(Boolean));
     },
   );
@@ -126,7 +154,7 @@ export function registerSubmitForReviewTools(server: ToolRegistrar) {
         return textResult(submitForReviewDryRunText(preview));
       }
       const result = await appstore.submitVersionForReview(versionId);
-      return textResult(`✅ 버전 ${versionId} 심사 제출 완료 (state: ${result.state}). App Store Connect에서 진행 상태 확인 가능.\n\n${JSON.stringify(result, null, 2)}`);
+      return textResult(M().submitted(versionId, String(result.state), JSON.stringify(result, null, 2)));
     },
   );
 
@@ -146,11 +174,11 @@ export function registerSubmitForReviewTools(server: ToolRegistrar) {
     async ({ versionId }) => {
       const result = await appstore.cancelVersionReview(versionId);
       return textResult([
-        `✅ 심사 철회 완료`,
+        M().cancelled,
         `  submissionId: ${result.submissionId}`,
         `  ${result.previousState} → ${result.newState}`,
-        `  버전 ${result.versionId}이(가) PREPARE_FOR_SUBMISSION 상태로 복귀됨.`,
-        `  메타데이터/빌드 수정 후 appstore_submit_for_review로 재제출 가능.`,
+        M().backToPrepare(result.versionId),
+        M().canResubmit,
       ]);
     },
   );

@@ -4,6 +4,24 @@ import * as billing from '../billing/tools.js';
 import { requireAuth } from '../helpers.js';
 import { CLOUD_PLATFORM_SCOPE } from '../auth/scopes.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    created: '✓ 예산 생성 완료',
+    scope: (s: string) => `**범위**: ${s}`,
+    wholeAccount: '결제 계정 전체',
+    thresholds: (s: string) => `**알림 임계**: ${s}`,
+    alertOnly: '⚠️ 이 예산은 **알림만** 한다 — 임계를 넘어도 지출은 계속된다.',
+  },
+  {
+    created: '✓ Budget created',
+    scope: (s: string) => `**Scope**: ${s}`,
+    wholeAccount: 'entire billing account',
+    thresholds: (s: string) => `**Alert thresholds**: ${s}`,
+    alertOnly: '⚠️ This budget **only alerts** — spending continues after a threshold is crossed.',
+  },
+);
 
 export function registerBillingTools(server: ToolRegistrar) {
   server.tool(
@@ -120,14 +138,14 @@ export function registerBillingTools(server: ToolRegistrar) {
         quotaProjectId,
       });
       return textResult([
-        '✓ 예산 생성 완료',
+        M().created,
         '',
         `**name**: \`${budget.name}\``,
         `**displayName**: ${budget.displayName}`,
-        `**범위**: ${budget.projects.length ? budget.projects.join(', ') : '결제 계정 전체'}`,
-        `**알림 임계**: ${budget.thresholds.map((t) => `${Math.round(t * 100)}%`).join(' / ')}`,
+        M().scope(budget.projects.length ? budget.projects.join(', ') : M().wholeAccount),
+        M().thresholds(budget.thresholds.map((t) => `${Math.round(t * 100)}%`).join(' / ')),
         '',
-        '⚠️ 이 예산은 **알림만** 한다 — 임계를 넘어도 지출은 계속된다.',
+        M().alertOnly,
       ]);
     },
   );

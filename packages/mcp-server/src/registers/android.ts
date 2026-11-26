@@ -16,6 +16,28 @@ import {
   playServiceAccountMissingLines, playServiceAccountUploadedLines,
 } from '../android/messages.js';
 import { textResult } from '../lib/mcp-response.js';
+import { catalog } from '#core/lang.js';
+
+const M = catalog(
+  {
+    noPlayPermission: '(Play Console SA 권한 없음 — 신규 앱으로 처리)',
+    playCheckFailed: (msg: string) => `Play Console 확인 불가: ${msg}`,
+    noPlaySa: 'Play Store SA 없음 — 사용자에게 신규/기존 여부를 직접 확인하세요.',
+    jenkinsConnected: (url: string) => `✅ Jenkins 연결됨 (${url})`,
+    jenkinsMissing: '⚠️  Jenkins 미설정 — jenkins_status 호출 후 jenkins_save_config로 먼저 설정하세요.',
+    defaultIdNote: (id: string, pkg: string) =>
+      `ℹ️ "${id}" 는 credential_id 를 생략해 ${pkg} 의 마지막 세그먼트로 만든 기본 id 다 — 같은 마지막 세그먼트를 가진 다른 앱도 이 id 를 쓴다.`,
+  },
+  {
+    noPlayPermission: '(No Play Console SA permission — treated as a new app)',
+    playCheckFailed: (msg: string) => `Could not check Play Console: ${msg}`,
+    noPlaySa: 'No Play Store SA — ask the user directly whether the app is new or existing.',
+    jenkinsConnected: (url: string) => `✅ Jenkins connected (${url})`,
+    jenkinsMissing: '⚠️  Jenkins not configured — call jenkins_status, then configure it first with jenkins_save_config.',
+    defaultIdNote: (id: string, pkg: string) =>
+      `ℹ️ "${id}" is a default id built from the last segment of ${pkg} because credential_id was omitted — other apps with the same last segment use this id too.`,
+  },
+);
 
 /**
  * Jenkins credential id 접두사를 패키지명/앱 이름에서 만든다.
@@ -65,18 +87,18 @@ export function registerAndroidTools(server: ToolRegistrar) {
             appStatus = 'new';
           } else if (msg.includes('403') || msg.includes('forbidden')) {
             appStatus = 'new'; // SA는 있지만 권한 없음 = 신규 앱에 아직 초대 안 됨
-            playNote = '(Play Console SA 권한 없음 — 신규 앱으로 처리)';
+            playNote = M().noPlayPermission;
           } else {
-            playNote = `Play Console 확인 불가: ${msg.slice(0, 100)}`;
+            playNote = M().playCheckFailed(msg.slice(0, 100));
           }
         }
       } else {
-        playNote = 'Play Store SA 없음 — 사용자에게 신규/기존 여부를 직접 확인하세요.';
+        playNote = M().noPlaySa;
       }
 
       const jenkinsStatus = jenkinsCfg
-        ? `✅ Jenkins 연결됨 (${jenkinsCfg.url})`
-        : '⚠️  Jenkins 미설정 — jenkins_status 호출 후 jenkins_save_config로 먼저 설정하세요.';
+        ? M().jenkinsConnected(jenkinsCfg.url)
+        : M().jenkinsMissing;
 
       if (appStatus === 'existing') {
         return textResult(
@@ -165,7 +187,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
         if (credentialIdInput === undefined) {
           notes.push(
             ambiguousDefaultIdNote(credential_id) ??
-              `ℹ️ "${credential_id}" 는 credential_id 를 생략해 ${package_name} 의 마지막 세그먼트로 만든 기본 id 다 — 같은 마지막 세그먼트를 가진 다른 앱도 이 id 를 쓴다.`,
+              M().defaultIdNote(credential_id, package_name),
           );
         }
         return textResult(existingCredentialPreview(credential_id, await inspectCredential(cfg, credential_id), KIND_FILE, notes));
