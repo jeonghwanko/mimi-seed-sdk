@@ -10,8 +10,8 @@ export default {
     'Jenkins user ID',
   'Jenkins에 등록된 credential 목록을 조회합니다 (id / displayName / type). 설정이 없으면 jenkins_status를 먼저 호출해 연결 정보를 확인하세요.':
     'Lists the credentials registered in Jenkins (id / displayName / type). If there is no config, call jenkins_status first to check the connection info.',
-  'Jenkins에 Secret Text credential을 생성하거나 업데이트합니다. 비밀번호, API 키, 앱 시크릿 등 문자열 값에 사용하세요. 새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 값을 되돌릴 수 없게 덮어쓰므로 confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출. 설정이 없으면 jenkins_status를 먼저 호출하세요.':
-    'Creates or updates a Secret Text credential in Jenkins. Use it for string values such as passwords, API keys, and app secrets. A new id is created immediately. If the same id already exists, the existing value is overwritten irreversibly, so with confirm omitted/false nothing changes and only an "already exists" dry-run is returned — call again with confirm: true after the user approves. If there is no config, call jenkins_status first.',
+  'Jenkins에 Secret Text credential을 생성하거나 업데이트합니다. 비밀번호, API 키, 앱 시크릿 등 문자열 값에 사용하세요. confirm 생략/false 면 아무것도 보내지 않고 dry-run 만 반환한다 — 새 id 면 "생성 예정", 같은 id 가 있으면 "이미 존재"(교체하면 되돌릴 수 없음). 사용자 승인 후 같은 인자에 confirm: true 로 재호출. 설정이 없으면 jenkins_status를 먼저 호출하세요.':
+    'Creates or updates a Secret Text credential in Jenkins. Use it for string values such as passwords, API keys, and app secrets. With confirm omitted/false nothing is sent and only a dry-run is returned — "will create" for a new id, "already exists" for an existing one (replacing it cannot be undone). Call again with the same arguments plus confirm: true after the user approves. If there is no config, call jenkins_status first.',
   'Credential ID (예: my-app-android-key-password)':
     'Credential ID (e.g. my-app-android-key-password)',
   '저장할 비밀값. secret_file 과 둘 중 하나':
@@ -22,10 +22,10 @@ export default {
     'Field to read from secret_file (storePassword / keyPassword / keyAlias)',
   '설명 (선택)':
     'Description (optional)',
-  '같은 id 가 이미 있을 때만 필요. true 면 기존 값을 교체':
-    'Required only when the same id already exists. true replaces the existing value',
-  'Jenkins에 Android keystore 파일을 Secret File credential로 업로드합니다. keystore_base64에 .jks/.p12 파일을 base64로 인코딩한 값을 전달하세요. 새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 keystore 를 되돌릴 수 없게 교체하므로 confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출. 설정이 없으면 jenkins_status를 먼저 호출하세요.':
-    'Uploads an Android keystore file to Jenkins as a Secret File credential. Pass the .jks/.p12 file base64-encoded in keystore_base64. A new id is created immediately. If the same id already exists, the existing keystore is replaced irreversibly, so with confirm omitted/false nothing changes and only an "already exists" dry-run is returned — call again with confirm: true after the user approves. If there is no config, call jenkins_status first.',
+  'true 일 때만 Jenkins 로 보낸다 (새 id 생성 또는 기존 값 교체). 생략/false 면 dry-run':
+    'Sends to Jenkins only when true (creates a new id or replaces the existing value). Omitted/false is a dry-run',
+  'Jenkins에 Android keystore 파일을 Secret File credential로 업로드합니다. keystore_base64에 .jks/.p12 파일을 base64로 인코딩한 값을 전달하세요. confirm 생략/false 면 아무것도 보내지 않고 dry-run 만 반환한다 — 새 id 면 "생성 예정", 같은 id 가 있으면 "이미 존재"(기존 keystore 를 교체하면 되돌릴 수 없음). 사용자 승인 후 같은 인자에 confirm: true 로 재호출. 설정이 없으면 jenkins_status를 먼저 호출하세요.':
+    'Uploads an Android keystore file to Jenkins as a Secret File credential. Pass the .jks/.p12 file base64-encoded in keystore_base64. With confirm omitted/false nothing is sent and only a dry-run is returned — "will create" for a new id, "already exists" for an existing one (replacing the existing keystore cannot be undone). Call again with the same arguments plus confirm: true after the user approves. If there is no config, call jenkins_status first.',
   'Credential ID (예: my-app-android-keystore)':
     'Credential ID (e.g. my-app-android-keystore)',
   'keystore 파일 내용을 base64로 인코딩한 값. keystore_path 와 둘 중 하나':
@@ -34,8 +34,8 @@ export default {
     'Recommended — absolute path to the keystore created by android_generate_keystore (only paths inside ~/.mimi-seed/keystores/ are allowed)',
   '파일명 (기본: keystore.jks)':
     'File name (default: keystore.jks)',
-  '같은 id 가 이미 있을 때만 필요. true 면 기존 keystore 를 교체':
-    'Required only when the same id already exists. true replaces the existing keystore',
+  'true 일 때만 Jenkins 로 보낸다 (새 id 생성 또는 기존 keystore 교체). 생략/false 면 dry-run':
+    'Sends to Jenkins only when true (creates a new id or replaces the existing keystore). Omitted/false is a dry-run',
   'Jenkins credential을 삭제합니다. 비가역 작업입니다. 설정이 없으면 jenkins_status를 먼저 호출하세요.':
     'Deletes a Jenkins credential. This is irreversible. If there is no config, call jenkins_status first.',
   '삭제할 Credential ID':

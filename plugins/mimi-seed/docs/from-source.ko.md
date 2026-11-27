@@ -152,6 +152,10 @@ codex plugin add mimi-seed@yoonion
 설치 후에는 **새 대화**를 시작한다. 루트의 플러그인 원본을 고쳤다면 먼저
 `npm run plugin:sync`를 실행하고, `npm run plugin:check`로 배포본 드리프트를 확인한다.
 
+> 마켓플레이스 항목은 최신 **릴리스 태그**를 가리키므로 `codex plugin add`는 작업 트리가 아니라 GitHub의 릴리스된
+> 플러그인을 설치한다 (Claude Code 마켓플레이스도 같다). 로컬 빌드한 서버를 쓰려면 직접도 등록한다 —
+> `npm link` 후 `codex mcp add mimi-seed-dev -- mimi-seed-mcp` — 그리고 새 대화를 시작한다.
+
 ---
 
 ## 5. 체크아웃에서 첫 인증

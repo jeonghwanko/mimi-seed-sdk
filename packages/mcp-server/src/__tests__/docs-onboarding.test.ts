@@ -28,6 +28,7 @@ const USER_GUIDE_PAIRS = [
   ['docs/user-guide/cloud-operations.md', 'docs/user-guide/cloud-operations.ko.md'],
   ['docs/user-guide/video.md', 'docs/user-guide/video.ko.md'],
   ['docs/user-guide/social.md', 'docs/user-guide/social.ko.md'],
+  ['docs/user-guide/social-setup-checklist.md', 'docs/user-guide/social-setup-checklist.ko.md'],
   ['docs/user-guide/team-security.md', 'docs/user-guide/team-security.ko.md'],
 ] as const;
 

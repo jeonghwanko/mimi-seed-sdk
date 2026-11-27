@@ -18,9 +18,56 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.25.5] - 2026-11-28
+
+### Added
+
+- `social_publish` posts one announcement to several platforms (Facebook, Instagram, Threads, YouTube, and TikTok) in a single call. Without `confirm` it returns a plan for each platform and lists anything that would block it. Nothing is posted anywhere unless every platform passes, and every platform's pre-send checks (sign-in and tokens, the YouTube channel and video file, the TikTok publish permission) run before anything is sent. After you approve, results come back per platform. The same post — the same platform, account, and content — is never posted twice: calling again skips the platforms that already posted and resends the ones that failed (fix a failed one through its own options, e.g. `threads.text`). There is no request id: a `requestId` argument is rejected with that explanation rather than ignored. To post the same content again on purpose, pass `repost` with the platform and the `at` the plan shows for that post. A call that overlaps another one publishing to the same account is refused until that one finishes. A platform whose outcome is unknown (the publishing request was sent but the answer was a server error, a timeout, or a dropped connection) is never resent automatically, and that account stays blocked even for edited content; after you check the platform, pass `markPosted` (it is live: record it as posted) or `resendUnknown` (it is not: send again), naming that outcome's `at`. Each approval covers only the record it names and stays valid until its action succeeds or ends unknown, so repeating the same call afterwards cannot repost again or resend a newer unknown outcome. Failures before the publishing request, and clear refusals such as YouTube's upload quota, are reported as failed and can simply be sent again. The record is kept in `~/.mimi-seed/social-publish/`.
+- A one-page **social setup checklist** ([`docs/user-guide/social-setup-checklist.md`](docs/user-guide/social-setup-checklist.md), Korean `.ko.md`). It covers what to prepare in each platform's console (YouTube, Facebook, Instagram, Threads, TikTok), the one command that connects them all (`mimi-seed auth social`), how to verify, what expires, and the usual blockers. `mimi-seed auth social` now points to it when it starts.
+
+### Tool changes
+
+- Added `social_publish` (new `crosspost` domain, included in the `social` toolset).
+
+## [0.25.4] - 2026-11-27
+
 ### Added
 
 - `mimi-seed auth instagram` and `mimi-seed auth threads` can sign in through the browser with **your own Meta app**, with no server in between. Since the public console was retired, these commands could only take a pasted token. The first run asks for the app ID, app secret, and registered redirect URI. They are saved to `~/.mimi-seed/meta-apps.json` (`0600`, and encrypted like your other credentials when credential encryption is on) only after a successful login. The app secret is not shown on screen as you type it. After you approve, paste the redirected URL, or register an `http://localhost:<port>` redirect and the CLI catches it. `--reset-app` changes the saved app. A team broker (`MIMI_SEED_WEB_BASE`), `--manual-token`, and a token piped on standard input (`printf 'IGAA…' | mimi-seed auth instagram`) work as before.
+- `mimi-seed auth social` connects every posting channel (YouTube, Facebook, Instagram, Threads, and TikTok) in one pass. Anything already connected is skipped, and expired or expiring tokens are reconnected. Setup flags such as `--reconnect threads` pass through.
+- YouTube upload now appears in `mimi-seed setup`, `mimi-seed doctor`, and `mimi-seed auth status --all`. Connecting it signs in to a separate `youtube` Google profile (`mimi-seed auth login --profile youtube --domains youtube`), so a channel owned by a different Google account never replaces your default login for Play and Firebase. It counts as connected when the default login or any named profile has the YouTube upload permission. Pass `profile: "youtube"` to the `youtube_*` tools.
+
+### Changed
+
+- The first sign-in of a new named Google profile reuses the OAuth client saved by your default login, so you no longer have to set `MIMI_SEED_GOOGLE_CLIENT_ID` / `MIMI_SEED_GOOGLE_CLIENT_SECRET` again.
+- `mimi_seed_status` reports YouTube as connected when a named profile has the upload permission, and names the profile to pass. Before, it looked only at the default login.
+- `jenkins_create_credential`, `jenkins_upload_keystore`, and `jenkins_upload_playstore_sa` now send nothing to Jenkins without `confirm: true`, including for a new credential id. The dry-run says whether the id will be created or replaced. Before, a new id was created on the first call, so a secret could leave your machine with no confirmation, and the replace path showed the approval dialog twice. Now it is shown once, when the upload actually happens.
+- The Codex plugin marketplace, like the Claude Code one, now offers a release only after its server version is on npm. Installing or updating the plugin between a release merge and its npm publish no longer fails to start the server.
+
+### Fixed
+
+- `mimi-seed auth instagram` / `threads` with your own Meta app:
+  - Cancelling consent now ends the login at once with "consent was cancelled". Before, a local redirect left it waiting 10 minutes, and a pasted URL was reported as the wrong address.
+  - The app secret can no longer be recalled with ↑ at a later prompt.
+  - Ctrl-C cancels with exit code 130 instead of finishing as a success.
+  - The setup now says to enter the redirect URI exactly as the Meta dashboard saved it, including a trailing `/`.
+- `MIMI_SEED_WEB_BASE`:
+  - Must be the team console's root address. With a path (`https://console.example.com/team`), some commands dropped the path and sent your token to the root of the host. A bare `?` or `#` broke every endpoint.
+  - When it is set but not accepted, every `mimi-seed` command now says why, instead of acting as if it were not set.
+  - A local `http://localhost` console no longer blocks Instagram/Threads sign-in; it falls back to the local login.
+- `mimi-seed telemetry`:
+  - `telemetry on` without a team console now explains that one is needed and exits 1, instead of printing "disabled".
+  - The "usage measurement is off" notice is no longer shown when there is no console to send it to.
+  - A one-off `MIMI_SEED_TELEMETRY=1` against another console no longer resets your saved consent.
+- A Google sign-in with no OAuth client configured is reported as not retriable, so agents ask you to set one up instead of retrying. The Google OAuth guide now covers what your own client's project needs: the consent screen, the APIs to enable, and the 7-day sign-in limit of *Testing* mode.
+
+### Security
+
+- The approval dialog also asks before `drive_upload_file` and `drive_update_file_metadata`, which can put a local file or move a folder into any Drive folder, and before `playstore_register_service_account`, which replaces a stored Play key. Drive uploads also refuse files inside `~/.mimi-seed/`.
+- The approval dialog:
+  - Shows hidden Unicode (tag characters, variation selectors, the Hangul filler) as escapes, so approved text cannot carry an invisible payload.
+  - Redacts common CI secret names such as `API_KEY`, `SIGNING_KEY`, and `STORE_PASS`.
+  - Treats a timed-out or interrupted dialog as unanswered rather than declined, so the call can be asked again right away.
 
 ### Tool changes
 

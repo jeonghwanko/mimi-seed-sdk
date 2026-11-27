@@ -6,7 +6,7 @@
 // 자격증명 **목록**은 여기 없다 — credentials.ts 레지스트리가 SSOT 다 (setup/doctor 와 공유).
 
 import kleur from "kleur";
-import { CREDENTIALS, credLabel, detectAll, isSatisfied } from "./credentials.js";
+import { CREDENTIALS, credLabel, detectAll, isSatisfied, type CredId } from "./credentials.js";
 import { MCP_PKG, runMcpBin } from "./mcp-bin.js";
 import { catalog, t } from "./i18n.js";
 
@@ -32,6 +32,7 @@ ${kleur.bold("플랫폼별 자격증명:")}
   ${kleur.cyan("mimi-seed auth drive")}      Google Drive 서비스 계정 (공유 폴더·공유 드라이브 업로드)
 
 ${kleur.bold("빌드 / 마케팅:")}
+  ${kleur.cyan("mimi-seed auth social")}     YouTube · Facebook · Instagram · Threads · TikTok 한 번에 (연결된 건 건너뜀)
   ${kleur.cyan("mimi-seed auth meta")}       Facebook · Instagram · Threads 한 번에
   ${kleur.cyan("mimi-seed auth jenkins")}    Jenkins 연결 (jenkins.json)
   ${kleur.cyan("mimi-seed auth ci")}         GitHub Actions / GitLab CI (ci.json)
@@ -56,6 +57,7 @@ ${kleur.bold("login 옵션:")}
 
 ${kleur.dim(`내부적으로 ${MCP_PKG} 의 mimi-seed-*-auth CLI를 호출합니다.`)}`,
     connectAll: "\n  한 번에 연결: mimi-seed setup",
+    socialChecklist: "  처음이면 먼저 준비할 것: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social-setup-checklist.ko.md",
   },
   {
     help: `${kleur.bold("mimi-seed auth")} — local credential setup
@@ -73,6 +75,7 @@ ${kleur.bold("Per-platform credentials:")}
   ${kleur.cyan("mimi-seed auth drive")}      Google Drive service account (uploads to shared folders / drives)
 
 ${kleur.bold("Build / marketing:")}
+  ${kleur.cyan("mimi-seed auth social")}     YouTube · Facebook · Instagram · Threads · TikTok in one flow (skips connected ones)
   ${kleur.cyan("mimi-seed auth meta")}       Facebook · Instagram · Threads in one flow
   ${kleur.cyan("mimi-seed auth jenkins")}    Jenkins connection (jenkins.json)
   ${kleur.cyan("mimi-seed auth ci")}         GitHub Actions / GitLab CI (ci.json)
@@ -97,8 +100,12 @@ ${kleur.bold("login options:")}
 
 ${kleur.dim(`Under the hood this calls the mimi-seed-*-auth CLIs from ${MCP_PKG}.`)}`,
     connectAll: "\n  Connect everything at once: mimi-seed setup",
+    socialChecklist: "  First time? What to prepare first: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social-setup-checklist.md",
   },
 );
+
+/** `mimi-seed auth social` 이 다루는 게시 채널 — 순서는 setup 계획(planSetup)이 정한다. */
+export const SOCIAL_CREDENTIALS = ["youtube", "facebook", "instagram", "threads", "tiktok"] as const satisfies readonly CredId[];
 
 function printAuthHelp(): void {
   log(M().help);
@@ -161,6 +168,17 @@ export async function cmdAuth(args: string[]): Promise<void> {
   if (sub === "instagram") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["instagram", ...rest]));
   if (sub === "threads") return void exitWith(await runMcpBin("mimi-seed-social-auth", ["threads", ...rest]));
   if (sub === "tiktok") return void exitWith(await runMcpBin("mimi-seed-tiktok-business-auth", rest));
+
+  // 소셜 게시 채널 전부 — 별도 마법사를 두지 않고 setup 마법사를 그 범위로 좁혀 돌린다(연결된 건 건너뛰고,
+  // 만료·만료 임박 토큰은 다시 연결한다). 각 항목의 쓰기·검증은 여전히 그 자격증명을 소유한 mcp-server bin 이 한다.
+  // `--reconnect youtube,threads` 처럼 setup 플래그를 그대로 넘길 수 있다.
+  if (sub === "social") {
+    // 오래 걸리는 건 각 플랫폼 콘솔에서 하는 준비다 — 마법사를 시작하기 전에 그 목록을 가리킨다.
+    log(kleur.dim(M().socialChecklist));
+    const { cmdSetup } = await import("./setup.js");
+    await cmdSetup(["--only", SOCIAL_CREDENTIALS.join(","), ...rest]);
+    return;
+  }
 
   // CI(ci.json)는 CLI 가 직접 소유하는 유일한 자격증명 — setup 마법사의 항목 하나만 돌린다.
   if (sub === "ci") {

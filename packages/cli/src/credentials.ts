@@ -1,4 +1,4 @@
-import { consoleUrl } from "#core/console-url.js";
+import { consoleBase, consoleUrl } from "#core/console-url.js";
 // 자격증명 레지스트리 — `doctor` · `auth status --all` · `setup` 이 **공유하는 단일 SSOT**.
 //
 // 예전엔 doctor 와 auth 가 각자 4줄짜리 목록을 손으로 들고 있었고, Jenkins/CI/Ads/FB/IG 는
@@ -45,6 +45,7 @@ export type CredId =
   | "github"
   | "gitlab"
   | "googleads"
+  | "youtube"
   | "facebook"
   | "instagram"
   | "threads"
@@ -148,6 +149,44 @@ function readJson<T>(home: string, name: string): T | null {
     // 개별 탐지는 '없음'(null)으로 본다 — 깨진 파일은 detectAll 이 #core/json-file.js 로 따로 짚어 Detected.invalid 에 싣는다
     return null;
   }
+}
+
+/** Upload scope requested by the `youtube` auth domain (mcp-server `auth/scopes.ts`). */
+const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
+
+/** Google profile `mimi-seed auth social` / setup connect YouTube to (mcp-server `google-profiles/<id>.json`). */
+export const YOUTUBE_PROFILE = "youtube";
+
+/** Same rule as mcp-server `GOOGLE_PROFILE_ID`; other file names in google-profiles/ are not profiles. */
+const GOOGLE_PROFILE_FILE = /^[a-z0-9][a-z0-9_-]{0,63}\.json$/;
+
+function hasYouTubeUpload(tokens: { scope?: unknown } | undefined | null): boolean {
+  return typeof tokens?.scope === "string" && tokens.scope.split(/\s+/).includes(YOUTUBE_UPLOAD_SCOPE);
+}
+
+/**
+ * YouTube 는 별도 파일이 아니라 Google 토큰의 부여 scope 로 판정한다 — 기본 로그인(tokens.json)과 이름 있는 프로필
+ * (google-profiles/<id>.json, `{ tokens }`) 둘 다 본다. 프로필로 연결한 사용자에게 "미연결"이라며 다시 묻지 않게.
+ * scope 를 기록하지 않은 예전 토큰은 "미연결"로 본다. 읽기 전용(yt-analytics) 권한은 업로드가 안 되므로 제외.
+ */
+function detectYouTubeGrant(home: string): Detected {
+  const found: string[] = [];
+  if (hasYouTubeUpload(readJson<{ scope?: unknown }>(home, "tokens.json"))) found.push("default");
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(path.join(credDir(home), "google-profiles")).filter((f) => GOOGLE_PROFILE_FILE.test(f)).sort();
+  } catch {
+    // 프로필 디렉터리가 없으면 이름 있는 프로필이 없는 것 — 기본 로그인 판정만으로 충분하다
+  }
+  for (const file of files) {
+    const doc = readJson<{ tokens?: { scope?: unknown; youtubeChannel?: { title?: unknown } } }>(home, path.join("google-profiles", file));
+    if (!hasYouTubeUpload(doc?.tokens)) continue;
+    // 채널 제목은 YouTube 가 준 외부 입력이다 — 제어 문자(터미널 이스케이프)를 지우고 길이를 자른다.
+    const raw = doc?.tokens?.youtubeChannel?.title;
+    const title = typeof raw === "string" ? raw.replace(/\p{Cc}/gu, "").slice(0, 60) : "";
+    found.push(`profile ${file.slice(0, -5)}${title ? ` (${title})` : ""}`);
+  }
+  return found.length > 0 ? { present: true, detail: found.join(", ") } : { present: false };
 }
 
 const EXPIRING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
@@ -284,10 +323,10 @@ export const CREDENTIALS: readonly CredSpec[] = [
     docsAnchor: "cloud-pat",
     detect: (home) => {
       if (process.env.MIMI_SEED_TOKEN) {
-        return consoleUrl(process.env.MIMI_SEED_WEB_BASE) ? { present: true, detail: "MIMI_SEED_TOKEN (env)" } : { present: false };
+        return consoleBase(process.env.MIMI_SEED_WEB_BASE) ? { present: true, detail: "MIMI_SEED_TOKEN (env)" } : { present: false };
       }
       const cfg = readJson<{ prefix?: string; webBase?: string; endpoint?: string }>(home, "config.json");
-      return cfg?.prefix && consoleUrl(cfg.webBase) && consoleUrl(cfg.endpoint) ? { present: true, detail: `${cfg.prefix}…` } : { present: false };
+      return cfg?.prefix && consoleBase(cfg.webBase) && consoleUrl(cfg.endpoint) ? { present: true, detail: `${cfg.prefix}…` } : { present: false };
     },
   },
   {
@@ -598,6 +637,36 @@ export const CREDENTIALS: readonly CredSpec[] = [
     },
   },
   {
+    id: "youtube",
+    label: {
+      ko: "YouTube 업로드",
+      en: "YouTube upload",
+    },
+    requirement: "optional",
+    group: "marketing",
+    file: "~/.mimi-seed/tokens.json",
+    // 기본 로그인(tokens.json)이 아니라 별도 Google 프로필에 연결한다. 채널 계정이 Play·Firebase 계정과 다르면
+    // 기본 로그인에 YouTube 를 붙이는 순간 그 계정으로 tokens.json 이 교체돼 기존 연결이 끊긴다.
+    fix: `mimi-seed auth login --profile ${YOUTUBE_PROFILE} --domains youtube`,
+    setup: { kind: "mcp-bin", bin: "mimi-seed-auth", args: ["--profile", YOUTUBE_PROFILE, "--domains", "youtube"] },
+    obtain: {
+      ko: [
+        "따로 발급받을 토큰이 없다 — 채널을 가진 Google 계정으로 로그인해 YouTube 권한에 동의한다.",
+        `기본 Google 로그인과 분리된 '${YOUTUBE_PROFILE}' 프로필에 저장되므로 Play·Firebase 로그인은 그대로다.`,
+        "기본 로그인에 쓴 OAuth 클라이언트를 재사용한다. 저장된 채널은 로그인 때 확인해 함께 기록한다.",
+        `youtube_* 도구에는 profile="${YOUTUBE_PROFILE}" 를 넘긴다 (업로드는 expectedChannelId 로 채널을 다시 확인한다).`,
+      ],
+      en: [
+        "Nothing to obtain separately — sign in with the Google account that owns the channel and approve YouTube.",
+        `It is saved to a separate '${YOUTUBE_PROFILE}' profile, so your default Google login (Play, Firebase) is untouched.`,
+        "The OAuth client from your default login is reused. The channel is looked up at sign-in and recorded.",
+        `Pass profile="${YOUTUBE_PROFILE}" to youtube_* tools (uploads re-check the channel with expectedChannelId).`,
+      ],
+    },
+    docsAnchor: "google-oauth",
+    detect: (home) => detectYouTubeGrant(home),
+  },
+  {
     id: "facebook",
     label: {
       ko: "Facebook 페이지",
@@ -826,7 +895,7 @@ export function missingRequired(
   platforms: Platform[],
 ): CredSpec[] {
   return CREDENTIALS.filter((spec) => {
-    if (spec.id === "mimiseed") return !!consoleUrl(process.env.MIMI_SEED_WEB_BASE) && !isSatisfied(spec, detected);
+    if (spec.id === "mimiseed") return !!consoleBase(process.env.MIMI_SEED_WEB_BASE) && !isSatisfied(spec, detected);
     if (spec.requirement === "optional") return false;
     if (spec.requirement === "platform" && !platforms.includes(spec.platform!)) return false;
     return !isSatisfied(spec, detected);
@@ -855,7 +924,7 @@ export function planSetup(detected: Map<CredId, Detected>, opts: PlanOpts = {}):
 
   return CREDENTIALS.filter((spec) => {
     if (only && !only.has(spec.id)) return false;
-    if (spec.id === "mimiseed" && !only && !reconnect.has(spec.id) && !consoleUrl(process.env.MIMI_SEED_WEB_BASE)) return false;
+    if (spec.id === "mimiseed" && !only && !reconnect.has(spec.id) && !consoleBase(process.env.MIMI_SEED_WEB_BASE)) return false;
     if (reconnect.has(spec.id)) return true;
     const found = detected.get(spec.id);
     // 만료됐거나 7일 안에 만료되는 토큰은 setup 이 알아서 재연결 대상으로 올린다.

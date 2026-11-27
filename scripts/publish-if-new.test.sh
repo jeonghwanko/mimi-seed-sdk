@@ -56,7 +56,9 @@ printf 'gh %s\n' "$*" >> "$TRACE"
 [ "$2" = create ] && [ "${GH_TOKEN:-}" = test-token ]
 MOCK
 printf '#!/usr/bin/env bash\nexit 0\n' > "$scratch/bin/sleep"
-chmod +x "$scratch/bin/npm" "$scratch/bin/gh" "$scratch/bin/sleep"
+# macOS has no coreutils `timeout`; the test does not exercise timeouts, so a pass-through stands in everywhere.
+printf '#!/usr/bin/env bash\nshift\nexec "$@"\n' > "$scratch/bin/timeout"
+chmod +x "$scratch/bin/npm" "$scratch/bin/gh" "$scratch/bin/sleep" "$scratch/bin/timeout"
 
 run_release() (
   export SCENARIO="$1" TEST_VERSION="$2" PACKAGE_DIR="$scratch/package"

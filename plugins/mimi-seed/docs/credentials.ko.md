@@ -34,7 +34,7 @@ mimi-seed setup
 | Crashlytics / 애널리틱스 export 조회 | [Google OAuth](#google-oauth), OAuth 가 자꾸 막히면 [BigQuery SA](#bigquery) |
 | **Google Drive** 에 파일 올리기·교체 | 기존·공유 폴더는 [Drive 서비스 계정](#drive), mimi-seed 가 만드는 폴더는 [Google OAuth](#google-oauth) |
 | 광고 캠페인 리포트 | [Google Ads](#google-ads) |
-| 출시 공지 게시 | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
+| 출시 공지 게시 — `mimi-seed auth social`로 한 번에 연결 | [YouTube](#google-oauth) (`youtube` 프로필) · [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI 릴리스 노트 / 리뷰 답변 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(선택 — 없어도 동작한다)* |
 | story 기반 영상 리서치·제작 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + 실제로 쓸 공급자의 [영상 API 키](#video-api-keys) |
 | 호스팅 대시보드 / 원격 MCP | [Mimi Seed 계정](#cloud-pat) |
@@ -52,9 +52,17 @@ Cloud IAM · BigQuery 가 모두 같은 OAuth 토큰을 탄다. 여기서 시작
 
 Search Console 분석에는 `mimi-seed auth login --domains gsc_readonly`로 로그인한다. 기존 `gsc` 권한으로도 조회할 수 있고, 사이트맵 제출에는 `gsc` 권한이 필요하다. 이름 있는 Google 로그인 프로필로 GSC 도구에서 사용할 계정을 선택할 수 있다.
 
+**YouTube 게시:** `mimi-seed auth social`(또는 `mimi-seed setup`)은 YouTube를 별도의 `youtube` Google 프로필에 연결한다. 그래서 채널 계정이 Play·Firebase에 쓰는 계정과 달라도 된다. 기본 로그인의 OAuth 클라이언트를 재사용한다. `youtube_*` 도구에는 `profile: "youtube"`를 넘긴다. 직접 하려면 `mimi-seed auth login --profile youtube --domains youtube`.
+
 YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한다. 채널·영상 목록·댓글 조회는 이 권한이나 기존 게시용 `youtube` 권한으로 할 수 있고, 영상 관리 쓰기와 댓글 답글은 `youtube` 권한을 사용한다.
 
-처음 연결할 때는 Google Cloud에서 **데스크톱 앱** 유형 OAuth 클라이언트를 만들고 `MIMI_SEED_GOOGLE_CLIENT_ID`와 `MIMI_SEED_GOOGLE_CLIENT_SECRET`를 CLI 또는 MCP 서버 환경에 설정하세요. 같은 프로필의 재로그인은 저장된 클라이언트를 재사용합니다.
+처음 연결할 때는 Google Cloud에서 **데스크톱 앱** 유형 OAuth 클라이언트를 만들고 `MIMI_SEED_GOOGLE_CLIENT_ID`와 `MIMI_SEED_GOOGLE_CLIENT_SECRET`를 CLI 또는 MCP 서버 환경에 설정하세요. 같은 프로필의 재로그인은 저장된 클라이언트를, 새 이름 있는 프로필은 기본 로그인의 클라이언트를 재사용합니다.
+
+직접 만든 클라이언트는 API 호출이 **그 클라이언트의** Google Cloud 프로젝트로 나가므로, 그 프로젝트를 한 번 준비한다:
+
+1. **OAuth 동의 화면** — 사용자 유형 *외부*(Workspace 조직이면 *내부*), 앱이 *테스트* 상태인 동안 *테스트 사용자*에 내 Google 계정을 추가한다.
+2. **쓰는 서비스의 API 사용 설정** (*API 및 서비스 → 라이브러리*): Firebase Management, AdMob, Google Play Android Developer, Google Play Developer Reporting, Search Console, Google Analytics Admin + Data, Identity and Access Management, BigQuery, YouTube Data, YouTube Analytics, Google Drive, Google Ads. 꺼진 API 는 첫 호출이 `SERVICE_DISABLED` 로 실패한다 — 켜고 다시 시도한다.
+3. **테스트 모드는 일주일이다.** Google 은 *테스트* 상태인 *외부* 앱의 refresh token 을 7일 뒤 만료시켜 매주 다시 로그인해야 한다. 앱을 *프로덕션*으로 게시하면 이 제한이 없어진다 — 본인만 쓴다면 검증 없이 경고를 넘기고 써도 된다.
 
 ```bash
 mimi-seed auth login
@@ -63,9 +71,9 @@ mimi-seed auth login
 브라우저가 열리고, 승인하면, 토큰이 `~/.mimi-seed/tokens.json` 에 저장된다.
 
 > ⚠️ **거의 모두가 부딪히는 단 하나의 벽.** 거부한 적이 없는데 Google 이 *"액세스 차단됨"* / `access_denied` 라고
-> 한다면: 이 OAuth 앱이 **테스팅** 모드라 등록된 테스트 사용자만 로그인할 수 있다는 뜻이다. 앱 운영자에게
-> *OAuth 동의 화면 → 테스트 사용자* 에 네 Google 계정을 추가해달라고 요청한 뒤 재시도하라. 그 전엔 몇 번을
-> 다시 해도 절대 안 된다. → [`troubleshooting.ko.md#user-denied`](troubleshooting.ko.md#user-denied)
+> 한다면: 이 OAuth 앱이 **테스팅** 모드라 등록된 테스트 사용자만 로그인할 수 있다는 뜻이다. 클라이언트가 속한
+> 프로젝트(직접 만들었다면 내 프로젝트)의 *OAuth 동의 화면 → 테스트 사용자* 에 네 Google 계정을 추가한 뒤
+> 재시도하라. 그 전엔 몇 번을 다시 해도 절대 안 된다. → [`troubleshooting.ko.md#user-denied`](troubleshooting.ko.md#user-denied)
 
 **확인:** `mimi-seed auth status`
 

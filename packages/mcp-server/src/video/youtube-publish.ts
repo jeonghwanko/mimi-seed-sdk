@@ -163,7 +163,20 @@ export async function getYouTubeVideoStatus(auth: OAuth2Client, videoId: string)
   return safeStatus(video);
 }
 
-export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTubeVideoInput) {
+export interface UploadYouTubeVideoHooks {
+  /**
+   * Called right before the upload request is sent. Everything that fails before it (channel check, file and
+   * video validation) has sent nothing; after it, a thrown error may still mean the video was uploaded.
+   */
+  onUploadStart?: () => void;
+}
+
+/**
+ * Every check the upload makes before sending anything: the authenticated channel, visibility confirmation, the
+ * file, title/description/tags, and the video stream (ffprobe). Exported so a caller that posts to several
+ * platforms can run it for YouTube before posting anywhere else.
+ */
+export async function prepareYouTubeUpload(auth: OAuth2Client, input: UploadYouTubeVideoInput) {
   if (!input.expectedChannelId) throw new Error('expectedChannelId is required before uploading.');
   const channel = await verifyYouTubeChannel(auth, input.expectedChannelId);
   const privacyStatus = input.privacyStatus ?? 'private';
@@ -180,10 +193,28 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
     throw new Error(M().noVideoStream);
   }
   if (input.shortsOnly) assertShortsCompatible(facts);
+  return { channel, privacyStatus, file, validation, facts };
+}
+
+export type PreparedYouTubeUpload = Awaited<ReturnType<typeof prepareYouTubeUpload>>;
+
+/**
+ * `prepared` skips the pre-upload checks when the caller already ran prepareYouTubeUpload for this exact input
+ * (social_publish does, before posting anywhere): repeating them would cost quota and an ffprobe, and could fail
+ * late on a transient error after other platforms are live.
+ */
+export async function uploadYouTubeVideo(
+  auth: OAuth2Client,
+  input: UploadYouTubeVideoInput,
+  hooks: UploadYouTubeVideoHooks = {},
+  prepared?: PreparedYouTubeUpload,
+) {
+  const { channel, privacyStatus, file, validation, facts } = prepared ?? await prepareYouTubeUpload(auth, input);
 
   const youtube = google.youtube({ version: 'v3', auth });
   // try 는 업로드 호출만 감싼다 — 응답 검사(videoId 없음)를 같은 try 에 두면 catch 에서 메시지 문구로 구분해야 했다.
   let response;
+  hooks.onUploadStart?.();
   try {
     response = await youtube.videos.insert({
       part: ['snippet', 'status'],

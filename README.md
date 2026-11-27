@@ -155,7 +155,7 @@ npx mimi-seed setup   # accounts: one guided wizard for stores · CI · social
 
 You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery; the same wizard also connects App Store Connect, a Play service account, Jenkins, GitHub/GitLab CI, and Facebook / Instagram / Threads whenever you need them → [What do you actually need?](docs/credentials.md#what-you-need)
 
-On first run `setup` asks for your language (Enter keeps your system locale: Korean for a Korean locale, otherwise English), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Reconnect the three Meta platforms any time with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
+On first run `setup` asks for your language (Enter keeps your system locale: Korean for a Korean locale, otherwise English), then shows what's connected, asks only about what isn't, and skips anything you've already done (so you can quit and resume). At each step press `?` to see exactly where to get that token — the full reference is [docs/credentials.md](docs/credentials.md). Connect every posting channel (YouTube, Facebook, Instagram, Threads, TikTok) in one pass with `npx mimi-seed auth social`, or just the three Meta platforms with `npx mimi-seed auth meta`; switch language with `mimi-seed lang en` / `mimi-seed lang ko` (or `MIMI_SEED_LANG=en` for one command).
 
 #### App Store Connect: connect once, update safely
 
@@ -429,7 +429,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## Local MCP Tool List (150+ tools · 24 domains)
+## Local MCP Tool List (150+ tools · 25 domains)
 <!-- generated:readme-tools-heading:end -->
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md). Every tool carries MCP annotations (read-only / destructive / open-world), and destructive tools (submit, delete, public posts, …) return a dry-run preview unless called with `confirm: true`.
@@ -454,6 +454,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **GCP Billing** | 4 | `gcp_get_billing_info` · `gcp_list_billing_projects` · `gcp_list_budgets` · `gcp_create_budget` |
 | **Threads** | 7 | `threads_post` · `threads_post_video` · `threads_post_carousel` · `threads_refresh_token` |
 | **TikTok Business** | 7 | `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
+| **Cross-post** | 1 | `social_publish` |
 | **Checks / Risk** | 5 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |

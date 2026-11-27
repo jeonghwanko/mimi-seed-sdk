@@ -9,7 +9,11 @@ vi.mock('../mcp-bin.js', () => ({
   runMcpBin,
 }));
 
-import { cmdAuth } from '../auth.js';
+const { cmdSetup } = vi.hoisted(() => ({ cmdSetup: vi.fn(async () => {}) }));
+vi.mock('../setup.js', () => ({ cmdSetup }));
+
+import { cmdAuth, SOCIAL_CREDENTIALS } from '../auth.js';
+import { tryCredById } from '../credentials.js';
 
 describe('cmdAuth social routes', () => {
   beforeEach(() => runMcpBin.mockClear());
@@ -38,5 +42,16 @@ describe('cmdAuth social routes', () => {
   it('tiktok은 전용 Business OAuth 설정 진입점을 연다', async () => {
     await cmdAuth(['tiktok']);
     expect(runMcpBin).toHaveBeenCalledWith('mimi-seed-tiktok-business-auth', []);
+  });
+
+  it('social 은 게시 채널 전부를 setup 마법사로 묶고, setup 플래그를 그대로 넘긴다', async () => {
+    cmdSetup.mockClear();
+    await cmdAuth(['social', '--reconnect', 'threads']);
+    expect(cmdSetup).toHaveBeenCalledWith(['--only', 'youtube,facebook,instagram,threads,tiktok', '--reconnect', 'threads']);
+    expect(runMcpBin).not.toHaveBeenCalled();
+  });
+
+  it('social 이 묶는 id 는 모두 자격증명 레지스트리에 있다 (setup 의 --only 는 모르는 id 를 조용히 버린다)', () => {
+    for (const id of SOCIAL_CREDENTIALS) expect(tryCredById(id), id).toBeDefined();
   });
 });

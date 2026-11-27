@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cmdTelemetry, usageRun } from '../telemetry.js';
+import { cmdTelemetry, telemetryNotice, usageRun } from '../telemetry.js';
 let home: string;
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'mimi-usage-test-'));
@@ -47,5 +47,31 @@ describe('optional usage privacy', () => {
     vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://other.example.test');
     await usageRun('check', home)('completed');
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('`telemetry on` without a console says why and exits 1, and the off notice is not shown without a console', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    cmdTelemetry(['on']);
+    expect(process.exitCode).toBe(1);
+    expect(String(stderr.mock.calls[0]?.[0])).toMatch(/MIMI_SEED_WEB_BASE/);
+    expect(fs.existsSync(path.join(home, '.mimi-seed', 'telemetry.json'))).toBe(false);
+    expect(telemetryNotice()).toBe('');
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://console.example.test');
+    expect(telemetryNotice()).not.toBe('');
+    process.exitCode = undefined;
+  });
+  it('a one-off MIMI_SEED_TELEMETRY=1 against another console does not overwrite the saved consent', async () => {
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://a.example.test');
+    cmdTelemetry(['on']);
+    const file = path.join(home, '.mimi-seed', 'telemetry.json');
+    const saved = fs.readFileSync(file, 'utf8');
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://b.example.test');
+    vi.stubEnv('MIMI_SEED_TELEMETRY', '1');
+    await usageRun('check', home)('completed');
+    expect(fetch).toHaveBeenCalled();
+    expect(fs.readFileSync(file, 'utf8')).toBe(saved);
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://a.example.test');
+    vi.stubEnv('MIMI_SEED_TELEMETRY', undefined);
+    expect(telemetryNotice()).toBe('');
   });
 });

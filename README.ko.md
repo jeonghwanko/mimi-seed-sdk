@@ -155,7 +155,7 @@ npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 �
 
 첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버되고, 같은 마법사가 필요할 때 App Store Connect · Play 서비스 계정 · Jenkins · GitHub/GitLab CI · Facebook / Instagram / Threads까지 연결해줍니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
 
-`setup` 은 첫 실행이면 언어를 먼저 묻고(엔터 = 시스템 로캘: 한국어 로캘이면 한국어, 그 외 English), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
+`setup` 은 첫 실행이면 언어를 먼저 묻고(엔터 = 시스템 로캘: 한국어 로캘이면 한국어, 그 외 English), 무엇이 연결됐는지 보여주고, 안 된 것만 물어보고, 이미 한 건 건너뜁니다(중간에 그만두고 나중에 이어서 해도 됩니다). 각 단계에서 `?` 를 누르면 그 토큰을 어디서 받는지 알려줍니다 — 전체 레퍼런스는 [docs/credentials.ko.md](docs/credentials.ko.md). 게시 채널 전체(YouTube·Facebook·Instagram·Threads·TikTok)를 한 번에 연결하려면 `npx mimi-seed auth social`, Meta 세 플랫폼만 다시 연결하려면 `npx mimi-seed auth meta`, 언어 변경은 `mimi-seed lang en` / `mimi-seed lang ko` (한 번만 강제하려면 `MIMI_SEED_LANG=en`).
 
 #### App Store Connect: 한 번 연결하고 안전하게 갱신하기
 
@@ -426,7 +426,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## 도구 목록 (Local MCP · 150+ 개 · 24개 영역)
+## 도구 목록 (Local MCP · 150+ 개 · 25개 영역)
 <!-- generated:readme-tools-heading:end -->
 
 > 아래 도구는 **Local MCP** — 로컬 Google OAuth — 로 동작합니다. Remote MCP는 더 작은 읽기/진단 subset과 App Store IAP 심사 노트/스크린샷 쓰기를 노출합니다. 항상 최신 카탈로그: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md).
@@ -451,6 +451,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 | **GCP Billing** | 4 | `gcp_get_billing_info` · `gcp_list_billing_projects` · `gcp_list_budgets` · `gcp_create_budget` |
 | **Threads** | 7 | `threads_post` · `threads_post_video` · `threads_post_carousel` · `threads_refresh_token` |
 | **TikTok Business** | 7 | `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
+| **소셜 통합 게시** | 1 | `social_publish` |
 | **출시 점검** | 5 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android 서명** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |

@@ -49,8 +49,15 @@ function validateMarketplace() {
 
   if (marketplace.name !== 'yoonion') throw new Error('Codex marketplace name must be yoonion');
   if (!plugin) throw new Error('Codex marketplace is missing the mimi-seed entry');
-  if (plugin.source?.source !== 'local' || plugin.source?.path !== './plugins/mimi-seed') {
-    throw new Error('Codex marketplace source must be local ./plugins/mimi-seed');
+  // The entry points at a release tag of this repo, so Codex users get a plugin only once its pinned server is on
+  // npm (scripts/release-marketplace.mjs moves the ref and checks it). The bundle itself still lives here.
+  if (
+    plugin.source?.source !== 'git-subdir' ||
+    plugin.source?.url !== 'https://github.com/jeonghwanko/mimi-seed-sdk.git' ||
+    plugin.source?.path !== './plugins/mimi-seed' ||
+    typeof plugin.source?.ref !== 'string'
+  ) {
+    throw new Error('Codex marketplace source must be git-subdir of this repo at ./plugins/mimi-seed with a release ref');
   }
   if (plugin.policy?.installation !== 'AVAILABLE' || plugin.policy?.authentication !== 'ON_INSTALL') {
     throw new Error('Codex marketplace policy must be AVAILABLE / ON_INSTALL');

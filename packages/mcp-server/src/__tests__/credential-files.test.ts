@@ -255,6 +255,18 @@ describe('도구 호출 — 깨진 파일을 밝히는 진단·상태 도구', (
     });
   });
 
+  // 권장 설정(이름 있는 'youtube' 프로필)으로 연결했는데 기본 로그인만 보고 "미연결"이라 하면 안 된다.
+  it('YouTube 는 기본 로그인에 없어도 업로드 권한이 있는 프로필을 연결됨으로 보인다', async () => {
+    expect(await call('mimi_seed_status')).toMatch(/❌ YouTube\s+— 미연결 → mimi_seed_auth_start\(profile="youtube"/);
+    write('google-profiles/youtube.json', JSON.stringify({
+      credentials: { clientId: 'example-client', clientSecret: 'example-value' },
+      tokens: { access_token: 'a', refresh_token: 'r', token_type: 'Bearer', expiry_date: 0,
+        scope: 'https://www.googleapis.com/auth/youtube.force-ssl', youtubeChannel: { id: 'UC' + 'a'.repeat(22), title: 'Example A' } },
+    }));
+    const text = await call('mimi_seed_status');
+    expect(text).toContain('✅ YouTube           — 업로드 권한 연결됨 (프로필 youtube: Example A) — youtube_* 도구에 profile="youtube"');
+  });
+
   it('깨진 파일이 없으면 섹션도 없다', async () => {
     write('ci.json', JSON.stringify({ provider: 'github', token: 'x', owner: 'o', repo: 'r' }));
     expect(await call('mimi_seed_status')).not.toContain('읽을 수 없는 설정 파일');

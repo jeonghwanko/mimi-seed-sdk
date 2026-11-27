@@ -64,6 +64,7 @@ const ALLOW: Readonly<Record<string, ReadonlyArray<readonly [literal: string, re
     ["'YouTube · 영상 제작'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],
     ["'YouTube · 업로드·채널 운영'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],
     ["'네이버 서치어드바이저'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],
+    ["'소셜 통합 게시'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],
     ["'출시 상태·제출 전 점검'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],
     ["'Android 서명'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],
     ["'AI 초안 · 릴리스 노트 / 리뷰 답변'", 'lang 인자로 고르는 메뉴의 ko 문구 — en 짝이 같은 객체에 있다'],

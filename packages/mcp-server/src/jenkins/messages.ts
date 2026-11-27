@@ -7,6 +7,9 @@ import { kindLabel, type CredentialKind, type ExistingCredential } from './crede
 const M = catalog(
   {
     exists: (id: string) => `🛑 dry-run — Jenkins credential \`${id}\` 가 이미 존재해 아직 바꾸지 않았다.`,
+    willCreate: (id: string, kind: string) =>
+      `🛑 dry-run — Jenkins credential \`${id}\` (${kind}) 는 아직 없다. 아무것도 보내지 않았다.`,
+    createNext: '비밀값을 Jenkins 로 보내는 작업이다. 대상 Jenkins·id 가 맞는지 사용자에게 확인받은 뒤 같은 인자에 confirm: true 를 추가해 다시 호출하세요.',
     existingHeader: '기존 credential:',
     kind: '종류:   ',
     name: '이름:   ',
@@ -48,6 +51,9 @@ const M = catalog(
   },
   {
     exists: (id: string) => `🛑 dry-run — Jenkins credential \`${id}\` already exists, so nothing has changed yet.`,
+    willCreate: (id: string, kind: string) =>
+      `🛑 dry-run — Jenkins credential \`${id}\` (${kind}) does not exist yet. Nothing was sent.`,
+    createNext: 'This sends a secret to Jenkins. Confirm the target Jenkins and id with the user, then call again with the same arguments plus confirm: true.',
     existingHeader: 'Existing credential:',
     kind: 'kind:   ',
     name: 'name:   ',
@@ -128,6 +134,18 @@ export function existingCredentialPreview(
     '',
     m.irreversible,
     m.confirmNext,
+  ].join('\n');
+}
+
+/** 새 id dry-run — 무엇을 어디로 보낼지 (비밀값은 싣지 않는다). */
+export function newCredentialPreview(id: string, jenkinsUrl: string, requested: CredentialKind, notes: string[] = []): string {
+  const m = M();
+  return [
+    m.willCreate(id, kindLabel(requested)),
+    `   Jenkins: ${jenkinsUrl}`,
+    ...(notes.length ? ['', ...notes] : []),
+    '',
+    m.createNext,
   ].join('\n');
 }
 

@@ -106,6 +106,7 @@ describe('자격증명 writer 가드', () => {
     'jenkins/config.ts',
     'social/meta-app-config.ts', // 사용자 본인의 Meta 앱 (meta-apps.json)
     'social/profile-store.ts',
+    'crosspost/ledger.ts', // social_publish 중복 게시 방지 기록 (~/.mimi-seed/social-publish/, 0600)
     'tiktok-business/config.ts',
   ];
 

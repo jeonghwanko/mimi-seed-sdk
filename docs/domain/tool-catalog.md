@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**256 tools across 24 domains** — per-domain counts below.
+**257 tools across 25 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -44,6 +44,7 @@
 | GCP Billing | `registers/billing.ts` | 4 |
 | Threads | `registers/threads.ts` | 7 |
 | TikTok Business | `registers/tiktok.ts` | 7 |
+| Cross-post | `registers/crosspost.ts` | 1 |
 | Checks / Risk | `registers/checks.ts` | 5 |
 | Instagram | `registers/instagram.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
@@ -51,7 +52,7 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **24 modules** | **256** |
+| **Total** | **25 modules** | **257** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -147,6 +148,7 @@
 | Facebook (`facebook.ts`) | `facebook_list_pages` · `facebook_get_page` · `facebook_current_config` · **W** `facebook_save_config` · **D** `facebook_post_photo` (public) · **D** `facebook_post_multi_photo` (public) |
 | Instagram (`instagram.ts`) | `instagram_get_account` · **W** `instagram_save_config` · **D** `instagram_post_image` (public) · **D** `instagram_post_carousel` (public) |
 | Threads (`threads.ts`) — Meta Threads Graph API, **text-first** (IG 와 별개 계정·토큰) | `threads_get_account` · `threads_current_config` · **W** `threads_save_config` · **W** `threads_refresh_token` · **D** `threads_post` (public; text or image) · **D** `threads_post_video` (public; public video URL) · **D** `threads_post_carousel` (public; 2–20) |
+| Cross-post (`crosspost.ts`) — one post to Facebook / Instagram / Threads / YouTube / TikTok through the per-platform functions | **D** `social_publish` (dry-run plan by default; nothing posts if any target has a problem; every pre-send check runs before anything is sent; the same post (platform + account + content) is never posted twice unless named in repost; an unknown outcome blocks that account until resendUnknown) |
 <!-- generated:catalog-table:cloud:end -->
 
 ## Build / CI / signing
@@ -155,8 +157,8 @@
 | Domain (file) | Tools |
 |---|---|
 | CI (GitHub Actions / GitLab) (`ci.ts`) — **not** Jenkins builds | `ci_list_workflows` · `ci_get_build_status` · `ci_list_recent_builds` · **W** `ci_save_config` · **W** `ci_trigger_build` · **D** `ci_cancel_build` |
-| Jenkins (credentials + jobs + builds) (`jenkins.ts`) — builds: `jenkins_trigger_build` → `jenkins_get_queue_item` → `jenkins_get_build_status` | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · `jenkins_get_queue_item` · `jenkins_get_build_status` · **W** `jenkins_save_config` · **D** `jenkins_create_credential` · **D** `jenkins_upload_keystore` (새 id 는 바로 생성, 기존 id 교체만 confirm) · **D** `jenkins_delete_credential` · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) · **D** `jenkins_trigger_build` (confirm 필요; 같은 `request_id` 는 로컬 기록으로 한 번만 발송) |
-| Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **D** `jenkins_upload_playstore_sa` (새 id 는 바로 생성, 기존 id 교체만 confirm) |
+| Jenkins (credentials + jobs + builds) (`jenkins.ts`) — builds: `jenkins_trigger_build` → `jenkins_get_queue_item` → `jenkins_get_build_status` | `jenkins_status` · `jenkins_list_credentials` · `jenkins_list_jobs` · `jenkins_get_job_config` · `jenkins_get_queue_item` · `jenkins_get_build_status` · **W** `jenkins_save_config` · **D** `jenkins_create_credential` · **D** `jenkins_upload_keystore` (confirm 전에는 보내지 않음 — dry-run 이 새 id 생성/기존 id 교체를 알려줌) · **D** `jenkins_delete_credential` · **D** `jenkins_create_job` (`overwrite=true` replaces) · **D** `jenkins_update_job` (replaces config.xml) · **D** `jenkins_trigger_build` (confirm 필요; 같은 `request_id` 는 로컬 기록으로 한 번만 발송) |
+| Android signing (`android.ts`) | `android_signing_setup` · **W** `android_generate_keystore` · **D** `jenkins_upload_playstore_sa` (confirm 전에는 보내지 않음 — dry-run 이 새 id 생성/기존 id 교체를 알려줌) |
 <!-- generated:catalog-table:build:end -->
 
 ## Cross-cutting

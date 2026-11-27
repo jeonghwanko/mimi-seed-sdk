@@ -1,4 +1,4 @@
-import { consoleUrl } from "#core/console-url.js";
+import { consoleBase } from "#core/console-url.js";
 import kleur from "kleur";
 import { getEffectiveConfig } from "./config.js";
 import { credentialFileProblemMessage, credentialProblemText } from "./credentials.js";
@@ -130,9 +130,9 @@ export function platformsFromHints(hints: AppHint[]): Platform[] {
  * 쓰려던 것이므로 true.
  */
 export async function remoteConfigured(cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  if (consoleUrl(env.MIMI_SEED_WEB_BASE)) return true;
+  if (consoleBase(env.MIMI_SEED_WEB_BASE)) return true;
   try {
-    return !!consoleUrl((await findProjectLink(cwd))?.webBase);
+    return !!consoleBase((await findProjectLink(cwd))?.webBase);
   } catch {
     // 연결 파일이 깨져 있어도 원격을 쓰려던 흔적이다 — 토큰 부재를 경고가 아닌 실패로 띄워 사용자가 보게 한다
     return true;

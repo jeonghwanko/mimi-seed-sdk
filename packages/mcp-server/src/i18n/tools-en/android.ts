@@ -12,12 +12,12 @@ export default {
     'Organization name — dname O (when omitted, app_name)',
   '국가 코드 (기본: KR)':
     'Country code (default: KR)',
-  'setup_playstore_connection으로 생성한 Play Store 서비스 계정 JSON을 Jenkins Secret File credential로 업로드합니다. ~/.mimi-seed/play-service-accounts/{package_name}.json 을 읽어 base64로 변환 후 등록합니다. iam_create_key 로 막 발급한 키를 올리려면 service_account_json_path 에 그 경로(~/.mimi-seed/keys/ 안)를 넘기세요. setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요. 새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 SA JSON 을 되돌릴 수 없게 교체하므로 confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.':
-    'Upload the Play Store service account JSON created by setup_playstore_connection to Jenkins as a Secret File credential. Reads ~/.mimi-seed/play-service-accounts/{package_name}.json, converts it to base64, and registers it. To upload a key just issued by iam_create_key, pass its path (inside ~/.mimi-seed/keys/) in service_account_json_path. You must call this tool after running setup_playstore_connection. A new id is created immediately. If the same id already exists, the existing SA JSON is irreversibly replaced, so when confirm is omitted/false nothing is changed and only an "already exists" dry-run is returned — call again with confirm: true after the user approves.',
+  'setup_playstore_connection으로 생성한 Play Store 서비스 계정 JSON을 Jenkins Secret File credential로 업로드합니다. ~/.mimi-seed/play-service-accounts/{package_name}.json 을 읽어 base64로 변환 후 등록합니다. iam_create_key 로 막 발급한 키를 올리려면 service_account_json_path 에 그 경로(~/.mimi-seed/keys/ 안)를 넘기세요. setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요. confirm 생략/false 면 아무것도 보내지 않고 dry-run 만 반환한다 — 새 id 면 "생성 예정", 같은 id 가 있으면 "이미 존재"(기존 SA JSON 을 교체하면 되돌릴 수 없음). 사용자 승인 후 같은 인자에 confirm: true 로 재호출.':
+    'Upload the Play Store service account JSON created by setup_playstore_connection to Jenkins as a Secret File credential. Reads ~/.mimi-seed/play-service-accounts/{package_name}.json, converts it to base64, and registers it. To upload a key just issued by iam_create_key, pass its path (inside ~/.mimi-seed/keys/) in service_account_json_path. You must call this tool after running setup_playstore_connection. With confirm omitted/false nothing is sent and only a dry-run is returned — "will create" for a new id, "already exists" for an existing one (replacing the existing SA JSON cannot be undone). Call again with the same arguments plus confirm: true after the user approves.',
   'Jenkins Credential ID (생략 시 "<앱>-playstore-sa")':
     'Jenkins Credential ID (when omitted, "<app>-playstore-sa")',
   '선택 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 생략하면 패키지별 등록 SA 사용':
     'Optional — absolute path of a key file saved by iam_create_key (only inside ~/.mimi-seed/keys/ is allowed). When omitted, the per-package registered SA is used',
-  '같은 id 가 이미 있을 때만 필요. true 면 기존 SA JSON 을 교체':
-    'Needed only when the same id already exists. true replaces the existing SA JSON',
+  'true 일 때만 Jenkins 로 보낸다 (새 id 생성 또는 기존 SA JSON 교체). 생략/false 면 dry-run':
+    'Sends to Jenkins only when true (creates a new id or replaces the existing SA JSON). Omitted/false is a dry-run',
 } satisfies Record<string, string>;

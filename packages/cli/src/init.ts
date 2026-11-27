@@ -1,4 +1,4 @@
-import { consoleUrl } from "#core/console-url.js";
+import { consoleBase } from "#core/console-url.js";
 // `mimi-seed init` — 앱 감지 → 브라우저 PAT 핸드셰이크 → 앱 등록 → 프로젝트 컨텍스트 파일 생성.
 // 흐름 설명: docs/domain/cli-deploy.md "init — detection → handshake → scaffold".
 
@@ -42,8 +42,8 @@ const M = catalog(
     nextSetup: "  1) mimi-seed setup    계정 연결 (안내형 — 각 단계에서 ? 를 누르면 발급처 안내)",
     nextDoctor: "  2) mimi-seed doctor   전체 점검 + 누락 항목별 복구 명령",
 
-    localStep1: "Google 로그인 (Firebase / AdMob / Play / Ads):",
-    localStep2: "로컬 MCP 서버 등록 (원격 'mimi-seed' 와 별개):",
+    localStep1: "Google 로그인 (Firebase / AdMob / Play / Ads) — 처음이면 내 Google Cloud 의 데스크톱 OAuth 클라이언트를 MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET 로 지정 (docs/credentials.md#google-oauth):",
+    localStep2: "로컬 MCP 서버 등록:",
     localCodexHint:
       '   Codex: ~/.codex/config.toml 에 [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp@latest"]',
   },
@@ -73,8 +73,8 @@ const M = catalog(
     nextSetup: "  1) mimi-seed setup    connect your accounts (guided — press ? for where each token comes from)",
     nextDoctor: "  2) mimi-seed doctor   verify everything + the exact fix for anything missing",
 
-    localStep1: "Sign in with Google (Firebase / AdMob / Play / Ads):",
-    localStep2: "Register the local MCP server (separate from the remote 'mimi-seed'):",
+    localStep1: "Sign in with Google (Firebase / AdMob / Play / Ads) — the first time, set MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET to a Desktop OAuth client in your Google Cloud project (docs/credentials.md#google-oauth):",
+    localStep2: "Register the local MCP server:",
     localCodexHint:
       '   Codex: add [mcp_servers.mimi-seed-local] command="npx", args=["-y","@yoonion/mimi-seed-mcp@latest"] to ~/.codex/config.toml',
   },
@@ -85,7 +85,7 @@ function log(msg: string): void {
 }
 
 export async function cmdInit(args: string[]): Promise<void> {
-  const webBase = args.includes("--local") ? null : consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  const webBase = args.includes("--local") ? null : consoleBase(process.env.MIMI_SEED_WEB_BASE);
   const cwd = process.cwd();
   log(kleur.bold("Mimi Seed CLI — init"));
   log(kleur.dim(cwd));

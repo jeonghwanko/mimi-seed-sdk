@@ -90,6 +90,10 @@ export const domains = {
     en: 'TikTok Business',
     highlights: ['tiktok_business_plan_video_post', 'tiktok_business_publish_video', 'tiktok_business_get_publish_status'],
   },
+  crosspost: {
+    en: 'Cross-post',
+    highlights: ['social_publish'],
+  },
   checks: {
     en: 'Checks / Risk',
     highlights: ['playstore_check_submission_risks', 'appstore_check_submission_risks', 'android_check_billing_compliance', 'screenshot_validate', 'release_status'],
@@ -179,6 +183,7 @@ export const catalog = {
       rows: [
         ['admob'], ['iam'], ['billing'], ['bigquery'], ['ga4'], ['gsc'], ['naver', '— no public Search Advisor API: crawler-view check + IndexNow'], ['googleads'], ['facebook'], ['instagram'],
         ['threads', '— Meta Threads Graph API, **text-first** (IG 와 별개 계정·토큰)'],
+        ['crosspost', '— one post to Facebook / Instagram / Threads / YouTube / TikTok through the per-platform functions'],
       ],
     },
     build: {
@@ -254,8 +259,8 @@ export const catalog = {
     threads_post_video: 'public; public video URL',
     threads_post_carousel: 'public; 2–20',
     // Build / CI / signing
-    jenkins_upload_keystore: '새 id 는 바로 생성, 기존 id 교체만 confirm',
-    jenkins_upload_playstore_sa: '새 id 는 바로 생성, 기존 id 교체만 confirm',
+    jenkins_upload_keystore: 'confirm 전에는 보내지 않음 — dry-run 이 새 id 생성/기존 id 교체를 알려줌',
+    jenkins_upload_playstore_sa: 'confirm 전에는 보내지 않음 — dry-run 이 새 id 생성/기존 id 교체를 알려줌',
     jenkins_create_job: '`overwrite=true` replaces',
     jenkins_update_job: 'replaces config.xml',
     jenkins_trigger_build: 'confirm 필요; 같은 `request_id` 는 로컬 기록으로 한 번만 발송',
@@ -280,6 +285,9 @@ export const catalog = {
     tiktok_business_get_publish_status: 'provider read + local audit update',
     tiktok_business_publish_video:
       'owned Business Account에 공개 게시 — 명시 확인 필수, 원자적 중복 예약, POST 결과 불명 시 자동 재시도 금지',
+    // Cross-post
+    social_publish:
+      'dry-run plan by default; nothing posts if any target has a problem; every pre-send check runs before anything is sent; the same post (platform + account + content) is never posted twice unless named in repost; an unknown outcome blocks that account until resendUnknown',
   },
 };
 
@@ -536,6 +544,11 @@ export const batches = [
   {
     goal: 'TikTok Business video publish',
     domains: ['tiktok'],
+  },
+  {
+    goal: 'Cross-post one announcement to several platforms',
+    tools: ['mimi_seed_status', 'tiktok_business_plan_video_post', 'social_publish'],
+    fallbackFor: ['crosspost'],
   },
   {
     goal: 'Jenkins credentials + jobs',

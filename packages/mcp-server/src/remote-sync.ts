@@ -1,4 +1,4 @@
-import { consoleUrl } from '#core/console-url.js';
+import { consoleBase, consoleBaseProblem, consoleUrl, type ConsoleUrlProblem } from '#core/console-url.js';
 import os from 'node:os';
 import path from 'node:path';
 import { getAppStoreCredentials, type AppStoreCredentials } from './appstore/auth.js';
@@ -36,6 +36,7 @@ const R = catalog(
     oauthNotCopied: '- Google OAuth: 복사하지 않음 (원격 웹에서 별도 동의 필요)',
     previewOnly: '미리보기만 수행했습니다. 원격 저장은 confirm=true일 때만 실행됩니다.',
     noConfig: '원격 연결 정보가 없습니다. 팀 콘솔의 MIMI_SEED_WEB_BASE를 설정하고 `mimi-seed init`을 실행하세요.',
+    webBaseIgnored: (problem: ConsoleUrlProblem) => `MIMI_SEED_WEB_BASE 는 설정돼 있지만 받아들이지 않았습니다 (${problem}) — 팀 콘솔의 https 루트 주소(경로·?·# 없이)여야 합니다.`,
     untrusted: (reason: string | undefined) => `원격 엔드포인트를 신뢰할 수 없어 전송하지 않았습니다: ${reason}`,
     failed: '실패',
     skippedResult: (name: string) => `- Play ${name}: 건너뜀 (등록되지 않은 패키지)`,
@@ -66,6 +67,7 @@ const R = catalog(
     oauthNotCopied: '- Google OAuth: not copied (requires separate consent on the remote web)',
     previewOnly: 'Preview only. Remote storage runs only with confirm=true.',
     noConfig: 'No remote connection info. Set MIMI_SEED_WEB_BASE to your team console and run `mimi-seed init`.',
+    webBaseIgnored: (problem: ConsoleUrlProblem) => `MIMI_SEED_WEB_BASE is set but was not accepted (${problem}) — it must be the team console's https root address (no path, ? or #).`,
     untrusted: (reason: string | undefined) => `The remote endpoint is not trusted, so nothing was sent: ${reason}`,
     failed: 'failed',
     skippedResult: (name: string) => `- Play ${name}: skipped (unregistered package)`,
@@ -108,7 +110,7 @@ export interface RemoteSyncDependencies {
 function getRemoteConfig(): RemoteConfig | null {
   const envToken = process.env.MIMI_SEED_TOKEN;
   if (envToken) {
-    const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+    const webBase = consoleBase(process.env.MIMI_SEED_WEB_BASE);
     if (!webBase) return null;
     return { token: envToken, endpoint: `${webBase}/api/mcp`, webBase };
   }
@@ -117,7 +119,7 @@ function getRemoteConfig(): RemoteConfig | null {
     const parsed = JSON.parse(readCredentialFileSync(configPath)) as Partial<RemoteConfig>;
     if (!parsed.token || !parsed.endpoint) return null;
     const webBase = parsed.webBase ?? parsed.endpoint.replace(/\/api\/mcp\/?$/, '');
-    if (!consoleUrl(webBase) || !consoleUrl(parsed.endpoint)) return null;
+    if (!consoleBase(webBase) || !consoleUrl(parsed.endpoint)) return null;
     return { token: parsed.token, endpoint: parsed.endpoint, webBase };
   } catch {
     // config.json 을 못 읽으면 '원격 연결 없음' — 복구(mimi-seed init)가 같고, 깨진 파일은 mimi_seed_status 가 json-file 로 보고한다
@@ -262,7 +264,9 @@ export async function syncRemoteCredentials(
   }
 
   if (!config) {
-    return [...lines, '', m.noConfig].join('\n');
+    // 설정했는데 거부된 값은 "연결 정보 없음" 만으로는 원인을 알 수 없다 — 이유를 함께 보인다.
+    const problem = consoleBaseProblem(process.env.MIMI_SEED_WEB_BASE);
+    return [...lines, '', ...(problem ? [m.webBaseIgnored(problem)] : []), m.noConfig].join('\n');
   }
   if (!endpoint?.ok) {
     return [...lines, '', m.untrusted(endpoint?.reason)].join('\n');
