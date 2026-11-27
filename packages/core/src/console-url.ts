@@ -12,6 +12,7 @@ export function consoleUrl(value: string | undefined): string | null {
     if (url.username || url.password || url.search || url.hash) return null;
     return url.href.replace(/\/+$/, '');
   } catch {
+    // An invalid URL cannot identify a console. Treat it as unconfigured before opening a connection.
     return null;
   }
 }
