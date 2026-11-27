@@ -14,7 +14,7 @@ const M = catalog(
     preview:
       'dry-run — 아무것도 게시하지 않았습니다. 아래 계획을 사용자에게 보여주고 명시 승인을 받은 뒤, 같은 인자에 confirm: true 를 더해 다시 호출하세요.',
     blocked: '문제가 있는 대상이 있어 아무 곳에도 게시하지 않았습니다. problems 를 고친 뒤 다시 미리보기하세요.',
-    done: '게시를 마쳤습니다. 실패한 대상을 다시 보내려면 같은 requestId 로 다시 호출하세요 — 이미 게시된 곳은 건너뜁니다. 고쳐야 한다면 공통 text 가 아니라 실패한 대상의 플랫폼별 옵션(예: threads.text)만 바꾸세요. 결과를 알 수 없는 대상은 플랫폼에서 먼저 확인하세요.',
+    done: '게시를 마쳤습니다. 실패한 대상은 다시 호출하면 다시 보냅니다 — 이미 게시된 곳은 건너뜁니다. 결과를 알 수 없는 대상은 그 플랫폼에서 먼저 확인하세요.',
   },
   {
     httpsOnly: 'Only HTTPS URLs are allowed.',
@@ -22,7 +22,7 @@ const M = catalog(
     preview:
       'dry-run — nothing was posted. Show the user the plan below, get their explicit approval, then call again with the same arguments plus confirm: true.',
     blocked: 'Nothing was posted because some targets have problems. Fix the problems, then preview again.',
-    done: 'Publishing finished. To resend the failed targets, call again with the same requestId — platforms that already posted are skipped. To fix something, change only the failed target\'s own options (e.g. threads.text), not the shared text. Check any unknown-outcome target on the platform first.',
+    done: 'Publishing finished. Calling again resends the failed targets — platforms that already posted are skipped. Check any unknown-outcome target on its platform first.',
   },
 );
 
@@ -44,7 +44,7 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       'confirm 없이 부르면 dry-run 계획만 돌려줍니다: 플랫폼별 동작·본문·미디어와 게시를 막는 문제. 네트워크 호출은 하지 않습니다.',
       '한 대상이라도 문제가 있으면 어디에도 게시하지 않습니다. 사용자에게 계획을 보여주고 명시 승인을 받은 뒤 confirm: true 로 다시 호출하세요.',
       '미디어 규칙은 플랫폼별 도구와 같습니다: Facebook·Instagram 은 public HTTPS imageUrls(1~10장)가 필요하고, Threads 는 텍스트·이미지(1~20장)·videoUrl 중 하나, YouTube 는 로컬 videoFilePath 와 youtube.expectedChannelId, TikTok 은 tiktok_business_plan_video_post 로 만든 tiktok.planId 를 씁니다.',
-      '결과는 플랫폼별로 돌려줍니다. 같은 requestId(생략 시 내용으로 자동 생성)로 다시 부르면 이미 게시된 플랫폼은 건너뛰고, 결과를 알 수 없는 플랫폼(타임아웃 등)은 중복 게시를 막기 위해 다시 보내지 않습니다.',
+      '결과는 플랫폼별로 돌려줍니다. 같은 게시물(플랫폼·계정·내용이 같음)은 두 번 게시하지 않습니다: 다시 부르면 이미 게시된 곳은 건너뛰고, 실패한 곳만 보냅니다. 결과를 알 수 없는 플랫폼(타임아웃 등)은 사람이 그 플랫폼에서 확인한 뒤 resendUnknown 으로 지정해야만 다시 보냅니다.',
     ].join(' '),
     {
       targets: z.array(z.enum(SOCIAL_TARGETS)).min(1).max(SOCIAL_TARGETS.length).describe('게시할 플랫폼 목록 (이 순서대로 게시)'),
@@ -68,7 +68,7 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       tiktok: z.object({
         planId: z.string().min(1).max(128).describe('tiktok_business_plan_video_post 가 만든 계획 ID (캡션·설정은 계획의 값을 씁니다)'),
       }).optional(),
-      requestId: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).optional().describe('중복 게시 방지 키. 생략 시 내용으로 자동 생성되어, 같은 내용을 다시 보내면 이미 게시된 곳을 건너뜁니다.'),
+      resendUnknown: z.array(z.enum(SOCIAL_TARGETS)).max(SOCIAL_TARGETS.length).optional().describe('결과를 알 수 없었던 플랫폼 중, 사용자가 그 플랫폼에서 게시되지 않았음을 확인한 것만. 다시 보냅니다.'),
       confirm: z.boolean().default(false).describe('사용자의 명시 승인 후 true. false 면 dry-run 계획만 반환합니다.'),
     },
     async ({ confirm, ...input }) => {
@@ -76,7 +76,7 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       if (!confirm) return jsonResult({ mode: 'dry-run', note: M().preview, ...plan });
       if (!plan.ok) return jsonResult({ mode: 'blocked', note: M().blocked, ...plan });
       const results = await executePublish(input, plan);
-      return jsonResult({ mode: 'published', note: M().done, requestId: plan.requestId, results });
+      return jsonResult({ mode: 'published', note: M().done, results });
     },
   );
 }

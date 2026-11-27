@@ -148,12 +148,11 @@ the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools 
    target cannot post. Fix those (per-platform `text`, images, `youtube.title`, …) and preview again.
 4. Show the plan, including YouTube's privacy, to the user and get explicit approval, then call again with the same
    arguments plus `confirm: true`.
-5. Report the per-platform `results`. If something `failed`, call again with the same `requestId`: platforms that
-   already posted are skipped. To fix the failed target, change only **its own** options (e.g. `threads.text`), not
-   the shared `text` — a platform that already posted is refused if its content would change. If a result is
-   `unknown_outcome`, do **not** retry. Ask the user to check that platform: the post may be live, and a new
-   `requestId` would post it again. A failed pre-send check (an expired token, a bad video file) means nothing was
-   posted anywhere.
+5. Report the per-platform `results`. The same post (same platform, account, and content) is never posted twice, so
+   if something `failed`, fix it if needed (e.g. that platform's own `threads.text`) and call again: platforms that
+   already posted are skipped. If a result is `unknown_outcome`, do **not** retry on your own. Ask the user to check
+   that platform; only if it is not there, call again with `resendUnknown: ["<platform>"]`. A failed pre-send check
+   (an expired token, a bad video file) means nothing was posted anywhere.
 
 All three Meta platforms can use named local profiles. Save one with
 `mimi-seed auth facebook|instagram|threads --profile <id>`, then select it per project with `.mimi-seed.json` →
