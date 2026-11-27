@@ -115,11 +115,24 @@ Show me the plan first.
 The agent uses `social_publish`. First it shows a plan for each platform and anything that would block one (a
 Threads post over 500 characters, Instagram without an image, a platform that is not connected). Nothing is posted
 anywhere until every platform passes and you approve. After that you get a result per platform. If one failed, asking
-again with the same post resends only that platform. If a platform's result is unknown (for example, a timeout), it
-is not resent automatically: check that platform first, because the post may already be live.
+again with the same post resends only that platform; platforms that already posted are skipped. The same post (same
+platform, account, and content) is never posted twice.
+
+If a platform's result is unknown (for example, a timeout), it is not resent automatically, and that account is
+blocked for every post, edited ones included, until you check it. Look at the platform, then tell the agent what you
+found:
+
+| You see | Tell the agent | What happens |
+|---|---|---|
+| The post is live | "It's posted" | It is recorded as posted (`markPosted`); nothing is sent |
+| The post is not there | "It isn't there, send it again" | It is sent again (`resendUnknown`) |
+
+To post identical content again on purpose, say so ("post it again"); the agent passes `repost`. Without that, a
+repeat request is skipped.
 
 YouTube needs a local video file and the channel ID; it uploads as private unless you ask otherwise. TikTok needs a
-plan made first with `tiktok_business_plan_video_post`.
+plan made first with `tiktok_business_plan_video_post`; TikTok never publishes a plan twice, so posting again (or
+resending after an unknown result) needs a new plan.
 
 ## Token expiry
 
@@ -137,7 +150,7 @@ Meta OAuth code 190 and 401 responses are translated into an exact recovery comm
 - Open image and video URLs while logged out
 - Check carousel order and platform item limits
 - Align public post timing with actual store availability
-- Record returned IDs to avoid duplicate posting
+- With the single-platform tools, record returned IDs to avoid duplicate posting (`social_publish` keeps that record for you)
 - Verify rendering and links in the platform after publishing
 
 ## Failure recovery

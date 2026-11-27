@@ -25,7 +25,7 @@ Mimi Seed uses **what actually shipped in a version** to guide release, marketin
 2. **Match the release.** Match the Git tag and commits to a build number, then distribute that build through a Google Play track or iOS TestFlight.
 3. **Update the stores.** Use that version’s commits and release record to draft update news, refresh store images and prepare the review submission.
 4. **Create the campaign.** Turn the user-visible changes into promotional copy and video material.
-5. **Publish and support.** Publish to YouTube and Instagram. When drafting a store review reply, check the reported issue against the version containing the fix.
+5. **Publish and support.** Post the announcement to Facebook, Instagram, Threads, YouTube and TikTok in one approved call, which never posts the same thing twice. When drafting a store review reply, check the reported issue against the version containing the fix.
 
 ```
 "Is my app ready to ship?"

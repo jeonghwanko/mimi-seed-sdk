@@ -20,6 +20,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The README and the social publishing guide now describe posting to several platforms at once: what to tell the agent after an unknown result (posted → `markPosted`, missing → `resendUnknown`), how to post again on purpose (`repost`), and that TikTok needs a new plan to post again.
 - The license notice now names **Lucas Foundation** (https://mimi-seed.oddbout.com) as the copyright holder, replacing Pryzm GG and the retired console URL. The license itself (PolyForm Noncommercial 1.0.0) is unchanged.
 
 ### Fixed
