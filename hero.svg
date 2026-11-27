@@ -52,7 +52,7 @@
     <!-- Subtitle -->
     <text x="340" y="278" font-size="18" font-weight="500" fill="#475569"
           letter-spacing="-0.3">
-      Claude Code MCP로 연결하는 인디 개발자 출시 자동화 콘솔
+      Claude Code와 Codex에서 사용하는 모바일 앱 출시 도구
     </text>
 
     <!-- 4 Module pills -->
@@ -85,6 +85,6 @@
 
     <!-- Domain badge bottom right -->
     <text x="1245" y="370" font-size="12" font-weight="500" fill="#94A3B8"
-          text-anchor="end">mimi-seed.pryzm.gg</text>
+          text-anchor="end">mimi-seed.oddbout.com</text>
   </g>
 </svg>

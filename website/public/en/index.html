@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mimi Seed · Mobile release tools</title>
+  <meta name="description" content="Mimi Seed pairs a mobile release-check CLI with a local MCP server for store operations in Claude Code and Codex.">
+  <link rel="canonical" href="https://mimi-seed.oddbout.com/en/">
+  <link rel="alternate" hreflang="ko" href="https://mimi-seed.oddbout.com/">
+  <link rel="alternate" hreflang="en" href="https://mimi-seed.oddbout.com/en/">
+  <link rel="icon" href="/mimi.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="wrap">
+    <a class="brand" href="/en/"><img src="/mimi.svg" alt="">Mimi Seed</a>
+    <nav aria-label="Main navigation">
+      <a href="#guides">Guides</a>
+      <a href="https://github.com/jeonghwanko/mimi-seed-sdk">GitHub</a>
+      <a class="lang" href="/" lang="ko">한국어</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <h1><span>Release checks</span>start in your repo.</h1>
+        <p class="intro">Find settings in your mobile app that could block a store submission. Connect your store accounts to draft release notes and upload screenshots from Claude Code or Codex.</p>
+        <a class="button" href="#start">Run your first check <span aria-hidden="true">↓</span></a>
+      </div>
+      <div class="art" aria-hidden="true">
+        <img src="/mimi.svg" alt="" width="800" height="800">
+        <span class="tag tag-ios">App Store Connect</span>
+        <span class="tag tag-android">Google Play</span>
+      </div>
+    </section>
+    <section class="check" id="start" aria-labelledby="doctor">
+      <div>
+        <h2 id="doctor">Release Doctor</h2>
+        <p>Run this in your app repository with Node.js 22 or later. Your first check runs locally, without store credentials.</p>
+      </div>
+      <div class="command"><span aria-hidden="true">$ </span><code>npx mimi-seed check --local</code></div>
+    </section>
+    <section class="guides" id="guides" aria-labelledby="guide-heading">
+      <h2 id="guide-heading">Release guides</h2>
+      <div class="guide-list">
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-readiness.md">
+          <h3>Find release blockers</h3><p>Check the Android target API, Play Billing library and Xcode version against release requirements.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.md">
+          <h3>Prepare a store listing</h3><p>Connect your local MCP server to Google Play and App Store Connect to manage screenshots and release notes.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-ci.md">
+          <h3>Run checks in CI</h3><p>Run the same check in CI and fail the job when a change introduces a release blocker.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap">
+    <strong>Mimi Seed</strong>
+    <a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/LICENSE">PolyForm Noncommercial 1.0.0</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mimi Seed · 모바일 앱 출시 도구</title>
+  <meta name="description" content="Mimi Seed는 모바일 앱의 출시 준비를 점검하는 CLI와 Claude Code·Codex에서 스토어 운영을 돕는 로컬 MCP 서버입니다.">
+  <link rel="canonical" href="https://mimi-seed.oddbout.com/">
+  <link rel="alternate" hreflang="ko" href="https://mimi-seed.oddbout.com/">
+  <link rel="alternate" hreflang="en" href="https://mimi-seed.oddbout.com/en/">
+  <link rel="icon" href="/mimi.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="wrap">
+    <a class="brand" href="/"><img src="/mimi.svg" alt="">Mimi Seed</a>
+    <nav aria-label="주 메뉴">
+      <a href="#guides">가이드</a>
+      <a href="https://github.com/jeonghwanko/mimi-seed-sdk">GitHub</a>
+      <a class="lang" href="/en/" lang="en">English</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <h1><span>앱 출시 준비,</span>저장소에서 시작하세요.</h1>
+        <p class="intro">Mimi Seed는 앱 코드에서 스토어 심사를 막을 수 있는 설정을 찾습니다. 계정을 연결하면 Claude Code와 Codex에서 릴리스 노트를 작성하고 스크린샷도 올릴 수 있습니다.</p>
+        <a class="button" href="#start">첫 출시 점검 실행하기 <span aria-hidden="true">↓</span></a>
+      </div>
+      <div class="art" aria-hidden="true">
+        <img src="/mimi.svg" alt="" width="800" height="800">
+        <span class="tag tag-ios">App Store Connect</span>
+        <span class="tag tag-android">Google Play</span>
+      </div>
+    </section>
+    <section class="check" id="start" aria-labelledby="doctor">
+      <div>
+        <h2 id="doctor">Release Doctor</h2>
+        <p>Node.js 22 이상에서 앱 저장소를 열고 실행하세요. 첫 점검에는 스토어 계정이 필요 없습니다.</p>
+      </div>
+      <div class="command"><span aria-hidden="true">$ </span><code>npx mimi-seed check --local</code></div>
+    </section>
+    <section class="guides" id="guides" aria-labelledby="guide-heading">
+      <h2 id="guide-heading">출시 작업별 가이드</h2>
+      <div class="guide-list">
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-readiness.ko.md">
+          <h3>출시 차단 요인 찾기</h3><p>Target API와 결제 라이브러리, Xcode 버전을 확인하고 수정할 파일을 찾습니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.ko.md">
+          <h3>스토어 등록정보 준비하기</h3><p>로컬 MCP로 Google Play와 App Store Connect의 스크린샷과 릴리스 노트를 관리합니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-ci.ko.md">
+          <h3>CI에서 점검 반복하기</h3><p>같은 검사를 CI에 추가하고 출시를 막는 문제가 생기면 빌드에서 확인합니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap">
+    <strong>Mimi Seed</strong>
+    <a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/LICENSE">PolyForm Noncommercial 1.0.0</a>
+  </footer>
+</body>
+</html>
