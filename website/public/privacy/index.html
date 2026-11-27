@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>개인정보처리방침 · Mimi Seed</title>
+  <link rel="canonical" href="https://mimi-seed.oddbout.com/privacy/">
+  <link rel="icon" href="/mimi.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="wrap"><a class="brand" href="/"><img src="/mimi.svg" alt="">Mimi Seed</a></header>
+  <main class="legal wrap">
+<h1>개인정보처리방침</h1><p>최종 수정일: 2026년 11월 27일</p>
+<p>Mimi Seed는 CLI와 Claude Code·Codex 등 MCP 클라이언트에서 사용자가 본인의 앱 스토어·클라우드 리소스를 운영할 수 있도록 돕는 개발자 도구입니다. Google 동의 화면의 앱 이름은 mimi-seed-sdk입니다. 이 방침은 Google 계정 연동으로 접근하는 데이터의 종류와 사용·저장·보호 방식, 기존 웹 콘솔에 저장된 데이터의 처리를 설명합니다.</p>
+
+<section>
+<h2>1. 접근하는 Google 사용자 데이터</h2>
+<div><p><a href="/privacy/sdk-usage/">선택적 SDK 사용량 측정 안내</a> — 기본 꺼짐, 가명 이벤트와 보관 기간은 별도 안내를 확인하세요.</p>
+<p>사용자가 Google 계정으로 로그인(OAuth 동의)하면, 서비스는 사용자가 명시적으로 승인한 범위에 한해 아래 Google API에 접근합니다. 서비스는 사용자를 <b>대신하여</b> 해당 계정에 접근 권한이 있는 리소스를 처리합니다. 공유 프로젝트나 워크스페이스에는 다른 구성원의 데이터가 포함될 수 있습니다.</p>
+<ul><li><b>Google Play (androidpublisher, playdeveloperreporting)</b> — 앱 메타데이터·릴리스 트랙·리뷰·출시 관리와 Android vitals 오류·비정상 종료·ANR 통계</li>
+<li><b>Firebase / Google Cloud (firebase, cloud-platform)</b> — 프로젝트·앱 구성, 서비스 활성화, Remote Config 구성 및 사용자가 요청한 IAM 서비스 계정 생성</li>
+<li><b>AdMob (admob.readonly, admob.monetization)</b> — 광고 단위·수익 리포트 조회/구성</li>
+<li><b>Google Ads (adwords)</b> — UAC 캠페인·리포트 조회</li>
+<li><b>Search Console (webmasters)</b> — 사이트·사이트맵·검색 분석</li>
+<li><b>Google Analytics (analytics.edit, analytics.readonly)</b> — GA4 속성·데이터 스트림 조회/구성과 집계 성과 리포트</li>
+<li><b>BigQuery</b> — 사용자가 지정한 데이터셋 조회(선택). 로컬 SDK에서는 서비스 계정 또는 Google Cloud 권한을 사용합니다.</li>
+<li><b>YouTube / YouTube Analytics(로컬 SDK 선택 기능)</b> — 동의한 권한에 따라 채널·영상·성과 조회, 영상 업로드·관리 및 댓글 답글</li>
+<li>계정 기본 프로필(이메일·이름·프로필 이미지) — 로그인한 계정 식별 용도</li>
+<li>Google Drive (drive.file) — 앱을 통해 만든 파일과 폴더에 출시 자료를 저장하고 관리합니다.</li>
+</ul></div></section>
+<section>
+<h2>2. 데이터 사용 목적</h2>
+<div><p>접근한 데이터는 오직 사용자가 요청한 기능(스토어 메타데이터 작성·검증, 릴리스 노트 생성, 스크린샷 규격 검증, 빌드·배포 상태 조회, 리뷰 답글, 통계 조회 등)을 제공하기 위해서만 사용됩니다. 서비스는 이 데이터를 광고 목적으로 사용하지 않으며, 사용자에게 기능을 제공하는 것과 무관한 용도로 처리하지 않습니다.</p>
+</div></section>
+<section>
+<h2>3. Google API Services User Data Policy 준수 (Limited Use)</h2>
+<div><p>Mimi Seed의 Google API로부터 수신한 정보의 사용 및 그 정보의 다른 앱으로의 전송은 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>(Limited Use 요건 포함)를 준수합니다.</p>
+<p>Mimi Seed’s use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+</div></section>
+<section>
+<h2>4. 저장 및 보안</h2>
+<div><ul><li><b>CLI / 로컬 MCP 서버</b>: OAuth 토큰은 사용자 본인 컴퓨터의 홈 디렉토리(<code>~/.mimi-seed/</code>, 권한 0600)에만 저장되며 보관됩니다. Google 인증·토큰 갱신·API 호출에는 해당 토큰을 Google에 전송합니다. 로컬 Google OAuth 토큰은 Mimi Seed 원격 자격증명 동기화 대상에서 제외됩니다.</li>
+<li><b>웹 콘솔</b>: 인증 토큰은 사용자 세션 및 데이터베이스에 보관되며, 외부 API 시크릿은 별도 저장소에서 AES-256-GCM으로 암호화 저장됩니다. Google OAuth 토큰의 데이터베이스 저장과 이 외부 API 시크릿 암호화는 서로 다른 처리입니다. 전송 구간은 HTTPS로 보호됩니다.</li>
+<li>스토어·클라우드 API 응답은 기능 실행 과정에서 처리됩니다. 사용자가 저장한 앱 구성, 작업 결과, 출시 정보와 작업 기록은 서비스 데이터베이스에 남을 수 있습니다.</li>
+</ul></div></section>
+<section>
+<h2>5. 제3자 제공</h2>
+<div><p>서비스는 Google 사용자 데이터를 판매하지 않으며, 제3자에게 양도·공개하지 않습니다. 다만 사용자가 요청한 작업을 수행하기 위해 필요한 경우(예: 사용자가 지정한 Google/Apple API 호출), 해당 데이터는 그 작업 수행 목적에 한해 처리됩니다.</p>
+<p>웹 콘솔의 AI 대화와 리뷰 답글 생성 기능을 사용하면 입력한 내용, 대화 기록 및 기능 수행에 필요한 Google API 조회 결과(예: 앱 정보·리뷰 내용·성과 요약)가 Anthropic API로 전달될 수 있습니다. 로컬·원격 MCP의 도구 응답은 사용자가 연결한 Claude Code·Codex 등 MCP 클라이언트에 전달되며, 해당 클라이언트의 설정에 따라 그 제공자가 처리합니다. 이 데이터는 요청한 기능을 제공하기 위해 사용되며, 각 제공자의 처리·보관 조건도 적용됩니다.</p>
+</div></section>
+<section>
+<h2>6. 데이터 보관 및 접근 권한 취소</h2>
+<div><p>사용자는 언제든지 <a href="https://myaccount.google.com/permissions">Google 계정 권한 관리</a>에서 Mimi Seed의 접근 권한을 취소할 수 있습니다. 로컬에 저장된 토큰은 <code>mimi-seed auth logout</code> 명령으로 제거할 수 있습니다. 이름을 지정한 프로필은 같은 명령의 프로필 옵션으로 각각 삭제하세요. 로컬 파일 삭제는 Google의 접근 권한 취소와 별개입니다. 권한 취소 시 해당 토큰으로 Google API에 접근할 수 없습니다.</p>
+</div></section>
+<section>
+<h2>7. 보관 및 삭제 요청</h2>
+<div><p>웹 콘솔의 로그인 계정 정보와 OAuth 토큰은 계정 연결을 유지하기 위해 보관됩니다. Google에서 권한을 취소하거나 웹 콘솔에서 로그아웃하는 것만으로 기존 데이터베이스 기록이 모두 삭제되지는 않습니다. 계정·연결 토큰·저장된 작업 데이터의 삭제를 요청하려면 아래 문의 이메일로 연락해 주세요. 계정 소유 확인 후 삭제 대상과 공유 워크스페이스 데이터의 처리 범위를 안내합니다. 비밀번호, 액세스 토큰, 서비스 계정 키를 이메일에 포함하지 마세요.</p>
+<p>선택적 SDK 사용량 측정 이벤트는 별도 안내에 따라 최대 90일 보관합니다. AI 제공자와 사용자가 연결한 MCP 클라이언트가 보관하는 데이터는 해당 제공자의 설정·삭제 절차를 함께 확인해야 합니다.</p>
+</div></section>
+<section>
+<h2>8. 문의</h2>
+<div><p>본 방침이나 데이터 처리에 관한 문의는 아래로 연락해 주세요.</p>
+<ul><li>이메일: <a href="mailto:turbo08@supervlabs.io">turbo08@supervlabs.io</a></li>
+<li>GitHub: <a href="https://github.com/jeonghwanko/mimi-seed-sdk">https://github.com/jeonghwanko/mimi-seed-sdk</a></li>
+</ul></div></section>
+  </main>
+</body>
+</html>

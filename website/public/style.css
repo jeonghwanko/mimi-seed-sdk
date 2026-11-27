@@ -63,3 +63,9 @@ footer { border-top: 1px solid var(--line); padding-block: 22px; gap: 18px; flex
   .brand img { width: 28px; height: 28px; }
   .command { padding: 12px; }
 }
+
+.legal { max-width: 48rem; padding-block: clamp(2rem, 6vw, 5rem); line-height: 1.75; }
+.legal h1 { font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -.045em; }
+.legal h2 { margin-top: 2rem; font-size: 1.35rem; letter-spacing: -.035em; }
+.legal p, .legal ul { margin-top: .85rem; }
+.legal li + li { margin-top: .4rem; }

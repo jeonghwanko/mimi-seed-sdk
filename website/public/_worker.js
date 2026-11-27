@@ -1,6 +1,7 @@
 export default {
   fetch(request, env) {
-    if (new URL(request.url).hostname !== "mimi-seed.pryzm.gg") {
+    const url = new URL(request.url);
+    if (url.hostname !== "mimi-seed.pryzm.gg") {
       return env.ASSETS.fetch(request);
     }
 
@@ -8,10 +9,12 @@ export default {
       return new Response(null, { status: 410 });
     }
 
+    const path = url.pathname.replace(/\/$/, "");
+    const destination = ["/privacy", "/privacy/sdk-usage", "/terms"].includes(path) ? path + "/" : "/";
     return new Response(null, {
       status: 301,
       headers: {
-        Location: "https://mimi-seed.oddbout.com/",
+        Location: "https://mimi-seed.oddbout.com" + destination,
         "Referrer-Policy": "no-referrer",
       },
     });

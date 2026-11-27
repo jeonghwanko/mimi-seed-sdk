@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Optional SDK usage measurement · Mimi Seed</title>
+  <link rel="canonical" href="https://mimi-seed.oddbout.com/privacy/sdk-usage/">
+  <link rel="icon" href="/mimi.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="wrap"><a class="brand" href="/"><img src="/mimi.svg" alt="">Mimi Seed</a></header>
+  <main class="legal wrap">
+<a href="/">← Mimi Seed</a><h1>Optional SDK usage measurement</h1><p>Off by default. Run <code>mimi-seed telemetry on</code> to participate, and <code>mimi-seed telemetry off</code> to stop. The environment variable <code>MIMI_SEED_TELEMETRY=0</code> always disables transmission.</p>
+<p>With your consent, the CLI sends a random installation ID, a project-path hash with a private local salt, a random run ID, CLI version, OS, CI flag, framework category, command, outcome, duration, mobile platforms and finding codes. The salt never leaves your machine. These are pseudonymous identifiers, not a count of people. No source, paths, app IDs, credentials, free-text errors or store data are included.</p>
+<p>Reports go to the Mimi Seed web console after a command finishes. Transmission has an 800 ms timeout and never changes the check result. Crashes and network failures can be missing, so reported runs are not a complete start-to-finish funnel.</p>
+<p>Events are kept for up to 90 days, with expired rows removed on ingestion or the maintenance report. IP addresses are used temporarily for request rate limits; they are not written to the usage table. Hosting infrastructure can keep standard request logs. Turning off resets the local measurement ID; it does not delete previously received events. Contact the service to request deletion using your installation ID from the local telemetry settings.</p>
+<p>한국어: 기본 꺼짐이며 동의한 경우에만 가명 설치 ID·프로젝트 해시·실행 결과를 전송합니다. 원본 경로·앱 식별자·소스·인증정보는 전송하지 않습니다. <code>mimi-seed telemetry off</code> 또는 <code>MIMI_SEED_TELEMETRY=0</code>으로 중단할 수 있습니다. 집계는 동의한 실행만 포함하며 사용자 전체를 뜻하지 않습니다.</p>
+<a href="/privacy/">Contact and full privacy policy</a>
+  </main>
+</body>
+</html>
