@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Docs & setup guide
-    url: https://mimi-seed.pryzm.gg
+    url: https://mimi-seed.oddbout.com
     about: Installation, MCP setup (Claude Code / Codex / Cursor), and the full tool list.
   - name: Commercial / licensing inquiry
     url: mailto:turbo08@gmail.com

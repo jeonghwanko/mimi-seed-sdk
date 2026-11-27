@@ -5,9 +5,9 @@
   "description": "Firebase, AdMob, Google Play, App Store Connect와 스토리 기반 영상·YouTube 게시를 Claude Code에서 관리하는 MCP 도구·스킬 번들.",
   "author": {
     "name": "yoonion",
-    "url": "https://mimi-seed.pryzm.gg"
+    "url": "https://mimi-seed.oddbout.com"
   },
-  "homepage": "https://mimi-seed.pryzm.gg",
+  "homepage": "https://mimi-seed.oddbout.com",
   "repository": "https://github.com/jeonghwanko/mimi-seed-sdk",
   "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": [

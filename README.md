@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mimi-seed.pryzm.gg"><strong>🌐 Homepage</strong></a> &nbsp;·&nbsp;
+  <a href="https://mimi-seed.oddbout.com/en/"><strong>🌐 Project overview</strong></a> &nbsp;·&nbsp;
   <a href="#try-release-doctor-first--no-account-or-store-key">🌱 Try Release Doctor</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.ko.md">🇰🇷 한국어</a>
@@ -46,7 +46,7 @@ Write release notes, check screenshot specs, reply to reviews, wire up Firebase 
 
 After the first report, [add CI checks and a status badge](docs/user-guide/release-doctor-ci.md).
 Optional usage measurement is off by default; see `mimi-seed telemetry --help` and the
-[privacy notice](https://mimi-seed.pryzm.gg/privacy/sdk-usage).
+[measurement guide](docs/growth/measurement.md).
 
 Run this inside an Expo, React Native, Android, iOS, or Unity repository:
 
@@ -92,7 +92,6 @@ Pick by what you want to do (they can also be installed side by side):
 | You want to… | Install |
 |---|---|
 | **Write to stores** — apply release notes, upload screenshots, submit for review, manage Firebase / AdMob / IAM (everything in the demo above) | **Local MCP** ↓ (recommended) |
-| **Status & readiness** plus App Store IAP review notes/screenshots — blockers, checklists, drafts, team-shared BigQuery | **Remote MCP** ↓ |
 | **Hack on it** — run unpublished code from a git checkout | `git clone … && npm run setup` → [Run from source](docs/from-source.md) |
 
 **Local MCP — recommended** (store-write automation · Google OAuth · runs on your machine, Node 22+)
@@ -140,34 +139,14 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-**Remote MCP** (status & readiness · requires web console account)
-
-```bash
-# 1. Create account: https://mimi-seed.pryzm.gg/auth/signin
-# 2. Issue a PAT:   https://mimi-seed.pryzm.gg/workspace/api-tokens
-# 3-a. Register in Claude Code:
-claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
-  --header "Authorization: Bearer <PAT>"
-
-# 3-b. Or register in Codex:
-npx mimi-seed mcp codex --write
-# The config references MIMI_SEED_TOKEN instead of storing the PAT.
-# Set it in the environment that launches Codex, then restart Codex.
-export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
-# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
-```
-
-> **What the Remote MCP can and can't do.** It exposes a **read & diagnostic** subset (readiness, blockers, drafts, checklist, publish screenshots) **plus workspace-shared BigQuery** and App Store IAP review-note/review-screenshot writes. Broader store writes — release-note apply, listing screenshots, Firebase / AdMob / IAM — need the **Local MCP** ([full tool catalog](docs/domain/tool-catalog.md)).
+The public web console has closed. For a new Google sign-in, [configure your own OAuth client](docs/troubleshooting.md#config-fetch-failed).
 
 ### 2 · Connect your project and accounts
 
 ```bash
 cd <your-app>
-npx mimi-seed init    # project: auto-detect app → browser sign-in → register apps → agent context files
 npx mimi-seed setup   # accounts: one guided wizard for stores · CI · social
 ```
-
-`init` detects Expo (including identifiers imported from JSON by `app.config.js`/`.ts`) · Gradle · Info.plist · pbxproj · Unity `ProjectSettings.asset` automatically, and drops `.claude/mimi-seed.md` plus `AGENTS.md` so Claude Code and Codex pick up the release workflow every session. (Skipped the plugin and registered the bare MCP server instead? `npx mimi-seed init --local` chains the Google sign-in and the local-MCP registration into the same pass.)
 
 You don't need every account on day one — most people need **two or three**. One Google sign-in covers Firebase, AdMob, Play, Google Ads, Search Console, GA4, IAM, and BigQuery; the same wizard also connects App Store Connect, a Play service account, Jenkins, GitHub/GitLab CI, and Facebook / Instagram / Threads whenever you need them → [What do you actually need?](docs/credentials.md#what-you-need)
 
@@ -331,6 +310,8 @@ Works with **Jenkins · GitHub Actions · GitLab CI** (auto-detected, or force w
 
 ### Team-Shared BigQuery (Remote MCP)
 
+This workflow requires a team-operated console. Set `MIMI_SEED_WEB_BASE` to its HTTPS origin in the shell before running the registration command below.
+
 Give a whole team read-only BigQuery access (GA4 export analysis, etc.) with **one shared
 service account** — no per-machine key files, and immune to the Google Workspace OAuth
 reauth policy (`invalid_rapt`) that breaks personal tokens.
@@ -347,7 +328,7 @@ Then every workspace member (invite them at `/workspace/members`, they issue a P
 `/workspace/api-tokens`) connects the **Remote MCP** and queries with no local key:
 
 ```bash
-claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
+claude mcp add --transport http mimi-seed "${MIMI_SEED_WEB_BASE}/api/mcp" \
   --header "Authorization: Bearer <PAT>"
 ```
 
@@ -488,6 +469,7 @@ Auto-generate and apply release notes on tag push:
 ```yaml
 - name: Generate and apply release notes
   env:
+    MIMI_SEED_WEB_BASE: ${{ vars.MIMI_SEED_WEB_BASE }}
     MIMI_SEED_TOKEN: ${{ secrets.MIMI_SEED_TOKEN }}
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   run: |
@@ -495,7 +477,7 @@ Auto-generate and apply release notes on tag push:
     npx mimi-seed check --fail-on-blocker
 ```
 
-Issue `MIMI_SEED_TOKEN` at [Dashboard → API Tokens](https://mimi-seed.pryzm.gg/workspace/api-tokens).
+Issue the PAT from your team-operated console and set the `MIMI_SEED_WEB_BASE` repository variable to its HTTPS origin.
 
 ---
 
@@ -519,8 +501,6 @@ Measured production install sizes (`npm install --omit=dev` of the packed tarbal
 
 To enable AI after a slim install, run `npm install --include=optional` in the same project and set `ANTHROPIC_API_KEY`.
 
-Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
-
 ---
 
 ## Environment Variables
@@ -528,7 +508,7 @@ Web console (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/t
 | Variable | Description |
 |----------|-------------|
 | `MIMI_SEED_TOKEN` | PAT for CLI / CI headless mode |
-| `MIMI_SEED_WEB_BASE` | Server base URL (default: `https://mimi-seed.pryzm.gg`) |
+| `MIMI_SEED_WEB_BASE` | HTTPS origin of your team-operated console for remote workflows |
 | `ANTHROPIC_API_KEY` | Enable AI release notes and review replies (optional) |
 | `YOUTUBE_API_KEY` | Reference-video metadata research for `video_research_youtube` (optional) |
 | `PEXELS_API_KEY` | Licensed stock-video search for `video_search_stock_assets` (optional) |
@@ -557,4 +537,4 @@ New data is written to `~/.mimi-seed/`.
 
 Commercial licensing: [turbo08@gmail.com](mailto:turbo08@gmail.com)
 
-**Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)
+[Required Notice](LICENSE)

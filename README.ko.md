@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mimi-seed.pryzm.gg"><strong>🌐 홈페이지</strong></a> &nbsp;·&nbsp;
+  <a href="https://mimi-seed.oddbout.com/"><strong>🌐 프로젝트 소개</strong></a> &nbsp;·&nbsp;
   <a href="#계정-연결-전에-release-doctor부터--로그인스토어-키-불필요">🌱 Release Doctor 시작</a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@yoonion/mimi-seed-mcp">📦 npm</a> &nbsp;·&nbsp;
   <a href="README.md">🇺🇸 English</a>
@@ -46,7 +46,7 @@ Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...
 
 첫 결과를 확인한 뒤 [CI 반복 검사와 상태 배지](docs/user-guide/release-doctor-ci.ko.md)를 추가하세요.
 선택적 사용량 측정은 기본 꺼짐입니다. `mimi-seed telemetry --help`와
-[측정 안내](https://mimi-seed.pryzm.gg/privacy/sdk-usage)를 참고하세요.
+[측정 안내](docs/growth/measurement.md)를 참고하세요.
 
 Expo, React Native, Android, iOS 또는 Unity 저장소에서 실행하세요.
 
@@ -92,7 +92,6 @@ Instance ID, 14.5 미만 `firebase-admin`의 토픽 호출)입니다. 정책 관
 | 하고 싶은 것 | 설치할 것 |
 |---|---|
 | **스토어에 쓰기** — 릴리스 노트 적용, 스크린샷 업로드, 심사 제출, Firebase / AdMob / IAM (위 데모의 전부) | **Local MCP** ↓ (권장) |
-| **상태·준비도** + App Store IAP 심사 노트/스크린샷 — 블로커, 체크리스트, 초안, 팀 공유 BigQuery | **Remote MCP** ↓ |
 | **코드를 고치거나** 배포 전 코드를 git 체크아웃에서 돌리기 | `git clone … && npm run setup` → [소스에서 실행](docs/from-source.ko.md) |
 
 **Local MCP — 권장** (스토어 쓰기 자동화 · Google OAuth · 로컬 직접 실행, Node 22+)
@@ -140,34 +139,14 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-**Remote MCP** (상태·준비도 확인 · 웹 콘솔 계정 필요)
-
-```bash
-# 1. 계정 만들기: https://mimi-seed.pryzm.gg/auth/signin
-# 2. PAT 발급:    https://mimi-seed.pryzm.gg/workspace/api-tokens
-# 3-a. Claude Code에 등록:
-claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
-  --header "Authorization: Bearer <PAT>"
-
-# 3-b. 또는 Codex에 등록:
-npx mimi-seed mcp codex --write
-# 설정 파일에는 PAT 대신 MIMI_SEED_TOKEN 환경변수 이름만 기록됩니다.
-# Codex를 실행하는 환경에 값을 넣고 Codex를 다시 시작하세요.
-export MIMI_SEED_TOKEN="<PAT>"        # bash/zsh
-# PowerShell: $env:MIMI_SEED_TOKEN="<PAT>"
-```
-
-> **Remote MCP가 할 수 있는 것 / 없는 것.** Remote MCP는 **읽기·진단** 도구(준비도, 블로커, 초안, 체크리스트, 스크린샷 푸시), **워크스페이스 공유 BigQuery**, App Store IAP 심사 노트/심사 스크린샷 쓰기를 제공합니다. 릴리스 노트 적용, 리스팅 스크린샷, Firebase / AdMob / IAM 등 더 넓은 스토어 쓰기는 **Local MCP**가 필요합니다 ([전체 도구 카탈로그](docs/domain/tool-catalog.md)).
+기존 공개 웹 콘솔은 운영을 종료했습니다. Google 로그인을 처음 연결할 때는 [자체 OAuth 클라이언트 설정](docs/troubleshooting.ko.md#config-fetch-failed)을 따르세요.
 
 ### 2 · 프로젝트와 계정 연결
 
 ```bash
 cd <내-앱-폴더>
-npx mimi-seed init    # 프로젝트: 앱 자동 감지 → 브라우저 로그인 → 앱 등록 → 에이전트 컨텍스트 파일 생성
 npx mimi-seed setup   # 계정: 스토어 · CI · 소셜 자격증명을 한 번에 연결하는 안내형 마법사
 ```
-
-`init` 은 Expo(`app.config.js`/`.ts`가 JSON에서 가져온 식별자 포함) · Gradle · Info.plist · pbxproj · Unity `ProjectSettings.asset`를 자동 감지하고, `.claude/mimi-seed.md`와 `AGENTS.md`를 생성해 Claude Code와 Codex가 세션마다 출시 워크플로우를 자동 인식하게 합니다. (플러그인 대신 MCP 서버만 등록했다면? `npx mimi-seed init --local` 이 Google 로그인과 로컬 MCP 등록까지 한 번에 이어서 해줍니다.)
 
 첫날부터 모든 계정이 필요하진 않습니다 — 대부분 **2~3개**면 충분합니다. Google 로그인 **하나**로 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery가 커버되고, 같은 마법사가 필요할 때 App Store Connect · Play 서비스 계정 · Jenkins · GitHub/GitLab CI · Facebook / Instagram / Threads까지 연결해줍니다 → [나한테 실제로 필요한 건 뭘까?](docs/credentials.ko.md#what-you-need)
 
@@ -331,6 +310,8 @@ npx mimi-seed deploy --skip-build --version-code 142   # 노트만 적용
 
 ### 팀 공유 BigQuery (Remote MCP)
 
+자체 운영 콘솔이 있는 팀에서만 사용할 수 있습니다. 아래 명령을 실행할 셸에서 `MIMI_SEED_WEB_BASE`를 팀 콘솔의 HTTPS 주소로 설정하세요.
+
 팀 전체에 읽기 전용 BigQuery 접근(GA4 export 분석 등)을 **하나의 공유 서비스 계정**으로 제공합니다 —
 머신마다 키 파일이 필요 없고, 개인 토큰을 죽이는 Google Workspace 재인증 정책(`invalid_rapt`)의
 영향도 받지 않습니다.
@@ -347,7 +328,7 @@ npx mimi-seed deploy --skip-build --version-code 142   # 노트만 적용
 **Remote MCP** 를 연결해 로컬 키 없이 조회합니다:
 
 ```bash
-claude mcp add --transport http mimi-seed https://mimi-seed.pryzm.gg/api/mcp \
+claude mcp add --transport http mimi-seed "${MIMI_SEED_WEB_BASE}/api/mcp" \
   --header "Authorization: Bearer <PAT>"
 ```
 
@@ -485,6 +466,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
 ```yaml
 - name: 릴리즈 노트 생성 및 적용
   env:
+    MIMI_SEED_WEB_BASE: ${{ vars.MIMI_SEED_WEB_BASE }}
     MIMI_SEED_TOKEN: ${{ secrets.MIMI_SEED_TOKEN }}
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   run: |
@@ -492,7 +474,7 @@ SDK에 기여한다면 **도메인 온톨로지** [`docs/domain/`](docs/domain/)
     npx mimi-seed check --fail-on-blocker
 ```
 
-`MIMI_SEED_TOKEN` → [대시보드 API 토큰](https://mimi-seed.pryzm.gg/workspace/api-tokens)에서 발급.
+자체 운영 콘솔에서 PAT를 발급하고 콘솔 주소를 `MIMI_SEED_WEB_BASE` 저장소 변수로 등록하세요.
 
 ---
 
@@ -516,8 +498,6 @@ npm install @yoonion/mimi-seed-mcp --omit=optional
 
 얇게 설치한 뒤 AI 기능을 쓰려면 같은 프로젝트에서 `npm install --include=optional` 을 실행하고 `ANTHROPIC_API_KEY` 를 설정하세요.
 
-웹 콘솔 (Remote MCP): [mimi-seed.pryzm.gg/tool](https://mimi-seed.pryzm.gg/tool)
-
 ---
 
 ## 환경변수
@@ -525,7 +505,7 @@ npm install @yoonion/mimi-seed-mcp --omit=optional
 | 변수 | 설명 |
 |------|------|
 | `MIMI_SEED_TOKEN` | PAT — CLI / CI 무인증 모드 |
-| `MIMI_SEED_WEB_BASE` | 서버 주소 (기본: `https://mimi-seed.pryzm.gg`) |
+| `MIMI_SEED_WEB_BASE` | 자체 운영 콘솔의 HTTPS 주소 (원격 기능을 사용할 때 지정) |
 | `ANTHROPIC_API_KEY` | AI 릴리즈 노트·리뷰 답변 활성화 (선택) |
 | `YOUTUBE_API_KEY` | `video_research_youtube`의 참고 영상 메타데이터 조사 (선택) |
 | `PEXELS_API_KEY` | `video_search_stock_assets`의 라이선스 스톡 영상 검색 (선택) |
@@ -552,4 +532,4 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받습니다.
 
 상업적 이용 문의: [turbo08@gmail.com](mailto:turbo08@gmail.com)
 
-**Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)
+[Required Notice](LICENSE)

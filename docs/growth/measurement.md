@@ -7,7 +7,7 @@ with consent, a separate best-effort report is sent after the command returns it
 The web console owns collection, storage and aggregation. It accepts only the bounded payload, deduplicates
 run IDs, separates CI from interactive usage and retains events for 90 days. No raw paths, app IDs,
 credentials, free-text errors or source are included. Installation IDs and salted project hashes are
-pseudonymous, not anonymous people. See [the privacy notice](https://mimi-seed.pryzm.gg/privacy/sdk-usage).
+pseudonymous, not anonymous people.
 
 Read success as completed scans, including those that found blockers. Distinguish runtime failures from
 useful blocker findings. Setup completion means the requested credentials are satisfied, not a store release.
