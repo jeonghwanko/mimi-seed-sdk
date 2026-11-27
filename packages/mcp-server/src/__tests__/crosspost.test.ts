@@ -870,3 +870,77 @@ describe('review 9', () => {
     expect(api.thText).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('settled by attempt id, not by clock', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+  const launch: SocialPublishInput = { targets: ['threads'], text: 'Launch' };
+  const other: SocialPublishInput = { targets: ['threads'], text: 'Other' };
+  const T = new Date('2026-06-01T00:00:00.000Z');
+  const BACK = new Date(T.getTime() - 60_000);
+  const account = () => accountKey('threads', launch)!;
+  const key = () => targetKey('threads', launch)!;
+  const record = () => readRecord('threads', key())!;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(T);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Post 'Launch' at T, then repost it at `repostAt` with an unknown outcome. */
+  const repostUnknownAt = async (repostAt: Date) => {
+    expect((await run(launch))[0].status).toBe('posted');
+    const posted = record();
+    vi.setSystemTime(repostAt);
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run({ ...launch, repost: [{ platform: 'threads', at: posted.at }] }))[0].status).toBe('unknown_outcome');
+    return { posted, pending: readPending('threads', account())! };
+  };
+
+  it.each([['the same millisecond', T], ['a clock stepped back', BACK]])(
+    'a repost with an unknown outcome in %s as the post blocks the account until checked',
+    async (_case, repostAt) => {
+      const { posted, pending } = await repostUnknownAt(repostAt);
+      expect(record()).toEqual(posted); // the repost never touches the posted record
+      expect(pending.at > posted.at).toBe(true); // its own `at`, so an approval can tell the two apart
+      expect(planPublish(other).ok).toBe(false);
+      expect(api.thText).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([['the same millisecond', T], ['a clock stepped back', BACK]])(
+    'in %s, markPosted uses up the repost approval even when clearing the marker did not happen',
+    async (_case, repostAt) => {
+      const { posted, pending } = await repostUnknownAt(repostAt);
+      const ledgerModule = await import('../crosspost/ledger.js');
+      const keep = vi.spyOn(ledgerModule, 'replacePendingIfOurs').mockImplementationOnce(() => false); // marker stays
+      const marked = { ...launch, repost: [{ platform: 'threads' as const, at: posted.at }], markPosted: [{ platform: 'threads' as const, at: pending.at }] };
+      try {
+        expect((await run(marked))[0].status).toBe('already_posted');
+      } finally {
+        keep.mockRestore();
+      }
+      expect(readPending('threads', account())).toMatchObject({ attempt: pending.attempt }); // not cleared…
+      expect(planPublish(other).ok).toBe(true); // …but settled: the record names its attempt
+      expect((await run(marked))[0].status).toBe('already_posted'); // the old repost approval no longer matches
+      expect((await run(other))[0].status).toBe('posted');
+      expect(api.thText).toHaveBeenCalledTimes(3); // the post, the repost, and 'Other' — never 'Launch' a third time
+    },
+  );
+
+  it.each([['equal to', 0], ['earlier than', -60_000]])(
+    'a marker whose at is %s its posted record blocks unless the record names its attempt',
+    async (_case, offset) => {
+      const at = T.toISOString();
+      const markerAt = new Date(T.getTime() + offset).toISOString();
+      writeRecord('threads', key(), { state: 'posted', at, settledAttempt: 'attempt-a' });
+      const ledgerModule = await import('../crosspost/ledger.js');
+      ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at: markerAt, attempt: 'attempt-b' });
+      expect(planPublish(other).ok).toBe(false);
+      ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at: markerAt, attempt: 'attempt-a' });
+      expect(planPublish(other).ok).toBe(true);
+      ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at: markerAt }); // no attempt
+      expect(planPublish(other).ok).toBe(false);
+    },
+  );
+});

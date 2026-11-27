@@ -1,9 +1,10 @@
 // social_publish's at-most-once records.
 //
 //   ~/.mimi-seed/social-publish/targets/<sha256(platform:postKey)>.json      one per **post** (platform + account +
-//                                                                           exact content): { state, at, id?, url?, error? }
+//                                                                           exact content): { state, at, id?, url?, error?,
+//                                                                           settledAttempt? }
 //   ~/.mimi-seed/social-publish/accounts/<sha256(platform:account)>.json     one per **account** while a send to it is
-//                                                                           unresolved: { postKey, state, at }
+//                                                                           unresolved: { postKey, state, at, attempt? }
 //   ~/.mimi-seed/social-publish/accounts/<sha256(platform:account)>.lock/    held while publishing to that account
 //
 // The account marker exists from just before a publishing call until its outcome is known. A `sending` or `unknown`
@@ -30,6 +31,11 @@ export interface PostRecord {
   id?: string;
   url?: string;
   error?: string;
+  /**
+   * The `attempt` of the send whose outcome this record settled (posted, cleanly failed, or marked posted). A marker
+   * naming that attempt is settled even if clearing it failed. Matched by id, never by time: clocks tie and step back.
+   */
+  settledAttempt?: string;
 }
 
 /** An account with a send whose outcome is not known yet (or never became known). */
@@ -37,6 +43,8 @@ export interface PendingRecord {
   postKey: string;
   state: 'sending' | 'unknown';
   at: string;
+  /** Random id of this send. Without one (written by an earlier build) the marker is never treated as settled. */
+  attempt?: string;
 }
 
 const M = catalog(
@@ -103,7 +111,8 @@ export function writeRecord(platform: SocialTarget, postKey: string, record: Pos
 
 export function readPending(platform: SocialTarget, account: string): PendingRecord | null {
   return readJsonRecord<PendingRecord>(pendingPath(platform, account),
-    (r) => typeof r.postKey === 'string' && (r.state === 'sending' || r.state === 'unknown') && typeof r.at === 'string');
+    (r) => typeof r.postKey === 'string' && (r.state === 'sending' || r.state === 'unknown') && typeof r.at === 'string'
+      && (r.attempt === undefined || typeof r.attempt === 'string'));
 }
 
 export function writePending(platform: SocialTarget, account: string, pending: PendingRecord): void {
@@ -116,17 +125,17 @@ export function clearPending(platform: SocialTarget, account: string): void {
 
 /**
  * Compare-and-set on the account marker: replace it with `next` (or remove it, for null) only if it is still the
- * one this send wrote (same postKey and `at`). Returns false — and changes nothing — when another call has replaced
+ * one this send wrote (same postKey, `at`, and attempt). Returns false — and changes nothing — when another call has replaced
  * it meanwhile (possible only after this call's lock went stale), so one call's outcome never erases another's.
  */
 export function replacePendingIfOurs(
   platform: SocialTarget,
   account: string,
-  ours: { postKey: string; at: string },
+  ours: { postKey: string; at: string; attempt?: string },
   next: PendingRecord | null,
 ): boolean {
   const current = readPending(platform, account);
-  if (!current || current.postKey !== ours.postKey || current.at !== ours.at) return false;
+  if (!current || current.postKey !== ours.postKey || current.at !== ours.at || current.attempt !== ours.attempt) return false;
   if (next) writePending(platform, account, next);
   else clearPending(platform, account);
   return true;
