@@ -35,7 +35,7 @@
 // Media rules mirror the per-platform tools: Meta fetches public HTTPS URLs; YouTube uploads a local file; TikTok
 // publishes a plan made by tiktok_business_plan_video_post (its own consent, settings, and duplicate checks).
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { catalog } from '#core/lang.js';
@@ -338,12 +338,27 @@ const youtubeRejected = (error: unknown) => {
  * Replaces (or, for null, clears) this send's own account marker — compare-and-set, so a marker another call wrote
  * meanwhile is never erased. Returns a note to report instead of throwing (callers keep their own error), or null.
  */
-function settlePending(platform: SocialTarget, account: string, ours: { postKey: string; at: string }, next: PendingRecord | null): string | null {
+function settlePending(platform: SocialTarget, account: string, ours: { postKey: string; at: string; attempt?: string }, next: PendingRecord | null): string | null {
   try {
     return replacePendingIfOurs(platform, account, ours, next) ? null : M().pendingTakenOver;
   } catch (error) {
     return M().pendingNotCleared(errorText(error));
   }
+}
+
+/**
+ * `base` (default: now), but always after every `previous`. An approval names a record or marker by its `at`, so
+ * whatever a send writes must carry an `at` the record and marker it replaces did not — even within one millisecond
+ * or after the clock stepped back — or an approval for the old one (repost, resendUnknown) would still match the new.
+ */
+function laterThan(previous: readonly (string | undefined)[], base = Date.now()): string {
+  const floors = previous.map((at) => (at === undefined ? Number.NaN : Date.parse(at) + 1)).filter((ms) => !Number.isNaN(ms));
+  return new Date(Math.max(base, ...floors)).toISOString();
+}
+
+/** The `at` a marked-posted send gets: its own, moved past an earlier `posted` record so a repost approval is used up. */
+function markedAt(pendingAt: string, itsPost: PostRecord | null): string {
+  return itsPost?.state === 'posted' ? laterThan([itsPost.at], Date.parse(pendingAt)) : pendingAt;
 }
 
 function errorText(error: unknown): string {
@@ -510,7 +525,10 @@ function applyMarks(platform: SocialTarget, key: string, record: PostRecord | nu
     marked = pending.at;
     // The marked send becomes this post's latest `posted` record — a repost's too (keeping the original's id/url), so
     // the repost approval that named the older `at` is used up and cannot send the post once more.
-    view = { record: pending.postKey === key ? { ...(record?.state === 'posted' ? record : {}), state: 'posted', at: pending.at } : record, pending: null };
+    view = {
+      record: pending.postKey === key ? { ...(record?.state === 'posted' ? record : {}), state: 'posted', at: markedAt(pending.at, record) } : record,
+      pending: null,
+    };
   }
   if (view.record && (view.record.state === 'unknown' || view.record.state === 'sending') && approves(opts.markPosted, platform, view.record.at)) {
     marked = view.record.at;
@@ -581,15 +599,18 @@ function resolveDecision(platform: SocialTarget, key: string, record: PostRecord
 }
 
 /**
- * The account's pending marker, unless the post it names did finish: a marker whose own post record is `posted`, or
- * cleanly `failed` (nothing went out), at or after the marker was written only failed to be cleared, so it must not
- * block the account as "outcome unknown". (A repost never writes `failed`, so its marker is never dropped this way.)
+ * The account's pending marker, unless the send it names did finish: when that send's own outcome was recorded
+ * (`posted`, cleanly `failed`, or marked posted — the record's settledAttempt is the marker's attempt), the marker
+ * only failed to be cleared and must not block the account as "outcome unknown". Matched by attempt id, not by time:
+ * a repost's marker can carry the same millisecond as — or, after a clock step, an earlier one than — the `posted`
+ * record it reposts, and must still block until its own outcome is known.
  */
 function effectivePending(platform: SocialTarget, account: string): PendingRecord | null {
   const pending = readPending(platform, account);
   if (!pending) return null;
   const itsPost = readRecord(platform, pending.postKey);
-  const settled = (itsPost?.state === 'posted' || itsPost?.state === 'failed') && itsPost.at >= pending.at;
+  const settled = (itsPost?.state === 'posted' || itsPost?.state === 'failed')
+    && pending.attempt !== undefined && itsPost.settledAttempt === pending.attempt;
   return settled ? null : pending;
 }
 
@@ -719,7 +740,8 @@ function persistMarks(input: SocialPublishInput, videoFile: ReturnType<typeof fi
         // Also when the post is already `posted` (the marker is a repost's): move its `at` forward, so a repost
         // approval naming the older `at` no longer matches (same as applyMarks).
         const itsPost = readRecord(platform, pending.postKey);
-        writeRecord(platform, pending.postKey, { ...(itsPost?.state === 'posted' ? itsPost : {}), state: 'posted', at: pending.at });
+        writeRecord(platform, pending.postKey,
+          { ...(itsPost?.state === 'posted' ? itsPost : {}), state: 'posted', at: markedAt(pending.at, itsPost), settledAttempt: pending.attempt });
         replacePendingIfOurs(platform, account, pending, null);
       }
       const record = readRecord(platform, key);
@@ -798,9 +820,12 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       // Last check before the publishing call: still our lock, and still a send by the rule.
       let now: Decision;
       let current: PostRecord | null;
+      let replacedMarkerAt: string | undefined;
       try {
         lock.confirmHeld();
         current = readRecord(platform, key);
+        // The raw marker (even one effectivePending ignores) is overwritten below: the new one must not reuse its `at`.
+        replacedMarkerAt = readPending(platform, account)?.at;
         now = decide(platform, current, effectivePending(platform, account), opts);
       } catch (error) {
         outcomes.push({ platform, status: 'failed', error: errorText(error) });
@@ -817,14 +842,16 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       // A repost must never downgrade the `posted` record: that content is live, and a later plain call has to keep
       // skipping it even if this repost fails. The attempt is tracked on the account marker alone.
       const reposting = current?.state === 'posted';
-      const startedAt = new Date().toISOString();
+      const startedAt = laterThan([current?.at, replacedMarkerAt]);
+      const attempt = randomUUID();
+      const ours = { postKey: key, at: startedAt, attempt };
       try {
-        writePending(platform, account, { postKey: key, state: 'sending', at: startedAt });
+        writePending(platform, account, { ...ours, state: 'sending' });
         try {
           if (!reposting) writeRecord(platform, key, { state: 'sending', at: startedAt });
         } catch (recordError) {
           // Nothing was sent: do not leave the account looking pending. Report the record error, not a cleanup one.
-          settlePending(platform, account, { postKey: key, at: startedAt }, null);
+          settlePending(platform, account, ours, null);
           throw recordError;
         }
       } catch (error) {
@@ -841,17 +868,20 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
         const ambiguous = isAmbiguous(error);
         // Record and marker share the send's start time, whatever is written when: that is the one `at` a person
         // approves with resendUnknown, even if one of the two writes below fails.
-        const at = ambiguous ? startedAt : new Date().toISOString();
+        const at = ambiguous ? startedAt : laterThan([startedAt]);
         let reported = errorText(error);
         try {
           // Unknown keeps the account pending (blocks even edited content); a clean failure releases it.
-          const ours = { postKey: key, at: startedAt };
           if (ambiguous) {
-            const note = settlePending(platform, account, ours, { postKey: key, state: 'unknown', at });
+            const note = settlePending(platform, account, ours, { postKey: key, state: 'unknown', at, attempt });
             if (!reposting) writeRecord(platform, key, { state: 'unknown', at, error: reported });
             if (note) reported = `${reported} ${note}`;
           } else {
-            if (!reposting) writeRecord(platform, key, { state: 'failed', at, error: reported });
+            // A repost keeps its `posted` record as is, but names this attempt on it: nothing went out, so its marker
+            // must not block the account as unknown if clearing it fails.
+            writeRecord(platform, key, reposting && current
+              ? { ...current, settledAttempt: attempt }
+              : { state: 'failed', at, error: reported, settledAttempt: attempt });
             const note = settlePending(platform, account, ours, null);
             if (note) reported = `${reported} ${note}`;
           }
@@ -869,9 +899,9 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       // `sending`, so the next call reports the account as pending instead of posting again.
       let warning: string | null = null;
       try {
-        writeRecord(platform, key, { state: 'posted', at: new Date().toISOString(), ...sent });
+        writeRecord(platform, key, { state: 'posted', at: laterThan([startedAt]), ...sent, settledAttempt: attempt });
         // Posted and recorded. A marker that could not be cleared would block this account: say so in the result.
-        warning = settlePending(platform, account, { postKey: key, at: startedAt }, null);
+        warning = settlePending(platform, account, ours, null);
       } catch (writeError) {
         // Live but unrecorded: the marker stays, so the account reads as pending until a person confirms the post.
         ledgerBroken = errorText(writeError);
