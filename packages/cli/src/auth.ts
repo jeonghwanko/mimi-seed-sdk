@@ -38,7 +38,7 @@ ${kleur.bold("빌드 / 마케팅:")}
   ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook 페이지
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
-  ${kleur.cyan("mimi-seed auth threads")}    Threads 브라우저 로그인
+  ${kleur.cyan("mimi-seed auth threads")}    Threads 연결 (팀 브로커 또는 로컬 토큰)
   ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
   ${kleur.dim("  Instagram/Threads: --profile <id>로 특정 소셜 프로필 저장/갱신. Instagram/Threads 수동 토큰 입력은 --manual-token")}
 
@@ -79,7 +79,7 @@ ${kleur.bold("Build / marketing:")}
   ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook Page
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
-  ${kleur.cyan("mimi-seed auth threads")}    Threads (browser login)
+  ${kleur.cyan("mimi-seed auth threads")}    Threads (team broker or local token)
   ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
   ${kleur.dim("  Instagram/Threads: use --profile <id> to save or refresh a named social profile. Instagram/Threads manual tokens: --manual-token")}
 

@@ -4,6 +4,7 @@ import {
   startAuth,
   googleProfilePath,
   listGoogleProfiles,
+  getStoredCredentials,
   getStoredTokens,
   ensureFreshAccessToken,
   resolveAccountEmail,
@@ -362,7 +363,7 @@ async function cmdLogin(): Promise<number> {
   let url: string;
   let wait: Promise<StoredTokens>;
   try {
-    const { clientId, clientSecret } = await getMcpOAuthClient();
+    const { clientId, clientSecret } = await getMcpOAuthClient(getStoredCredentials(profile));
     const r = startAuth(clientId, clientSecret, {
       profile,
       expectedChannelId,

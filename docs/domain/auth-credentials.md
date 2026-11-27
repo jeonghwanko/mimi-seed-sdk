@@ -34,7 +34,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `keys/<sa-localpart>-<keyId>.json` | Service-account keys minted by `iam_create_key` (`0600`). The tool returns the **path only**; `playstore_register_service_account` / `playstore_verify_service_account` (`serviceAccountJsonPath`) and `jenkins_upload_playstore_sa` (`service_account_json_path`) read files **inside this directory only** (realpath containment, `lib/path-containment.ts`) | `iam/key-files.ts` |
 | `keystores/<app>-<timestamp>/upload.jks` + `signing.json` | Upload keystore and its alias / store / key passwords from `android_generate_keystore` (`0600`). The tool returns paths only; `jenkins_upload_keystore` (`keystore_path`) and `jenkins_create_credential` (`secret_file` + `secret_field`) read files inside `keystores/` only | `android/keystore-store.ts` |
 | `config.json` | CLI ↔ remote-MCP config (PAT prefix + endpoint) | `mimi-seed init` (`cli/src/config.ts`) |
-| `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise fetched at login. Written `0600` | `auth/google-auth.ts:saveCredentials` |
+| `credentials.json` | The Google **OAuth client** (`clientId` / `clientSecret`) that mints `tokens.json` — a bring-your-own client via `MIMI_SEED_GOOGLE_CLIENT_ID`/`_SECRET`, otherwise reused from disk or fetched from an explicitly configured console. Written `0600` | `auth/google-auth.ts:saveCredentials` |
 | `settings.json` | **Not a credential** — user preference (`{ lang }`), deliberately separate so logout/re-auth never resets it. Read by both packages through the one rule in `core/src/lang.ts`; written only by the CLI (`cli/src/settings.ts`) | `mimi-seed lang` / the setup wizard's first prompt |
 
 > Treat every file above as a secret. They are plaintext `0600` by default. Encryption at rest with an OS-held key
@@ -48,7 +48,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | Default OAuth token in `tokens.json`, or isolated named grants in `google-profiles/<profile>.json`; `ensureFreshAccessToken()` refreshes the selected grant | `auth/google-auth.ts` |
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
-| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Instagram and Threads default to browser OAuth through operator-managed HTTPS brokers, with manual token entry retained for advanced/headless use | `facebook/`, `instagram/`, `threads/` |
+| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Instagram and Threads offer browser OAuth with configured operator-managed HTTPS brokers, with manual token entry retained for advanced/headless use | `facebook/`, `instagram/`, `threads/` |
 | **TikTok Business Organic API** | Short-term access token renewed from a refresh token five minutes before expiry | `tiktok-business/auth.ts` |
 
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
@@ -63,7 +63,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 - **Project social-profile mapping wins over the legacy default.** If `.mimi-seed.json` declares
   `socialProfiles.facebook`, `.instagram`, or `.threads`, tools resolve only that profile and do not silently fall back to a
   different default account. An explicit MCP `profile` argument wins over the project mapping.
-- **Threads browser OAuth is an operator boundary.** The default `mimi-seed auth threads` flow sends the user through
+- **Threads browser OAuth is an operator boundary.** With a configured broker, the `mimi-seed auth threads` flow sends the user through
   an HTTPS web broker that performs the authorize callback exchange. The operator owns its deployment, Threads App
   ID/secret, and registered HTTPS callback URL; the SDK does not claim to deploy that broker. `--manual-token` is the
   advanced fallback. OAuth validates the account and persists the actual returned expiry locally, including for a

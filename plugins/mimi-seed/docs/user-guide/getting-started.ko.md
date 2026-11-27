@@ -13,21 +13,19 @@ npx mimi-seed check --local
 
 ## 1. 설치 방식 선택
 
-상태 확인만 필요하면 Remote MCP만으로 시작할 수 있다. 스토어·Firebase·소셜에 실제로 쓰려면 Local MCP가 필요하다.
+로컬 MCP를 설치하면 팀 콘솔 없이 스토어·Firebase·소셜 도구를 사용할 수 있다.
 
-전체 기능을 쓰는 권장 순서:
+[SDK를 소스에서 설치](../from-source.ko.md)한 뒤 앱 프로젝트에서 실행한다.
 
 ```bash
 # 프로젝트 디렉터리에서
-npx mimi-seed init --local
-npx mimi-seed setup
+mimi-seed init --local
+mimi-seed setup
 ```
 
 `init --local`은 다음을 수행하거나 안내한다.
 
 - Expo, Gradle, Info.plist, pbxproj에서 앱 정보 감지
-- 브라우저에서 Mimi Seed 계정 연결
-- Remote MCP에 앱 등록
 - 프로젝트에 `.claude/mimi-seed.md`, `AGENTS.md`, `docs/releases.json` 준비
 - Google OAuth와 Local MCP 등록 안내
 

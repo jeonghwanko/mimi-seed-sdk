@@ -54,10 +54,7 @@ Search Console 분석에는 `mimi-seed auth login --domains gsc_readonly`로 로
 
 YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한다. 채널·영상 목록·댓글 조회는 이 권한이나 기존 게시용 `youtube` 권한으로 할 수 있고, 영상 관리 쓰기와 댓글 답글은 `youtube` 권한을 사용한다.
 
-**먼저 필요한 것:** Google 계정. 그게 전부다.
-
-**발급받기:** 미리 가져올 게 **없다**. Google Cloud 프로젝트도, OAuth 클라이언트도 직접 만들지 않는다 —
-클라이언트는 로그인 시점에 알아서 공급된다. 마법사를 돌리거나:
+처음 연결할 때는 Google Cloud에서 **데스크톱 앱** 유형 OAuth 클라이언트를 만들고 `MIMI_SEED_GOOGLE_CLIENT_ID`와 `MIMI_SEED_GOOGLE_CLIENT_SECRET`를 CLI 또는 MCP 서버 환경에 설정하세요. 같은 프로필의 재로그인은 저장된 클라이언트를 재사용합니다.
 
 ```bash
 mimi-seed auth login
@@ -72,10 +69,7 @@ mimi-seed auth login
 
 **확인:** `mimi-seed auth status`
 
-**폐쇄망이거나 자체호스팅인가?** OAuth 클라이언트 id/secret 을 로그인 시점에 Mimi Seed 웹 콘솔에서 받아온다.
-접근할 수 없다면 `MIMI_SEED_GOOGLE_CLIENT_ID` / `MIMI_SEED_GOOGLE_CLIENT_SECRET` 으로 자체 클라이언트를 지정하라
-(루프백 리다이렉트 포트 9876).
-→ [`troubleshooting.ko.md#config-fetch-failed`](troubleshooting.ko.md#config-fetch-failed)
+[OAuth 설정 문제 해결](troubleshooting.ko.md#config-fetch-failed)
 
 ---
 
@@ -284,7 +278,7 @@ Google **Workspace 재인증 정책**(`invalid_rapt`)이 OAuth 토큰을 계속 
 
 ## Instagram
 
-**브라우저 로그인(기본):** `mimi-seed auth instagram`을 실행하고 브라우저에서 로그인과 권한 동의를 완료한다. Mimi Seed가 계정을 검증하고 실제 만료시간과 함께 자동 저장한다. 운영자가 Instagram 전용 앱 자격증명과 등록된 콜백을 갖춘 HTTPS 브로커를 구성해야 하며 SDK가 이를 배포하지는 않는다. 브로커 연결 실패 시 기존 인증을 보존하고 토큰 붙여넣기를 요구하지 않는다. 고급 수동 흐름에만 `--manual-token`을 사용한다.
+콘솔이 없으면 로컬에서 토큰을 입력한다. **팀 브로커로 브라우저 로그인:** `MIMI_SEED_WEB_BASE`를 브로커의 HTTPS 주소로 지정한다. `mimi-seed auth instagram`을 실행하고 브라우저에서 로그인과 권한 동의를 완료한다. Mimi Seed가 계정을 검증하고 실제 만료시간과 함께 자동 저장한다. 운영자가 Instagram 전용 앱 자격증명과 등록된 콜백을 갖춘 HTTPS 브로커를 구성해야 하며 SDK가 이를 배포하지는 않는다. 브로커 연결 실패 시 기존 인증을 보존하고 토큰 붙여넣기를 요구하지 않는다. 고급 수동 흐름에만 `--manual-token`을 사용한다.
 
 
 **열리는 것:** `instagram_*` — 이미지·캐러셀 게시.
@@ -324,7 +318,7 @@ Instagram 토큰은 여기서 안 통한다.
 
 **발급받기:**
 
-1. 기본 흐름인 `mimi-seed auth threads`를 실행하고 운영자의 HTTPS 웹 브로커가 연 브라우저에서 Threads 로그인과
+1. 팀 브로커가 없으면 `mimi-seed auth threads`에서 토큰을 직접 입력한다. 브로커가 있으면 HTTPS 주소를 `MIMI_SEED_WEB_BASE`에 설정하고 브라우저에서 Threads 로그인과
    권한 승인을 완료한다.
 2. 브로커 운영자는 Threads App ID·secret과 앱에 등록한 HTTPS callback URL을 설정·배포해야 한다. SDK가 이
    비공개 브로커를 배포하거나 설정하지는 않는다.
@@ -381,8 +375,7 @@ Mimi Seed는 ffprobe 규격 검사와 SHA-256 중복 차단을 위해 동일 원
 
 **열리는 것:** 호스팅 대시보드와 원격 MCP(읽기·진단 위주의 부분집합).
 
-**발급받기:** `mimi-seed init` 실행. 브라우저가 열리고 로그인하면 토큰이 자동으로 돌아온다. CI 에서는 대신
-`MIMI_SEED_TOKEN` 을 설정하면 `init` 이 브라우저 단계를 건너뛴다.
+팀이 운영하는 콘솔에만 필요합니다. `MIMI_SEED_WEB_BASE`를 해당 주소로 지정하고 `mimi-seed init`을 실행하세요. CI에서는 콘솔 주소와 `MIMI_SEED_TOKEN`을 함께 설정하세요.
 
 **확인:** `mimi-seed status`.
 

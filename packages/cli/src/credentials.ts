@@ -1,3 +1,4 @@
+import { consoleUrl } from "#core/console-url.js";
 // 자격증명 레지스트리 — `doctor` · `auth status --all` · `setup` 이 **공유하는 단일 SSOT**.
 //
 // 예전엔 doctor 와 auth 가 각자 4줄짜리 목록을 손으로 들고 있었고, Jenkins/CI/Ads/FB/IG 는
@@ -265,26 +266,28 @@ export const CREDENTIALS: readonly CredSpec[] = [
       ko: "Mimi Seed 계정 (클라우드)",
       en: "Mimi Seed account (cloud)",
     },
-    requirement: "required",
+    requirement: "optional",
     group: "core",
     file: "~/.mimi-seed/config.json",
     fix: "mimi-seed init",
     setup: { kind: "command", run: "mimi-seed init" },
     obtain: {
       ko: [
-        "https://mimi-seed.pryzm.gg 에서 가입/로그인하면 끝 — 브라우저가 알아서 토큰을 넘겨준다.",
+        "팀 콘솔 주소를 MIMI_SEED_WEB_BASE에 지정한 뒤 mimi-seed init을 실행하세요.",
         "CI 에서는 MIMI_SEED_TOKEN 환경변수로 대체할 수 있다.",
       ],
       en: [
-        "Sign up / sign in at https://mimi-seed.pryzm.gg — the browser hands the token back for you.",
+        "Set MIMI_SEED_WEB_BASE to your team console, then run mimi-seed init.",
         "In CI, set the MIMI_SEED_TOKEN environment variable instead.",
       ],
     },
     docsAnchor: "cloud-pat",
     detect: (home) => {
-      if (process.env.MIMI_SEED_TOKEN) return { present: true, detail: "MIMI_SEED_TOKEN (env)" };
-      const cfg = readJson<{ prefix?: string }>(home, "config.json");
-      return cfg?.prefix ? { present: true, detail: `${cfg.prefix}…` } : { present: false };
+      if (process.env.MIMI_SEED_TOKEN) {
+        return consoleUrl(process.env.MIMI_SEED_WEB_BASE) ? { present: true, detail: "MIMI_SEED_TOKEN (env)" } : { present: false };
+      }
+      const cfg = readJson<{ prefix?: string; webBase?: string; endpoint?: string }>(home, "config.json");
+      return cfg?.prefix && consoleUrl(cfg.webBase) && consoleUrl(cfg.endpoint) ? { present: true, detail: `${cfg.prefix}…` } : { present: false };
     },
   },
   {
@@ -300,13 +303,13 @@ export const CREDENTIALS: readonly CredSpec[] = [
     setup: { kind: "mcp-bin", bin: "mimi-seed-auth" },
     obtain: {
       ko: [
-        "미리 발급받을 게 **없다**. 브라우저 로그인 한 번이면 끝.",
+        "처음이면 Google 데스크톱 앱 OAuth 클라이언트의 MIMI_SEED_GOOGLE_CLIENT_ID와 MIMI_SEED_GOOGLE_CLIENT_SECRET를 설정한다.",
         "이 토큰 하나가 Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery 를 모두 연다.",
         "⚠️ 로그인 화면에서 거부(access_denied) 당하면 앱이 아직 '테스팅' 모드라 그렇다 —",
         "   운영자에게 네 Google 계정을 Test users 에 추가해달라고 요청해야 한다.",
       ],
       en: [
-        "**Nothing** to fetch beforehand. One browser sign-in is all it takes.",
+        "For first sign-in, set MIMI_SEED_GOOGLE_CLIENT_ID and MIMI_SEED_GOOGLE_CLIENT_SECRET from a Google Desktop app OAuth client.",
         "This single token unlocks Firebase · AdMob · Play · Google Ads · Search Console · GA4 · IAM · BigQuery.",
         "⚠️ If the login screen blocks you (access_denied), the app is still in 'testing' mode —",
         "   ask whoever operates it to add your Google account under Test users. Retrying alone never works.",
@@ -664,14 +667,14 @@ export const CREDENTIALS: readonly CredSpec[] = [
     obtain: {
       ko: [
         "Instagram 과 **별개 계정·별개 토큰**이다 (Threads Graph API).",
-        "기본 흐름: `mimi-seed auth threads`를 실행하면 HTTPS 브로커가 여는 브라우저에서 Threads 로그인·권한 승인을 완료한다.",
+        "`mimi-seed auth threads`에서 토큰을 입력한다. 팀 브로커 주소를 MIMI_SEED_WEB_BASE에 설정하면 브라우저로 로그인한다.",
         "브로커 운영자는 Threads App ID/secret과 앱에 등록한 HTTPS callback URL을 설정·배포해야 한다 (SDK가 브로커를 배포하지는 않는다).",
         "토큰을 직접 붙여 넣는 `--manual-token`은 고급/헤드리스 흐름이다. 저장 전에 Threads 계정을 검증한다.",
         "`--profile <id>`로 이름 있는 계정을 저장할 수 있으며, OAuth 응답의 실제 만료 시각을 로컬 프로필에 기록한다.",
       ],
       en: [
         "A **separate account and token** from Instagram (Threads Graph API).",
-        "Default: run `mimi-seed auth threads` and finish Threads login and consent in the browser opened by the HTTPS broker.",
+        "Run `mimi-seed auth threads` to enter a token locally. Set MIMI_SEED_WEB_BASE to a team broker to use browser login.",
         "The broker operator must deploy it with the Threads App ID/secret and the HTTPS callback URL registered in the app (the SDK does not deploy the broker).",
         "Pasting a token with `--manual-token` is the advanced/headless path; the Threads account is verified before saving.",
         "Use `--profile <id>` for a named account; the actual expiry returned by OAuth is saved in the local profile.",
@@ -821,6 +824,7 @@ export function missingRequired(
   platforms: Platform[],
 ): CredSpec[] {
   return CREDENTIALS.filter((spec) => {
+    if (spec.id === "mimiseed") return !!consoleUrl(process.env.MIMI_SEED_WEB_BASE) && !isSatisfied(spec, detected);
     if (spec.requirement === "optional") return false;
     if (spec.requirement === "platform" && !platforms.includes(spec.platform!)) return false;
     return !isSatisfied(spec, detected);
@@ -849,6 +853,7 @@ export function planSetup(detected: Map<CredId, Detected>, opts: PlanOpts = {}):
 
   return CREDENTIALS.filter((spec) => {
     if (only && !only.has(spec.id)) return false;
+    if (spec.id === "mimiseed" && !only && !reconnect.has(spec.id) && !consoleUrl(process.env.MIMI_SEED_WEB_BASE)) return false;
     if (reconnect.has(spec.id)) return true;
     const found = detected.get(spec.id);
     // 만료됐거나 7일 안에 만료되는 토큰은 setup 이 알아서 재연결 대상으로 올린다.

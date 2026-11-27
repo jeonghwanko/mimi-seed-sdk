@@ -130,7 +130,7 @@ every credential, which also tells them where to obtain each token
 | Jenkins | `mimi-seed auth jenkins` (probes the server before saving) |
 | GitHub / GitLab CI | `mimi-seed auth ci` |
 | Google Ads | `mimi-seed auth googleads` — needs the `adwords` OAuth scope; an old token may need `mimi-seed auth login --domains googleads` (adds the grant, keeps the rest) |
-| Facebook / Instagram / Threads | `mimi-seed auth facebook` / `mimi-seed auth instagram` / `mimi-seed auth threads` (Threads opens the default browser OAuth flow) |
+| Facebook / Instagram / Threads | `mimi-seed auth facebook` / `mimi-seed auth instagram` / `mimi-seed auth threads` |
 | TikTok Business | `mimi-seed auth tiktok` → verify with `tiktok_business_auth_status` and `tiktok_business_get_account` |
 
 `mimi-seed auth meta` opens the combined social setup entry point when the user wants to review or reconnect
@@ -149,7 +149,7 @@ tokens with seven days or less remaining are automatically put back into the set
 (including OAuth code 190) returns the exact `mimi-seed auth <platform>` recovery command instead of a raw error.
 For an unexpired Threads long-lived token, `threads_refresh_token` (also used by `mimi-seed auth threads`) refreshes
 it without asking the user to paste a replacement. If refresh cannot recover an expired or revoked token, the CLI
-falls back to the default browser OAuth flow through the operator's HTTPS broker. The broker must be deployed and
+uses local token entry, or browser OAuth if `MIMI_SEED_WEB_BASE` points to an operator’s HTTPS broker. The broker must be deployed and
 configured with the Threads App ID/secret and registered HTTPS callback; the SDK does not provide that deployment.
 `--manual-token` remains available for advanced/headless use. Both flows validate the account, and browser OAuth saves
 the actual returned expiry locally. Named `--profile` accounts continue to map through `socialProfiles.threads`.

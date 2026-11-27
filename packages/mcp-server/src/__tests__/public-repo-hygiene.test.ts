@@ -49,7 +49,7 @@ const BANNED: Banned[] = [
   },
   {
     label: 'pryzm 사설 식별자',
-    // mimi-seed.pryzm.gg(공개 제품 URL)와 gg.pryzm.* 을 구분한다.
+    // 과거 공개 제품 URL와 gg.pryzm.* 을 구분한다.
     pattern: /\bgg\.pryzm\.[a-z0-9]|pryzm[-_][a-z0-9]/i,
     hint: '사설 조직/프로젝트 접두사 대신 com.example.app / my-app-* 을 쓰세요.',
   },

@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Initialize SDK projects locally without the retired public console. Google sign-in reuses stored OAuth clients, and remote workflows require a team console URL.
+
 ## [0.25.2] - 2026-11-27
 
 ### Changed

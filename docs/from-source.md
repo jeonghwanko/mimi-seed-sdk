@@ -171,8 +171,7 @@ Change it later with `mimi-seed lang en` / `mimi-seed lang ko`, or force it per-
 `MIMI_SEED_LANG=en`. The setting lives in `~/.mimi-seed/settings.json` and is passed down to the setup
 binaries, so the wizard and its child prompts never end up in different languages.
 
-> ⚠️ **Even from source, Google login is not self-contained.** The OAuth client id/secret is fetched at login
-> time from the Mimi Seed web console. If you're offline, air-gapped, or self-hosting, supply your own client:
+> For first Google sign-in, configure a Desktop app OAuth client. Returning profiles can reuse the saved configuration.
 >
 > ```bash
 > export MIMI_SEED_GOOGLE_CLIENT_ID=...

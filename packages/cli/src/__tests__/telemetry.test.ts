@@ -9,6 +9,7 @@ beforeEach(() => {
   vi.spyOn(os, 'homedir').mockReturnValue(home);
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
   vi.stubEnv('MIMI_SEED_TELEMETRY', undefined);
+  vi.stubEnv('MIMI_SEED_WEB_BASE', undefined);
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); fs.rmSync(home, { recursive: true, force: true }); });
@@ -18,11 +19,15 @@ describe('optional usage privacy', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(fs.existsSync(path.join(home, '.mimi-seed'))).toBe(false);
     cmdTelemetry(['on']);
+    await usageRun('check', home)('completed');
+    expect(fetch).not.toHaveBeenCalled();
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://console.example.test');
     vi.stubEnv('MIMI_SEED_TELEMETRY', '0');
     await usageRun('check', home)('completed');
     expect(fetch).not.toHaveBeenCalled();
   });
   it('projects are salted, payload excludes report secrets, and network failure is harmless', async () => {
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://console.example.test');
     cmdTelemetry(['on']);
     await usageRun('check', path.join(home, 'private-project'))('completed', {
       projectPath: '/private/source', checkedAt: '', platforms: ['android'],

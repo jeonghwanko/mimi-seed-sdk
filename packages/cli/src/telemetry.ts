@@ -1,3 +1,4 @@
+import { consoleUrl } from "#core/console-url.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,6 @@ import { writeCredentialJson } from "#core/atomic-write.js";
 import type { ReleaseDoctorReport } from "#core/checks/release-doctor.js";
 import { version } from "../package.json";
 
-const ENDPOINT = "https://mimi-seed.pryzm.gg/api/sdk-usage";
 const M = catalog(
   {
     notice: "선택적 사용량 측정은 꺼져 있습니다. 안내: mimi-seed telemetry --help\n",
@@ -35,6 +35,7 @@ function writeConsent(value: Consent): void {
   writeCredentialJson(location(), value);
 }
 export function telemetryEnabled(): boolean {
+  if (!consoleUrl(process.env.MIMI_SEED_WEB_BASE)) return false;
   if (process.env.MIMI_SEED_TELEMETRY !== undefined) return process.env.MIMI_SEED_TELEMETRY === "1";
   return readConsent().enabled === true;
 }
@@ -65,7 +66,8 @@ function frameworkAt(root: string): string {
 }
 export function usageRun(command: "check" | "setup", projectPath: string):
   (outcome: UsageOutcome, report?: ReleaseDoctorReport) => Promise<void> {
-  if (!telemetryEnabled()) return async () => {};
+  const baseUrl = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  if (!baseUrl || !telemetryEnabled()) return async () => {};
   try {
     const consent = readConsent();
     const installationId = consent.installationId ?? randomUUID();
@@ -91,7 +93,7 @@ export function usageRun(command: "check" | "setup", projectPath: string):
         codes: [...new Set(report?.findings.map(f => f.code).filter(c => /^[a-zA-Z0-9_]{1,80}$/.test(c)) ?? [])].slice(0, 60),
       };
       try {
-        await fetchWithTimeout(ENDPOINT, {
+        await fetchWithTimeout(`${baseUrl}/api/sdk-usage`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify(payload), redirect: "error",
         }, 800);

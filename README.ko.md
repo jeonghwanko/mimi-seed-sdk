@@ -17,12 +17,15 @@
 
 ---
 
-앱 하나 출시하는 데 얼마나 많은 탭을 열고 있나요?
+## 개발 코드에서 출시와 고객 응대까지
 
-Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...  
-릴리즈 노트는 써야 하고, 스크린샷은 규격이 맞는지 확인해야 하고, 리뷰에 답변도 달아야 합니다.
+Mimi Seed는 **이번 버전에 실제로 들어간 변경**을 근거로 앱을 운영하는 SDK입니다. 예를 들어 로그인 오류를 고쳤다면, 수정 커밋과 그 수정이 포함된 빌드를 확인합니다. 그다음 같은 버전 정보를 업데이트 공지, 스토어 등록정보, 해당 오류를 신고한 고객에게 보낼 답변에 사용합니다.
 
-**Mimi Seed는 이 반복 작업 전체를 Claude Code 또는 Codex 대화로 처리합니다.**
+1. **빌드** · Jenkins, GitHub Actions, GitLab CI에서 기존 빌드 작업을 실행하고 결과를 확인합니다.
+2. **배포와 버전 확인** · Git 태그·커밋과 빌드 번호를 대조하고, 해당 빌드를 Google Play 트랙 또는 iOS TestFlight에서 배포합니다.
+3. **스토어 업데이트** · 해당 버전의 커밋과 릴리스 기록으로 업데이트 소식을 작성하고, 마켓 이미지와 심사 제출 정보를 준비합니다.
+4. **홍보 제작** · 사용자가 달라진 점을 볼 수 있도록 릴리스 내용에서 홍보 글과 영상 소재를 뽑습니다.
+5. **채널 운영과 CS** · YouTube와 Instagram에 콘텐츠를 게시하고, 스토어 리뷰에는 고객이 겪은 문제와 수정 버전을 확인해 답변을 작성합니다.
 
 ```
 "내 앱 출시 준비됐어?"
@@ -142,6 +145,8 @@ Claude Desktop (`claude_desktop_config.json`):
 기존 공개 웹 콘솔은 운영을 종료했습니다. Google 로그인을 처음 연결할 때는 [자체 OAuth 클라이언트 설정](docs/troubleshooting.ko.md#config-fetch-failed)을 따르세요.
 
 ### 2 · 프로젝트와 계정 연결
+
+프로젝트 파일을 콘솔 로그인 없이 생성하려면 [소스 설치](docs/from-source.ko.md) 후 앱 폴더에서 `mimi-seed init --local`을 실행하세요.
 
 ```bash
 cd <내-앱-폴더>
@@ -513,7 +518,7 @@ npm install @yoonion/mimi-seed-mcp --omit=optional
 | `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 `PATH`에 없을 때 지정하는 선택적 절대경로 |
 | `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선. 둘 다 없으면 한국어 시스템 로캘은 한국어, 그 외 로캘은 영어 |
 | `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | 로컬 MCP 전용: 노출할 도구 영역만 고른다 (`playstore,appstore` 같은 도메인 키 쉼표 구분, 또는 그룹 `store` · `google` · `social` · `media` · `build` · `all`). 미지정 = 전체. `auth`·`checks` 는 항상 켜지고, 모르는 키는 경고 후 무시. 도구 lazy-load 가 없는 클라이언트에서 도구 목록을 줄일 때 쓴다 ([에이전트 가이드](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
-| `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 자체 Google OAuth 클라이언트 사용. 미지정 시 로그인 때 웹 콘솔에서 받아온다 — 오프라인·폐쇄망·자체호스팅이면 지정할 것 ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
+| `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 최초 Google 로그인에 사용할 데스크톱 앱 OAuth 클라이언트. 재로그인 시 저장된 설정을 재사용합니다. ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
 
 ---
 

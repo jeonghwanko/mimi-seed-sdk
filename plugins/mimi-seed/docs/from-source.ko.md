@@ -168,8 +168,7 @@ npm run dev -- setup     # 또는 packages/cli 안에서
 설정은 `~/.mimi-seed/settings.json` 에 저장되고 setup 바이너리들에도 물려주므로, 마법사와 자식 프롬프트의
 언어가 어긋나지 않는다.
 
-> ⚠️ **소스에서 돌려도 Google 로그인은 자립적이지 않다.** OAuth 클라이언트 id/secret 을 로그인 시점에 Mimi Seed
-> 웹 콘솔에서 받아온다. 오프라인·폐쇄망·자체호스팅이라면 자체 클라이언트를 지정해야 한다:
+> 최초 Google 로그인에는 자체 데스크톱 앱 OAuth 클라이언트를 설정하세요. 기존 프로필은 저장된 설정을 재사용합니다.
 >
 > ```bash
 > export MIMI_SEED_GOOGLE_CLIENT_ID=...

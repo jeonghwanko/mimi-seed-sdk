@@ -28,7 +28,7 @@ import { version as CLI_VERSION } from "../package.json";
 // 이 파일에서만 쓰는 문구. 공통 문구(common.error 등)는 i18n.ts 의 t() 에 있다.
 const M = catalog(
   {
-    notConnected: "연결된 Mimi Seed 계정이 없습니다. `mimi-seed init` 실행.",
+    notConnected: "원격 기능에는 팀 콘솔 연결이 필요합니다. MIMI_SEED_WEB_BASE를 지정하고 mimi-seed init을 실행하세요.",
     statusTitle: "Mimi Seed 연결 상태",
     statusToken: (prefix: string, date: string) => `  토큰: ${prefix}…  (${date})`,
     statusEndpoint: (endpoint: string) => `  엔드포인트: ${endpoint}`,
@@ -49,7 +49,7 @@ const M = catalog(
       "  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ~/.mimi-seed/config.json 에도 저장되어 있습니다.",
   },
   {
-    notConnected: "No Mimi Seed account connected. Run `mimi-seed init`.",
+    notConnected: "For remote commands, set MIMI_SEED_WEB_BASE to your team console and run mimi-seed init.",
     statusTitle: "Mimi Seed connection status",
     statusToken: (prefix: string, date: string) => `  Token: ${prefix}…  (${date})`,
     statusEndpoint: (endpoint: string) => `  Endpoint: ${endpoint}`,

@@ -11,14 +11,14 @@ const M = catalog(
   {
     // 명령별 상세 사용법 (SSOT). `mimi-seed <command> --help` 와 overview 가 공유.
     usage: {
-      telemetry: "mimi-seed telemetry on|off|status — 선택적 사용량 측정. 기본 꺼짐. 임의 설치 ID, 프로젝트 해시, 버전, OS, 결과 코드와 실행시간을 전송합니다. 개인정보 안내: https://mimi-seed.pryzm.gg/privacy/sdk-usage . MIMI_SEED_TELEMETRY=0은 항상 전송을 끕니다.",
+      telemetry: "mimi-seed telemetry on|off|status — 선택적 사용량 측정. 기본 꺼짐. 임의 설치 ID, 프로젝트 해시, 버전, OS, 결과 코드와 실행시간을 전송합니다. 개인정보 안내: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/growth/measurement.md . MIMI_SEED_TELEMETRY=0은 항상 전송을 끕니다.",
       init: `${kleur.bold("mimi-seed init")} — 현재 프로젝트를 Mimi Seed에 연결
 
-앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) → 브라우저 PAT 발급(원격 MCP) → 앱 등록
+앱 자동 감지(Expo/Gradle/Info.plist/pbxproj) (MIMI_SEED_WEB_BASE를 지정한 경우에만 원격 연결)
 + .claude/mimi-seed.md, AGENTS.md, docs/releases.json 생성/확인.
 
 옵션:
-  --local   추가로 Google OAuth 로그인 + 로컬 MCP(스토어 쓰기 도구 전체) 등록 안내`,
+  --local   자체 운영 콘솔이 설정돼 있어도 로컬 프로젝트만 초기화`,
       setup: `${kleur.bold("mimi-seed setup")} — 가진 계정을 한 번에 연결 (안내형 마법사)
 
 연결 상태를 먼저 보여주고, 아직 연결되지 않은 것만 순서대로 물어본다.
@@ -57,7 +57,7 @@ ${kleur.dim("setup 마법사가 첫 실행 때 물어보므로 보통은 직접 
       doctor: `${kleur.bold("mimi-seed doctor")} — 환경 진단 (토큰·Node·Git·프로젝트·CI)
 
 기본은 진단만 하고 exit 0. Mimi Seed 클라우드 토큰은 원격 기능
-(MIMI_SEED_TOKEN · MIMI_SEED_WEB_BASE · .mimi-seed-link.json)을 쓸 때만, App Store Connect 는
+(MIMI_SEED_WEB_BASE · .mimi-seed-link.json)을 쓸 때만, App Store Connect 는
 프로젝트에 iOS 앱이 있을 때만 ✗ 로 본다.
 
 옵션:
@@ -156,7 +156,7 @@ ${kleur.dim("각 명령 상세 옵션:")} ${kleur.cyan("mimi-seed <command> --he
 
 ${kleur.bold("환경변수:")}
   MIMI_SEED_TOKEN     PAT 토큰 (CI/CD 무인증 모드)
-  MIMI_SEED_WEB_BASE  서버 주소 (기본: https://mimi-seed.pryzm.gg)
+  MIMI_SEED_WEB_BASE  자체 운영 콘솔 주소 (선택)
   ANTHROPIC_API_KEY   AI 노트 생성 활성화 (선택)
   MIMI_SEED_LANG      출력 언어 강제 (ko / en) — settings.json 보다 우선
   MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET
@@ -165,14 +165,14 @@ ${kleur.bold("환경변수:")}
   },
   {
     usage: {
-      telemetry: "mimi-seed telemetry on|off|status — optional usage measurement, off by default. Sends a random installation ID, project hash, version, OS, result codes and duration. Privacy: https://mimi-seed.pryzm.gg/privacy/sdk-usage . MIMI_SEED_TELEMETRY=0 always disables transmission.",
+      telemetry: "mimi-seed telemetry on|off|status — optional usage measurement, off by default. Sends a random installation ID, project hash, version, OS, result codes and duration. Privacy: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/growth/measurement.md . MIMI_SEED_TELEMETRY=0 always disables transmission.",
       init: `${kleur.bold("mimi-seed init")} — connect the current project to Mimi Seed
 
-Auto-detects apps (Expo/Gradle/Info.plist/pbxproj) → issues a PAT in the browser (remote MCP) → registers the apps
+Auto-detects apps (Expo/Gradle/Info.plist/pbxproj) (remote registration only with MIMI_SEED_WEB_BASE)
 + creates/verifies .claude/mimi-seed.md, AGENTS.md, docs/releases.json.
 
 Options:
-  --local   also sign in with Google OAuth and show local MCP (all store write tools) setup`,
+  --local   scaffold locally even when a team console is configured`,
       setup: `${kleur.bold("mimi-seed setup")} — connect the accounts you have, in one pass (guided wizard)
 
 Shows the connection status first, then asks only about what is not connected yet.
@@ -211,7 +211,7 @@ ${kleur.dim("The setup wizard asks on first run, so you rarely need to type this
       doctor: `${kleur.bold("mimi-seed doctor")} — environment check (token · Node · Git · project · CI)
 
 By default it only reports and exits 0. The Mimi Seed cloud token is only a ✗ when remote features
-are configured (MIMI_SEED_TOKEN · MIMI_SEED_WEB_BASE · .mimi-seed-link.json), and App Store Connect
+are configured (MIMI_SEED_WEB_BASE · .mimi-seed-link.json), and App Store Connect
 only when the project has an iOS app.
 
 Options:
@@ -310,7 +310,7 @@ ${kleur.dim("Per-command options:")} ${kleur.cyan("mimi-seed <command> --help")}
 
 ${kleur.bold("Environment variables:")}
   MIMI_SEED_TOKEN     PAT token (headless CI/CD mode)
-  MIMI_SEED_WEB_BASE  server address (default: https://mimi-seed.pryzm.gg)
+  MIMI_SEED_WEB_BASE  team-operated console URL (optional)
   ANTHROPIC_API_KEY   enable AI note generation (optional)
   MIMI_SEED_LANG      force the output language (ko / en) — beats settings.json
   MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET

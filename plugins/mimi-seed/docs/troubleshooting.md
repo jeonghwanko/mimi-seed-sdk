@@ -87,12 +87,7 @@ just run it again and approve every scope.
 
 ### `CONFIG_FETCH_FAILED` — couldn't fetch the OAuth client config
 
-Login needs an OAuth client id/secret, and it fetches them **at runtime from the Mimi Seed web console**. This
-is a real network dependency, and it is the one that surprises people running from source, offline, or behind a
-corporate proxy or captive portal (a captive portal returns `200` with HTML, which fails just the same).
-
-**What you do:** confirm you can reach the web console. If you can't — or you're self-hosting — bring your own
-Google OAuth client:
+First sign-in requires a Google Desktop app OAuth client. Set both values in the environment that launches the CLI or MCP server, then retry. A previously connected profile can reuse its saved client.
 
 ```bash
 export MIMI_SEED_GOOGLE_CLIENT_ID=...

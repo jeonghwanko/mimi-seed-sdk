@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { consoleUrl } from '#core/console-url.js';
 // mimi-seed-social-auth — Facebook 페이지 / Instagram 계정 연결.
 //
 // 검증·저장 구현은 facebook/setup.ts · instagram/setup.ts 에 있고, MCP 도구
@@ -72,9 +73,9 @@ const ko = {
   thNote: '  (Instagram 과 **별개 계정·별개 토큰**. userId 는 토큰에서 자동 조회돼. 수명 약 60일.)',
   thAskToken: '  Threads Access Token: ',
   thAskUserId: '  Threads user ID (선택, 엔터 시 자동 조회): ',
-  thExistingAction: '  [Enter/y] 기존 토큰 자동 갱신  [r] 브라우저로 다시 로그인  [n] 건너뛰기: ',
+  thExistingAction: '  [Enter/y] 기존 토큰 자동 갱신  [r] 다시 연결  [n] 건너뛰기: ',
   thRefreshing: '  🔄 기존 Threads 토큰 갱신 중...',
-  thRefreshFallback: '  자동 갱신에 실패했습니다. 브라우저 로그인으로 다시 연결합니다.',
+  thRefreshFallback: '  자동 갱신에 실패했습니다. 다시 연결합니다.',
   profile: (id: string) => `  소셜 프로필: ${id}`,
   invalidArgs: '  사용법: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token]',
 };
@@ -123,7 +124,7 @@ const en: typeof ko = {
   thNote: '  (A **separate account and token** from Instagram. userId is looked up from the token. ~60 days.)',
   thAskToken: '  Threads Access Token: ',
   thAskUserId: '  Threads user ID (optional, Enter to look it up): ',
-  thExistingAction: '  [Enter/y] refresh current token  [r] sign in again in your browser  [n] skip: ',
+  thExistingAction: '  [Enter/y] refresh current token  [r] reconnect  [n] skip: ',
   thRefreshing: '  🔄 Refreshing the existing Threads token...',
   thRefreshFallback: '  Automatic refresh failed. Reconnecting in your browser.',
   profile: (id: string) => `  Social profile: ${id}`,
@@ -201,7 +202,7 @@ async function setupInstagram(profile?: string, manualToken = false): Promise<bo
     return true;
   }
 
-  if (!manualToken) {
+  if (!manualToken && consoleUrl(process.env.MIMI_SEED_WEB_BASE)) {
     console.log(M.igBrowser);
     try {
       const result = await connectInstagramInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); console.log(M.thResume); } });
@@ -257,7 +258,7 @@ async function setupThreads(profile?: string, manualToken = false): Promise<bool
     }
   }
 
-  if (!manualToken) {
+  if (!manualToken && consoleUrl(process.env.MIMI_SEED_WEB_BASE)) {
     console.log(M.thBrowser);
     try {
       const result = await connectThreadsInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); console.log(M.thResume); } });

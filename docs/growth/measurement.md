@@ -1,6 +1,6 @@
 # SDK activation measurement
 
-The CLI's `telemetry.ts` is the public payload contract. Measurement is opt-in and disabled by default.
+The CLI's `telemetry.ts` is the public payload contract. Measurement requires both opt-in and a team console configured via `MIMI_SEED_WEB_BASE`. There is no public collector.
 `mimi-seed telemetry --help` describes the commands and override. The local scanner stays offline;
 with consent, a separate best-effort report is sent after the command returns its result.
 
