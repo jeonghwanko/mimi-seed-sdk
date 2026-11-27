@@ -57,6 +57,7 @@ ${kleur.bold("login 옵션:")}
 
 ${kleur.dim(`내부적으로 ${MCP_PKG} 의 mimi-seed-*-auth CLI를 호출합니다.`)}`,
     connectAll: "\n  한 번에 연결: mimi-seed setup",
+    socialChecklist: "  처음이면 먼저 준비할 것: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social-setup-checklist.ko.md",
   },
   {
     help: `${kleur.bold("mimi-seed auth")} — local credential setup
@@ -99,6 +100,7 @@ ${kleur.bold("login options:")}
 
 ${kleur.dim(`Under the hood this calls the mimi-seed-*-auth CLIs from ${MCP_PKG}.`)}`,
     connectAll: "\n  Connect everything at once: mimi-seed setup",
+    socialChecklist: "  First time? What to prepare first: https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social-setup-checklist.md",
   },
 );
 
@@ -171,6 +173,8 @@ export async function cmdAuth(args: string[]): Promise<void> {
   // 만료·만료 임박 토큰은 다시 연결한다). 각 항목의 쓰기·검증은 여전히 그 자격증명을 소유한 mcp-server bin 이 한다.
   // `--reconnect youtube,threads` 처럼 setup 플래그를 그대로 넘길 수 있다.
   if (sub === "social") {
+    // 오래 걸리는 건 각 플랫폼 콘솔에서 하는 준비다 — 마법사를 시작하기 전에 그 목록을 가리킨다.
+    log(kleur.dim(M().socialChecklist));
     const { cmdSetup } = await import("./setup.js");
     await cmdSetup(["--only", SOCIAL_CREDENTIALS.join(","), ...rest]);
     return;

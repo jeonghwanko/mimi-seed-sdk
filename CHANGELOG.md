@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- A one-page **social setup checklist** ([`docs/user-guide/social-setup-checklist.md`](docs/user-guide/social-setup-checklist.md), Korean `.ko.md`). It covers what to prepare in each platform's console (YouTube, Facebook, Instagram, Threads, TikTok), the one command that connects them all (`mimi-seed auth social`), how to verify, what expires, and the usual blockers. `mimi-seed auth social` now points to it when it starts.
+
 ## [0.25.4] - 2026-11-27
 
 ### Added

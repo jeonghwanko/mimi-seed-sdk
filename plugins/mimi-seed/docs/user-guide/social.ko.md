@@ -17,6 +17,9 @@ Mimi Seed는 Facebook 페이지, Instagram 프로/크리에이터 계정, Thread
 
 ## 1. 계정 연결
 
+처음이라면 한 장짜리 [소셜 초기 설정 체크리스트](social-setup-checklist.ko.md)를 따라 한다. 플랫폼 콘솔에서 준비할 것,
+한 번에 연결하는 명령, 확인 방법이 정리돼 있다.
+
 ```bash
 npx mimi-seed auth meta
 npx mimi-seed auth status --all

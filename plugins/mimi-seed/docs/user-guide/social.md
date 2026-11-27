@@ -17,6 +17,9 @@ URLs, and expired signed URLs do not work.
 
 ## 1. Connect accounts
 
+First time? Follow the one-page [social setup checklist](social-setup-checklist.md): what to prepare in each
+platform's console, the one command that connects them, and how to verify.
+
 ```bash
 npx mimi-seed auth meta
 npx mimi-seed auth status --all
