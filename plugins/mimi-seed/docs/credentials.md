@@ -34,7 +34,7 @@ Most people need two or three of these. Find your goal, connect only what it lis
 | Query Crashlytics / analytics exports | [Google OAuth](#google-oauth), or [BigQuery SA](#bigquery) if OAuth keeps getting blocked |
 | Upload / replace files in **Google Drive** | [Drive service account](#drive) for existing or shared folders; [Google OAuth](#google-oauth) for folders mimi-seed creates |
 | Report on ad campaigns | [Google Ads](#google-ads) |
-| Post launch announcements | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
+| Post launch announcements — `mimi-seed auth social` connects all of them in one pass | [YouTube](#google-oauth) (`youtube` profile) · [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI-written release notes / review replies | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(optional — it degrades gracefully)* |
 | Research and produce a story-based video | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + [video API keys](#video-api-keys) for only the providers you use |
 | Use the hosted dashboard / remote MCP | [Mimi Seed account](#cloud-pat) |
@@ -52,9 +52,11 @@ and BigQuery all ride on the same OAuth token. Start there.
 
 For Search Console analysis, sign in with `mimi-seed auth login --domains gsc_readonly`. The existing `gsc` grant also covers reads and is required for sitemap submission. Use a named Google login profile to choose which account the GSC tools use.
 
+**YouTube posting:** `mimi-seed auth social` (or `mimi-seed setup`) connects YouTube to a separate `youtube` Google profile, so the channel's account can differ from the one you use for Play and Firebase. It reuses the OAuth client from your default login. Pass `profile: "youtube"` to the `youtube_*` tools. To do it by hand: `mimi-seed auth login --profile youtube --domains youtube`.
+
 YouTube Analytics reports use the separate `youtube_analytics` grant. Channel, video-list, and comment reads can use that grant or the existing publishing `youtube` grant; video management writes and comment replies use `youtube`.
 
-For first sign-in, create a **Desktop app** OAuth client in Google Cloud and set `MIMI_SEED_GOOGLE_CLIENT_ID` and `MIMI_SEED_GOOGLE_CLIENT_SECRET` in the CLI or MCP server environment. A returning profile can reuse its saved client.
+For first sign-in, create a **Desktop app** OAuth client in Google Cloud and set `MIMI_SEED_GOOGLE_CLIENT_ID` and `MIMI_SEED_GOOGLE_CLIENT_SECRET` in the CLI or MCP server environment. A returning profile reuses its saved client, and a new named profile reuses the default login's client.
 
 ```bash
 mimi-seed auth login

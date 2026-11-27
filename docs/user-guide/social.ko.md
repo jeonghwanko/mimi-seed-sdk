@@ -22,6 +22,9 @@ npx mimi-seed auth meta
 npx mimi-seed auth status --all
 ```
 
+YouTube와 TikTok까지 한 번에 연결하려면 대신 `npx mimi-seed auth social`을 실행한다. 이미 연결된 것은
+건너뛰고, 만료가 임박한 토큰은 다시 연결한다.
+
 필요한 플랫폼만 연결할 수도 있다.
 
 ```bash
