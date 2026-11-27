@@ -108,6 +108,12 @@ mapping is `mcp-server/src/auth/scopes.ts` (`AUTH_DOMAINS`: `firebase`, `gcp`, `
 - `cloud-platform` is isolated in the `gcp` domain because the IAM API offers no narrower scope; the
   `firebase` domain alone cannot create projects (Cloud Resource Manager) or enable services (Service
   Usage) — those tools pre-flight `cloud-platform` and point at `gcp`.
+- The login binds the authorization code with **PKCE (S256)** on top of `state` (`createPkcePair()` in
+  `auth/google-auth.ts`). An installed app's client secret is effectively public (anyone can fetch it at login),
+  so without PKCE a code intercepted on the loopback callback (another local process grabbing the port first, a
+  browser extension or history reading the redirect URL) could be exchanged for a refresh token. The verifier
+  lives only in the logging-in process's memory. `oauth-pkce.test.ts` pins it — don't drop it when touching
+  `startAuth`.
 
 ## Setup sub-CLIs
 

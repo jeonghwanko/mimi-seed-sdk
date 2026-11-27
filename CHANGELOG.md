@@ -18,7 +18,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
 - Initialize SDK projects locally without the retired public console. Google sign-in reuses stored OAuth clients, and remote workflows require a team console URL.
+
+### Security
+
+- Google login now binds the authorization code with PKCE (S256), on top of the existing `state` check. A code intercepted on the local callback (another process holding the port, a browser extension reading the redirect URL) can no longer be exchanged for a refresh token, because the matching verifier never leaves the process that started the login. Existing saved logins keep working; nothing to re-run.
+- In clients that support approval dialogs (MCP elicitation), Mimi Seed now asks **you** before it runs a confirmed action, instead of trusting the agent's `confirm` alone. That covers releases, deletes, public posts, IAM changes and the other actions that need a confirm flag, plus every call that saves a connection setting (`*_save_config`), uploads a credential to Jenkins, or starts a CI workflow. The dialog shows the tool and its arguments (strings quoted, hidden characters made visible, long values shortened with a warning), and the action runs only if you tick *approve* and confirm. This closes the path where text the agent read (a review, a comment, a document) talks it into a release, an IAM key, or sending a credential somewhere else. A declined request returns a `⛔` result, changes nothing, and is refused without asking again for 5 minutes.
+- `MIMI_SEED_APPROVAL` chooses what happens in clients without approval dialogs: `auto` (default) keeps the old behavior, `required` refuses, `off` never asks (unattended runs only). An unrecognized value now means `required`. `mimi_seed_status` shows the live mode on its `🛡️ Approval:` line.
+- The Claude Code plugin now starts the server version it was released with, instead of `@latest`, and the marketplace offers a release only after that version is on npm. A new npm release therefore reaches plugin users through a plugin update. Registrations you made yourself with `claude mcp add … @latest` are unchanged.
+- The published MCP server package ships an `npm-shrinkwrap.json`, so `npx` installs exactly the dependency versions CI tested, each checked against its registry hash, instead of the newest version in each range. Development tools are not included, and the install size does not change.
 
 ## [0.25.2] - 2026-11-27
 

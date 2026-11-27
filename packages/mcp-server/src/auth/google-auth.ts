@@ -1,6 +1,7 @@
 import { google } from '../lib/googleapis-lite.js';
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import type { CodeChallengeMethod } from 'google-auth-library';
 import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID, YouTubeChannelError } from './youtube-channel.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -191,6 +192,21 @@ export function callbackPortInUse(host: string, err: Error): AuthErrorPayload {
   };
 }
 
+/**
+ * PKCE (RFC 7636) verifier/challenge 쌍.
+ *
+ * 설치형 앱의 client secret 은 사실상 공개값이다 (`mcp-auth-config` 로 누구나 받는다). 그래서 secret 만으로는
+ * 인가 코드를 가로챈 쪽 — 같은 머신의 다른 프로세스가 콜백 포트를 먼저 잡거나, 브라우저 기록·확장이 리다이렉트
+ * URL 을 본 경우 — 이 토큰을 교환하는 것을 막지 못한다. verifier 는 이 프로세스 메모리에만 있으므로 코드만
+ * 가진 쪽은 교환에 실패한다. `generateCodeVerifierAsync()` 는 async 라 동기인 `startAuth` 에 맞지 않아
+ * 같은 규칙(43자 base64url verifier, S256)으로 직접 만든다.
+ */
+export function createPkcePair(): { codeVerifier: string; codeChallenge: string } {
+  const codeVerifier = randomBytes(32).toString('base64url');
+  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+  return { codeVerifier, codeChallenge };
+}
+
 export function createOAuth2Client(clientId: string, clientSecret: string) {
   return new google.auth.OAuth2(clientId, clientSecret, OAUTH_REDIRECT_URI);
 }
@@ -271,8 +287,12 @@ export function startAuth(
     ...IDENTITY_SCOPES,
   ])];
   const state = randomUUID();
+  const { codeVerifier, codeChallenge } = createPkcePair();
   const authUrl = oauth2Client.generateAuthUrl({
     state,
+    code_challenge: codeChallenge,
+    // 타입은 enum 이지만 값 import 는 기동 비용 때문에 금지 (lib/google-auth-lite.ts) — 런타임 값은 문자열이다.
+    code_challenge_method: 'S256' as CodeChallengeMethod,
     access_type: 'offline',
     scope: requestedScopes,
     // Private windows can still share cookies with an already-running private session.
@@ -327,7 +347,7 @@ export function startAuth(
         exchanging = true;
         let tokenResponse;
         try {
-          tokenResponse = await oauth2Client.getToken(code);
+          tokenResponse = await oauth2Client.getToken({ code, codeVerifier });
         } catch (e) {
           res.writeHead(500);
           res.end('Code exchange failed');

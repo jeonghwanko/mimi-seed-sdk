@@ -17,6 +17,10 @@ dist/
 artifacts/
 /.work/
 
+# mcp-server 의 prepack 이 package-lock.json 을 복사해 만들고 postpack 이 지운다 — 배포 tarball 전용.
+# 남아 있으면 npm install 이 package-lock.json 대신 이걸 읽으므로 커밋하지 않는다.
+packages/mcp-server/npm-shrinkwrap.json
+
 # vitest 커버리지 리포트 (로컬 진단용)
 coverage/
 

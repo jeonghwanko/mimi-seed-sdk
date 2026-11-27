@@ -308,6 +308,7 @@ Claude가 연쇄 호출:
 | `OPENAI_API_KEY` | 장면 이미지 생성 (선택) |
 | `MIMI_SEED_FFMPEG_PATH` / `MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 PATH에 없을 때 실행 파일 경로 (선택) |
 | `MIMI_SEED_TOOLSETS` / `MIMI_SEED_TOOLSETS_EXCLUDE` | 노출할 도구 영역만 고른다 — 도메인 키(`playstore,appstore` …) 또는 그룹 `store` · `google` · `social` · `media` · `build` · `all` 쉼표 구분. 미지정 = 전체. `auth`·`checks` 는 항상 켜짐, 모르는 키는 stderr 경고 후 무시 (선택) |
+| `MIMI_SEED_APPROVAL` | 확정된 쓰기 작업(`confirm` 류 플래그 true)의 사용자 승인 방식 — `auto`(기본: elicitation 지원 클라이언트에서 승인 대화상자, 미지원이면 confirm 만으로 실행) · `required`(미지원 클라이언트에서 거부, 알 수 없는 값도 여기) · `off`(묻지 않음, 무인 실행 전용) (선택) |
 
 ---
 

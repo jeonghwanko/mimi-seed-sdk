@@ -52,7 +52,7 @@ jobs:
           "$RUNNER_TEMP/actionlint"
 
       - run: npm run plugin:check
-      - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs scripts/changelog-check.test.mjs
+      - run: node --test scripts/release-channel.test.mjs scripts/gen-docs.test.mjs scripts/changelog-check.test.mjs scripts/shrinkwrap.test.mjs scripts/release-marketplace.test.mjs
       - run: bash scripts/publish-if-new.test.sh
 
   # 테스트 전용 — 이 잡은 절대 publish 하지 않는다 (publish 잡이 따로 있다).
