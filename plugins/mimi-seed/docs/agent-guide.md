@@ -150,9 +150,11 @@ the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools 
    arguments plus `confirm: true`.
 5. Report the per-platform `results`. The same post (same platform, account, and content) is never posted twice, so
    if something `failed`, fix it if needed (e.g. that platform's own `threads.text`) and call again: platforms that
-   already posted are skipped. If a result is `unknown_outcome`, do **not** retry on your own. Ask the user to check
-   that platform; only if it is not there, call again with `resendUnknown: ["<platform>"]`. A failed pre-send check
-   (an expired token, a bad video file) means nothing was posted anywhere.
+   already posted are skipped. To post identical content again on purpose (a deliberate repost), get the user's
+   go-ahead and pass `repost: ["<platform>"]`. If a result is `unknown_outcome`, do **not** retry on your own: that
+   account stays blocked, even for edited content. Ask the user to check the platform; only if it is not there, call
+   again with `resendUnknown: ["<platform>"]`. A failed pre-send check (an expired token, a bad video file) means
+   nothing was posted anywhere; "another call is publishing to this account" means wait and call again.
 
 All three Meta platforms can use named local profiles. Save one with
 `mimi-seed auth facebook|instagram|threads --profile <id>`, then select it per project with `.mimi-seed.json` →

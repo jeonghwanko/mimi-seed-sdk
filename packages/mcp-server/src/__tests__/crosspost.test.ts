@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -43,8 +44,8 @@ vi.mock('../crosspost/ledger.js', async (original) => {
   return { ...actual, writeRecord: vi.fn(actual.writeRecord) };
 });
 
-import { decide, executePublish, planPublish, targetKey, type SocialPublishInput } from '../crosspost/tools.js';
-import { acquirePostLock, readRecord, recordPath, writeRecord, type PostRecord } from '../crosspost/ledger.js';
+import { accountKey, decide, executePublish, planPublish, targetKey, type SocialPublishInput } from '../crosspost/tools.js';
+import { acquireAccountLock, readPending, readRecord, recordPath, writeRecord, type PendingRecord, type PostRecord } from '../crosspost/ledger.js';
 import { TikTokApiError } from '../tiktok-business/api.js';
 
 type Hooks = { onPublishStart?: () => void; onUploadStart?: () => void };
@@ -59,6 +60,9 @@ const metaError = (status: number) => Object.assign(new Error(`Meta API ${status
 const timeout = () => new Error('timed out', { cause: Object.assign(new Error('t'), { name: 'TimeoutError' }) });
 
 const IMG = ['https://example.com/a.png', 'https://example.com/b.png'];
+/** Where ledger.ts keeps an account's lock (social-publish/accounts/<sha256(platform:account)>.lock). */
+const accountLockPath = (platform: string, account: string) =>
+  path.join(h.home, '.mimi-seed', 'social-publish', 'accounts', `${createHash('sha256').update(`${platform}:${account}`).digest('hex')}.lock`);
 let VIDEO = '';
 const CHANNEL = `UC${'a'.repeat(22)}`;
 
@@ -73,7 +77,8 @@ beforeEach(() => {
   }
   api.ytUpload.mockReset().mockResolvedValue({ videoId: 'vid1' });
   api.ttPublish.mockReset().mockResolvedValue({ publishId: 'pub1', state: 'pending' });
-  api.ttPlan.mockReset().mockReturnValue({ request: { post_info: { caption: 'planned caption' } } });
+  // Each plan id belongs to its own TikTok account, so tests can tell accounts apart.
+  api.ttPlan.mockReset().mockImplementation((planId: string) => ({ openId: `tt-${planId}`, request: { post_info: { caption: 'planned caption' } } }));
   api.requireAuth.mockReset().mockResolvedValue({});
   api.tokens.mockReset().mockReturnValue({ refresh_token: 'r', scope: 'https://www.googleapis.com/auth/youtube.force-ssl' });
   vi.mocked(writeRecord).mockReset().mockImplementation(ledger.realWrite as typeof writeRecord);
@@ -176,32 +181,42 @@ describe('planPublish', () => {
 });
 
 /**
- * The single "same post?" rule, one test per row of the table at the top of crosspost/tools.ts. Every behavior below
- * (plan, execute, resend) goes through decide(); a change to the rule must change a row here.
+ * The single rule, one test per row of the table at the top of crosspost/tools.ts. Every behavior below (plan,
+ * execute, resend) goes through decide(); a change to the rule must change a row here.
  */
-describe('decide() — the "same post?" table', () => {
+describe('decide() — the table', () => {
   const at = '2026-11-27T00:00:00.000Z';
   const rec = (state: PostRecord['state']): PostRecord => ({ state, at, id: 'p1', url: 'https://example.com/p1' });
+  const pend: PendingRecord = { postKey: 'other', state: 'unknown', at };
+  const opts = (resendUnknown: string[] = [], repost: string[] = []) =>
+    ({ resendUnknown, repost }) as Parameters<typeof decide>[3];
   it.each([
-    ['no record', null, [], 'send'],
-    ['failed', rec('failed'), [], 'send'],
-    ['posted', rec('posted'), [], 'skip'],
-    ['posted, even if named in resendUnknown', rec('posted'), ['threads'], 'skip'],
-    ['sending', rec('sending'), [], 'block'],
-    ['unknown', rec('unknown'), [], 'block'],
-    ['sending, checked by a person', rec('sending'), ['threads'], 'send'],
-    ['unknown, checked by a person', rec('unknown'), ['threads'], 'send'],
-    ['unknown, but resendUnknown names another platform', rec('unknown'), ['facebook'], 'block'],
-  ] as const)('%s → %s', (_label, record, resend, expected) => {
-    expect(decide('threads', record, resend).kind).toBe(expected);
+    ['account pending, new content', null, pend, opts(), 'block'],
+    ['account pending, posted content', rec('posted'), pend, opts(), 'block'],
+    ['account pending, even with repost', rec('posted'), pend, opts([], ['threads']), 'block'],
+    ['account pending, checked by a person', null, pend, opts(['threads']), 'send'],
+    ['account pending, resendUnknown names another platform', null, pend, opts(['facebook']), 'block'],
+    ['no record', null, null, opts(), 'send'],
+    ['failed', rec('failed'), null, opts(), 'send'],
+    ['posted', rec('posted'), null, opts(), 'skip'],
+    ['posted, named in resendUnknown only', rec('posted'), null, opts(['threads']), 'skip'],
+    ['posted, named in repost', rec('posted'), null, opts([], ['threads']), 'send'],
+    ['posted, repost names another platform', rec('posted'), null, opts([], ['facebook']), 'skip'],
+    ['sending record without a pending marker', rec('sending'), null, opts(), 'block'],
+    ['unknown record without a pending marker', rec('unknown'), null, opts(), 'block'],
+    ['unknown record, checked by a person', rec('unknown'), null, opts(['threads']), 'send'],
+  ] as const)('%s → %s', (_label, record, pending, options, expected) => {
+    expect(decide('threads', record, pending, options).kind).toBe(expected);
   });
 
-  it('a skip reports the earlier post; a block says how to resend after checking', () => {
-    expect(decide('threads', rec('posted'), [])).toEqual({
+  it('a skip reports the earlier post; a block says how to resend after checking; a repost says so', () => {
+    expect(decide('threads', rec('posted'), null, opts())).toEqual({
       kind: 'skip', outcome: { platform: 'threads', status: 'already_posted', id: 'p1', url: 'https://example.com/p1', at },
     });
-    const blocked = decide('threads', rec('unknown'), []);
-    expect(blocked.kind === 'block' && blocked.problem).toMatch(/resendUnknown: \["threads"\]/);
+    const blocked = decide('threads', null, pend, opts());
+    expect(blocked.kind === 'block' && blocked.problem).toMatch(/outcome is unknown .* resendUnknown: \["threads"\]/);
+    const repost = decide('threads', rec('posted'), null, opts([], ['threads']));
+    expect(repost.kind === 'send' && repost.note).toMatch(/posting it again \(repost\)/);
   });
 });
 
@@ -268,10 +283,10 @@ describe('executePublish', () => {
     await vi.waitFor(() => expect(api.fbPhoto).toHaveBeenCalledTimes(1));
     // A different call shape, same Facebook post, while the first is still publishing it.
     const second: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'Sale', imageUrls: [IMG[0]] };
-    expect(planPublish(second).posts[0].problems.join()).toMatch(/being published by another call/);
+    expect(planPublish(second).posts[0].problems.join()).toMatch(/publishing to this account right now/);
     // Even a plan made before the first call started cannot get past the lock.
     await expect(executePublish(second, { ok: true, posts: planPublish({ ...second, targets: ['facebook'] }).posts.map((p) => ({ ...p, problems: [] })) }))
-      .rejects.toThrow(/being published by another call/);
+      .rejects.toThrow(/publishing to this account right now/);
     finishFirst();
     expect((await a)[0].status).toBe('posted');
     expect(api.thText).not.toHaveBeenCalled(); // the second call sent nothing at all
@@ -279,14 +294,35 @@ describe('executePublish', () => {
     expect(api.fbPhoto).toHaveBeenCalledTimes(1);
   });
 
-  it('round 4 #1: an unknown outcome blocks only that exact post; a re-rendered video is a new post', async () => {
+  it('review 5 #1 (decision): after an unknown outcome, the account stays blocked even for edited content', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    const first: SocialPublishInput = { targets: ['threads'], text: 'Launch day' };
+    expect((await run(first))[0].status).toBe('unknown_outcome');
+    const edited: SocialPublishInput = { targets: ['threads'], text: 'Launch day (edited)' };
+    expect(planPublish(edited).posts[0].problems.join()).toMatch(/outcome is unknown — blocked even for different content/);
+    // A re-rendered video on a pending YouTube channel is blocked the same way.
     api.ytUpload.mockImplementationOnce(failAfterPublishStart(timeout()));
-    const week1: SocialPublishInput = { targets: ['youtube'], text: 'Launch', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
-    expect((await run(week1))[0].status).toBe('unknown_outcome');
-    expect(planPublish(week1).ok).toBe(false); // the same post: a person must check
+    const yt: SocialPublishInput = { targets: ['youtube'], text: 'Launch', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
+    expect((await run(yt))[0].status).toBe('unknown_outcome');
     writeFileSync(VIDEO, 'week two render, a different file');
-    expect(planPublish(week1).ok).toBe(true); // same path and text, different file → a different post
-    expect((await run(week1))[0].status).toBe('posted');
+    expect(planPublish(yt).ok).toBe(false);
+    // Another account is unaffected.
+    expect((await run({ targets: ['threads'], text: 'Launch day (edited)', threads: { profile: 'other-account' } }))[0].status).toBe('posted');
+    // After the person checked: resendUnknown sends the edited post and clears the account.
+    expect((await run({ ...edited, resendUnknown: ['threads'] }))[0].status).toBe('posted');
+    expect(readPending('threads', accountKey('threads', edited)!)).toBeNull();
+    expect((await run({ targets: ['threads'], text: 'Next week' }))[0].status).toBe('posted');
+  });
+
+  it('review 5 #3 (decision): repost sends content that already went out, and the plan says so', async () => {
+    const input: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'New episode out now!', imageUrls: [IMG[0]] };
+    await run(input);
+    expect((await run(input)).map((o) => o.status)).toEqual(['already_posted', 'already_posted']);
+    const again: SocialPublishInput = { ...input, repost: ['threads'] };
+    expect(planPublish(again).posts[1].action).toMatch(/posting it again \(repost\)/);
+    expect((await run(again)).map((o) => o.status)).toEqual(['already_posted', 'posted']);
+    expect(api.fbPhoto).toHaveBeenCalledTimes(1);
+    expect(api.thText).toHaveBeenCalledTimes(2);
   });
 
   it('an unknown outcome is resent only when named in resendUnknown, after a person checked', async () => {
@@ -294,8 +330,8 @@ describe('executePublish', () => {
     const input: SocialPublishInput = { targets: ['threads'], text: 'hi' };
     expect((await run(input))[0].status).toBe('unknown_outcome');
     const plan = planPublish(input);
-    expect(plan.posts[0].problems.join()).toMatch(/is unknown .* resendUnknown: \["threads"\]/);
-    await expect(executePublish(input, { ...plan, ok: true })).rejects.toThrow(/is unknown/); // re-checked under the lock
+    expect(plan.posts[0].problems.join()).toMatch(/outcome is unknown .* resendUnknown: \["threads"\]/);
+    await expect(executePublish(input, { ...plan, ok: true })).rejects.toThrow(/outcome is unknown/); // re-checked under the lock
     const resend: SocialPublishInput = { ...input, resendUnknown: ['threads'] };
     expect(planPublish(resend).posts[0].action).toMatch(/resending after a check/);
     expect((await run(resend))[0].status).toBe('posted');
@@ -316,7 +352,8 @@ describe('executePublish', () => {
     api.fbPhoto.mockImplementationOnce(failAfterPublishStart(new TypeError('fetch failed')));
     expect((await run({ targets: ['facebook'], text: 'b', imageUrls: [IMG[0]] }))[0].status).toBe('unknown_outcome');
     api.igImage.mockImplementationOnce(failAfterPublishStart(metaError(400)));
-    expect((await run({ targets: ['instagram'], text: 'c', imageUrls: [IMG[0]] }))[0].status).toBe('failed');
+    // Another account: the first Instagram account is pending after its unknown outcome.
+    expect((await run({ targets: ['instagram'], text: 'c', imageUrls: [IMG[0]], instagram: { profile: 'acct-c' } }))[0].status).toBe('failed');
   });
 
   it('TikTok: an unknown publish outcome is unknown; a known rejection is a clean failure', async () => {
@@ -403,7 +440,7 @@ describe('executePublish', () => {
     expect(outcomes[0]).toMatchObject({ platform: 'facebook', status: 'posted' });
     expect(outcomes[1]).toMatchObject({ platform: 'threads', status: 'failed' }); // nothing more is sent
     vi.mocked(writeRecord).mockImplementation(real);
-    expect(planPublish(input).posts[0].problems.join()).toMatch(/is unknown/); // still `sending`: never resent blindly
+    expect(planPublish(input).posts[0].problems.join()).toMatch(/outcome is unknown/); // still pending: never resent blindly
     expect(api.fbPhoto).toHaveBeenCalledTimes(1);
   });
 
@@ -414,55 +451,147 @@ describe('executePublish', () => {
   });
 });
 
-describe('post lock', () => {
-  const key = 'k';
-  const lockOf = () => recordPath('threads', key).replace(/\.json$/, '.lock');
+describe('review 5 — remaining findings', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+
+  it('#4: the YouTube file is checked against the identity the post key was built from', async () => {
+    const input: SocialPublishInput = { targets: ['facebook', 'youtube'], text: 'T', imageUrls: [IMG[0]], videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
+    // The render is still writing while the preflights run.
+    api.ytPrepare.mockImplementationOnce(async () => { writeFileSync(VIDEO, 'v2, written during the preflight'); return {}; });
+    const outcomes = await run(input);
+    expect(outcomes[1]).toMatchObject({ status: 'failed', error: expect.stringMatching(/video file changed after the pre-send check/) });
+    expect(api.fbPhoto).not.toHaveBeenCalled(); // a preflight failure sends nothing
+    expect(api.ytUpload).not.toHaveBeenCalled();
+  });
+
+  it('#5: if the account lock was taken over mid-run, that post is not sent', async () => {
+    const input: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'hi', imageUrls: [IMG[0]] };
+    api.fbPhoto.mockImplementationOnce(async () => {
+      // While Facebook posts, another call judges the Threads lock stale (e.g. after a suspend) and takes it.
+      writeFileSync(path.join(accountLockPath('threads', accountKey('threads', input)!), 'owner'), '2147483646');
+      return { id: 'f1' };
+    });
+    const outcomes = await run(input);
+    expect(outcomes[0]).toMatchObject({ status: 'posted' });
+    expect(outcomes[1]).toMatchObject({ status: 'failed', error: expect.stringMatching(/publishing to this account right now/) });
+    expect(api.thText).not.toHaveBeenCalled();
+  });
+
+  it('#8: resendUnknown is not honoured while another call is still publishing to that account', () => {
+    const input: SocialPublishInput = { targets: ['threads'], text: 'hi', resendUnknown: ['threads'] };
+    const lock = acquireAccountLock('threads', accountKey('threads', input)!);
+    try {
+      const plan = planPublish(input);
+      expect(plan.ok).toBe(false);
+      expect(plan.posts[0].problems.join()).toMatch(/publishing to this account right now/);
+    } finally {
+      lock.release();
+    }
+  });
+
+  it('#10: a post that is only skipped takes no lock, so another call on that account does not block it', async () => {
+    const input: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'Launch', imageUrls: [IMG[0]] };
+    await run({ ...input, targets: ['facebook'] });
+    const lock = acquireAccountLock('facebook', accountKey('facebook', input)!); // an unrelated call on that Page
+    try {
+      expect((await run(input)).map((o) => o.status)).toEqual(['already_posted', 'posted']);
+    } finally {
+      lock.release();
+    }
+  });
+
+  it('#9: an expired Meta token or a missing TikTok scope fails the preflight; nothing is sent', async () => {
+    api.thAccount.mockRejectedValueOnce(new Error('Threads token revoked'));
+    const outcomes = await run({ targets: ['facebook', 'threads'], text: 'hi', imageUrls: [IMG[0]] });
+    expect(outcomes[1]).toMatchObject({ status: 'failed', error: expect.stringMatching(/Threads token revoked/) });
+    expect(api.fbPhoto).not.toHaveBeenCalled();
+    api.ttConfig.mockRejectedValueOnce(new Error('no video.publish scope'));
+    const tt = await run({ targets: ['threads', 'tiktok'], text: 'x', tiktok: { planId: 'plan-a' } });
+    expect(tt[1]).toMatchObject({ error: expect.stringMatching(/no video.publish scope/) });
+    expect(api.thText).not.toHaveBeenCalled();
+  });
+
+  it('#9: a < or > in the YouTube title or a tag is caught in the plan', () => {
+    const base = { targets: ['youtube'] as SocialPublishInput['targets'], videoFilePath: VIDEO };
+    expect(problemsOf({ ...base, text: 'We <3 our users', youtube: { expectedChannelId: CHANNEL } }).youtube.join()).toMatch(/cannot contain < or >/);
+    expect(problemsOf({ ...base, text: 'T', youtube: { expectedChannelId: CHANNEL, tags: ['<3 launch'] } }).youtube.join()).toMatch(/cannot contain < or >/);
+  });
+
+  it('#9: a YouTube error before the upload (channel mismatch) or an auth failure is a clean, retryable failure', async () => {
+    const input: SocialPublishInput = { targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL, privacyStatus: 'public' } };
+    api.ytUpload.mockRejectedValueOnce(new Error('YouTube channel mismatch'));
+    expect((await run(input))[0]).toMatchObject({ status: 'failed', error: 'YouTube channel mismatch' });
+    api.requireAuth.mockRejectedValueOnce(new Error('not signed in'));
+    expect((await run(input))[0]).toMatchObject({ status: 'failed', error: 'Pre-send check failed (youtube): not signed in' });
+    expect((await run(input))[0].status).toBe('posted');
+    expect(api.ytUpload).toHaveBeenLastCalledWith({}, expect.objectContaining({ privacyStatus: 'public', confirmVisible: true }), expect.anything(), expect.anything());
+  });
+
+  it('#9: TikTok publishes the approved plan', async () => {
+    expect(await run({ targets: ['tiktok'], text: 'ignored', tiktok: { planId: 'plan-ok' } })).toEqual([{ platform: 'tiktok', status: 'posted', id: 'pub1' }]);
+    expect(api.ttPublish).toHaveBeenCalledWith('plan-ok', true, { onPublishStart: expect.any(Function) });
+  });
+
+  it('if writing the post record fails after the account was marked, the account is not left pending', async () => {
+    const real = ledger.realWrite as typeof writeRecord;
+    vi.mocked(writeRecord).mockImplementationOnce(() => { throw new Error('EACCES'); });
+    const input: SocialPublishInput = { targets: ['threads'], text: 'hi' };
+    expect((await run(input))[0]).toMatchObject({ status: 'failed' });
+    vi.mocked(writeRecord).mockImplementation(real);
+    expect(readPending('threads', accountKey('threads', input)!)).toBeNull();
+    expect((await run(input))[0].status).toBe('posted');
+  });
+});
+
+describe('account lock', () => {
+  const account = 'user:1';
+  const lockOf = () => accountLockPath('threads', account);
   const leaveLock = (owner: string) => {
     mkdirSync(lockOf(), { recursive: true });
     writeFileSync(path.join(lockOf(), 'owner'), owner);
   };
 
-  it('a live holder blocks; release frees it', () => {
-    const release = acquirePostLock('threads', key);
-    expect(() => acquirePostLock('threads', key)).toThrow(/being published by another call/);
-    release();
-    expect(() => acquirePostLock('threads', key)()).not.toThrow();
+  it('a live holder blocks; release frees it; confirmHeld passes while it is ours', () => {
+    const lock = acquireAccountLock('threads', account);
+    expect(() => lock.confirmHeld()).not.toThrow();
+    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account right now/);
+    lock.release();
+    expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
   });
 
-  it('a lock whose owner process is gone is replaced', () => {
+  it('a lock whose owner process is gone, or that names our pid without us holding it, is replaced', () => {
     leaveLock('2147483646');
-    expect(() => acquirePostLock('threads', key)()).not.toThrow();
-  });
-
-  it('a lock naming our own pid that we do not hold (an earlier run that died) is replaced', () => {
+    expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
     leaveLock(String(process.pid));
-    expect(() => acquirePostLock('threads', key)()).not.toThrow();
+    expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
   });
 
   it('a lock not refreshed for 30 minutes is stale even if a process with its pid is alive (pid reuse)', () => {
     leaveLock(String(process.ppid));
-    expect(() => acquirePostLock('threads', key)).toThrow(/being published/);
+    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account/);
     const old = (Date.now() - 31 * 60 * 1000) / 1000;
     utimesSync(lockOf(), old, old);
-    expect(() => acquirePostLock('threads', key)()).not.toThrow();
+    expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
   });
 
-  it('round 4 #6: a stale lock is not replaced while a live breaker is held; a dead breaker is cleared and retried', () => {
+  it('review 5 #2: a dead breaker is moved aside and this call stops; the next call proceeds', () => {
     leaveLock('2147483646');
     mkdirSync(`${lockOf()}.break`);
-    expect(() => acquirePostLock('threads', key)).toThrow(/being published/);
+    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account/); // live breaker
     const old = (Date.now() - 2 * 60 * 1000) / 1000;
     utimesSync(`${lockOf()}.break`, old, old);
-    expect(() => acquirePostLock('threads', key)()).not.toThrow(); // not "already running" when nothing runs
+    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account/); // cleared, then stops
+    expect(existsSync(`${lockOf()}.break`)).toBe(false);
+    expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
   });
 
-  it('round 4 #8: release removes the lock only while it is still ours', () => {
-    const release = acquirePostLock('threads', key);
-    // Another caller replaced it (e.g. after we were suspended past the stale age).
+  it('release removes the lock only while it is still ours; confirmHeld then refuses', () => {
+    const lock = acquireAccountLock('threads', account);
     rmSync(lockOf(), { recursive: true });
-    leaveLock('2147483646');
-    release();
+    leaveLock('2147483646'); // replaced by another caller
+    expect(() => lock.confirmHeld()).toThrow(/publishing to this account/);
+    lock.release();
     expect(existsSync(lockOf())).toBe(true);
-    expect(readRecord('threads', key)).toBeNull();
+    expect(readRecord('threads', 'x')).toBeNull();
   });
 });
