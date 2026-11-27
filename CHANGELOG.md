@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `mimi-seed auth social` connects every posting channel (YouTube, Facebook, Instagram, Threads, and TikTok) in one pass. Anything already connected is skipped, and expired or expiring tokens are reconnected. Setup flags such as `--reconnect threads` pass through.
 - YouTube upload now appears in `mimi-seed setup`, `mimi-seed doctor`, and `mimi-seed auth status --all`. Connecting it signs in to a separate `youtube` Google profile (`mimi-seed auth login --profile youtube --domains youtube`), so a channel owned by a different Google account never replaces your default login for Play and Firebase. It counts as connected when the default login or any named profile has the YouTube upload permission. Pass `profile: "youtube"` to the `youtube_*` tools.
 
+- `social_publish` posts one announcement to several platforms (Facebook, Instagram, Threads, YouTube, and TikTok) in a single call. Without `confirm` it returns a plan for each platform and lists anything that would block it. Nothing is posted anywhere unless every platform passes. After you approve, results come back per platform. Calling again with the same `requestId` resends only the platforms that failed. A platform whose outcome is unknown (a timeout, a dropped connection, or a YouTube upload that failed after it started) is never resent automatically, so a post cannot go out twice. Reusing a `requestId` for different content is refused instead of being skipped as "already posted". The record is kept in `~/.mimi-seed/social-publish/`.
+
 ### Changed
 
 - The first sign-in of a new named Google profile reuses the OAuth client saved by your default login, so you no longer have to set `MIMI_SEED_GOOGLE_CLIENT_ID` / `MIMI_SEED_GOOGLE_CLIENT_SECRET` again.
@@ -31,7 +33,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Tool changes
 
-- none
+- Added `social_publish` (new `crosspost` domain, included in the `social` toolset).
 
 ## [0.25.3] - 2026-11-27
 

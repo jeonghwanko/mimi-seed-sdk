@@ -100,6 +100,24 @@ Facebook 멀티포토:
 도구 결과의 media ID와 permalink를 보관한다. permalink 조회가 best-effort라 비어 있을 수 있으므로, 필요하면
 플랫폼 앱/페이지에서 최신 게시물을 직접 확인한다. 이미지·영상·캐러셀은 Meta 처리 때문에 몇 초 이상 걸릴 수 있다.
 
+## 5. 여러 플랫폼에 한 번에 게시
+
+같은 공지를 여러 플랫폼에 올리려면 한 번에 요청한다.
+
+```text
+"버전 2.4 출시" 를 https://cdn.example.com/releases/2.4.0/hero.png 와 함께 Facebook, Instagram, Threads 에 올려줘.
+먼저 계획을 보여줘.
+```
+
+에이전트는 `social_publish`를 쓴다. 먼저 플랫폼별 계획과 게시를 막는 문제(500자를 넘는 Threads 게시물, 이미지
+없는 Instagram, 연결되지 않은 플랫폼 등)를 보여준다. 모든 플랫폼이 통과하고 사용자가 승인하기 전에는 어디에도
+게시하지 않는다. 승인 후에는 플랫폼별 결과를 받는다. 실패한 곳이 있으면 같은 게시물로 다시 요청할 때 그
+플랫폼만 다시 보낸다. 결과를 알 수 없는 플랫폼(타임아웃 등)은 자동으로 다시 보내지 않는다. 이미 게시됐을 수
+있으니 그 플랫폼을 먼저 확인한다.
+
+YouTube는 로컬 영상 파일과 채널 ID가 필요하고, 따로 요청하지 않으면 비공개로 올라간다. TikTok은
+`tiktok_business_plan_video_post`로 계획을 먼저 만들어야 한다.
+
 ## 토큰 만료
 
 - Facebook/Instagram: 오류에 표시된 `mimi-seed auth <platform>`으로 새 토큰 연결

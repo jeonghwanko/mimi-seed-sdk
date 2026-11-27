@@ -1,7 +1,7 @@
 # Tool catalog
 
 <!-- generated:catalog-total:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-**256 tools across 24 domains** — per-domain counts below.
+**257 tools across 25 domains** — per-domain counts below.
 <!-- generated:catalog-total:end -->
 
 > The MCP server's "entities". One row per domain → register file → tools, with **W** (write) and **D**
@@ -44,6 +44,7 @@
 | GCP Billing | `registers/billing.ts` | 4 |
 | Threads | `registers/threads.ts` | 7 |
 | TikTok Business | `registers/tiktok.ts` | 7 |
+| Cross-post | `registers/crosspost.ts` | 1 |
 | Checks / Risk | `registers/checks.ts` | 5 |
 | Instagram | `registers/instagram.ts` | 4 |
 | Android signing | `registers/android.ts` | 3 |
@@ -51,7 +52,7 @@
 | AI | `registers/ai.ts` | 2 |
 | Video production | `registers/video.ts` | 15 |
 | YouTube | `registers/youtube.ts` | 10 |
-| **Total** | **24 modules** | **256** |
+| **Total** | **25 modules** | **257** |
 <!-- generated:catalog-counts:end -->
 
 <!-- generated:catalog-domain:playstore:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
@@ -147,6 +148,7 @@
 | Facebook (`facebook.ts`) | `facebook_list_pages` · `facebook_get_page` · `facebook_current_config` · **W** `facebook_save_config` · **D** `facebook_post_photo` (public) · **D** `facebook_post_multi_photo` (public) |
 | Instagram (`instagram.ts`) | `instagram_get_account` · **W** `instagram_save_config` · **D** `instagram_post_image` (public) · **D** `instagram_post_carousel` (public) |
 | Threads (`threads.ts`) — Meta Threads Graph API, **text-first** (IG 와 별개 계정·토큰) | `threads_get_account` · `threads_current_config` · **W** `threads_save_config` · **W** `threads_refresh_token` · **D** `threads_post` (public; text or image) · **D** `threads_post_video` (public; public video URL) · **D** `threads_post_carousel` (public; 2–20) |
+| Cross-post (`crosspost.ts`) — one post to Facebook / Instagram / Threads / YouTube / TikTok through the per-platform functions | **D** `social_publish` (dry-run plan by default; nothing posts if any target has a problem; per-platform results; a same-requestId retry skips posted targets and never resends an unknown outcome) |
 <!-- generated:catalog-table:cloud:end -->
 
 ## Build / CI / signing

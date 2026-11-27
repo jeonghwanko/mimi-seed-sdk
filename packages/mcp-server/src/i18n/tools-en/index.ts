@@ -18,6 +18,7 @@ import iam from './iam.js';
 import instagram from './instagram.js';
 import jenkins from './jenkins.js';
 import playstore from './playstore.js';
+import social from './social.js';
 import threads from './threads.js';
 import tiktok from './tiktok.js';
 import video from './video.js';
@@ -50,6 +51,7 @@ export const TOOL_TEXT_EN_SOURCES: Readonly<Record<string, Readonly<Record<strin
   instagram,
   jenkins,
   playstore,
+  social,
   threads,
   tiktok,
   video,
