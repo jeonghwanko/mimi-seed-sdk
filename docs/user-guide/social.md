@@ -116,16 +116,21 @@ The agent uses `social_publish`. First it shows a plan for each platform and any
 Threads post over 500 characters, Instagram without an image, a platform that is not connected). Nothing is posted
 anywhere until every platform passes and you approve. After that you get a result per platform. If one failed, asking
 again with the same post resends only that platform; platforms that already posted are skipped. The same post (same
-platform, account, and content) is never posted twice.
+platform, account, and content) is never posted twice unless you ask for a repost (below).
 
 If a platform's result is unknown (for example, a timeout), it is not resent automatically, and that account is
 blocked for every post, edited ones included, until you check it. Look at the platform, then tell the agent what you
 found:
 
-| You see | Tell the agent | What happens |
+| You see | Tell the agent | What happens when you repeat the same post |
 |---|---|---|
 | The post is live | "It's posted" | It is recorded as posted (`markPosted`); nothing is sent |
 | The post is not there | "It isn't there, send it again" | It is sent again (`resendUnknown`) |
+
+This holds when you repeat the **same** post. Either answer lifts the block on the account, so if you edited the
+text, images, or video in the meantime, the edited version is a different post and is sent. Saying "it's posted"
+while asking for an edited post therefore leaves both on the platform. To record the old one and send nothing, ask
+with the original content.
 
 To post identical content again on purpose, say so ("post it again"); the agent passes `repost`. Without that, a
 repeat request is skipped.

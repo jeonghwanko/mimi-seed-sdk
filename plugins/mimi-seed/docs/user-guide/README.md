@@ -30,7 +30,7 @@ launch**. Start with the outcome you want instead of memorizing tool names.
 | Operate Firebase, AdMob, GA4, or BigQuery | [Cloud and analytics](cloud-operations.md) |
 | Produce a video and publish it to YouTube | [Video production](video.md) |
 | Set up the social channels for the first time | [Social setup checklist](social-setup-checklist.md) |
-| Post to Facebook, Instagram, Threads, or TikTok — one at a time or all at once | [Social publishing](social.md) |
+| Post to Facebook, Instagram, Threads, YouTube, or TikTok — one at a time or all at once | [Social publishing](social.md) |
 | Use Claude Code, Codex, and team automation safely | [Teams, security, and automation](team-security.md) |
 
 ## Three surfaces
