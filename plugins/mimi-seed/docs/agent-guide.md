@@ -158,8 +158,13 @@ the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools 
    - If a result is `unknown_outcome`, do **not** retry on your own: that account stays blocked, even for edited
      content. Ask the user to check the platform. If the post **is** there, pass
      `markPosted: [{ "platform": "<platform>", "at": "<at the plan shows>" }]` (it is recorded as posted, nothing is
-     sent); if it is **not**, pass `resendUnknown` with the same shape (it also resends an unknown repost). On TikTok,
-     which never republishes a plan, a resend needs a new plan sent with that `resendUnknown`. `markPosted` with
+     sent); if it is **not**, pass `resendUnknown` with the same shape (it also resends an unknown repost). Both lift
+     the account's block: send them with the **same** content as the unknown send. With edited content, the edited
+     post is a different post: with `markPosted` it goes out as well as the old one being recorded; with
+     `resendUnknown` it goes out **instead of** the old one, which stays unresolved (a later call with the old content
+     is blocked again). Say so in the plan you show and get the user's go-ahead. The exception is TikTok, which never
+     republishes a plan: there a resend is always a new plan of the same video, sent with that `resendUnknown`, and
+     needs no warning. `markPosted` with
      `confirm: true` is recorded even if the plan is blocked by something else (e.g. the rendered video was moved);
      the result lists it under `marks`.
    A `posted` result with a `warning` that it could not be recorded is handled the same way (`markPosted`); a

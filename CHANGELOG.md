@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The social publishing guide now says that `markPosted` and `resendUnknown` send nothing extra only when you repeat the same post: once the block is lifted, an edited post is sent. It also notes that `repost` is the one exception to "never posted twice". The user-guide index now lists YouTube, and the website's channel card names all five platforms.
+
 ## [0.25.6] - 2026-11-28
 
 ### Changed
