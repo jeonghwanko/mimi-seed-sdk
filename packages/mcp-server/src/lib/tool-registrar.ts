@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { catalog } from '#core/lang.js';
 import type { ToolManifest } from './package-root.js';
 import type { ToolsetSelection } from './toolsets.js';
+import { approvalMode, clientCanElicit, requestHumanApproval, type ApprovalMode } from './human-approval.js';
 
 /**
  * 도구 등록의 단일 관문.
@@ -20,6 +21,9 @@ import type { ToolsetSelection } from './toolsets.js';
  *    "자기 confirm 이 모든 파괴적 경로를 막는다" 고 선언한 도구만 주입을 생략하고, 선언과 스키마가
  *    어긋나면 throw — 파괴적 도구가 가드 없이 등록되는 경로를 구조적으로 없앤다.
  * 3. **toolset 필터** — MIMI_SEED_TOOLSETS 로 꺼진 도구는 등록하지 않는다 (도메인 + alsoInToolsets 소속 기준).
+ * 3b. **사람 승인** — 확인 플래그(`confirm`, `confirm<Xxx>`)가 true 로 온 호출과 manifest `approval` 도구의 모든 호출은
+ *    실행 직전에 MCP elicitation 으로 사용자에게 직접 묻는다 (lib/human-approval.ts). 모델이 채운 confirm 만으로는
+ *    실행되지 않는다.
  * 4. **폐기 예정 별칭** — manifest `deprecated` 의 옛 이름을 정식 도구의 스키마·핸들러로
  *    함께 등록한다 (설명에 [DEPRECATED …] 접두).
  *
@@ -40,6 +44,8 @@ export interface ToolMeta {
    * 레지스트라는 이런 도구에만 가드 주입을 생략한다 — 선언 없이 confirm 파라미터만 있으면 throw.
    */
   ownGate: boolean;
+  /** 확인 플래그와 무관하게 매 호출 사용자 승인을 받는다 (manifest `approval`). */
+  approval: boolean;
   /** 이 이름이 폐기 예정 별칭이면 정식 도구 이름. */
   deprecatedFor?: string;
   /** 이 도구를 가리키는 폐기 예정 별칭들. */
@@ -64,6 +70,7 @@ export function buildToolIndex(manifest: ToolManifest): Map<string, ToolMeta> {
     const local = new Set(entry.local ?? []);
     const idempotent = new Set(entry.idempotent ?? []);
     const ownGate = new Set(entry.ownGate ?? []);
+    const approval = new Set(entry.approval ?? []);
     for (const name of entry.tools) {
       const kind: ToolKind = destructive.has(name) ? 'destructive' : write.has(name) ? 'write' : 'read';
       index.set(name, {
@@ -73,6 +80,7 @@ export function buildToolIndex(manifest: ToolManifest): Map<string, ToolMeta> {
         local: local.has(name),
         idempotent: kind === 'read' || idempotent.has(name),
         ownGate: ownGate.has(name),
+        approval: approval.has(name),
         deprecatedFor: manifest.deprecated?.[name],
         aliases: aliasesOf.get(name) ?? [],
       });
@@ -191,13 +199,64 @@ export function previewValue(key: string, value: unknown): string {
   return raw.length > 200 ? `${raw.slice(0, 200)}… (${P().chars(raw.length)})` : raw;
 }
 
+/**
+ * 확인 플래그인가 — `confirm` 또는 `confirm` + 대문자로 시작하는 이름 (`confirmPublish`, `confirmCreate` …).
+ * 세 이름만 보던 시절 `confirmCreate` 같은 새 플래그가 승인 게이트를 조용히 비껴갔다. ownGate 선언 검사는
+ * 여전히 CONFIRM_KEYS 로 한다 (그 규칙은 파괴적 도구의 가드 모양에 대한 것).
+ */
+export function isConfirmKey(key: string): boolean {
+  return /^confirm(?:[A-Z]\w*)?$/.test(key);
+}
+
+/** 인자 → `  key: value` 줄 (비밀 키는 가리고, 확인 플래그 자체는 뺀다). 비면 빈 배열. */
+export function previewArgLines(args: Record<string, unknown>): string[] {
+  return Object.entries(args)
+    .filter(([k, v]) => !isConfirmKey(k) && v !== undefined)
+    .map(([k, v]) => `  ${k}: ${previewValue(k, v)}`);
+}
+
+/**
+ * 줄바꿈·제어 문자에 더해, 화면에서 안 보이거나 글자 순서를 뒤집는 문자(zero-width, bidi override/isolate, BOM,
+ * soft hyphen, 줄/문단 구분자)를 `\uXXXX` 로 보이게 만든다. JSON.stringify 는 U+0020 미만만 이스케이프한다.
+ */
+const INVISIBLE = /[\u007F-\u009F\u00AD\u061C\u180E\u200B-\u200F\u2028-\u202E\u2060-\u2069\uFEFF]/g;
+const showInvisible = (s: string) => s.replace(INVISIBLE, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+
+/** 승인 대화상자의 값 하나가 넘으면 가운데를 생략한다 — 앞 HEAD + 뒤 TAIL 은 항상 보인다. */
+const APPROVAL_VALUE_MAX = 1500;
+const APPROVAL_VALUE_HEAD = 1000;
+const APPROVAL_VALUE_TAIL = 300;
+
+/**
+ * 승인 대화상자용 인자 줄. dry-run preview 와 달리 **사람이 마지막으로 보는 화면**이라 모델이 고른 값으로
+ * 화면을 위조할 수 없어야 한다: 문자열은 JSON 리터럴로(따옴표 + `\n` 이스케이프 — 값 안의 줄바꿈으로 가짜
+ * `key: value` 줄이나 "검증됨" 문구를 만들 수 없다), 보이지 않는 문자는 `\uXXXX` 로, 긴 값은 앞뒤를 보이고
+ * 생략 사실과 길이를 밝힌다 (200자에서 자르던 시절엔 뒤쪽에 숨긴 URL·명령이 안 보였다).
+ */
+export function approvalArgLines(args: Record<string, unknown>): { lines: string[]; truncated: boolean } {
+  let truncated = false;
+  const lines = Object.entries(args)
+    .filter(([k, v]) => !isConfirmKey(k) && v !== undefined)
+    .map(([k, v]) => {
+      if (SECRET_KEY.test(k)) return `  ${k}: (redacted)`;
+      let shown = showInvisible(JSON.stringify(redactNested(v)) ?? 'undefined');
+      if (shown.length > APPROVAL_VALUE_MAX) {
+        truncated = true;
+        const hidden = shown.length - APPROVAL_VALUE_HEAD - APPROVAL_VALUE_TAIL;
+        shown = `${shown.slice(0, APPROVAL_VALUE_HEAD)} …[${hidden}/${shown.length}]… ${shown.slice(-APPROVAL_VALUE_TAIL)}`;
+      }
+      return `  ${k}: ${shown}`;
+    });
+  return { lines, truncated };
+}
+
 export function confirmPreview(name: string, args: Record<string, unknown>): CallToolResult {
-  const entries = Object.entries(args).filter(([k, v]) => k !== 'confirm' && v !== undefined);
+  const argLines = previewArgLines(args);
   const lines = [
     `${CONFIRM_PREVIEW_MARKER} — ${P().notRun(name)}`,
     '',
     P().args,
-    ...(entries.length ? entries.map(([k, v]) => `  ${k}: ${previewValue(k, v)}`) : [`  ${P().none}`]),
+    ...(argLines.length ? argLines : [`  ${P().none}`]),
     '',
     P().next,
   ];
@@ -225,6 +284,8 @@ export interface ToolRegistrar {
   /** 이 서버에서 켜진 toolset (mimi_seed_status 가 보고한다). */
   readonly toolsets: ToolsetSelection;
   readonly manifest: ToolManifest;
+  /** 승인 게이트가 지금 살아 있는가 — 모드 + 연결된 클라이언트의 elicitation 지원 (mimi_seed_status 가 보고한다). */
+  approvalStatus(): { mode: ApprovalMode; clientCanElicit: boolean };
 }
 
 type AnyHandler = (args: Record<string, unknown>, extra: unknown) => CallToolResult | Promise<CallToolResult>;
@@ -239,9 +300,12 @@ export function createToolRegistrar(
      * 번역표의 키와 맞지 않는다. 파라미터 설명은 buildServer 가 tools/list 응답에서 바꾼다. 생략하면 원문 그대로.
      */
     translate?: (text: string) => string;
+    /** `MIMI_SEED_APPROVAL` 을 읽을 환경 (buildServer({ env }) 와 같은 것). 생략하면 process.env. */
+    env?: NodeJS.ProcessEnv;
   },
 ): ToolRegistrar {
   const { manifest, toolsets } = options;
+  const env = options.env ?? process.env;
   const t = options.translate ?? ((text: string) => text);
   const index = buildToolIndex(manifest);
 
@@ -273,6 +337,7 @@ export function createToolRegistrar(
   return {
     toolsets,
     manifest,
+    approvalStatus: () => ({ mode: approvalMode(env), clientCanElicit: clientCanElicit(server) }),
     tool(name, description, shape, handler, outputSchema) {
       const meta = metaOf(name);
       if (meta.deprecatedFor) {
@@ -311,6 +376,27 @@ export function createToolRegistrar(
         finalHandler = async (args, extra) => {
           if (args.confirm !== true) return confirmPreview(name, args);
           return run(args, extra);
+        };
+      }
+
+      // 사람 승인 게이트 — 확인 플래그(confirm* — isConfirmKey)를 가진 **모든** 도구(레지스트라 가드 · ownGate · 자체 확인을
+      // 가진 쓰기 도구)에서, 플래그가 true 로 온 호출만 실행 직전에 사용자에게 직접 묻는다. 플래그 없는 호출은 그대로.
+      // manifest `approval` 도구는 플래그와 무관하게 매 호출 묻는다 — 플래그 없는 경로가 위험한 도구
+      // (자격증명 목적지 변경 `*_save_config`, 새 id 로 비밀 업로드, 배포 워크플로 시작).
+      const confirmKeys = Object.keys(finalShape).filter(isConfirmKey);
+      if (meta.approval || confirmKeys.length > 0) {
+        const gated = finalHandler;
+        const title = annotationsFor(meta).title;
+        finalHandler = async (args, extra) => {
+          if (!meta.approval && !confirmKeys.some((k) => args[k] === true)) return gated(args, extra);
+          const signal = (extra as { signal?: AbortSignal } | undefined)?.signal;
+          const { lines, truncated } = approvalArgLines(args);
+          const refusal = await requestHumanApproval(
+            server,
+            { name, title, args, argLines: lines, truncated },
+            { signal, mode: approvalMode(env) },
+          );
+          return refusal ?? gated(args, extra);
         };
       }
 

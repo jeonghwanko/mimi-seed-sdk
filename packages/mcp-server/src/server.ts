@@ -49,6 +49,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv;
       'If the user starts Mimi Seed without a specific task, show mimi-seed://tools/menu and let them choose one or more services by number, name, or free-form description. Read mimi-seed://tools/menu/{areas} for the selected comma-separated service IDs before loading tools for the task.',
       'For a targeted read, start with the domain tool. Use mimi_seed_status for onboarding, connection diagnostics, or unresolved authentication errors.',
       'For preview-gated writes, get the preview and explicit approval before confirming the same operation.',
+      'A confirmed call may also open an approval dialog for the user; if it returns ⛔ (not approved), nothing changed — do not retry, ask the user.',
     ].join(' '),
   });
 
@@ -62,7 +63,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv;
   // 원문은 한국어이고 en 이면 i18n/tools-en 번역표로 바꾼다 (lib/tool-text.ts). 서버 수명 동안 고정이다.
   const toolLang = options.lang ?? resolveLang();
   const translate = toolTextTranslator(toolLang);
-  const registrar = createToolRegistrar(server, { manifest, toolsets, translate });
+  const registrar = createToolRegistrar(server, { manifest, toolsets, translate, env: options.env ?? process.env });
 
   registerFirebaseTools(registrar);
   registerAdmobTools(registrar);

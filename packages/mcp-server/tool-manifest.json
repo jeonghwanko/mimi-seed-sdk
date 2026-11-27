@@ -116,6 +116,9 @@
       ],
       "idempotent": [
         "jenkins_upload_playstore_sa"
+      ],
+      "approval": [
+        "jenkins_upload_playstore_sa"
       ]
     },
     "appstore": {
@@ -362,6 +365,10 @@
       ],
       "idempotent": [
         "ci_save_config"
+      ],
+      "approval": [
+        "ci_save_config",
+        "ci_trigger_build"
       ]
     },
     "facebook": {
@@ -388,6 +395,9 @@
         "facebook_current_config"
       ],
       "idempotent": [
+        "facebook_save_config"
+      ],
+      "approval": [
         "facebook_save_config"
       ]
     },
@@ -488,6 +498,9 @@
       ],
       "idempotent": [
         "googleads_save_config"
+      ],
+      "approval": [
+        "googleads_save_config"
       ]
     },
     "gsc": {
@@ -575,6 +588,9 @@
       "local": [],
       "idempotent": [
         "instagram_save_config"
+      ],
+      "approval": [
+        "instagram_save_config"
       ]
     },
     "jenkins": {
@@ -617,6 +633,11 @@
         "jenkins_create_credential",
         "jenkins_upload_keystore",
         "jenkins_update_job"
+      ],
+      "approval": [
+        "jenkins_save_config",
+        "jenkins_create_credential",
+        "jenkins_upload_keystore"
       ]
     },
     "playstore": {
@@ -737,6 +758,9 @@
         "threads_current_config"
       ],
       "idempotent": [
+        "threads_save_config"
+      ],
+      "approval": [
         "threads_save_config"
       ]
     },

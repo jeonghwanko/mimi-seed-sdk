@@ -42,6 +42,10 @@ echo "bin $1" >> "$TRACE"
 if [ "$SCENARIO" = wrong-version ]; then echo 0.0.0; else echo "$TEST_VERSION"; fi
 BIN
     chmod +x node_modules/.bin/mimi-seed-mcp
+    if [ "$SCENARIO" != shrinkwrap-missing ]; then
+      mkdir -p node_modules/@example/mimi-seed-mcp && echo '{}' > node_modules/@example/mimi-seed-mcp/npm-shrinkwrap.json
+    fi
+    if [ "$SCENARIO" = shrinkwrap-dev ]; then mkdir -p node_modules/typescript; fi
     ;;
   *) exit 2 ;;
 esac
@@ -57,7 +61,7 @@ chmod +x "$scratch/bin/npm" "$scratch/bin/gh" "$scratch/bin/sleep"
 run_release() (
   export SCENARIO="$1" TEST_VERSION="$2" PACKAGE_DIR="$scratch/package"
   cd "$PACKAGE_DIR"
-  printf '{"name":"@example/mimi-seed-mcp","version":"%s"}\n' "$TEST_VERSION" > package.json
+  printf '{"name":"@example/mimi-seed-mcp","version":"%s","files":["dist","npm-shrinkwrap.json"]}\n' "$TEST_VERSION" > package.json
   : > "$TRACE"
   bash "$ROOT/.github/scripts/publish-if-new.sh" mcp-server
 )
@@ -90,5 +94,11 @@ grep -q '^gh release create mcp-server-v1.2.4-next.1 .*--prerelease$' "$TRACE"
 if run_release wrong-version 1.2.3 > "$scratch/wrong-version.log" 2>&1; then exit 1; fi
 grep -q '^bin --version$' "$TRACE"
 if grep -q '^gh ' "$TRACE"; then exit 1; fi
+
+for scenario in shrinkwrap-missing shrinkwrap-dev; do
+  if run_release "$scenario" 1.2.3 > "$scratch/$scenario.log" 2>&1; then exit 1; fi
+  grep -q 'npm-shrinkwrap\|devDependencies' "$scratch/$scenario.log"
+  if grep -q '^gh ' "$TRACE"; then exit 1; fi
+done
 
 echo 'npm publication verification tests passed'

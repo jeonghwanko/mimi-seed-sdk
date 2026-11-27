@@ -12,6 +12,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PACKAGE, isStable, withMcpPin } from './release-marketplace.mjs';
+
+/** 플러그인 서버 고정 — 루트 원본과 Codex 번들 복사본 (sync-codex-plugin 이 복사하지만 version:set 직후에도 맞게). */
+const PINNED_MCP = ['.mcp.json', 'plugins/mimi-seed/.mcp.json'];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -104,5 +108,15 @@ for (const f of VERSIONED_LOCKS) {
   const before = lockVersion(f);
   writeLockVersion(f, next);
   console.log(`  ✓ ${f.padEnd(34)} ${before} → ${next}`);
+}
+// 플러그인이 띄우는 서버도 같은 버전으로 — 안정 버전만 (프리릴리스는 Codex 가 main 을 그대로 읽어 베타를 받게 된다).
+// 사용자에게 가는 시점은 npm 배포 뒤 `npm run release:marketplace` 가 정한다 (scripts/release-marketplace.mjs).
+if (isStable(next)) {
+  for (const f of PINNED_MCP) {
+    writeFileSync(path.join(root, f), withMcpPin(readFileSync(path.join(root, f), 'utf8'), next));
+    console.log(`  ✓ ${f.padEnd(34)} → ${PACKAGE}@${next}`);
+  }
+} else {
+  console.log(`  • .mcp.json 은 프리릴리스라 그대로 둔다`);
 }
 console.log(`\n  루트 SDK 버전: ${rootVersion} → ${next}\n`);

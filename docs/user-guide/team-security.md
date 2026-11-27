@@ -24,6 +24,26 @@ allows, and never put secrets in them.
 - Start a new session after installation or update so the running server changes.
 - If tools look stale, use the `mimi-seed-update` skill and verify the version actually running.
 
+## Approving agent actions
+
+Store reviews, social comments, Drive documents, and video metadata are text written by other people, and the
+agent reads them through Mimi Seed tools. An instruction hidden in that text can try to steer the agent into a
+release, an IAM key, or a public post. Keep a person in the loop:
+
+- **Do not auto-approve Mimi Seed's write tools.** Leave them out of the client's allow list, and don't run Mimi
+  Seed in a mode that skips permission prompts. Read-only tools are the safe ones to allow.
+- **Answer the approval dialog yourself.** When the agent confirms an action that is hard to undo or that
+  publishes — or saves a connection setting, uploads a credential to Jenkins, or starts a CI workflow — Mimi Seed
+  opens a dialog in the client with the tool and its arguments, and runs only if you tick *approve* and confirm.
+  Check the target app, track, version, URL, and text against what you asked for. If the dialog says a value was
+  shortened and you can't check the hidden part, decline.
+- **Choose the approval mode** with `MIMI_SEED_APPROVAL` in the MCP server's `env`. The default, `auto`, asks
+  when the client can show the dialog and otherwise trusts the agent's confirmation. `required` refuses instead,
+  which is the team setting to use with a client you have not checked; an unrecognized value also counts as
+  `required`. `off` is only for unattended runs, which then have no human check. The `🛡️ Approval:` line of
+  `mimi_seed_status` shows which mode is live in your client.
+- **Expose only the domains you use** with `MIMI_SEED_TOOLSETS` — a tool that isn't registered can't be misused.
+
 ## Codex configuration warning
 
 `mimi-seed mcp codex --write` writes a separate `[mcp_servers.mimi-seed-remote]` HTTP entry. It stores
