@@ -8,6 +8,7 @@ import { resolveToolsets } from '../lib/toolsets.js';
 import {
   CONFIRM_PREVIEW_MARKER,
   annotationsFor,
+  effectiveHints,
   buildToolIndex,
   createToolRegistrar,
   previewValue,
@@ -56,16 +57,25 @@ const ok = (text: string) => async (_args?: Record<string, unknown>) => ({ conte
 describe('annotations — manifest 분류에서 파생', () => {
   const index = buildToolIndex(manifest);
 
-  it('읽기 / 쓰기 / 파괴적 / 로컬 / idempotent 를 힌트로 옮긴다', () => {
-    expect(annotationsFor(index.get('core_read')!)).toMatchObject({
+  it('읽기 / 쓰기 / 파괴적 / 로컬 / idempotent 를 힌트로 옮긴다 (실효값 = 생략 시 명세 기본값)', () => {
+    expect(effectiveHints(annotationsFor(index.get('core_read')!))).toEqual({
       readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false,
     });
-    expect(annotationsFor(index.get('store_write')!)).toMatchObject({
+    expect(effectiveHints(annotationsFor(index.get('store_write')!))).toEqual({
       readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true,
     });
-    expect(annotationsFor(index.get('store_delete')!)).toMatchObject({
+    expect(effectiveHints(annotationsFor(index.get('store_delete')!))).toEqual({
       readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true,
     });
+  });
+
+  it('명세 기본값과 같은 힌트는 싣지 않는다 — destructiveHint 만은 항상 명시한다', () => {
+    const { title: _readTitle, ...read } = annotationsFor(index.get('core_read')!);
+    expect(read).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    const { title: _deleteTitle, ...destructive } = annotationsFor(index.get('store_delete')!);
+    expect(destructive).toEqual({ destructiveHint: true });
+    const { title: _writeTitle, ...write } = annotationsFor(index.get('store_write')!);
+    expect(write).toEqual({ destructiveHint: false, idempotentHint: true });
   });
 
   it('title 은 브랜드 접두를 사람이 읽는 이름으로 바꾼다', () => {

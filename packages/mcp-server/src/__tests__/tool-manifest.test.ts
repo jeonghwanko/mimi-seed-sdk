@@ -106,6 +106,38 @@ describe('tool-manifest (boot smoke test)', () => {
     expect(problems, problems.join('\n')).toEqual([]);
   });
 
+  it('tools/list 는 스키마의 $schema 를 싣지 않는다 (연결마다 컨텍스트에 실리는 크기 — lib/tool-text.ts)', async () => {
+    await withClient(async (client) => {
+      const { tools } = await client.listTools();
+      const withDialect = tools.filter((tool) => '$schema' in tool.inputSchema || (tool.outputSchema && '$schema' in tool.outputSchema));
+      expect(withDialect.map((tool) => tool.name)).toEqual([]);
+      // 스키마 자체는 그대로다 — 타입과 속성이 남아 있어야 클라이언트가 인자를 만든다
+      expect(tools.every((tool) => tool.inputSchema.type === 'object')).toBe(true);
+    });
+  });
+
+  it('스키마는 draft-07 과 2020-12 에서 뜻이 같은 구문만 쓴다 ($schema 를 빼므로 클라이언트가 2020-12 로 읽을 수 있다)', async () => {
+    // 튜플(z.tuple → 배열 items) · additionalItems · dependencies · definitions/$ref 는 두 방언에서 해석이 갈린다.
+    // 이런 스키마가 필요해지면 그 도구만 $schema 를 남기거나, 2020-12 방언으로 생성해야 한다 (lib/tool-text.ts).
+    await withClient(async (client) => {
+      const { tools } = await client.listTools();
+      const found: string[] = [];
+      const walk = (name: string, node: unknown, at: string) => {
+        if (Array.isArray(node)) { node.forEach((item, i) => walk(name, item, `${at}[${i}]`)); return; }
+        if (!node || typeof node !== 'object') return;
+        const obj = node as Record<string, unknown>;
+        if (Array.isArray(obj.items)) found.push(`${name} ${at}.items (tuple)`);
+        for (const key of ['additionalItems', 'dependencies', 'definitions', '$ref']) if (key in obj) found.push(`${name} ${at}.${key}`);
+        for (const [key, value] of Object.entries(obj)) if (key !== 'enum' && key !== 'required') walk(name, value, `${at}.${key}`);
+      };
+      for (const tool of tools) {
+        walk(tool.name, tool.inputSchema, 'input');
+        if (tool.outputSchema) walk(tool.name, tool.outputSchema, 'output');
+      }
+      expect(found).toEqual([]);
+    });
+  });
+
   it('실제 서버의 annotations·title 이 manifest 분류와 같다 (registerTool 경로)', async () => {
     const index = buildToolIndex(manifest);
     await withClient(async (client) => {

@@ -42,7 +42,23 @@ interface ToolListResult { tools: Array<Record<string, unknown>> }
 type RequestHandler = (request: unknown, extra: unknown) => Promise<unknown>;
 
 /**
- * `tools/list` 응답의 파라미터 설명을 번역하도록 핸들러를 감싼다. 모든 도구를 등록한 **뒤에** 부른다.
+ * 스키마 최상위의 `$schema`(JSON Schema 방언 URL)를 뺀다. SDK 가 도구마다 붙이는데(도구 수 × 약 50바이트) MCP
+ * 클라이언트는 쓰지 않는다 — 도구 목록은 연결마다 에이전트 컨텍스트에 실리므로 줄일수록 이득이다. 중첩 스키마는
+ * 건드리지 않는다(거기엔 붙지 않는다).
+ */
+export function withoutSchemaDialect<T>(schema: T): T {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema) || !('$schema' in schema)) return schema;
+  const { $schema: _dialect, ...rest } = schema as Record<string, unknown>;
+  return rest as T;
+}
+
+/**
+ * `tools/list` 응답을 다듬도록 핸들러를 감싼다 — `$schema` 를 빼고(모든 언어), `translate` 를 주면 파라미터 설명을
+ * 번역한다. 모든 도구를 등록한 **뒤에** 부른다.
+ *
+ * `$schema` 가 없으면 MCP 클라이언트는 스키마를 JSON Schema 2020-12 로 읽을 수 있다. 우리 스키마는 draft-07 로
+ * 만들어지지만 두 방언에서 뜻이 갈리는 구문(튜플 `items` · `additionalItems` · `dependencies` · `definitions`)을 쓰지
+ * 않아 어느 쪽으로 읽어도 같다 — tool-manifest.test.ts 가 그 조건을 지킨다.
  *
  * SDK 는 `tools/list` 응답을 매번 zod 에서 새로 만든다. 공개 API 로는 그 결과를 가공할 수 없어, Protocol 의
  * 핸들러 표(`_requestHandlers`)에 있는 SDK 핸들러를 감싼다 — 목록 조립(enabled 필터 · annotations · outputSchema)은
@@ -51,21 +67,23 @@ type RequestHandler = (request: unknown, extra: unknown) => Promise<unknown>;
  *
  * @returns 감쌌으면 true.
  */
-export function localizeToolList(server: McpServer, translate: TranslateText): boolean {
+export function localizeToolList(server: McpServer, translate?: TranslateText): boolean {
   const handlers = (server.server as unknown as { _requestHandlers?: Map<string, RequestHandler> })._requestHandlers;
   const original = handlers?.get('tools/list');
   if (!handlers || !original) {
-    console.error('[mimi-seed] tools/list handler not found; tool descriptions will not be translated (MCP SDK internals changed?).');
+    console.error('[mimi-seed] tools/list handler not found; tool descriptions will not be translated or trimmed (MCP SDK internals changed?).');
     return false;
   }
+  // 번역할 게 없으면(ko) 스키마를 통째로 복사하지 않는다 — `$schema` 제거는 최상위 얕은 복사로 충분하다.
+  const retext = <T>(schema: T): T => (translate ? translateSchemaDescriptions(schema, translate) : schema);
   handlers.set('tools/list', async (request, extra) => {
     const result = (await original(request, extra)) as ToolListResult;
     return {
       ...result,
       tools: result.tools.map((tool) => ({
         ...tool,
-        ...(tool.inputSchema ? { inputSchema: translateSchemaDescriptions(tool.inputSchema, translate) } : {}),
-        ...(tool.outputSchema ? { outputSchema: translateSchemaDescriptions(tool.outputSchema, translate) } : {}),
+        ...(tool.inputSchema ? { inputSchema: withoutSchemaDialect(retext(tool.inputSchema)) } : {}),
+        ...(tool.outputSchema ? { outputSchema: withoutSchemaDialect(retext(tool.outputSchema)) } : {}),
       })),
     };
   });

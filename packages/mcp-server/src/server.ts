@@ -88,7 +88,8 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv;
   registerYouTubeTools(registrar);
   registerTikTokBusinessTools(registrar);
   registerDriveTools(registrar);
-  if (toolLang === 'en') localizeToolList(server, translate);
+  // 모든 언어에 적용한다 — `$schema` 제거는 언어와 무관하다. 번역은 en 일 때만.
+  localizeToolList(server, toolLang === 'en' ? translate : undefined);
   registerPrompts(server, toolsets, manifest);
   registerResources(server, { manifest, toolsets });
 

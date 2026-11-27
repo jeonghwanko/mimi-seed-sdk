@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { JenkinsConfig } from '../jenkins/config.js';
 import { PENDING_WINDOW_MS, buildRequestsDir, getBuildStatus, getQueueItem, triggerBuild } from '../jenkins/builds.js';
-import { CONFIRM_PREVIEW_MARKER } from '../lib/tool-registrar.js';
+import { CONFIRM_PREVIEW_MARKER, effectiveHints } from '../lib/tool-registrar.js';
 import { withClient } from './helpers.js';
 
 /**
@@ -460,12 +460,12 @@ describe('MCP 경유 — confirm 가드와 request_id 합성', () => {
       const { tools } = await client.listTools();
       const byName = new Map(tools.map(t => [t.name, t]));
       const trigger = byName.get('jenkins_trigger_build');
-      expect(trigger?.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
+      expect(effectiveHints(trigger?.annotations)).toMatchObject({ destructiveHint: true, readOnlyHint: false });
       expect(Object.keys(trigger?.inputSchema.properties ?? {})).toEqual(
         expect.arrayContaining(['job', 'request_id', 'parameters', 'confirm']),
       );
       for (const name of ['jenkins_get_queue_item', 'jenkins_get_build_status']) {
-        expect(byName.get(name)?.annotations).toMatchObject({ readOnlyHint: true, idempotentHint: true, destructiveHint: false });
+        expect(effectiveHints(byName.get(name)?.annotations)).toMatchObject({ readOnlyHint: true, idempotentHint: true, destructiveHint: false });
       }
     });
   });
