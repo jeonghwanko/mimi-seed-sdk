@@ -150,14 +150,17 @@ the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools 
    arguments plus `confirm: true`.
 5. Report the per-platform `results`. The same post (same platform, account, and content) is never posted twice, so
    if something `failed`, fix it if needed (e.g. that platform's own `threads.text`) and call again: platforms that
-   already posted are skipped. Approvals name one record by the `at` the plan showed, and are used up once acted on:
+   already posted are skipped. Approvals name one record by the `at` the plan showed; an approval stays valid until
+   its action succeeds (or ends unknown), after which that record changes and the same arguments no longer match:
    - To post identical content again on purpose, get the user's go-ahead and pass
-     `repost: [{ "platform": "<platform>", "at": "<at of that posted record>" }]`.
+     `repost: [{ "platform": "<platform>", "at": "<at of that posted record>" }]` (TikTok needs a new plan instead).
    - If a result is `unknown_outcome`, do **not** retry on your own: that account stays blocked, even for edited
-     content. Ask the user to check the platform; only if it is not there, pass
-     `resendUnknown: [{ "platform": "<platform>", "at": "<at the plan shows>" }]`.
-   A failed pre-send check (an expired token, a bad video file) means nothing was posted anywhere; "another call is
-   publishing to this account" means wait and call again.
+     content. Ask the user to check the platform. If the post **is** there, pass
+     `markPosted: [{ "platform": "<platform>", "at": "<at the plan shows>" }]` (it is recorded as posted, nothing is
+     sent); if it is **not**, pass `resendUnknown` with the same shape.
+   A `posted` result with a `warning` that it could not be recorded is handled the same way (`markPosted`). A failed
+   pre-send check (an expired token, a bad video file) means nothing was posted anywhere; "another call is publishing
+   to this account" means wait and call again.
 
 All three Meta platforms can use named local profiles. Save one with
 `mimi-seed auth facebook|instagram|threads --profile <id>`, then select it per project with `.mimi-seed.json` →

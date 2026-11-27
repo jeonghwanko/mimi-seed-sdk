@@ -193,7 +193,7 @@ describe('decide() — the table', () => {
   const pend = (when = at): PendingRecord => ({ postKey: 'other', state: 'unknown', at: when });
   const ok = (platform: SocialPublishInput['targets'][number], when: string) => [{ platform, at: when }];
   const opts = (resendUnknown: { platform: SocialPublishInput['targets'][number]; at: string }[] = [], repost: typeof resendUnknown = []) =>
-    ({ resendUnknown, repost }) as Parameters<typeof decide>[3];
+    ({ resendUnknown, repost, markPosted: [] }) as Parameters<typeof decide>[3];
   it.each([
     // posted comes first: a skip sends nothing, so a pending send of other content does not block it (review 6 #2)
     ['posted', rec('posted'), null, opts(), 'skip'],
@@ -607,7 +607,7 @@ describe('review 6', () => {
 
   it('#6: a marker that cannot be cleared after a post is reported, and the original error is kept on a failure', async () => {
     const ledgerModule = await import('../crosspost/ledger.js');
-    const clear = vi.spyOn(ledgerModule, 'clearPending');
+    const clear = vi.spyOn(ledgerModule, 'replacePendingIfOurs');
     clear.mockImplementation(() => { throw new Error('EPERM'); });
     try {
       const posted = await run({ targets: ['threads'], text: 'hi' });
@@ -656,7 +656,7 @@ describe('review 7', () => {
 
   it('#3: a marker left behind by a post that did finish does not block the account', async () => {
     const ledgerModule = await import('../crosspost/ledger.js');
-    const clear = vi.spyOn(ledgerModule, 'clearPending').mockImplementationOnce(() => { throw new Error('EPERM'); });
+    const clear = vi.spyOn(ledgerModule, 'replacePendingIfOurs').mockImplementationOnce(() => { throw new Error('EPERM'); });
     try {
       expect((await run(launch))[0]).toMatchObject({ status: 'posted', warning: expect.stringMatching(/EPERM/) });
     } finally {
@@ -697,6 +697,83 @@ describe('review 7', () => {
     expect(() => second.confirmHeld()).not.toThrow();
     second.release();
     expect(existsSync(accountLockPath('threads', account))).toBe(false);
+  });
+});
+
+describe('review 8', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+  const launch: SocialPublishInput = { targets: ['threads'], text: 'Launch' };
+
+  it('#1: an unknown send a person found live is recorded with markPosted, and the account is free again', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(launch))[0].status).toBe('unknown_outcome');
+    const blocked = planPublish({ targets: ['threads'], text: 'Next week' }).posts[0];
+    expect(blocked.problems.join()).toMatch(/if it is there, send with markPosted: \[\{ "platform": "threads", "at": /);
+    const at = blocked.pending!.at;
+    // The person checked: 'Launch' is live. A new post goes out, and nothing is sent again for 'Launch'.
+    const next: SocialPublishInput = { targets: ['threads'], text: 'Next week', markPosted: [{ platform: 'threads', at }] };
+    expect(planPublish(next).posts[0].action).toMatch(/checked and is live — recorded as posted/);
+    expect((await run(next))[0].status).toBe('posted');
+    expect(readRecord('threads', targetKey('threads', launch)!)!.state).toBe('posted');
+    expect((await run(launch))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+
+  it('#1: markPosted with the same content just records it; nothing is sent', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    await run(launch);
+    const at = planPublish(launch).posts[0].pending!.at;
+    expect((await run({ ...launch, markPosted: [{ platform: 'threads', at }] }))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(1);
+    expect(readPending('threads', accountKey('threads', launch)!)).toBeNull();
+  });
+
+  it('#2: a post whose record could not be written is reported with a warning and how to clear the account', async () => {
+    const real = ledger.realWrite as typeof writeRecord;
+    vi.mocked(writeRecord).mockImplementation((platform, key, record) => {
+      if (record.state === 'posted') throw new Error('ENOSPC');
+      real(platform, key, record);
+    });
+    const outcome = (await run(launch))[0];
+    vi.mocked(writeRecord).mockImplementation(real);
+    expect(outcome).toMatchObject({ status: 'posted', warning: expect.stringMatching(/could not be recorded \(ENOSPC\).*markPosted: \[\{ "platform": "threads"/) });
+    const at = planPublish(launch).posts[0].pending!.at;
+    expect((await run({ ...launch, markPosted: [{ platform: 'threads', at }] }))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(1);
+  });
+
+  it('#3: a send never erases a marker another call wrote meanwhile (compare-and-set)', async () => {
+    const account = accountKey('threads', launch)!;
+    api.thText.mockImplementationOnce(async (_cfg: unknown, _t: unknown, _i: unknown, hooks: { onPublishStart?: () => void }) => {
+      hooks.onPublishStart?.();
+      // While this send runs past a stale lock, another call starts its own send to the account.
+      const ledgerModule = await import('../crosspost/ledger.js');
+      ledgerModule.writePending('threads', account, { postKey: 'other-post', state: 'sending', at: '2099-01-01T00:00:00.000Z' });
+      throw new TypeError('fetch failed');
+    });
+    const outcome = (await run(launch))[0];
+    expect(outcome).toMatchObject({ status: 'unknown_outcome', error: expect.stringMatching(/another call started publishing to this account/) });
+    expect(readPending('threads', account)).toMatchObject({ postKey: 'other-post' }); // not overwritten
+    expect(readRecord('threads', targetKey('threads', launch)!)!.state).toBe('unknown'); // this post stays blocked itself
+  });
+
+  it('#4: a marker left by a send that cleanly failed does not block the account', async () => {
+    const ledgerModule = await import('../crosspost/ledger.js');
+    const clear = vi.spyOn(ledgerModule, 'replacePendingIfOurs').mockImplementationOnce(() => { throw new Error('EPERM'); });
+    api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    try {
+      expect((await run(launch))[0]).toMatchObject({ status: 'failed', error: expect.stringMatching(/^Meta API 400 .*EPERM/) });
+    } finally {
+      clear.mockRestore();
+    }
+    expect(readPending('threads', accountKey('threads', launch)!)).not.toBeNull();
+    expect((await run({ targets: ['threads'], text: 'Other' }))[0].status).toBe('posted');
+  });
+
+  it('#6: an already-posted TikTok plan points to a new plan, not to repost', async () => {
+    await run({ targets: ['tiktok'], text: 'x', tiktok: { planId: 'plan-t' } });
+    expect(planPublish({ targets: ['tiktok'], text: 'x', tiktok: { planId: 'plan-t' } }).posts[0].action)
+      .toMatch(/make a new plan with tiktok_business_plan_video_post/);
   });
 });
 

@@ -113,6 +113,24 @@ export function clearPending(platform: SocialTarget, account: string): void {
   fs.rmSync(pendingPath(platform, account), { force: true });
 }
 
+/**
+ * Compare-and-set on the account marker: replace it with `next` (or remove it, for null) only if it is still the
+ * one this send wrote (same postKey and `at`). Returns false — and changes nothing — when another call has replaced
+ * it meanwhile (possible only after this call's lock went stale), so one call's outcome never erases another's.
+ */
+export function replacePendingIfOurs(
+  platform: SocialTarget,
+  account: string,
+  ours: { postKey: string; at: string },
+  next: PendingRecord | null,
+): boolean {
+  const current = readPending(platform, account);
+  if (!current || current.postKey !== ours.postKey || current.at !== ours.at) return false;
+  if (next) writePending(platform, account, next);
+  else clearPending(platform, account);
+  return true;
+}
+
 // ── account lock ─────────────────────────────────────────────────────────────
 
 /** Locks this process holds right now. A lock naming our pid that is not here was left by an earlier run. */
