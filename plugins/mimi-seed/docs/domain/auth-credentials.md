@@ -29,6 +29,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | `jenkins-build-requests/<sha256>/receipt.json` | **Not a credential** — `jenkins_trigger_build`'s at-most-once dispatch record: the directory (0700) is the atomic `request_id` reservation, keyed by a hash of Jenkins URL + user + `request_id`; the receipt (`0600`) holds only an HMAC fingerprint of the payload, state, reservation time, queue id, and HTTP status — never parameters or the token. Never deleted automatically once a POST may have been sent ([[pitfalls]] §5). `jenkins-build-requests/.key` (`0600`) is the random per-install HMAC key, created on first use | `jenkins/builds.ts` |
 | `facebook.json`, `instagram.json`, `threads.json` | Default/legacy Page or account access tokens for social post tools (written `0600`) | each domain's `*_save_config` |
 | `social-profiles/<profile>.json` | Named Facebook/Instagram/Threads credentials. One file can hold all three; `.mimi-seed.json.socialProfiles` selects each platform independently | `facebook_save_config` / `instagram_save_config` / `threads_save_config`, or `mimi-seed auth <platform> --profile <id>` |
+| `meta-apps.json` | The user's **own** Meta app for broker-free Instagram / Threads browser login: per platform `{ appId, appSecret, redirectUri }` (written `0600`, only after a verified login). Not per social profile: one app signs in several accounts | `social/meta-app-config.ts` (via `mimi-seed auth instagram` / `threads`) |
 | `tiktok-business.json` | TikTok API for Business app secret + one-day access token + one-year refresh token (written `0600`) | `mimi-seed-tiktok-business-auth` / `mimi-seed auth tiktok` |
 | `google-ads.json` | Google Ads developer token + customer id (note: **not** `googleads.json`) | `googleads_save_config` |
 | `keys/<sa-localpart>-<keyId>.json` | Service-account keys minted by `iam_create_key` (`0600`). The tool returns the **path only**; `playstore_register_service_account` / `playstore_verify_service_account` (`serviceAccountJsonPath`) and `jenkins_upload_playstore_sa` (`service_account_json_path`) read files **inside this directory only** (realpath containment, `lib/path-containment.ts`) | `iam/key-files.ts` |
@@ -48,7 +49,7 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 | **Google** (Firebase / AdMob / Play / IAM / BigQuery / GA4 / GSC / Ads) | Default OAuth token in `tokens.json`, or isolated named grants in `google-profiles/<profile>.json`; `ensureFreshAccessToken()` refreshes the selected grant | `auth/google-auth.ts` |
 | **Apple** (App Store Connect) | API key (`issuer-id`, `key-id`, `.p8` private key) → ES256 **JWT** minted per request with `jose`, short TTL | `appstore/auth.ts` |
 | **Google Play releases** (write) | A **service-account JSON** (not the user OAuth token); per-package resolution below | `auth/playstore-auth.ts` |
-| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Instagram and Threads offer browser OAuth with configured operator-managed HTTPS brokers, with manual token entry retained for advanced/headless use | `facebook/`, `instagram/`, `threads/` |
+| **Meta social posting** | Long-lived Page/account tokens with saved expiry; `mimi-seed setup` reconnects expired/expiring tokens. Instagram and Threads offer browser OAuth, preferring an operator-managed HTTPS broker when `MIMI_SEED_WEB_BASE` is set, then the user's own Meta app (local code exchange), then manual token entry | `facebook/`, `instagram/`, `threads/` |
 | **TikTok Business Organic API** | Short-term access token renewed from a refresh token five minutes before expiry | `tiktok-business/auth.ts` |
 
 - **Per-package Play SA wins over the default.** Different apps can use SAs from different GCP projects;
@@ -63,7 +64,11 @@ All under `~/.mimi-seed/` (legacy `~/.preseed/` is still read as a fallback):
 - **Project social-profile mapping wins over the legacy default.** If `.mimi-seed.json` declares
   `socialProfiles.facebook`, `.instagram`, or `.threads`, tools resolve only that profile and do not silently fall back to a
   different default account. An explicit MCP `profile` argument wins over the project mapping.
-- **Threads browser OAuth is an operator boundary.** With a configured broker, the `mimi-seed auth threads` flow sends the user through
+- **Instagram / Threads browser OAuth has two modes.** *Own app* (`social/meta-direct-login.ts`, the default without a
+  broker): the secret lives in `meta-apps.json` and the CLI exchanges the code itself. The code arrives either on a
+  loopback server (`http://localhost:<port>` redirect) or as a redirected URL the user pastes. Meta's dashboards
+  reject or inconsistently accept plain-HTTP loopback redirects, so the HTTPS paste path is the default. Both paths check
+  `state`, and the single-use code POST is never retried. *Broker*: with a configured broker, the `mimi-seed auth threads` flow sends the user through
   an HTTPS web broker that performs the authorize callback exchange. The operator owns its deployment, Threads App
   ID/secret, and registered HTTPS callback URL; the SDK does not claim to deploy that broker. `--manual-token` is the
   advanced fallback. OAuth validates the account and persists the actual returned expiry locally, including for a
@@ -215,4 +220,4 @@ to select the grant. Status and privacy tools accept the same profile. This inte
 change prevents accidental uploads to a previously authenticated account. Upload/status results include
 channel identity. The channel check is not an upload and does not consume upload quota.
 
-- Instagram browser login follows the same broker security boundary in `instagram/browser-login.ts`, using Instagram-specific routes and app credentials. The validated provider expiry is persisted by `instagram/setup.ts`; failure preserves the existing account.
+- Instagram browser login through a broker follows the same broker security boundary in `instagram/browser-login.ts`, using Instagram-specific routes and app credentials. The validated provider expiry is persisted by `instagram/setup.ts`; failure preserves the existing account.

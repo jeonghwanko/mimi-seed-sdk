@@ -638,13 +638,15 @@ export const CREDENTIALS: readonly CredSpec[] = [
     setup: { kind: "mcp-bin", bin: "mimi-seed-social-auth", args: ["instagram"] },
     obtain: {
       ko: [
-        "long-lived 토큰 두 형식 모두 지원한다 (자동 감지):",
+        "`mimi-seed auth instagram`은 내 Meta 앱(Instagram 앱 ID·시크릿·리디렉션 URI)으로 브라우저 로그인한다. 서버가 필요 없다.",
+        "토큰을 직접 넣을 때(--manual-token)는 long-lived 토큰 두 형식 모두 지원한다 (자동 감지):",
         "  • IGAA… — Instagram Login (Meta 신규 방식, Facebook 페이지 불필요)",
         "  • EAA…  — Facebook Login (IG **비즈니스** 계정이 FB 페이지에 연결돼 있어야 함)",
         "토큰 수명은 약 60일이다.",
       ],
       en: [
-        "Both long-lived token shapes are supported (auto-detected):",
+        "`mimi-seed auth instagram` signs in through the browser with your own Meta app (Instagram app ID, secret, redirect URI). No server is needed.",
+        "When pasting a token (--manual-token), both long-lived token shapes are supported (auto-detected):",
         "  • IGAA… — Instagram Login (Meta's newer path, no Facebook Page required)",
         "  • EAA…  — Facebook Login (needs an Instagram **Business** account linked to a FB Page)",
         "Tokens last about 60 days.",
@@ -667,15 +669,15 @@ export const CREDENTIALS: readonly CredSpec[] = [
     obtain: {
       ko: [
         "Instagram 과 **별개 계정·별개 토큰**이다 (Threads Graph API).",
-        "`mimi-seed auth threads`에서 토큰을 입력한다. 팀 브로커 주소를 MIMI_SEED_WEB_BASE에 설정하면 브라우저로 로그인한다.",
-        "브로커 운영자는 Threads App ID/secret과 앱에 등록한 HTTPS callback URL을 설정·배포해야 한다 (SDK가 브로커를 배포하지는 않는다).",
+        "`mimi-seed auth threads`는 내 Meta 앱(Threads 앱 ID·시크릿·리디렉션 URI)으로 브라우저 로그인한다. 서버가 필요 없다.",
+        "MIMI_SEED_WEB_BASE에 팀 브로커가 설정돼 있으면 브로커를 대신 쓴다 (SDK가 브로커를 배포하지는 않는다).",
         "토큰을 직접 붙여 넣는 `--manual-token`은 고급/헤드리스 흐름이다. 저장 전에 Threads 계정을 검증한다.",
         "`--profile <id>`로 이름 있는 계정을 저장할 수 있으며, OAuth 응답의 실제 만료 시각을 로컬 프로필에 기록한다.",
       ],
       en: [
         "A **separate account and token** from Instagram (Threads Graph API).",
-        "Run `mimi-seed auth threads` to enter a token locally. Set MIMI_SEED_WEB_BASE to a team broker to use browser login.",
-        "The broker operator must deploy it with the Threads App ID/secret and the HTTPS callback URL registered in the app (the SDK does not deploy the broker).",
+        "`mimi-seed auth threads` signs in through the browser with your own Meta app (Threads app ID, secret, redirect URI). No server is needed.",
+        "If MIMI_SEED_WEB_BASE points to a team broker, that broker is used instead (the SDK does not deploy it).",
         "Pasting a token with `--manual-token` is the advanced/headless path; the Threads account is verified before saving.",
         "Use `--profile <id>` for a named account; the actual expiry returned by OAuth is saved in the local profile.",
       ],

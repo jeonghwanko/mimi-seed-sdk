@@ -67,7 +67,7 @@ describe('저장 모드', () => {
   });
 
   it('암호화 범위는 §6 목록뿐 — keys/ · keystores/ · 영수증 · settings 는 평문', () => {
-    for (const yes of ['tokens.json', 'ci.json', 'config.json', 'google-profiles/travel.json',
+    for (const yes of ['tokens.json', 'ci.json', 'config.json', 'meta-apps.json', 'google-profiles/travel.json',
       'play-service-accounts/com.example.app.json', 'social-profiles/brand.json']) expect(isEncryptableCredential(yes)).toBe(true);
     for (const no of ['settings.json', 'telemetry.json', 'keys/sa-1.json', 'keystores/app-1/signing.json',
       'jenkins-build-requests/abc/receipt.json', 'play-service-accounts/nested/x.json', 'play-financials.json']) {

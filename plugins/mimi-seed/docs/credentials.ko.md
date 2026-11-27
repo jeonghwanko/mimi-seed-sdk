@@ -278,8 +278,29 @@ Google **Workspace 재인증 정책**(`invalid_rapt`)이 OAuth 토큰을 계속 
 
 ## Instagram
 
-콘솔이 없으면 로컬에서 토큰을 입력한다. **팀 브로커로 브라우저 로그인:** `MIMI_SEED_WEB_BASE`를 브로커의 HTTPS 주소로 지정한다. `mimi-seed auth instagram`을 실행하고 브라우저에서 로그인과 권한 동의를 완료한다. Mimi Seed가 계정을 검증하고 실제 만료시간과 함께 자동 저장한다. 운영자가 Instagram 전용 앱 자격증명과 등록된 콜백을 갖춘 HTTPS 브로커를 구성해야 하며 SDK가 이를 배포하지는 않는다. 브로커 연결 실패 시 기존 인증을 보존하고 토큰 붙여넣기를 요구하지 않는다. 고급 수동 흐름에만 `--manual-token`을 사용한다.
+**내 Meta 앱으로 브라우저 로그인 (권장, 서버 불필요):** `mimi-seed auth instagram`을 실행한다. 처음
+한 번은 마법사가 앱의 **Instagram 앱 ID·앱 시크릿**과 등록한 리디렉션 URI를 묻는다. 이 값은 로그인이
+성공한 뒤에만 `~/.mimi-seed/meta-apps.json`(`0600`)에 저장되며, Instagram 토큰 엔드포인트 외에는 어디로도
+보내지 않는다. 앱은 한 번만 설정하면 된다:
 
+1. [developers.facebook.com](https://developers.facebook.com/apps) → 앱 → 사용 사례 *Instagram에서 메시지 및
+   콘텐츠 관리* → *Instagram 로그인을 통한 API 설정*.
+2. *Instagram 비즈니스 로그인 설정* → *OAuth 리디렉션 URI*에 주소를 등록한다. 마법사 기본값은
+   `https://localhost:8765/callback`이다.
+3. 같은 화면의 **Instagram 앱 ID / 앱 시크릿**을 복사한다. Meta 앱 ID와 다르다.
+4. 앱이 개발 모드인 동안은 *앱 역할 → Instagram 테스터*에 내 계정을 추가하고 Instagram에서 초대를
+   수락한다. 이렇게 내 계정에 게시하는 데는 앱 검수가 필요 없다.
+
+동의하면 브라우저가 리디렉션 URI로 이동한다. `https://` 리디렉션이면 페이지가 대개 열리지 않는데, 정상이다.
+주소창의 URL 전체를 터미널에 붙여 넣는다. CLI가 이번 로그인의 리디렉션인지(`state`) 확인하고, 코드를
+long-lived 토큰으로 바꾸고, 계정을 검증한 뒤 실제 만료 시각과 함께 저장한다. `http://localhost:<포트>/<경로>`를
+등록했다면 CLI가 리디렉션을 직접 받으므로 붙여 넣을 것이 없다. 로그인이 실패하면 기존 연결은 보존된다. 다른
+앱 설정을 입력하려면 `--reset-app`을 쓴다.
+
+**팀 브로커:** `MIMI_SEED_WEB_BASE`가 운영자가 관리하는 HTTPS 브로커를 가리키면 그 브로커를 대신 쓰며, 앱
+시크릿은 브로커가 보관한다. SDK가 브로커를 배포하지는 않는다.
+
+**토큰 직접 입력:** `--manual-token`을 쓰거나 앱 ID를 비워 두면 토큰을 직접 붙여 넣는 흐름으로 바뀐다.
 
 **열리는 것:** `instagram_*` — 이미지·캐러셀 게시.
 
@@ -318,16 +339,25 @@ Instagram 토큰은 여기서 안 통한다.
 
 **발급받기:**
 
-1. 팀 브로커가 없으면 `mimi-seed auth threads`에서 토큰을 직접 입력한다. 브로커가 있으면 HTTPS 주소를 `MIMI_SEED_WEB_BASE`에 설정하고 브라우저에서 Threads 로그인과
-   권한 승인을 완료한다.
-2. 브로커 운영자는 Threads App ID·secret과 앱에 등록한 HTTPS callback URL을 설정·배포해야 한다. SDK가 이
-   비공개 브로커를 배포하거나 설정하지는 않는다.
-3. 브로커가 authorize callback을 토큰으로 교환하므로 기본 흐름에서는 CLI에 토큰을 붙여 넣지 않는다. 반환된
-   계정을 검증하고 실제 만료 시각을 로컬에 저장한다.
+1. `mimi-seed auth threads`를 실행한다. 내 Meta 앱을 쓰는 방식(권장, 서버 불필요)이면 처음 한 번
+   **Threads 앱 ID·앱 시크릿**과 등록한 리디렉션 URI를 묻는다. 로그인이 성공한 뒤에만
+   `~/.mimi-seed/meta-apps.json`(`0600`)에 저장된다.
+2. 앱은 한 번만 설정한다: [developers.facebook.com](https://developers.facebook.com/apps) → 앱 → 사용 사례
+   *Threads API 액세스*(`threads_basic`, `threads_content_publish`) → 설정 → *리디렉션 콜백 URL*에 주소를
+   등록한다(마법사 기본값 `https://localhost:8765/callback`). *제거*·*삭제* 콜백 URL도 채워야 저장된다. 앱이
+   개발 모드인 동안은 내 계정을 *Threads 테스터*로 추가하고 threads.net → 설정 → 웹사이트 권한에서 초대를
+   수락한다.
+3. 브라우저에서 동의한 뒤, 이동한 페이지의 주소창 URL을 붙여 넣는다. 페이지가 열리지 않는 것은 정상이다.
+   `http://localhost:<포트>/<경로>` 리디렉션이면 CLI가 자동으로 받는다. CLI가 `state`를 확인하고, 코드를
+   long-lived 토큰으로 바꾸고, 계정을 검증한 뒤 실제 만료 시각과 함께 저장한다. 다른 앱 설정은
+   `--reset-app`으로 입력한다.
 
-**고급/수동 흐름:** 헤드리스 또는 브로커를 쓸 수 없는 경우 `mimi-seed auth threads --manual-token`으로 토큰을
-직접 입력할 수 있다. 저장 전에 계정을 검증한다. 두 흐름 모두 `--profile <id>`로 이름 있는 계정을 저장할 수
-있고, 프로젝트는 `.mimi-seed.json`의 `socialProfiles.threads`로 선택한다.
+**팀 브로커:** `MIMI_SEED_WEB_BASE`가 운영자가 관리하는 HTTPS 브로커를 가리키면 그 브로커를 대신 쓰며, Threads
+앱 시크릿은 브로커가 보관한다. SDK가 브로커를 배포하지는 않는다.
+
+**고급/수동 흐름:** 헤드리스 환경에서는 `mimi-seed auth threads --manual-token`(또는 앱 ID를 비워 두기)으로
+토큰을 직접 입력할 수 있다. 저장 전에 계정을 검증한다. 모든 흐름에서 `--profile <id>`로 이름 있는 계정을 저장할
+수 있고, 프로젝트는 `.mimi-seed.json`의 `socialProfiles.threads`로 선택한다.
 
 **여러 계정:** Threads 도구는 프로젝트 매핑을 자동으로 사용한다.
 

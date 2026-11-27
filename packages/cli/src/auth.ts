@@ -38,9 +38,9 @@ ${kleur.bold("빌드 / 마케팅:")}
   ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook 페이지
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
-  ${kleur.cyan("mimi-seed auth threads")}    Threads 연결 (팀 브로커 또는 로컬 토큰)
+  ${kleur.cyan("mimi-seed auth threads")}    Threads (내 Meta 앱 브라우저 로그인 · 팀 브로커 · 토큰)
   ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
-  ${kleur.dim("  Instagram/Threads: --profile <id>로 특정 소셜 프로필 저장/갱신. Instagram/Threads 수동 토큰 입력은 --manual-token")}
+  ${kleur.dim("  Instagram/Threads: --profile <id>로 특정 소셜 프로필 저장/갱신. Instagram/Threads 수동 토큰 입력은 --manual-token, 저장된 Meta 앱 변경은 --reset-app")}
 
 ${kleur.bold("전체 상태:")}
   ${kleur.cyan("mimi-seed auth status --all")}  모든 자격증명 보유 여부 한눈에
@@ -79,9 +79,9 @@ ${kleur.bold("Build / marketing:")}
   ${kleur.cyan("mimi-seed auth googleads")}  Google Ads (google-ads.json)
   ${kleur.cyan("mimi-seed auth facebook")}   Facebook Page
   ${kleur.cyan("mimi-seed auth instagram")}  Instagram
-  ${kleur.cyan("mimi-seed auth threads")}    Threads (team broker or local token)
+  ${kleur.cyan("mimi-seed auth threads")}    Threads (own Meta app browser login · team broker · token)
   ${kleur.cyan("mimi-seed auth tiktok")}     TikTok Business Organic API
-  ${kleur.dim("  Instagram/Threads: use --profile <id> to save or refresh a named social profile. Instagram/Threads manual tokens: --manual-token")}
+  ${kleur.dim("  Instagram/Threads: use --profile <id> to save or refresh a named social profile. Instagram/Threads manual tokens: --manual-token; change the saved Meta app: --reset-app")}
 
 ${kleur.bold("Everything at a glance:")}
   ${kleur.cyan("mimi-seed auth status --all")}  which credentials you have

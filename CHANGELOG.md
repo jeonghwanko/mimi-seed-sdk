@@ -18,6 +18,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `mimi-seed auth instagram` and `mimi-seed auth threads` can sign in through the browser with **your own Meta app**, with no server in between. Since the public console was retired, these commands could only take a pasted token. The first run asks for the app ID, app secret, and registered redirect URI. They are saved to `~/.mimi-seed/meta-apps.json` (`0600`, and encrypted like your other credentials when credential encryption is on) only after a successful login. The app secret is not shown on screen as you type it. After you approve, paste the redirected URL, or register an `http://localhost:<port>` redirect and the CLI catches it. `--reset-app` changes the saved app. A team broker (`MIMI_SEED_WEB_BASE`), `--manual-token`, and a token piped on standard input (`printf 'IGAA…' | mimi-seed auth instagram`) work as before.
+
+### Tool changes
+
+- none
+
 ## [0.25.3] - 2026-11-27
 
 ### Changed

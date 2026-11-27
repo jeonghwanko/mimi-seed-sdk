@@ -24,7 +24,7 @@ const IN_SCOPE = [
   'tokens.json', 'credentials.json', 'google-profiles', 'appstore.json', 'play-service-account.json',
   'play-service-accounts', 'bigquery-service-account.json', 'drive-service-account.json', 'facebook.json',
   'instagram.json', 'threads.json', 'social-profiles', 'tiktok-business.json', 'google-ads.json', 'jenkins.json',
-  'ci.json', 'config.json',
+  'ci.json', 'config.json', 'meta-apps.json',
 ];
 
 /** 원시 읽기를 해도 되는 모듈 — 반드시 이유와 함께. (packages/ 기준 경로) */
