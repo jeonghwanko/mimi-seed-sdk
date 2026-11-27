@@ -230,8 +230,13 @@ async function captureLoopback(app: MetaAppConfig, state: string, timeoutMs: num
       try {
         await listen(server, Number(redirect.port), host);
         servers.push(server);
-      } catch {
-        // IPv6 may be unavailable; one bound family is enough.
+      } catch (error) {
+        // Only "this machine has no IPv6 loopback" is safe to skip. A port that is *in use* on either family must
+        // fail: the browser may resolve localhost to that family and hand ?code&state to the other process, and
+        // this login would then wait for the full timeout.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (host === '::1' && hosts.length > 1 && (code === 'EADDRNOTAVAIL' || code === 'EAFNOSUPPORT')) continue;
+        throw new MetaDirectLoginError('configuration', `port ${redirect.port} is not available on ${host}`);
       }
     }
     if (servers.length === 0) throw new MetaDirectLoginError('configuration', `port ${redirect.port} is not available`);
@@ -284,6 +289,8 @@ export async function connectWithMetaApp(platform: MetaLoginPlatform, options: M
   const connect = platform === 'instagram' ? connectInstagram : connectThreads;
   // Resolve the canonical account ID from /me rather than the OAuth user_id (numeric ids can lose precision).
   const connected = await connect(token.accessToken, undefined, true, saveOptions, token.expiresInSeconds);
-  if (!connected.ok) throw new MetaDirectLoginError('validation');
+  // Keep the verifier's own reason (e.g. "not a professional account") — it is the same text the MCP tools show,
+  // and the only thing that tells the user what to fix. Scrubbed anyway: it must never echo the token or secret.
+  if (!connected.ok) throw new MetaDirectLoginError('validation', scrub(connected.text, [token.accessToken, app.appSecret, code]));
   return connected;
 }

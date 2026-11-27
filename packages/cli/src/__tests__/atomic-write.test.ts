@@ -188,6 +188,7 @@ describe('CLI 자격증명 writer 가드', () => {
       'threads.json',
       'tiktok-business.json',
       'jenkins.json',
+      'meta-apps.json',
     ];
     // jenkins-config.ts 의 이관은 jenkins.json 이 **없을 때만** 만들고 정본을 덮어쓰지 않는다.
     const MIGRATION_EXCEPTION: Record<string, string[]> = { 'jenkins-config.ts': ['jenkins.json'] };

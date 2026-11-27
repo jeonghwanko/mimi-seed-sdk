@@ -1,4 +1,4 @@
-import { request } from 'node:http';
+import { createServer, request } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -157,6 +157,44 @@ describe('connectWithMetaApp', () => {
       app: pasteApp, openBrowser: async (url) => { authorize = url; },
       readRedirect: async () => `https://localhost:8765/callback?code=example-code&state=${stateOf(authorize)}`,
     })).rejects.toMatchObject({ code: 'validation' });
+  });
+
+  it('keeps the verifier\'s reason for a failed verification, without the token or secret', async () => {
+    vi.mocked(connectInstagram).mockResolvedValue({ ok: false, text: `Not a professional account (token ${LONG_TOKEN}, app ${SECRET})` });
+    let authorize = '';
+    const error = await connectWithMetaApp('instagram', {
+      app: pasteApp, openBrowser: async (url) => { authorize = url; },
+      readRedirect: async () => `https://localhost:8765/callback?code=example-code&state=${stateOf(authorize)}`,
+    }).catch((e: unknown) => e) as MetaDirectLoginError;
+    expect(error.code).toBe('validation');
+    expect(error.detail).toContain('Not a professional account');
+    expect(error.detail).not.toContain(LONG_TOKEN);
+    expect(error.detail).not.toContain(SECRET);
+  });
+
+  it('loopback on localhost: a port already taken on ::1 fails at once instead of losing the callback', async () => {
+    const port = 20000 + Math.floor(Math.random() * 20000);
+    const squatter = createServer();
+    const bound = await new Promise<boolean>((resolve) => {
+      squatter.once('error', () => resolve(false));
+      squatter.listen(port, '::1', () => resolve(true));
+    });
+    if (!bound) return; // no IPv6 loopback on this machine — the case cannot happen here
+    try {
+      const started = Date.now();
+      await expect(connectWithMetaApp('threads', {
+        app: { ...pasteApp, redirectUri: `http://localhost:${port}/cb` }, timeoutMs: 5000, openBrowser: async () => {},
+      })).rejects.toMatchObject({ code: 'configuration' });
+      expect(Date.now() - started).toBeLessThan(2000);
+      // The IPv4 listener it had already opened was released.
+      await new Promise<void>((resolve, reject) => {
+        const probe = createServer();
+        probe.once('error', reject);
+        probe.listen(port, '127.0.0.1', () => probe.close(() => resolve()));
+      });
+    } finally {
+      squatter.close();
+    }
   });
 });
 

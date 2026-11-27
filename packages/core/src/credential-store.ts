@@ -85,6 +85,8 @@ const IN_SCOPE_FILES = new Set([
   'tokens.json', 'credentials.json', 'appstore.json', 'play-service-account.json', 'bigquery-service-account.json',
   'drive-service-account.json', 'facebook.json', 'instagram.json', 'threads.json', 'tiktok-business.json',
   'google-ads.json', 'jenkins.json', 'ci.json', 'config.json',
+  // 사용자 본인의 Meta 앱 시크릿 — 만료되지 않고, 그 앱을 쓰는 모든 계정의 토큰을 만들 수 있다.
+  'meta-apps.json',
 ]);
 const IN_SCOPE_DIRS = new Set(['google-profiles', 'play-service-accounts', 'social-profiles']);
 

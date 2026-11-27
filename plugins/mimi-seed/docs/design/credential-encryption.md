@@ -245,7 +245,8 @@ Each file is rewritten through the atomic writer, so a crash in the middle leave
 **In scope (encrypted).** `tokens.json`, `credentials.json`, `google-profiles/*.json`, `appstore.json`,
 `play-service-account.json`, `play-service-accounts/*.json`, `bigquery-service-account.json`,
 `drive-service-account.json`, `facebook.json`, `instagram.json`, `threads.json`, `social-profiles/*.json`,
-`tiktok-business.json`, `google-ads.json`, `jenkins.json`, `ci.json`, `config.json`.
+`tiktok-business.json`, `google-ads.json`, `jenkins.json`, `ci.json`, `config.json`, `meta-apps.json` (the user's own
+Instagram / Threads app secrets).
 
 **Out of scope (stay plaintext).**
 

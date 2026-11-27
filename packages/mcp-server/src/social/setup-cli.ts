@@ -119,6 +119,9 @@ const ko = {
     configuration: '로그인을 시작하지 못했습니다.',
   } as Record<string, string>)[code] ?? code)} 기존 연결은 보존했습니다.`,
   directReason: (detail: string) => `     Meta 응답: ${detail}`,
+  appLoadFailed: (message: string) => `  ⚠️ 저장된 앱 설정을 읽지 못했습니다 — 토큰 직접 입력으로 진행합니다.\n     ${message}`,
+  appSaveFailed: (message: string) => `  ⚠️ 계정은 연결됐지만 앱 설정은 저장하지 못했습니다. 다음 로그인 때 앱 정보를 다시 묻습니다.\n     ${message}`,
+  tokenAtAppId: '  토큰처럼 보입니다 — 토큰 직접 입력으로 전환합니다. (앱 ID 칸에서는 엔터만 누르면 됩니다.)',
 };
 
 const en: typeof ko = {
@@ -206,12 +209,38 @@ const en: typeof ko = {
     configuration: 'Could not start the login.',
   } as Record<string, string>)[code] ?? code)} Existing credentials were preserved.`,
   directReason: (detail: string) => `     Meta said: ${detail}`,
+  appLoadFailed: (message: string) => `  ⚠️ Could not read the saved app settings — continuing with token paste.\n     ${message}`,
+  appSaveFailed: (message: string) => `  ⚠️ The account is connected, but the app settings were not saved. You will be asked for the app again next time.\n     ${message}`,
+  tokenAtAppId: '  That looks like a token — switching to token paste. (At the app ID prompt, just press Enter.)',
 };
 
 const M = resolveLang() === 'en' ? en : ko;
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q: string) => new Promise<string>((r) => rl.question(q, (a) => r(a.trim())));
+
+/**
+ * 입력을 화면에 찍지 않는 질문 — 앱 시크릿은 만료되지 않고 그 앱을 쓰는 모든 계정의 토큰을 만들 수 있어 터미널
+ * 스크롤백·화면 공유에 남으면 안 된다. readline 에는 공개 API 가 없어 출력 함수를 질문 동안만 바꾼다.
+ * TTY 가 아니면 찍을 화면도 없으니 그대로 읽는다.
+ */
+const askHidden = (q: string) => {
+  if (!process.stdin.isTTY) return ask(q);
+  const out = rl as unknown as { _writeToOutput: (text: string) => void };
+  const original = out._writeToOutput;
+  return new Promise<string>((r) => {
+    rl.question(q, (a) => {
+      out._writeToOutput = original;
+      process.stdout.write('\n');
+      r(a.trim());
+    });
+    // 프롬프트는 이미 찍혔다. 이후 입력 에코만 막는다.
+    out._writeToOutput = () => {};
+  });
+};
+
+/** 앱 ID 칸에 붙여 넣은 토큰 (IGAA… / EAA… / TH… 또는 긴 영숫자) — 예전 사용법 그대로 토큰 입력으로 보낸다. */
+const looksLikeToken = (value: string) => /^(IGAA|EAA|TH)[A-Za-z0-9]/.test(value) || /^[A-Za-z0-9_-]{40,}$/.test(value);
 
 async function confirmReconnect(label: string, detail: string): Promise<boolean> {
   console.log(M.already(label, detail));
@@ -281,8 +310,19 @@ async function loginWithOwnApp(
   resetApp: boolean,
 ): Promise<boolean | null> {
   const label = platform === 'instagram' ? 'Instagram' : 'Threads';
+  // 파이프로 들어온 입력은 예전처럼 토큰이다 (`printf 'IGAA…' | mimi-seed auth instagram`) — 앱 단계를 건너뛴다.
+  if (!process.stdin.isTTY) return null;
   console.log(M.appHeader(label));
-  let app: MetaAppConfig | null = resetApp ? null : loadMetaApp(platform);
+  let app: MetaAppConfig | null = null;
+  if (!resetApp) {
+    try {
+      app = loadMetaApp(platform);
+    } catch (error) {
+      // 손상된 meta-apps.json 때문에 명령 전체가 죽지 않게 — 토큰 입력으로 계속한다 (파일은 건드리지 않는다).
+      console.error(M.appLoadFailed(error instanceof Error ? error.message : String(error)));
+      return null;
+    }
+  }
   const isNew = !app;
   if (app) {
     console.log(M.appSaved(label, app.appId));
@@ -292,8 +332,9 @@ async function loginWithOwnApp(
     console.log('');
     const appId = await ask(M.askAppId(label));
     if (!appId) return null;
+    if (looksLikeToken(appId)) { console.log(M.tokenAtAppId); return null; }
     if (!isValidAppId(appId)) { console.error(M.badAppId); return false; }
-    const appSecret = await ask(M.askAppSecret(label));
+    const appSecret = await askHidden(M.askAppSecret(label));
     if (!isValidAppSecret(appSecret)) { console.error(M.badAppSecret); return false; }
     const redirectUri = (await ask(M.askRedirect(DEFAULT_REDIRECT_URI))) || DEFAULT_REDIRECT_URI;
     if (!isValidRedirectUri(redirectUri)) { console.error(M.badRedirect); return false; }
@@ -309,14 +350,22 @@ async function loginWithOwnApp(
       onUrl: (url) => { console.log(M.thUrl); console.log(url); },
       readRedirect: loopback ? undefined : () => ask(M.pastePrompt),
     });
-    // Save the app only once it has produced a verified login, so a typo is never persisted.
-    if (isNew) saveMetaApp(platform, app);
     console.log(indent(result.text));
+    // Save the app only once it has produced a verified login, so a typo is never persisted. The account is
+    // already saved at this point, so a failed app save is reported, not turned into a failed login.
+    if (isNew) {
+      try {
+        saveMetaApp(platform, app);
+      } catch (error) {
+        console.error(M.appSaveFailed(error instanceof Error ? error.message : String(error)));
+      }
+    }
     return true;
   } catch (error) {
     if (error instanceof MetaDirectLoginError) {
       console.error(M.directFailed(error.code));
-      if (error.detail) console.error(M.directReason(error.detail));
+      // validation 의 detail 은 연결 검증 결과 원문(MCP 도구와 같은 문구)이라 'Meta 응답' 접두 없이 그대로 보인다.
+      if (error.detail) console.error(error.code === 'validation' ? indent(error.detail) : M.directReason(error.detail));
       return false;
     }
     throw error;
