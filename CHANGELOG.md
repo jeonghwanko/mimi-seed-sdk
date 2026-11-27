@@ -22,6 +22,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The license notice now names **Lucas Foundation** (https://mimi-seed.oddbout.com) as the copyright holder, replacing Pryzm GG and the retired console URL. The license itself (PolyForm Noncommercial 1.0.0) is unchanged.
 
+### Fixed
+
+- `social_publish`: after a repost whose outcome was unknown, `resendUnknown` alone now resends it, as the message advises. Before, the call returned `already_posted` and the account stayed blocked.
+- `social_publish`: `markPosted` now works when the plan is blocked for another reason, for example a YouTube render that was moved after an upload whose outcome was unknown. Before, that channel stayed blocked. The result lists what was recorded under `marks`.
+- `social_publish`: for TikTok, an unknown outcome now says how to resend: TikTok never republishes a plan, so make a new plan and send it with `resendUnknown`.
+- `social_publish`: a refused post that could not be recorded now says how to clear the account. A `markPosted` that cannot be saved (for example, TikTok disconnected) is now reported instead of silently skipped.
+- `social_publish`: `markPosted` and `repost` naming the same `at` in one call no longer post it again. A record with an unparsable date is now reported as unreadable instead of crashing.
+
 ## [0.25.5] - 2026-11-28
 
 ### Added

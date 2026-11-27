@@ -27,7 +27,8 @@ export default {
     'Unknown-outcome records the user checked are not posted on that platform. Pass the platform and at exactly as the plan showed them. Only that record is sent again; a newer unknown outcome is blocked again.',
   '사용자가 일부러 다시 게시하려는 이미 게시된 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 한 번 다시 게시되면 그 승인은 더 이상 맞지 않아 재시도로 반복 게시되지 않습니다.':
     'Already-posted records the user wants to post again on purpose. Pass the platform and at exactly as the plan showed them. Once reposted, that approval no longer matches, so a retry cannot repost again.',
-  '계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목)': 'The at the plan showed for that record (names exactly which record is approved)',
-  '결과를 알 수 없었던 기록 중, 사용자가 그 플랫폼에서 실제로 올라가 있음을 확인한 것. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록을 게시됨으로 남기고 계정 차단을 풉니다 (보내지는 않음).':
-    'Unknown-outcome records the user checked and found live on that platform. Pass the platform and at exactly as the plan showed them. The record is kept as posted and the account is unblocked (nothing is sent).',
+  '계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목). 이 호출의 그 플랫폼 게시물과 계정 기준이므로, 내용을 바꾸면 다시 미리보기한 계획의 at 을 쓰세요.':
+    'The at the plan showed for that record (names exactly which record is approved). It is read against this call\'s post on that platform and its account, so after changing the content, use the at from a fresh preview.',
+  '결과를 알 수 없었던 기록 중, 사용자가 그 플랫폼에서 실제로 올라가 있음을 확인한 것. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록을 게시됨으로 남기고 계정 차단을 풉니다 (보내지는 않음). confirm: true 이면 계획이 다른 문제로 막혀도 계정의 진행 중 게시는 기록합니다.':
+    'Unknown-outcome records the user checked and found live on that platform. Pass the platform and at exactly as the plan showed them. The record is kept as posted and the account is unblocked (nothing is sent). With confirm: true, the account\'s pending send is recorded even when the plan is blocked by another problem.',
 };

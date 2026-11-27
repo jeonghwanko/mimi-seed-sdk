@@ -150,15 +150,20 @@ the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools 
    arguments plus `confirm: true`.
 5. Report the per-platform `results`. The same post (same platform, account, and content) is never posted twice, so
    if something `failed`, fix it if needed (e.g. that platform's own `threads.text`) and call again: platforms that
-   already posted are skipped. Approvals name one record by the `at` the plan showed; an approval stays valid until
-   its action succeeds (or ends unknown), after which that record changes and the same arguments no longer match:
+   already posted are skipped. Approvals name one record by the `at` the plan showed for that platform's post and
+   account (after changing the content, preview again and use the new plan's `at`); an approval stays valid until its
+   action succeeds (or ends unknown), after which that record changes and the same arguments no longer match:
    - To post identical content again on purpose, get the user's go-ahead and pass
      `repost: [{ "platform": "<platform>", "at": "<at of that posted record>" }]` (TikTok needs a new plan instead).
    - If a result is `unknown_outcome`, do **not** retry on your own: that account stays blocked, even for edited
      content. Ask the user to check the platform. If the post **is** there, pass
      `markPosted: [{ "platform": "<platform>", "at": "<at the plan shows>" }]` (it is recorded as posted, nothing is
-     sent); if it is **not**, pass `resendUnknown` with the same shape.
-   A `posted` result with a `warning` that it could not be recorded is handled the same way (`markPosted`). A failed
+     sent); if it is **not**, pass `resendUnknown` with the same shape (it also resends an unknown repost). On TikTok,
+     which never republishes a plan, a resend needs a new plan sent with that `resendUnknown`. `markPosted` with
+     `confirm: true` is recorded even if the plan is blocked by something else (e.g. the rendered video was moved);
+     the result lists it under `marks`.
+   A `posted` result with a `warning` that it could not be recorded is handled the same way (`markPosted`); a
+   `failed` one whose error says it could not be recorded is resent with the `resendUnknown` the error names. A failed
    pre-send check (an expired token, a bad video file) means nothing was posted anywhere; "another call is publishing
    to this account" means wait and call again.
 
