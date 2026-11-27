@@ -632,7 +632,8 @@ describe('review 7', () => {
     const before = readRecord('threads', targetKey('threads', launch)!);
     api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
     expect((await run(repostOf(launch)))[0].status).toBe('failed');
-    expect(readRecord('threads', targetKey('threads', launch)!)).toEqual(before); // not downgraded, id/url kept
+    // Not downgraded: state, `at`, id and url kept. Only the attempt that settled it changes.
+    expect(readRecord('threads', targetKey('threads', launch)!)).toEqual({ ...before, settledAttempt: expect.any(String) });
     expect((await run(launch))[0].status).toBe('already_posted');
     expect(api.thText).toHaveBeenCalledTimes(2);
   });
@@ -897,8 +898,8 @@ describe('settled by attempt id, not by clock', () => {
     return { posted, pending: readPending('threads', account())! };
   };
 
-  it.each([['the same millisecond', T], ['a clock stepped back', BACK]])(
-    'a repost with an unknown outcome in %s as the post blocks the account until checked',
+  it.each([['a frozen clock', T], ['a clock stepped back', BACK]])(
+    'a repost with an unknown outcome on %s blocks the account until checked',
     async (_case, repostAt) => {
       const { posted, pending } = await repostUnknownAt(repostAt);
       expect(record()).toEqual(posted); // the repost never touches the posted record
@@ -908,8 +909,8 @@ describe('settled by attempt id, not by clock', () => {
     },
   );
 
-  it.each([['the same millisecond', T], ['a clock stepped back', BACK]])(
-    'in %s, markPosted uses up the repost approval even when clearing the marker did not happen',
+  it.each([['a frozen clock', T], ['a clock stepped back', BACK]])(
+    'on %s, markPosted uses up the repost approval even when clearing the marker did not happen',
     async (_case, repostAt) => {
       const { posted, pending } = await repostUnknownAt(repostAt);
       const ledgerModule = await import('../crosspost/ledger.js');
@@ -943,4 +944,53 @@ describe('settled by attempt id, not by clock', () => {
       expect(planPublish(other).ok).toBe(false);
     },
   );
+
+  it('on a frozen clock, a repost that ends unknown twice gets a new `at` each time; the same retry is blocked', async () => {
+    const { posted, pending: first } = await repostUnknownAt(T);
+    const retry = { ...launch, repost: [{ platform: 'threads' as const, at: posted.at }], resendUnknown: [{ platform: 'threads' as const, at: first.at }] };
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(retry))[0].status).toBe('unknown_outcome');
+    const second = readPending('threads', account())!;
+    expect(second.at).not.toBe(first.at);
+    expect(planPublish(retry).ok).toBe(false); // the second unknown is not approved by the first one's `at`
+    expect(api.thText).toHaveBeenCalledTimes(3);
+  });
+
+  it('on a frozen clock, other content resent under resendUnknown that ends unknown again is blocked on retry', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(launch))[0].status).toBe('unknown_outcome');
+    const first = readPending('threads', account())!;
+    const retry = { ...other, resendUnknown: [{ platform: 'threads' as const, at: first.at }] };
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(retry))[0].status).toBe('unknown_outcome');
+    expect(readPending('threads', account())!.at).not.toBe(first.at);
+    expect(planPublish(retry).ok).toBe(false);
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+
+  it('markPosted on a marker whose at equals the posted record still uses up a repost approval in the same call', async () => {
+    const at = T.toISOString();
+    writeRecord('threads', key(), { state: 'posted', at, id: 'post-1' });
+    const ledgerModule = await import('../crosspost/ledger.js');
+    ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at, attempt: 'attempt-a' });
+    const marked = { ...launch, repost: [{ platform: 'threads' as const, at }], markPosted: [{ platform: 'threads' as const, at }] };
+    expect((await run(marked))[0].status).toBe('already_posted');
+    expect(record()).toMatchObject({ state: 'posted', id: 'post-1', settledAttempt: 'attempt-a' });
+    expect(record().at > at).toBe(true);
+    expect(api.thText).not.toHaveBeenCalled();
+  });
+
+  it('a repost that fails cleanly, whose marker could not be cleared, does not block the account', async () => {
+    expect((await run(launch))[0].status).toBe('posted');
+    const ledgerModule = await import('../crosspost/ledger.js');
+    const keep = vi.spyOn(ledgerModule, 'replacePendingIfOurs').mockImplementationOnce(() => false); // marker stays
+    api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    try {
+      expect((await run({ ...launch, repost: [{ platform: 'threads', at: record().at }] }))[0].status).toBe('failed');
+    } finally {
+      keep.mockRestore();
+    }
+    expect(readPending('threads', account())).not.toBeNull();
+    expect(planPublish(other).ok).toBe(true);
+  });
 });
