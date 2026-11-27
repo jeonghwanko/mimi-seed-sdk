@@ -103,6 +103,24 @@ and publish only after confirmation.
 Keep the returned media ID and permalink. Permalink lookup is best-effort and may be empty; inspect the latest
 post in the platform when necessary. Images, videos, and carousels can take several seconds to process.
 
+## 5. Post everywhere at once
+
+To post the same announcement to several platforms, ask for all of them in one request:
+
+```text
+Post "Version 2.4 is live" with https://cdn.example.com/releases/2.4.0/hero.png to Facebook, Instagram, and Threads.
+Show me the plan first.
+```
+
+The agent uses `social_publish`. First it shows a plan for each platform and anything that would block one (a
+Threads post over 500 characters, Instagram without an image, a platform that is not connected). Nothing is posted
+anywhere until every platform passes and you approve. After that you get a result per platform. If one failed, asking
+again with the same post resends only that platform. If a platform's result is unknown (for example, a timeout), it
+is not resent automatically: check that platform first, because the post may already be live.
+
+YouTube needs a local video file and the channel ID; it uploads as private unless you ask otherwise. TikTok needs a
+plan made first with `tiktok_business_plan_video_post`.
+
 ## Token expiry
 
 - Facebook/Instagram: reconnect with the exact `mimi-seed auth <platform>` command in the error

@@ -20,7 +20,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- `social_publish` posts one announcement to several platforms (Facebook, Instagram, Threads, YouTube, and TikTok) in a single call. Without `confirm` it returns a plan for each platform and lists anything that would block it. Nothing is posted anywhere unless every platform passes. After you approve, results come back per platform. Calling again with the same `requestId` resends only the platforms that failed. A platform whose outcome is unknown (the publishing request was sent but the answer was a server error, a timeout, or a dropped connection) is never resent automatically, so a post cannot go out twice. Failures before the publishing request stay retryable. The plan also runs each platform's local checks (YouTube sign-in, upload permission, and tag length; the TikTok account and duplicate record), so a problem there blocks the whole post before anything goes out. Reusing a `requestId` for different content is refused instead of being skipped as "already posted". The record is kept in `~/.mimi-seed/social-publish/`.
 - A one-page **social setup checklist** ([`docs/user-guide/social-setup-checklist.md`](docs/user-guide/social-setup-checklist.md), Korean `.ko.md`). It covers what to prepare in each platform's console (YouTube, Facebook, Instagram, Threads, TikTok), the one command that connects them all (`mimi-seed auth social`), how to verify, what expires, and the usual blockers. `mimi-seed auth social` now points to it when it starts.
+
+### Tool changes
+
+- Added `social_publish` (new `crosspost` domain, included in the `social` toolset).
 
 ## [0.25.4] - 2026-11-27
 

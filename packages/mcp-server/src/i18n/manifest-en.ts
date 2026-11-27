@@ -53,6 +53,9 @@ export const MANIFEST_TEXT_EN: Readonly<Record<string, string>> = {
   '텍스트/이미지/영상 포스팅·토큰 갱신': 'Post text/images/videos; refresh the token',
   'Organic API 계정 진단·게시 전 검증·공개 영상 게시·상태·중복 방지 감사 로그':
     'Organic API account diagnostics, pre-publish validation, public video publishing, status, duplicate-prevention audit log',
+  '소셜 통합 게시': 'Cross-platform social publishing',
+  '플랫폼별 연결 (mimi-seed auth social)': 'Each platform connected (mimi-seed auth social)',
+  '여러 소셜 플랫폼에 한 번에 게시·중복 게시 방지': 'Publish one post to several social platforms; duplicate-post protection',
   '영상 제작': 'Video production',
   '기능별 API 키 + Google OAuth(YouTube 게시) + FFmpeg': 'Per-feature API keys + Google OAuth (YouTube publishing) + FFmpeg',
   'story 스토리보드·영상 리서치/제작·YouTube 업로드와 공개 상태 관리':

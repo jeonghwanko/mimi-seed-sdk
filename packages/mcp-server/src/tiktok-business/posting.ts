@@ -16,6 +16,7 @@ import { CREDENTIAL_DIR_MODE, CREDENTIAL_FILE_MODE, writeJsonAtomic } from '#cor
 import { validateVideo } from '../video/render.js';
 import { TikTokApiError, getPublishStatus, getVideoSettings, publishVideo } from './api.js';
 import { ensureTikTokPublishConfig } from './auth.js';
+import { requireTikTokBusinessConfig } from './config.js';
 import type { TikTokPostInfo, TikTokPublishRequest, TikTokVideoSettings } from './types.js';
 import { catalog } from '#core/lang.js';
 import { readJsonFile } from '../lib/json-file.js';
@@ -397,7 +398,26 @@ export function loadPostPlan(planId: string): TikTokPostPlan {
   return plan;
 }
 
-export async function publishPlannedVideo(planId: string, confirmPublish: boolean) {
+/**
+ * Local checks that publishPlannedVideo makes before sending, without network: the plan exists and is fresh, the
+ * connected account is the one that made the plan, and this content has no blocking audit. social_publish runs it
+ * in its plan so a TikTok problem stops the cross-post before any other platform posts.
+ */
+export function preflightPlannedVideo(planId: string): TikTokPostPlan {
+  const plan = loadPostPlan(planId);
+  const config = requireTikTokBusinessConfig();
+  if (config.openId !== plan.openId) throw new Error(M().accountMismatch);
+  const duplicate = existingBlockingAudit(plan.openId, plan.contentHash);
+  if (duplicate) throw new Error(M().duplicateBlocked(duplicate.state));
+  return plan;
+}
+
+export interface PublishPlannedVideoHooks {
+  /** Called right before the publish request. A failure before it sent nothing. */
+  onPublishStart?: () => void;
+}
+
+export async function publishPlannedVideo(planId: string, confirmPublish: boolean, hooks: PublishPlannedVideoHooks = {}) {
   if (!confirmPublish) throw new Error(M().confirmRequired);
   const plan = loadPostPlan(planId);
   const config = await ensureTikTokPublishConfig();
@@ -427,6 +447,7 @@ export async function publishPlannedVideo(planId: string, confirmPublish: boolea
   }
 
   let result;
+  hooks.onPublishStart?.();
   try {
     result = await publishVideo(config, plan.request);
   } catch (error) {

@@ -13,7 +13,7 @@ export interface ToolMenuArea {
 
 const menuOrder = [
   'ga4', 'bigquery', 'playstore', 'appstore', 'video', 'youtube', 'firebase', 'googleads',
-  'admob', 'drive', 'gsc', 'naver', 'instagram', 'threads', 'facebook', 'tiktok',
+  'admob', 'drive', 'gsc', 'naver', 'instagram', 'threads', 'facebook', 'tiktok', 'crosspost',
   'ci', 'jenkins', 'checks', 'android', 'iam', 'billing', 'ai', 'auth',
 ];
 
@@ -24,6 +24,7 @@ const labels: Record<string, Record<MenuLanguage, string>> = {
   video: { ko: 'YouTube · 영상 제작', en: 'YouTube · Video production' },
   youtube: { ko: 'YouTube · 업로드·채널 운영', en: 'YouTube · Upload and channel management' },
   naver: { ko: '네이버 서치어드바이저', en: 'Naver Search Advisor' },
+  crosspost: { ko: '소셜 통합 게시', en: 'Cross-post to several social platforms' },
   checks: { ko: '출시 상태·제출 전 점검', en: 'Release status and submission checks' },
   android: { ko: 'Android 서명', en: 'Android signing' },
   ai: { ko: 'AI 초안 · 릴리스 노트 / 리뷰 답변', en: 'AI drafts · Release notes and review replies' },
