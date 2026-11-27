@@ -18,6 +18,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `social_publish` posts one announcement to several platforms (Facebook, Instagram, Threads, YouTube, and TikTok) in a single call. Without `confirm` it returns a plan for each platform and lists anything that would block it. Nothing is posted anywhere unless every platform passes. After you approve, results come back per platform. Calling again with the same `requestId` resends only the platforms that failed. A platform whose outcome is unknown (a timeout, a dropped connection, or a YouTube upload that failed after it started) is never resent automatically, so a post cannot go out twice. Reusing a `requestId` for different content is refused instead of being skipped as "already posted". The record is kept in `~/.mimi-seed/social-publish/`.
+
+### Tool changes
+
+- Added `social_publish` (new `crosspost` domain, included in the `social` toolset).
+
 ## [0.25.4] - 2026-11-27
 
 ### Added
@@ -25,8 +33,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `mimi-seed auth instagram` and `mimi-seed auth threads` can sign in through the browser with **your own Meta app**, with no server in between. Since the public console was retired, these commands could only take a pasted token. The first run asks for the app ID, app secret, and registered redirect URI. They are saved to `~/.mimi-seed/meta-apps.json` (`0600`, and encrypted like your other credentials when credential encryption is on) only after a successful login. The app secret is not shown on screen as you type it. After you approve, paste the redirected URL, or register an `http://localhost:<port>` redirect and the CLI catches it. `--reset-app` changes the saved app. A team broker (`MIMI_SEED_WEB_BASE`), `--manual-token`, and a token piped on standard input (`printf 'IGAA…' | mimi-seed auth instagram`) work as before.
 - `mimi-seed auth social` connects every posting channel (YouTube, Facebook, Instagram, Threads, and TikTok) in one pass. Anything already connected is skipped, and expired or expiring tokens are reconnected. Setup flags such as `--reconnect threads` pass through.
 - YouTube upload now appears in `mimi-seed setup`, `mimi-seed doctor`, and `mimi-seed auth status --all`. Connecting it signs in to a separate `youtube` Google profile (`mimi-seed auth login --profile youtube --domains youtube`), so a channel owned by a different Google account never replaces your default login for Play and Firebase. It counts as connected when the default login or any named profile has the YouTube upload permission. Pass `profile: "youtube"` to the `youtube_*` tools.
-
-- `social_publish` posts one announcement to several platforms (Facebook, Instagram, Threads, YouTube, and TikTok) in a single call. Without `confirm` it returns a plan for each platform and lists anything that would block it. Nothing is posted anywhere unless every platform passes. After you approve, results come back per platform. Calling again with the same `requestId` resends only the platforms that failed. A platform whose outcome is unknown (a timeout, a dropped connection, or a YouTube upload that failed after it started) is never resent automatically, so a post cannot go out twice. Reusing a `requestId` for different content is refused instead of being skipped as "already posted". The record is kept in `~/.mimi-seed/social-publish/`.
 
 ### Changed
 
@@ -62,7 +68,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Tool changes
 
-- Added `social_publish` (new `crosspost` domain, included in the `social` toolset).
+- none
 
 ## [0.25.3] - 2026-11-27
 
