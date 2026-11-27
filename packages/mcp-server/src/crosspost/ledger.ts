@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { CREDENTIAL_DIR_MODE, writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
 import { readCredentialFileSync } from '#core/credential-read.js';
 import { catalog } from '#core/lang.js';
@@ -43,11 +43,13 @@ const M = catalog(
     unreadable: (file: string) =>
       `게시 기록 파일을 읽을 수 없어 이미 게시됐는지 판단할 수 없습니다: ${file}. 파일을 확인한 뒤 다시 시도하세요.`,
     inProgress: '이 계정에 지금 다른 호출이 게시하고 있습니다. 끝난 뒤 다시 보내세요 — 이미 게시된 곳은 건너뜁니다.',
+    deadBreaker: (dir: string) => `이전 실행이 잠금 정리 도중 종료되어 표시가 남았습니다. 다른 게시가 진행 중이 아니라면 ${dir} 폴더를 지우고 다시 보내세요.`,
   },
   {
     unreadable: (file: string) =>
       `Cannot read the publish record, so it is unknown whether this was already posted: ${file}. Check the file, then try again.`,
     inProgress: 'Another call is publishing to this account right now. Send again once it finishes — whatever it posted is skipped.',
+    deadBreaker: (dir: string) => `An earlier run stopped while clearing a lock and left a marker behind. If nothing else is publishing, delete the folder ${dir} and send again.`,
   },
 );
 
@@ -209,9 +211,8 @@ export function inProgressMessage(): string {
 
 /**
  * Reserve an account for this process; throws "in progress" if another live call holds it. A stale lock is replaced
- * only while holding a breaker directory and after re-checking it. A breaker whose holder died is moved aside
- * atomically (rename, so two callers cannot both remove it) and this call stops with "in progress": the next call
- * starts clean instead of racing on in the same breath.
+ * only while holding a breaker directory (mkdir, so one caller at a time) and after re-checking it. A breaker is never
+ * removed by anyone but its creator; one left by a run that died is reported for a person to delete.
  */
 export function acquireAccountLock(platform: SocialTarget, account: string): AccountLock {
   fs.mkdirSync(path.join(root(), 'accounts'), { recursive: true, mode: CREDENTIAL_DIR_MODE });
@@ -238,15 +239,9 @@ export function acquireAccountLock(platform: SocialTarget, account: string): Acc
         if (!isCode(statError, 'ENOENT')) throw statError;
         continue; // the other breaker finished: look again
       }
-      if (breakerAge >= STALE_BREAKER_MS) {
-        const tombstone = `${breaker}.dead-${randomUUID()}`;
-        try {
-          fs.renameSync(breaker, tombstone);
-          fs.rmSync(tombstone, { recursive: true, force: true });
-        } catch (renameError) {
-          if (!isCode(renameError, 'ENOENT')) throw renameError;
-        }
-      }
+      // A breaker is held for milliseconds; an old one means a run died in that instant. Removing it automatically
+      // cannot be made race-free (whatever is at the path may already be someone else's fresh one), so a person does.
+      if (breakerAge >= STALE_BREAKER_MS) throw new Error(M().deadBreaker(breaker), { cause: error });
       throw new Error(M().inProgress, { cause: error });
     }
     try {

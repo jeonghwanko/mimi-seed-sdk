@@ -36,6 +36,11 @@ const metaOptions = z.object({
   text: z.string().optional().describe('이 플랫폼에만 쓸 본문 (생략 시 공통 text)'),
 }).optional();
 
+const approval = z.object({
+  platform: z.enum(SOCIAL_TARGETS),
+  at: z.string().min(1).max(64).describe('계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목)'),
+});
+
 export function registerCrosspostTools(server: ToolRegistrar) {
   server.tool(
     'social_publish',
@@ -68,8 +73,8 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       tiktok: z.object({
         planId: z.string().min(1).max(128).describe('tiktok_business_plan_video_post 가 만든 계획 ID (캡션·설정은 계획의 값을 씁니다)'),
       }).optional(),
-      resendUnknown: z.array(z.enum(SOCIAL_TARGETS)).max(SOCIAL_TARGETS.length).optional().describe('결과를 알 수 없었던 플랫폼 중, 사용자가 그 플랫폼에서 게시되지 않았음을 확인한 것만. 다시 보냅니다.'),
-      repost: z.array(z.enum(SOCIAL_TARGETS)).max(SOCIAL_TARGETS.length).optional().describe('이미 같은 내용을 게시한 플랫폼 중, 사용자가 일부러 다시 게시하려는 것만 (계획에 재게시로 표시됩니다).'),
+      resendUnknown: z.array(approval).max(SOCIAL_TARGETS.length).optional().describe('사용자가 그 플랫폼에서 게시되지 않았음을 확인한, 결과를 알 수 없었던 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록만 다시 보내며, 이후 새로 생긴 결과 불명은 다시 막힙니다.'),
+      repost: z.array(approval).max(SOCIAL_TARGETS.length).optional().describe('사용자가 일부러 다시 게시하려는 이미 게시된 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 한 번 다시 게시되면 그 승인은 더 이상 맞지 않아 재시도로 반복 게시되지 않습니다.'),
       confirm: z.boolean().default(false).describe('사용자의 명시 승인 후 true. false 면 dry-run 계획만 반환합니다.'),
     },
     async ({ confirm, ...input }) => {

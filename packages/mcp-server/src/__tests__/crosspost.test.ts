@@ -13,7 +13,7 @@ vi.mock('node:os', async (original) => {
 const api = vi.hoisted(() => {
   const state = {
     fbPhoto: vi.fn(), fbMulti: vi.fn(), igImage: vi.fn(), igCarousel: vi.fn(),
-    thText: vi.fn(), thCarousel: vi.fn(), thVideo: vi.fn(), ytUpload: vi.fn(), ttPublish: vi.fn(), ttPlan: vi.fn(),
+    thText: vi.fn(), thCarousel: vi.fn(), thVideo: vi.fn(), ytUpload: vi.fn(), ttPublish: vi.fn(), ttPlan: vi.fn(), ttOpenId: 'tt-1' as string | null,
     requireAuth: vi.fn(), tokens: vi.fn(), fbPage: vi.fn(), igAccount: vi.fn(), thAccount: vi.fn(), ytPrepare: vi.fn(), ttConfig: vi.fn(), connected: { facebook: true, instagram: true, threads: true } as Record<string, boolean>,
     cfg: { accessToken: 'example', userId: '1', pageAccessToken: 'example', pageId: '1' },
     // A named profile resolves to its own account (pageId / userId = the profile name); no profile → account '1'.
@@ -35,6 +35,7 @@ vi.mock('../helpers.js', () => ({ requireAuth: api.requireAuth }));
 vi.mock('../video/youtube-publish.js', () => ({ YOUTUBE_SCOPE: 'youtube-scope', uploadYouTubeVideo: api.ytUpload, prepareYouTubeUpload: api.ytPrepare }));
 vi.mock('../tiktok-business/auth.js', () => ({ ensureTikTokPublishConfig: api.ttConfig }));
 vi.mock('../tiktok-business/posting.js', () => ({ preflightPlannedVideo: api.ttPlan, publishPlannedVideo: api.ttPublish }));
+vi.mock('../tiktok-business/config.js', () => ({ loadTikTokBusinessConfig: () => (api.ttOpenId ? { openId: api.ttOpenId } : null) }));
 vi.mock('../auth/google-auth.js', () => ({ getStoredTokens: api.tokens }));
 // The real ledger, with writeRecord observable so a test can make one write fail.
 const ledger = vi.hoisted(() => ({ realWrite: null as null | ((...args: never[]) => void) }));
@@ -78,7 +79,8 @@ beforeEach(() => {
   api.ytUpload.mockReset().mockResolvedValue({ videoId: 'vid1' });
   api.ttPublish.mockReset().mockResolvedValue({ publishId: 'pub1', state: 'pending' });
   // Each plan id belongs to its own TikTok account, so tests can tell accounts apart.
-  api.ttPlan.mockReset().mockImplementation((planId: string) => ({ openId: `tt-${planId}`, request: { post_info: { caption: 'planned caption' } } }));
+  api.ttPlan.mockReset().mockImplementation(() => ({ openId: 'tt-1', request: { post_info: { caption: 'planned caption' } } }));
+  api.ttOpenId = 'tt-1';
   api.requireAuth.mockReset().mockResolvedValue({});
   api.tokens.mockReset().mockReturnValue({ refresh_token: 'r', scope: 'https://www.googleapis.com/auth/youtube.force-ssl' });
   vi.mocked(writeRecord).mockReset().mockImplementation(ledger.realWrite as typeof writeRecord);
@@ -186,36 +188,41 @@ describe('planPublish', () => {
  */
 describe('decide() — the table', () => {
   const at = '2026-11-27T00:00:00.000Z';
-  const rec = (state: PostRecord['state']): PostRecord => ({ state, at, id: 'p1', url: 'https://example.com/p1' });
-  const pend: PendingRecord = { postKey: 'other', state: 'unknown', at };
-  const opts = (resendUnknown: string[] = [], repost: string[] = []) =>
+  const later = '2026-11-28T00:00:00.000Z';
+  const rec = (state: PostRecord['state'], when = at): PostRecord => ({ state, at: when, id: 'p1', url: 'https://example.com/p1' });
+  const pend = (when = at): PendingRecord => ({ postKey: 'other', state: 'unknown', at: when });
+  const ok = (platform: SocialPublishInput['targets'][number], when: string) => [{ platform, at: when }];
+  const opts = (resendUnknown: { platform: SocialPublishInput['targets'][number]; at: string }[] = [], repost: typeof resendUnknown = []) =>
     ({ resendUnknown, repost }) as Parameters<typeof decide>[3];
   it.each([
-    ['account pending, new content', null, pend, opts(), 'block'],
-    ['account pending, posted content', rec('posted'), pend, opts(), 'block'],
-    ['account pending, even with repost', rec('posted'), pend, opts([], ['threads']), 'block'],
-    ['account pending, checked by a person', null, pend, opts(['threads']), 'send'],
-    ['account pending, resendUnknown names another platform', null, pend, opts(['facebook']), 'block'],
+    // posted comes first: a skip sends nothing, so a pending send of other content does not block it (review 6 #2)
+    ['posted', rec('posted'), null, opts(), 'skip'],
+    ['posted, account pending with other content', rec('posted'), pend(later), opts(), 'skip'],
+    ['posted, repost names this record', rec('posted'), null, opts([], ok('threads', at)), 'send'],
+    ['posted, repost names an older record (already reposted)', rec('posted', later), null, opts([], ok('threads', at)), 'skip'],
+    ['posted, repost names another platform', rec('posted'), null, opts([], ok('facebook', at)), 'skip'],
+    ['posted, repost approved but account pending', rec('posted'), pend(later), opts([], ok('threads', at)), 'block'],
+    ['account pending, new content', null, pend(), opts(), 'block'],
+    ['account pending, resendUnknown names this pending send', null, pend(), opts(ok('threads', at)), 'send'],
+    ['account pending, resendUnknown names an older one (review 6 #5)', null, pend(later), opts(ok('threads', at)), 'block'],
+    ['account pending, resendUnknown names another platform', null, pend(), opts(ok('facebook', at)), 'block'],
     ['no record', null, null, opts(), 'send'],
     ['failed', rec('failed'), null, opts(), 'send'],
-    ['posted', rec('posted'), null, opts(), 'skip'],
-    ['posted, named in resendUnknown only', rec('posted'), null, opts(['threads']), 'skip'],
-    ['posted, named in repost', rec('posted'), null, opts([], ['threads']), 'send'],
-    ['posted, repost names another platform', rec('posted'), null, opts([], ['facebook']), 'skip'],
     ['sending record without a pending marker', rec('sending'), null, opts(), 'block'],
     ['unknown record without a pending marker', rec('unknown'), null, opts(), 'block'],
-    ['unknown record, checked by a person', rec('unknown'), null, opts(['threads']), 'send'],
+    ['unknown record, resendUnknown names it', rec('unknown'), null, opts(ok('threads', at)), 'send'],
+    ['unknown record and its marker, resendUnknown names them', rec('unknown'), pend(), opts(ok('threads', at)), 'send'],
   ] as const)('%s → %s', (_label, record, pending, options, expected) => {
     expect(decide('threads', record, pending, options).kind).toBe(expected);
   });
 
-  it('a skip reports the earlier post; a block says how to resend after checking; a repost says so', () => {
+  it('a skip reports the earlier post; a block names the exact record to approve; a repost says so', () => {
     expect(decide('threads', rec('posted'), null, opts())).toEqual({
       kind: 'skip', outcome: { platform: 'threads', status: 'already_posted', id: 'p1', url: 'https://example.com/p1', at },
     });
-    const blocked = decide('threads', null, pend, opts());
-    expect(blocked.kind === 'block' && blocked.problem).toMatch(/outcome is unknown .* resendUnknown: \["threads"\]/);
-    const repost = decide('threads', rec('posted'), null, opts([], ['threads']));
+    const blocked = decide('threads', null, pend(), opts());
+    expect(blocked.kind === 'block' && blocked.problem).toContain(`resendUnknown: [{ "platform": "threads", "at": "${at}" }]`);
+    const repost = decide('threads', rec('posted'), null, opts([], ok('threads', at)));
     expect(repost.kind === 'send' && repost.note).toMatch(/posting it again \(repost\)/);
   });
 });
@@ -309,7 +316,8 @@ describe('executePublish', () => {
     // Another account is unaffected.
     expect((await run({ targets: ['threads'], text: 'Launch day (edited)', threads: { profile: 'other-account' } }))[0].status).toBe('posted');
     // After the person checked: resendUnknown sends the edited post and clears the account.
-    expect((await run({ ...edited, resendUnknown: ['threads'] }))[0].status).toBe('posted');
+    const pendingAt = planPublish(edited).posts[0].pending!.at;
+    expect((await run({ ...edited, resendUnknown: [{ platform: 'threads', at: pendingAt }] }))[0].status).toBe('posted');
     expect(readPending('threads', accountKey('threads', edited)!)).toBeNull();
     expect((await run({ targets: ['threads'], text: 'Next week' }))[0].status).toBe('posted');
   });
@@ -318,10 +326,16 @@ describe('executePublish', () => {
     const input: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'New episode out now!', imageUrls: [IMG[0]] };
     await run(input);
     expect((await run(input)).map((o) => o.status)).toEqual(['already_posted', 'already_posted']);
-    const again: SocialPublishInput = { ...input, repost: ['threads'] };
+    const shown = planPublish(input).posts[1];
+    expect(shown.action).toMatch(/To post it again on purpose: repost: \[\{ "platform": "threads", "at": ".*" \}\]/);
+    const again: SocialPublishInput = { ...input, repost: [{ platform: 'threads', at: shown.record!.at }] };
     expect(planPublish(again).posts[1].action).toMatch(/posting it again \(repost\)/);
     expect((await run(again)).map((o) => o.status)).toEqual(['already_posted', 'posted']);
     expect(api.fbPhoto).toHaveBeenCalledTimes(1);
+    expect(api.thText).toHaveBeenCalledTimes(2);
+    // review 6 #3: the approval named that record; after the repost the record is newer, so a retry with the same
+    // arguments skips instead of posting a third time.
+    expect((await run(again)).map((o) => o.status)).toEqual(['already_posted', 'already_posted']);
     expect(api.thText).toHaveBeenCalledTimes(2);
   });
 
@@ -330,9 +344,9 @@ describe('executePublish', () => {
     const input: SocialPublishInput = { targets: ['threads'], text: 'hi' };
     expect((await run(input))[0].status).toBe('unknown_outcome');
     const plan = planPublish(input);
-    expect(plan.posts[0].problems.join()).toMatch(/outcome is unknown .* resendUnknown: \["threads"\]/);
+    expect(plan.posts[0].problems.join()).toMatch(/outcome is unknown .* resendUnknown: \[\{ "platform": "threads", "at": /);
     await expect(executePublish(input, { ...plan, ok: true })).rejects.toThrow(/outcome is unknown/); // re-checked under the lock
-    const resend: SocialPublishInput = { ...input, resendUnknown: ['threads'] };
+    const resend: SocialPublishInput = { ...input, resendUnknown: [{ platform: 'threads', at: plan.posts[0].pending!.at }] };
     expect(planPublish(resend).posts[0].action).toMatch(/resending after a check/);
     expect((await run(resend))[0].status).toBe('posted');
     expect(api.thText).toHaveBeenCalledTimes(2);
@@ -360,10 +374,13 @@ describe('executePublish', () => {
     const input = (planId: string): SocialPublishInput => ({ targets: ['tiktok'], text: 'x', tiktok: { planId } });
     api.ttPublish.mockImplementationOnce(failAfterPublishStart(new Error('outcome unknown', { cause: new TikTokApiError('t', 1, 'r', true) })));
     expect((await run(input('plan-1')))[0].status).toBe('unknown_outcome');
+    api.ttOpenId = 'tt-2'; // each case on its own account: an unknown outcome blocks the account it happened on
     api.ttPublish.mockImplementationOnce(failAfterPublishStart(new TikTokApiError('no share_id', undefined, undefined, true)));
     expect((await run(input('plan-2')))[0].status).toBe('unknown_outcome');
+    api.ttOpenId = 'tt-3';
     api.ttPublish.mockImplementationOnce(failAfterPublishStart(new Error('audit write failed after success')));
     expect((await run(input('plan-3')))[0].status).toBe('unknown_outcome');
+    api.ttOpenId = 'tt-4';
     api.ttPublish.mockImplementationOnce(failAfterPublishStart(new TikTokApiError('rejected', 40001)));
     expect((await run(input('plan-4')))[0].status).toBe('failed');
     expect(api.ttPublish).toHaveBeenLastCalledWith('plan-4', true, { onPublishStart: expect.any(Function) });
@@ -478,7 +495,7 @@ describe('review 5 — remaining findings', () => {
   });
 
   it('#8: resendUnknown is not honoured while another call is still publishing to that account', () => {
-    const input: SocialPublishInput = { targets: ['threads'], text: 'hi', resendUnknown: ['threads'] };
+    const input: SocialPublishInput = { targets: ['threads'], text: 'hi', resendUnknown: [{ platform: 'threads', at: 'x' }] };
     const lock = acquireAccountLock('threads', accountKey('threads', input)!);
     try {
       const plan = planPublish(input);
@@ -543,6 +560,67 @@ describe('review 5 — remaining findings', () => {
   });
 });
 
+describe('review 6', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+
+  it('#1: a posted TikTok plan is skipped on a retry, so the failed target can be resent', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    const input: SocialPublishInput = { targets: ['threads', 'tiktok'], text: 'Launch', tiktok: { planId: 'plan-x' } };
+    expect((await run(input)).map((o) => o.status)).toEqual(['failed', 'posted']);
+    // TikTok's own duplicate guard now refuses this plan — that must not block skipping it.
+    api.ttPlan.mockImplementation(() => { throw new Error('Duplicate publish blocked: existing record state=published.'); });
+    const plan = planPublish(input);
+    expect(plan.ok).toBe(true);
+    expect(plan.posts[1].action).toMatch(/already posted/);
+    expect((await executePublish(input, plan)).map((o) => o.status)).toEqual(['posted', 'already_posted']);
+    expect(api.ttPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it('#2: an already-posted target is skipped even while another call is sending other content to that account', async () => {
+    const launch: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'Launch', imageUrls: [IMG[0]] };
+    api.fbPhoto.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    expect((await run(launch)).map((o) => o.status)).toEqual(['failed', 'posted']);
+    // Another call is sending 'Next week' to the same Threads account right now (its marker and lock are live).
+    let finish!: () => void;
+    api.thText.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve({ id: 't2' }); }));
+    const other = run({ targets: ['threads'], text: 'Next week' });
+    await vi.waitFor(() => expect(api.thText).toHaveBeenCalledTimes(2));
+    expect((await run(launch)).map((o) => o.status)).toEqual(['posted', 'already_posted']);
+    finish();
+    expect((await other)[0].status).toBe('posted');
+  });
+
+  it('#5: resendUnknown names the checked outcome; a newer unknown outcome after it is blocked again', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run({ targets: ['threads'], text: 'X' }))[0].status).toBe('unknown_outcome');
+    const y: SocialPublishInput = { targets: ['threads'], text: 'Y' };
+    const checkedAt = planPublish(y).posts[0].pending!.at;
+    const approved: SocialPublishInput = { ...y, resendUnknown: [{ platform: 'threads', at: checkedAt }] };
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout())); // Y also times out
+    expect((await run(approved))[0].status).toBe('unknown_outcome');
+    // Same arguments again: the approval was for X's outcome, not Y's, which nobody has checked.
+    const retry = planPublish(approved);
+    expect(retry.ok).toBe(false);
+    expect(retry.posts[0].problems.join()).toMatch(/outcome is unknown/);
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+
+  it('#6: a marker that cannot be cleared after a post is reported, and the original error is kept on a failure', async () => {
+    const ledgerModule = await import('../crosspost/ledger.js');
+    const clear = vi.spyOn(ledgerModule, 'clearPending');
+    clear.mockImplementation(() => { throw new Error('EPERM'); });
+    try {
+      const posted = await run({ targets: ['threads'], text: 'hi' });
+      expect(posted[0]).toMatchObject({ status: 'posted', warning: expect.stringMatching(/pending marker could not be cleared: EPERM/) });
+      api.igImage.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+      const failed = await run({ targets: ['instagram'], text: 'x', imageUrls: [IMG[0]] });
+      expect(failed[0]).toMatchObject({ status: 'failed', error: expect.stringMatching(/^Meta API 400 .*could not be cleared: EPERM/) });
+    } finally {
+      clear.mockRestore();
+    }
+  });
+});
+
 describe('account lock', () => {
   const account = 'user:1';
   const lockOf = () => accountLockPath('threads', account);
@@ -574,14 +652,15 @@ describe('account lock', () => {
     expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
   });
 
-  it('review 5 #2: a dead breaker is moved aside and this call stops; the next call proceeds', () => {
+  it('review 6 #4/#7: a breaker left by a dead run is never removed automatically; the message says what to delete', () => {
     leaveLock('2147483646');
     mkdirSync(`${lockOf()}.break`);
-    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account/); // live breaker
+    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account/); // a live breaker
     const old = (Date.now() - 2 * 60 * 1000) / 1000;
     utimesSync(`${lockOf()}.break`, old, old);
-    expect(() => acquireAccountLock('threads', account)).toThrow(/publishing to this account/); // cleared, then stops
-    expect(existsSync(`${lockOf()}.break`)).toBe(false);
+    expect(() => acquireAccountLock('threads', account)).toThrow(/stopped while clearing a lock .* delete the folder .*\.break/);
+    expect(existsSync(`${lockOf()}.break`)).toBe(true); // left for a person
+    rmSync(`${lockOf()}.break`, { recursive: true });
     expect(() => acquireAccountLock('threads', account).release()).not.toThrow();
   });
 

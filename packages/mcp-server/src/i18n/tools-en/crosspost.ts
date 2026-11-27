@@ -19,10 +19,11 @@ export default {
   '기본 private. 계획에 표시되며 승인 대상입니다.': 'Default private. Shown in the plan and covered by the approval.',
   'tiktok_business_plan_video_post 가 만든 계획 ID (캡션·설정은 계획의 값을 씁니다)':
     'Plan ID made by tiktok_business_plan_video_post (the caption and settings come from the plan)',
-  '결과를 알 수 없었던 플랫폼 중, 사용자가 그 플랫폼에서 게시되지 않았음을 확인한 것만. 다시 보냅니다.':
-    'Only platforms whose outcome was unknown and that the user checked are not posted there. They are sent again.',
-  '이미 같은 내용을 게시한 플랫폼 중, 사용자가 일부러 다시 게시하려는 것만 (계획에 재게시로 표시됩니다).':
-    'Only platforms where the same content was already posted and that the user wants to post again on purpose (the plan shows it as a repost).',
   '사용자의 명시 승인 후 true. false 면 dry-run 계획만 반환합니다.':
     'true after the user\'s explicit approval. When false, returns only the dry-run plan.',
+  '사용자가 그 플랫폼에서 게시되지 않았음을 확인한, 결과를 알 수 없었던 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록만 다시 보내며, 이후 새로 생긴 결과 불명은 다시 막힙니다.':
+    'Unknown-outcome records the user checked are not posted on that platform. Pass the platform and at exactly as the plan showed them. Only that record is sent again; a newer unknown outcome is blocked again.',
+  '사용자가 일부러 다시 게시하려는 이미 게시된 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 한 번 다시 게시되면 그 승인은 더 이상 맞지 않아 재시도로 반복 게시되지 않습니다.':
+    'Already-posted records the user wants to post again on purpose. Pass the platform and at exactly as the plan showed them. Once reposted, that approval no longer matches, so a retry cannot repost again.',
+  '계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목)': 'The at the plan showed for that record (names exactly which record is approved)',
 };

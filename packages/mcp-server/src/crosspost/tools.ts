@@ -15,16 +15,19 @@
 // receives (targetKey). An **account** is a platform + the account it resolves to (accountKey). While a send to an
 // account has no known outcome, that account is *pending* (ledger.ts) — whatever content the send carried.
 //
-//     account pending | post record    | resendUnknown | repost | decision
-//     ----------------+----------------+---------------+--------+--------------------------------------------------
-//     yes             | any            | no            | any    | block: a send to this account may be live, even if
-//                     |                |               |        | the new content differs; a person must check it
-//     no*             | none / failed  | —             | —      | send
-//     no*             | posted         | —             | no     | skip, report already_posted
-//     no*             | posted         | —             | yes    | send again (a deliberate repost, shown in the plan)
-//     no*             | sending/unknown| no            | —      | block (an older record without a pending marker)
-//     no*             | sending/unknown| yes           | —      | send
-//     * or pending, with resendUnknown naming the platform: the person checked that it is not live.
+//     post record      | account pending | approval                         | decision
+//     -----------------+-----------------+----------------------------------+------------------------------------
+//     posted           | any             | none                             | skip, report already_posted
+//     posted           | no              | repost names this record's `at`  | send again (a deliberate repost)
+//     any (to send)    | yes             | none for this pending `at`       | block: a send to this account may
+//                      |                 |                                  | be live, even for different content
+//     sending/unknown  | —               | none for this record's `at`      | block (an older record, no marker)
+//     none / failed    | no              | —                                | send
+//     (otherwise)      |                 | resendUnknown names the `at`     | send: a person checked it is not live
+//
+//   An approval (repost / resendUnknown) names the exact record it overrides by its `at`, shown in the plan. Once
+//   used, that record changes (a new `at`), so the same arguments on a retry cannot repost again or resend a newer
+//   unknown outcome nobody checked. A post that is only skipped never needs the account, its marker, or its lock.
 //
 //   Changing a platform's content (text, images, a re-rendered video, the title) makes a different post with its own
 //   record, so it is sent — unless that account is pending. Another Page or account is another post and account.
@@ -48,6 +51,7 @@ import {
 } from '../video/youtube-publish.js';
 import { preflightPlannedVideo, publishPlannedVideo } from '../tiktok-business/posting.js';
 import { TikTokApiError } from '../tiktok-business/api.js';
+import { loadTikTokBusinessConfig } from '../tiktok-business/config.js';
 import { ensureTikTokPublishConfig } from '../tiktok-business/auth.js';
 import { extractHttpStatus } from '../lib/google-errors.js';
 import { metaErrorStatus } from '../lib/meta-auth.js';
@@ -80,10 +84,19 @@ export interface SocialPublishInput {
     containsSyntheticMedia?: boolean;
   };
   tiktok?: { planId: string };
-  /** Platforms whose previous outcome was unknown and that a person has checked are not live: send them again. */
-  resendUnknown?: SocialTarget[];
-  /** Platforms to post to again even though exactly this content was already posted there (a deliberate repost). */
-  repost?: SocialTarget[];
+  /**
+   * Unknown outcomes a person has checked are not live, each named by the platform and the `at` the plan showed for
+   * it: send again. A newer unknown outcome (a different `at`) stays blocked.
+   */
+  resendUnknown?: Approval[];
+  /** Posts to make again on purpose though that content already went out, each named by the posted record's `at`. */
+  repost?: Approval[];
+}
+
+/** An approval for one specific record: the platform and the `at` the plan showed for that record. */
+export interface Approval {
+  platform: SocialTarget;
+  at: string;
 }
 
 export interface PlannedPost {
@@ -96,6 +109,8 @@ export interface PlannedPost {
   problems: string[];
   /** What an earlier call recorded for this exact post, if anything. */
   record?: PostRecord;
+  /** An unresolved send to this account (its `at` is what resendUnknown must name). */
+  pending?: PendingRecord;
 }
 
 export interface PublishPlan {
@@ -104,7 +119,7 @@ export interface PublishPlan {
 }
 
 export type PublishOutcome =
-  | { platform: SocialTarget; status: 'posted'; id?: string; url?: string }
+  | { platform: SocialTarget; status: 'posted'; id?: string; url?: string; warning?: string }
   | { platform: SocialTarget; status: 'already_posted'; id?: string; url?: string; at: string }
   | { platform: SocialTarget; status: 'unknown_outcome'; error?: string; at: string }
   | { platform: SocialTarget; status: 'failed'; error: string };
@@ -130,11 +145,13 @@ const M = catalog(
     tiktokPlan: 'TikTok 은 tiktok_business_plan_video_post 로 만든 planId 가 필요합니다 (tiktok.planId).',
     tiktokPlanInvalid: (msg: string) => `TikTok 계획을 쓸 수 없습니다: ${msg}`,
     previousUnknown: (p: string, at: string) =>
-      `이전 시도(${at})의 결과를 알 수 없습니다 — 게시됐을 수 있습니다. ${p} 에서 직접 확인하고, 게시되지 않았다면 resendUnknown: ["${p}"] 를 더해 다시 보내세요.`,
+      `이전 시도(${at})의 결과를 알 수 없습니다 — 게시됐을 수 있습니다. ${p} 에서 직접 확인하고, 게시되지 않았다면 resendUnknown: [{ "platform": "${p}", "at": "${at}" }] 를 더해 다시 보내세요.`,
     resendingUnknown: (at: string) => `이전 시도(${at})의 결과를 알 수 없었지만 확인 후 다시 보냄 (resendUnknown)`,
     accountPending: (p: string, at: string) =>
-      `${p} 계정에 결과를 알 수 없는 이전 게시(${at})가 있습니다 — 내용이 달라도 막습니다. ${p} 에서 직접 확인하고, 게시되지 않았다면 resendUnknown: ["${p}"] 를 더해 보내세요.`,
+      `${p} 계정에 결과를 알 수 없는 이전 게시(${at})가 있습니다 — 내용이 달라도 막습니다. ${p} 에서 직접 확인하고, 게시되지 않았다면 resendUnknown: [{ "platform": "${p}", "at": "${at}" }] 를 더해 보내세요.`,
     reposting: (at: string) => `같은 내용이 이미 게시됨 (${at}) — repost 로 다시 게시`,
+    alreadyPostedHint: (p: string, at: string) => `이미 게시됨 (${at}) — 건너뜀. 일부러 다시 올리려면 repost: [{ "platform": "${p}", "at": "${at}" }]`,
+    pendingNotCleared: (reason: string) => `(계정의 진행 중 표시를 지우지 못했습니다: ${reason}. 다음 호출에서 이 계정이 막히면 표시 파일을 확인하세요.)`,
     privacy: (p: string) => `공개 상태: ${p}`,
     youtubeAngle: 'YouTube 제목·설명·태그에는 < 와 > 를 쓸 수 없습니다.',
     preflightFailed: (p: string, msg: string) => `게시 전 확인 실패 (${p}): ${msg}`,
@@ -167,11 +184,13 @@ const M = catalog(
     tiktokPlan: 'TikTok needs a planId made by tiktok_business_plan_video_post (tiktok.planId).',
     tiktokPlanInvalid: (msg: string) => `Cannot use the TikTok plan: ${msg}`,
     previousUnknown: (p: string, at: string) =>
-      `The outcome of the previous attempt (${at}) is unknown — it may have been posted. Check ${p}; if it is not there, send again with resendUnknown: ["${p}"].`,
+      `The outcome of the previous attempt (${at}) is unknown — it may have been posted. Check ${p}; if it is not there, send again with resendUnknown: [{ "platform": "${p}", "at": "${at}" }].`,
     resendingUnknown: (at: string) => `the previous attempt (${at}) had an unknown outcome; resending after a check (resendUnknown)`,
     accountPending: (p: string, at: string) =>
-      `This ${p} account has an earlier send (${at}) whose outcome is unknown — blocked even for different content. Check ${p}; if it is not there, send again with resendUnknown: ["${p}"].`,
+      `This ${p} account has an earlier send (${at}) whose outcome is unknown — blocked even for different content. Check ${p}; if it is not there, send again with resendUnknown: [{ "platform": "${p}", "at": "${at}" }].`,
     reposting: (at: string) => `the same content was already posted (${at}) — posting it again (repost)`,
+    alreadyPostedHint: (p: string, at: string) => `already posted (${at}) — skipped. To post it again on purpose: repost: [{ "platform": "${p}", "at": "${at}" }]`,
+    pendingNotCleared: (reason: string) => `(The account's pending marker could not be cleared: ${reason}. If the next call is blocked for this account, check that file.)`,
     privacy: (p: string) => `privacy: ${p}`,
     youtubeAngle: 'YouTube titles, descriptions, and tags cannot contain < or >.',
     preflightFailed: (p: string, msg: string) => `Pre-send check failed (${p}): ${msg}`,
@@ -243,13 +262,11 @@ const UNRESOLVED = Symbol('unresolved account');
  */
 export function accountKey(platform: SocialTarget, input: SocialPublishInput): string | null {
   if (platform === 'youtube') return input.youtube ? `channel:${input.youtube.expectedChannelId}` : null;
+  // The connected TikTok account (publishing refuses a plan made for another one). Read from the config, not the plan:
+  // a published or expired plan must still resolve, or a retry could never skip it.
   if (platform === 'tiktok') {
-    try {
-      return input.tiktok ? `openid:${preflightPlannedVideo(input.tiktok.planId).openId}` : null;
-    } catch {
-      // An unusable plan is reported by planTikTok and blocks the publish.
-      return null;
-    }
+    const openId = loadTikTokBusinessConfig()?.openId;
+    return input.tiktok && openId ? `openid:${openId}` : null;
   }
   return metaAccount(platform, input);
 }
@@ -301,6 +318,16 @@ const youtubeRejected = (error: unknown) => {
   const status = extractHttpStatus(error) ?? extractHttpStatus((error as { cause?: unknown } | null)?.cause);
   return status !== undefined && status >= 400 && status < 500;
 };
+
+/** Clears an account's pending marker; returns the failure reason instead of throwing (callers keep their own error). */
+function tryClearPending(platform: SocialTarget, account: string): string | null {
+  try {
+    clearPending(platform, account);
+    return null;
+  } catch (error) {
+    return errorText(error);
+  }
+}
 
 function errorText(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 500);
@@ -418,9 +445,12 @@ type Decision =
   | { kind: 'block'; problem: string };
 
 interface DecideOptions {
-  resendUnknown: readonly SocialTarget[];
-  repost: readonly SocialTarget[];
+  resendUnknown: readonly Approval[];
+  repost: readonly Approval[];
 }
+
+const approves = (list: readonly Approval[], platform: SocialTarget, at: string) =>
+  list.some((a) => a.platform === platform && a.at === at);
 
 /** The single rule — the table at the top of this file. Same answer in the plan, under the lock, and before each send. */
 export function decide(
@@ -429,15 +459,19 @@ export function decide(
   pending: PendingRecord | null,
   { resendUnknown, repost }: DecideOptions,
 ): Decision {
-  const checked = resendUnknown.includes(platform);
-  if (pending && !checked) return { kind: 'block', problem: M().accountPending(platform, pending.at) };
-  if (record?.state === 'posted') {
-    if (repost.includes(platform)) return { kind: 'send', note: M().reposting(record.at) };
+  // A skip sends nothing, so nothing else (another call's pending send, a lock) can stand in its way.
+  const reposting = record?.state === 'posted' && approves(repost, platform, record.at);
+  if (record?.state === 'posted' && !reposting) {
     return { kind: 'skip', outcome: { platform, status: 'already_posted', id: record.id, url: record.url, at: record.at } };
   }
+  if (pending && !approves(resendUnknown, platform, pending.at)) {
+    return { kind: 'block', problem: M().accountPending(platform, pending.at) };
+  }
+  if (reposting && record) return { kind: 'send', note: M().reposting(record.at) };
   if (record?.state === 'sending' || record?.state === 'unknown') {
-    if (checked) return { kind: 'send', note: M().resendingUnknown(record.at) };
-    return { kind: 'block', problem: M().previousUnknown(platform, record.at) };
+    if (approves(resendUnknown, platform, record.at)) return { kind: 'send', note: M().resendingUnknown(record.at) };
+    // The marker for this record is already approved above; an older record without a marker needs its own approval.
+    if (!pending || pending.at !== record.at) return { kind: 'block', problem: M().previousUnknown(platform, record.at) };
   }
   if (pending) return { kind: 'send', note: M().resendingUnknown(pending.at) };
   return { kind: 'send' };
@@ -455,32 +489,44 @@ export function planPublish(input: SocialPublishInput): PublishPlan {
     const duplicate = seen.has(platform);
     seen.add(platform);
     const key = targetKey(platform, input);
-    const account = accountKey(platform, input);
-    // Null: not connected or no usable account, already reported by the platform's own plan check.
-    if (key !== null && account !== null) {
+    // Null: not connected, already reported by the platform's own plan check.
+    if (key !== null) {
       const record = readRecord(platform, key);
       if (record) post.record = record;
-      const decision = decide(platform, record, readPending(platform, account), options(input));
-      // A live lock is not a crash: another call is publishing to this account right now. Anything that would send
-      // (including resendUnknown and repost) or block waits for it; a post that is only skipped does not care.
-      if (decision.kind !== 'skip' && isAccountLocked(platform, account)) {
+      const resolved = resolveDecision(platform, key, record, input);
+      if (resolved.pending) post.pending = resolved.pending;
+      const { decision } = resolved;
+      if (decision.kind === 'skip') {
+        // It will not be sent, so its current state (an expired token or TikTok plan, a pending send of other
+        // content, another call's lock) must not block the others.
+        post.action = M().alreadyPostedHint(platform, record!.at);
+        post.problems = [];
+      } else if (resolved.locked) {
+        // A live lock is not a crash: another call is publishing to this account right now.
         post.problems.push(inProgressMessage());
-      } else {
-        if (decision.kind === 'skip') {
-          // It will not be sent, so its current state (e.g. a since-expired token) must not block the others.
-          post.action = M().alreadyPostedAction(record!.at);
-          post.problems = [];
-        } else if (decision.kind === 'block') {
-          post.problems.push(decision.problem);
-        } else if (decision.note) {
-          post.action = `${post.action} — ${decision.note}`;
-        }
+      } else if (decision.kind === 'block') {
+        post.problems.push(decision.problem);
+      } else if (decision.note) {
+        post.action = `${post.action} — ${decision.note}`;
       }
     }
     if (duplicate) post.problems.push(M().duplicateTarget(platform));
     return post;
   });
   return { ok: posts.every((p) => p.problems.length === 0), posts };
+}
+
+/**
+ * decide() with the account only when it matters: a post that is only skipped needs neither the account, its
+ * pending marker, nor its lock (a published TikTok plan, a disconnected account, another call's send).
+ */
+function resolveDecision(platform: SocialTarget, key: string, record: PostRecord | null, input: SocialPublishInput) {
+  const skipOnly = decide(platform, record, null, options(input));
+  if (skipOnly.kind === 'skip') return { decision: skipOnly, account: null, pending: null, locked: false };
+  const account = accountKey(platform, input);
+  if (account === null) return { decision: { kind: 'block', problem: M().planBlocked } as Decision, account, pending: null, locked: false };
+  const pending = readPending(platform, account);
+  return { decision: decide(platform, record, pending, options(input)), account, pending, locked: isAccountLocked(platform, account) };
 }
 
 function youtubeUploadInput(input: SocialPublishInput): UploadYouTubeVideoInput {
@@ -608,19 +654,20 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
     const decisions = plan.posts.map((post) => {
       const { platform } = post;
       const key = targetKey(platform, input, prepared.videoFile);
-      const account = accountKey(platform, input);
-      if (key === null || account === null) throw new Error(M().planBlocked); // the plan already blocks these
-      const preliminary = decide(platform, readRecord(platform, key), readPending(platform, account), opts);
+      if (key === null) throw new Error(M().planBlocked); // the plan already blocks these
+      const { decision: preliminary, account, locked } = resolveDecision(platform, key, readRecord(platform, key), input);
       // Blocked because a send to this account is still running: say so, rather than "outcome unknown".
-      if (preliminary.kind === 'block' && isAccountLocked(platform, account)) throw new Error(inProgressMessage());
+      if (preliminary.kind === 'block' && locked) throw new Error(inProgressMessage());
       let lock: AccountLock | null = null;
-      if (preliminary.kind === 'send') {
+      if (preliminary.kind === 'send' && account !== null) {
         lock = acquireAccountLock(platform, account);
         locks.push(lock);
       }
       // Re-read under the lock: a concurrent call may have changed the records since the plan was made.
-      const decision = lock ? decide(platform, readRecord(platform, key), readPending(platform, account), opts) : preliminary;
-      return { post, key, account, lock, decision };
+      const decision = lock && account !== null
+        ? decide(platform, readRecord(platform, key), readPending(platform, account), opts)
+        : preliminary;
+      return { post, key, account: account ?? '', lock, decision };
     });
     const blocked = decisions.find((d) => d.decision.kind === 'block');
     if (blocked && blocked.decision.kind === 'block') throw new Error(blocked.decision.problem);
@@ -674,8 +721,8 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
         try {
           writeRecord(platform, key, { state: 'sending', at: startedAt });
         } catch (recordError) {
-          // Nothing was sent: do not leave the account looking pending.
-          clearPending(platform, account);
+          // Nothing was sent: do not leave the account looking pending. Report the record error, not a cleanup one.
+          tryClearPending(platform, account);
           throw recordError;
         }
       } catch (error) {
@@ -691,18 +738,24 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       } catch (error) {
         const at = new Date().toISOString();
         const ambiguous = isAmbiguous(error);
+        let reported = errorText(error);
         try {
-          writeRecord(platform, key, { state: ambiguous ? 'unknown' : 'failed', at, error: errorText(error) });
+          // Record and marker share `at`: that is the value resendUnknown must name once a person has checked.
+          writeRecord(platform, key, { state: ambiguous ? 'unknown' : 'failed', at, error: reported });
           // Unknown keeps the account pending (blocks even edited content); a clean failure releases it.
-          if (ambiguous) writePending(platform, account, { postKey: key, state: 'unknown', at });
-          else clearPending(platform, account);
+          if (ambiguous) {
+            writePending(platform, account, { postKey: key, state: 'unknown', at });
+          } else {
+            const cleanup = tryClearPending(platform, account);
+            if (cleanup) reported = `${reported} ${M().pendingNotCleared(cleanup)}`;
+          }
         } catch (writeError) {
           // Both records stay `sending`, which decide() treats like unknown: safe, at worst it needs a manual check.
           ledgerBroken = errorText(writeError);
         }
         outcomes.push(ambiguous
-          ? { platform, status: 'unknown_outcome', error: errorText(error), at }
-          : { platform, status: 'failed', error: errorText(error) });
+          ? { platform, status: 'unknown_outcome', error: reported, at }
+          : { platform, status: 'failed', error: reported });
         continue;
       }
 
@@ -710,11 +763,13 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       // `sending`, so the next call reports the account as pending instead of posting again.
       try {
         writeRecord(platform, key, { state: 'posted', at: new Date().toISOString(), ...sent });
-        clearPending(platform, account);
       } catch (writeError) {
         ledgerBroken = errorText(writeError);
       }
-      outcomes.push({ platform, status: 'posted', ...sent });
+      // Posted either way. A marker that could not be cleared would block this account until a person checks:
+      // say so in the result instead of letting later calls report a mysterious unknown outcome.
+      const cleanup = ledgerBroken ? null : tryClearPending(platform, account);
+      outcomes.push({ platform, status: 'posted', ...sent, ...(cleanup ? { warning: M().pendingNotCleared(cleanup) } : {}) });
     }
     return outcomes;
   } finally {
