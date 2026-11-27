@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { GOOGLE_PROFILE_ID } from '../auth/google-auth.js';
 import { YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
-import { executePublish, planPublish, SOCIAL_TARGETS } from '../crosspost/tools.js';
+import { executePublish, planPublish, recordMarksOnly, SOCIAL_TARGETS } from '../crosspost/tools.js';
 import { jsonResult } from '../lib/mcp-response.js';
 import { catalog } from '#core/lang.js';
 
@@ -14,6 +14,7 @@ const M = catalog(
     preview:
       'dry-run — 아무것도 게시하지 않았습니다. 아래 계획을 사용자에게 보여주고 명시 승인을 받은 뒤, 같은 인자에 confirm: true 를 더해 다시 호출하세요.',
     blocked: '문제가 있는 대상이 있어 아무 곳에도 게시하지 않았습니다. problems 를 고친 뒤 다시 미리보기하세요.',
+    blockedMarked: '문제가 있는 대상이 있어 아무 곳에도 게시하지 않았습니다. 다만 markPosted 로 확인된 계정의 진행 중 게시는 게시됨으로 기록했습니다 (marks). problems 를 고친 뒤 다시 미리보기하세요.',
     requestIdRemoved:
       'requestId 는 더 이상 받지 않습니다. 같은 게시물(플랫폼·계정·내용이 같음)은 requestId 없이도 한 번만 게시됩니다. requestId 를 빼고 다시 부르세요. 같은 내용을 일부러 다시 올리려면 repost 를 쓰세요.',
     done: '게시를 마쳤습니다. 실패한 대상은 다시 호출하면 다시 보냅니다 — 이미 게시된 곳은 건너뜁니다. 결과를 알 수 없는 대상은 그 플랫폼에서 먼저 확인하세요.',
@@ -24,6 +25,7 @@ const M = catalog(
     preview:
       'dry-run — nothing was posted. Show the user the plan below, get their explicit approval, then call again with the same arguments plus confirm: true.',
     blocked: 'Nothing was posted because some targets have problems. Fix the problems, then preview again.',
+    blockedMarked: 'Nothing was posted because some targets have problems. The pending sends that markPosted confirmed live were still recorded as posted (marks). Fix the problems, then preview again.',
     requestIdRemoved:
       'requestId is no longer accepted. The same post (same platform, account, and content) is posted only once without it. Call again without requestId. To post the same content again on purpose, use repost.',
     done: 'Publishing finished. Calling again resends the failed targets — platforms that already posted are skipped. Check any unknown-outcome target on its platform first.',
@@ -42,7 +44,7 @@ const metaOptions = z.object({
 
 const approval = z.object({
   platform: z.enum(SOCIAL_TARGETS),
-  at: z.string().min(1).max(64).describe('계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목)'),
+  at: z.string().min(1).max(64).describe('계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목). 이 호출의 그 플랫폼 게시물과 계정 기준이므로, 내용을 바꾸면 다시 미리보기한 계획의 at 을 쓰세요.'),
 });
 
 export function registerCrosspostTools(server: ToolRegistrar) {
@@ -79,7 +81,7 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       }).optional(),
       resendUnknown: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('사용자가 그 플랫폼에서 게시되지 않았음을 확인한, 결과를 알 수 없었던 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록만 다시 보내며, 이후 새로 생긴 결과 불명은 다시 막힙니다.'),
       repost: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('사용자가 일부러 다시 게시하려는 이미 게시된 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 한 번 다시 게시되면 그 승인은 더 이상 맞지 않아 재시도로 반복 게시되지 않습니다.'),
-      markPosted: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('결과를 알 수 없었던 기록 중, 사용자가 그 플랫폼에서 실제로 올라가 있음을 확인한 것. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록을 게시됨으로 남기고 계정 차단을 풉니다 (보내지는 않음).'),
+      markPosted: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('결과를 알 수 없었던 기록 중, 사용자가 그 플랫폼에서 실제로 올라가 있음을 확인한 것. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록을 게시됨으로 남기고 계정 차단을 풉니다 (보내지는 않음). confirm: true 이면 계획이 다른 문제로 막혀도 계정의 진행 중 게시는 기록합니다.'),
       // Removed: the "same post" rule replaced it. Rejected rather than silently dropped, so a caller relying on it
       // learns that it no longer chooses what counts as a retry.
       requestId: z.never({ error: () => M().requestIdRemoved }).optional().describe('지원 중단 — 넘기면 거부합니다. 같은 게시물은 자동으로 한 번만 게시됩니다.'),
@@ -88,7 +90,14 @@ export function registerCrosspostTools(server: ToolRegistrar) {
     async ({ confirm, requestId: _removed, ...input }) => {
       const plan = planPublish(input);
       if (!confirm) return jsonResult({ mode: 'dry-run', note: M().preview, ...plan });
-      if (!plan.ok) return jsonResult({ mode: 'blocked', note: M().blocked, ...plan });
+      if (!plan.ok) {
+        // markPosted records what a person confirmed on the platform; it needs only the account, so a plan blocked by
+        // the content (a moved render, an expired TikTok plan) must not keep that account blocked.
+        const marks = input.markPosted?.length ? recordMarksOnly(input) : [];
+        return marks.some((m) => m.marked)
+          ? jsonResult({ mode: 'blocked', note: M().blockedMarked, marks, ...plan })
+          : jsonResult({ mode: 'blocked', note: M().blocked, ...(marks.length ? { marks } : {}), ...plan });
+      }
       const results = await executePublish(input, plan);
       return jsonResult({ mode: 'published', note: M().done, results });
     },

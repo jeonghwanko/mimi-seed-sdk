@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { withClient } from './helpers.js';
+import { readPending, writePending } from '../crosspost/ledger.js';
 
 // HOME is isolated: if the schema let the call through, the dry-run would read records under it, not the user's.
 const h = await vi.hoisted(async () => {
@@ -30,5 +31,24 @@ describe('social_publish — removed requestId', () => {
   it('still previews when it is left out', async () => {
     const { text } = await call({ targets: ['threads'], text: 'Launch' });
     expect(text).toMatch(/"mode": "dry-run"/);
+  });
+});
+
+describe('social_publish — markPosted on a blocked plan', () => {
+  it('records the account\'s pending send a person confirmed live, though the content can no longer be planned', async () => {
+    const channel = `UC${'b'.repeat(22)}`;
+    const at = '2026-06-01T00:00:00.000Z';
+    writePending('youtube', `channel:${channel}`, { postKey: 'gone-render', state: 'unknown', at, attempt: 'attempt-1' });
+    const args = {
+      targets: ['youtube'], text: 'Launch', videoFilePath: `${h.home}/moved.mp4`, youtube: { expectedChannelId: channel },
+      markPosted: [{ platform: 'youtube', at }],
+    };
+    const preview = await call(args);
+    expect(preview.text).toMatch(/"mode": "dry-run"/);
+    expect(readPending('youtube', `channel:${channel}`)).not.toBeNull(); // a preview records nothing
+    const { text } = await call({ ...args, confirm: true });
+    expect(text).toMatch(/"mode": "blocked"/);
+    expect(text).toMatch(/"marks": \[\s*\{\s*"platform": "youtube",\s*"marked": "2026-06-01T00:00:00.000Z"/);
+    expect(readPending('youtube', `channel:${channel}`)).toBeNull();
   });
 });
