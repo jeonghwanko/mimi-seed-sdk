@@ -116,9 +116,6 @@
       ],
       "idempotent": [
         "jenkins_upload_playstore_sa"
-      ],
-      "approval": [
-        "jenkins_upload_playstore_sa"
       ]
     },
     "appstore": {
@@ -635,9 +632,7 @@
         "jenkins_update_job"
       ],
       "approval": [
-        "jenkins_save_config",
-        "jenkins_create_credential",
-        "jenkins_upload_keystore"
+        "jenkins_save_config"
       ]
     },
     "playstore": {

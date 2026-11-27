@@ -11,8 +11,11 @@
 // 이 스크립트로 ref 를 올린다. Claude Code 는 plugin.json 의 version 이 바뀔 때만 업데이트를 받으므로(공식 문서),
 // 태그 안의 plugin.json 버전 = `.mcp.json` 버전 = npm 에 있는 버전이 한 번에 사용자에게 간다.
 //
-// 프리릴리스(`-beta.N`/`-next.N`)는 `.mcp.json` 을 움직이지 않는다: Codex 마켓플레이스는 main 을 그대로 읽으므로,
-// 움직이면 Codex 사용자가 베타 서버를 받는다. 마켓플레이스 ref 도 안정 버전만 가리킨다.
+// Codex 마켓플레이스(`.agents/plugins/marketplace.json`)도 같은 태그를 `git-subdir` source 로 가리킨다 (openai/codex#18017,
+// 2026-04 부터 지원). 두 ref 는 이 스크립트가 함께 옮기고 --check 가 같은지 본다.
+//
+// 프리릴리스(`-beta.N`/`-next.N`)는 `.mcp.json` 을 움직이지 않는다 — main 을 직접 체크아웃해 쓰는 사람이 베타 서버를
+// 받지 않게. 마켓플레이스 ref 도 안정 버전만 가리킨다.
 //
 //   node scripts/release-marketplace.mjs          # npm 배포 후: ref 를 v<루트 버전> 으로 (npm·태그 존재 확인)
 //   node scripts/release-marketplace.mjs --check  # 오프라인 검사 (plugin:check)
@@ -27,6 +30,8 @@ export const REPO = 'jeonghwanko/mimi-seed-sdk';
 export const PLUGIN = 'mimi-seed';
 export const MCP_JSON = '.mcp.json';
 export const MARKETPLACE = '.claude-plugin/marketplace.json';
+export const CODEX_MARKETPLACE = '.agents/plugins/marketplace.json';
+const REPO_URL = `https://github.com/${REPO}.git`;
 const REGISTRY = 'https://registry.npmjs.org/';
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
@@ -90,8 +95,20 @@ export function marketplaceRef(text) {
   return { version: src.ref.slice(1) };
 }
 
-/** 문제 목록 (비면 통과). */
-export function checkRelease({ mcpText, marketplaceText, rootVersion }) {
+/** Codex 마켓플레이스의 플러그인 source 가 가리키는 태그 버전 (git-subdir — openai/codex#18017 부터 지원). */
+export function codexMarketplaceRef(text) {
+  const entry = JSON.parse(text)?.plugins?.find((p) => p.name === PLUGIN);
+  const src = entry?.source;
+  if (!src || src.source !== 'git-subdir' || src.url !== REPO_URL || src.path !== `./plugins/${PLUGIN}` || typeof src.ref !== 'string') {
+    return { problem: `${CODEX_MARKETPLACE} 의 ${PLUGIN} source 는 { source: "git-subdir", url: "${REPO_URL}", path: "./plugins/${PLUGIN}", ref: "v<버전>" } 여야 한다` };
+  }
+  if (src.sha !== undefined) return { problem: `${CODEX_MARKETPLACE}: sha 를 쓰지 않는다 — ref 만 쓴다` };
+  if (!src.ref.startsWith('v')) return { problem: `${CODEX_MARKETPLACE}: ref 는 릴리스 태그(v<버전>)여야 한다` };
+  return { version: src.ref.slice(1) };
+}
+
+/** 문제 목록 (비면 통과). codexMarketplaceText 를 주면 두 마켓플레이스가 같은 태그인지도 본다. */
+export function checkRelease({ mcpText, marketplaceText, codexMarketplaceText, rootVersion }) {
   const problems = [];
   const pin = mcpPin(mcpText);
   if (pin.problem) problems.push(pin.problem);
@@ -105,13 +122,20 @@ export function checkRelease({ mcpText, marketplaceText, rootVersion }) {
   if (ref.problem) problems.push(ref.problem);
   else if (!isStable(ref.version)) problems.push(`${MARKETPLACE}: ref v${ref.version} — 안정 릴리스 태그만 가리킨다`);
   else if (compareSemver(ref.version, rootVersion) > 0) problems.push(`${MARKETPLACE}: ref v${ref.version} 가 루트 ${rootVersion} 보다 앞선다`);
+  if (codexMarketplaceText !== undefined) {
+    const codex = codexMarketplaceRef(codexMarketplaceText);
+    if (codex.problem) problems.push(codex.problem);
+    else if (!ref.problem && codex.version !== ref.version) {
+      problems.push(`${CODEX_MARKETPLACE}: ref v${codex.version} 가 ${MARKETPLACE} 의 v${ref.version} 와 다르다 — 두 마켓플레이스는 같은 릴리스를 내보낸다`);
+    }
+  }
   return problems;
 }
 
 /** ref 만 바꾼 마켓플레이스 텍스트 (포맷 유지). */
-export function withMarketplaceRef(text, version) {
+export function withMarketplaceRef(text, version, parse = marketplaceRef) {
   if (!isStable(version)) throw new Error(`안정 버전이 아니다: ${version}`);
-  if (marketplaceRef(text).problem) throw new Error(marketplaceRef(text).problem);
+  if (parse(text).problem) throw new Error(parse(text).problem);
   return text.replace(/("ref"\s*:\s*")v[^"]*(")/, `$1v${version}$2`);
 }
 
@@ -129,16 +153,17 @@ if (isMain) {
   const read = (rel) => readFileSync(path.join(root, rel), 'utf8');
   const rootVersion = JSON.parse(read('package.json')).version;
   const marketplaceText = read(MARKETPLACE);
+  const codexMarketplaceText = read(CODEX_MARKETPLACE);
 
   if (process.argv[2] === '--check') {
-    const problems = checkRelease({ mcpText: read(MCP_JSON), marketplaceText, rootVersion });
+    const problems = checkRelease({ mcpText: read(MCP_JSON), marketplaceText, codexMarketplaceText, rootVersion });
     if (problems.length > 0) {
       console.error(`\n  ✗ 플러그인 서버 고정 / 마켓플레이스 태그:`);
       for (const p of problems) console.error(`      ${p}`);
       console.error('');
       process.exit(1);
     }
-    console.log(`  ✓ ${MCP_JSON} → ${PACKAGE}@${mcpPin(read(MCP_JSON)).version}, ${MARKETPLACE} → v${marketplaceRef(marketplaceText).version}`);
+    console.log(`  ✓ ${MCP_JSON} → ${PACKAGE}@${mcpPin(read(MCP_JSON)).version}, Claude + Codex marketplaces → v${marketplaceRef(marketplaceText).version}`);
     process.exit(0);
   }
   if (process.argv.length > 2) {
@@ -170,5 +195,6 @@ if (isMain) {
     process.exit(1);
   }
   writeFileSync(path.join(root, MARKETPLACE), withMarketplaceRef(marketplaceText, rootVersion));
-  console.log(`  ✓ ${MARKETPLACE} → ref v${rootVersion}  (커밋 → PR. 머지되면 Claude Code 사용자가 이 버전을 받는다)`);
+  writeFileSync(path.join(root, CODEX_MARKETPLACE), withMarketplaceRef(codexMarketplaceText, rootVersion, codexMarketplaceRef));
+  console.log(`  ✓ ${MARKETPLACE} + ${CODEX_MARKETPLACE} → ref v${rootVersion}  (커밋 → PR. 머지되면 Claude Code·Codex 사용자가 이 버전을 받는다)`);
 }

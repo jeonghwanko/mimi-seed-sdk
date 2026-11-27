@@ -155,6 +155,11 @@ codex plugin add mimi-seed@yoonion
 Start a **new thread** after installation. After changing the root plugin sources, run
 `npm run plugin:sync`, then use `npm run plugin:check` to catch distribution drift.
 
+> The marketplace entry points at the latest **release tag**, so `codex plugin add` installs the released plugin
+> from GitHub, not your working tree (the same holds for the Claude Code marketplace). To exercise a local build of
+> the server, register it directly as well — `codex mcp add mimi-seed-dev -- mimi-seed-mcp` (after `npm link`) —
+> and start a new thread.
+
 ---
 
 ## 5. First auth from a checkout

@@ -7,8 +7,10 @@
     {
       "name": "mimi-seed",
       "source": {
-        "source": "local",
-        "path": "./plugins/mimi-seed"
+        "source": "git-subdir",
+        "url": "https://github.com/jeonghwanko/mimi-seed-sdk.git",
+        "path": "./plugins/mimi-seed",
+        "ref": "v0.25.3"
       },
       "policy": {
         "installation": "AVAILABLE",

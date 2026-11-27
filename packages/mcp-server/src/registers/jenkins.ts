@@ -9,7 +9,7 @@ import * as builds from '../jenkins/builds.js';
 import { jsonResult, textResult } from '../lib/mcp-response.js';
 import { SIGNING_SECRET_FIELDS, resolveKeystoreInput, resolveSecretInput } from '../android/keystore-store.js';
 import {
-  ambiguousDefaultIdNote, existingCredentialPreview, jenkinsConfiguredLines, jenkinsNotConfiguredLines,
+  ambiguousDefaultIdNote, existingCredentialPreview, jenkinsConfiguredLines, jenkinsNotConfiguredLines, newCredentialPreview,
 } from '../jenkins/messages.js';
 import { catalog } from '#core/lang.js';
 
@@ -43,6 +43,11 @@ const M = catalog(
 );
 
 /** 기존 id 교체 dry-run — 무엇을 덮어쓰게 되는지(id·종류·설명)와 모호한 기본 id 경고를 싣는다. */
+function newPreview(cfg: JenkinsConfig, id: string, requested: creds.CredentialKind) {
+  const note = ambiguousDefaultIdNote(id);
+  return textResult(newCredentialPreview(id, cfg.url, requested, note ? [note] : []));
+}
+
 async function existingPreview(cfg: JenkinsConfig, id: string, requested: creds.CredentialKind) {
   const note = ambiguousDefaultIdNote(id);
   return textResult(existingCredentialPreview(id, await creds.inspectCredential(cfg, id), requested, note ? [note] : []));
@@ -127,8 +132,8 @@ export function registerJenkinsTools(server: ToolRegistrar) {
     [
       'Jenkins에 Secret Text credential을 생성하거나 업데이트합니다.',
       '비밀번호, API 키, 앱 시크릿 등 문자열 값에 사용하세요.',
-      '새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 값을 되돌릴 수 없게 덮어쓰므로',
-      'confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.',
+      'confirm 생략/false 면 아무것도 보내지 않고 dry-run 만 반환한다 — 새 id 면 "생성 예정", 같은 id 가 있으면',
+      '"이미 존재"(교체하면 되돌릴 수 없음). 사용자 승인 후 같은 인자에 confirm: true 로 재호출.',
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
@@ -143,13 +148,17 @@ export function registerJenkinsTools(server: ToolRegistrar) {
         .optional()
         .describe('secret_file 에서 꺼낼 필드 (storePassword / keyPassword / keyAlias)'),
       description: z.string().optional().describe('설명 (선택)'),
-      confirm: z.boolean().optional().describe('같은 id 가 이미 있을 때만 필요. true 면 기존 값을 교체'),
+      confirm: z.boolean().optional().describe('true 일 때만 Jenkins 로 보낸다 (새 id 생성 또는 기존 값 교체). 생략/false 면 dry-run'),
     },
     async ({ id, secret, secret_file, secret_field, description, confirm }) => {
       const value = resolveSecretInput({ secret, secretFile: secret_file, secretField: secret_field });
       const cfg = requireJenkinsConfig();
-      const result = await creds.upsertSecretText(cfg, id, value, description ?? '', { allowReplace: confirm === true });
+      const result = await creds.upsertSecretText(cfg, id, value, description ?? '', {
+        allowReplace: confirm === true,
+        dryRun: confirm !== true,
+      });
       if (result === 'exists') return existingPreview(cfg, id, creds.KIND_STRING);
+      if (result === 'new') return newPreview(cfg, id, creds.KIND_STRING);
       return textResult(`✅ Jenkins credential ${result}: \`${id}\``);
     },
   );
@@ -160,8 +169,8 @@ export function registerJenkinsTools(server: ToolRegistrar) {
     [
       'Jenkins에 Android keystore 파일을 Secret File credential로 업로드합니다.',
       'keystore_base64에 .jks/.p12 파일을 base64로 인코딩한 값을 전달하세요.',
-      '새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 keystore 를 되돌릴 수 없게 교체하므로',
-      'confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.',
+      'confirm 생략/false 면 아무것도 보내지 않고 dry-run 만 반환한다 — 새 id 면 "생성 예정", 같은 id 가 있으면',
+      '"이미 존재"(기존 keystore 를 교체하면 되돌릴 수 없음). 사용자 승인 후 같은 인자에 confirm: true 로 재호출.',
       '설정이 없으면 jenkins_status를 먼저 호출하세요.',
     ].join(' '),
     {
@@ -173,15 +182,17 @@ export function registerJenkinsTools(server: ToolRegistrar) {
         .describe('권장 — android_generate_keystore 가 만든 keystore 절대경로 (~/.mimi-seed/keystores/ 안만 허용)'),
       file_name: z.string().default('keystore.jks').describe('파일명 (기본: keystore.jks)'),
       description: z.string().optional().describe('설명 (선택)'),
-      confirm: z.boolean().optional().describe('같은 id 가 이미 있을 때만 필요. true 면 기존 keystore 를 교체'),
+      confirm: z.boolean().optional().describe('true 일 때만 Jenkins 로 보낸다 (새 id 생성 또는 기존 keystore 교체). 생략/false 면 dry-run'),
     },
     async ({ id, keystore_base64, keystore_path, file_name, description, confirm }) => {
       const keystore = resolveKeystoreInput({ base64: keystore_base64, path: keystore_path });
       const cfg = requireJenkinsConfig();
       const result = await creds.upsertSecretFile(cfg, id, keystore, file_name, description ?? '', {
         allowReplace: confirm === true,
+        dryRun: confirm !== true,
       });
       if (result === 'exists') return existingPreview(cfg, id, creds.KIND_FILE);
+      if (result === 'new') return newPreview(cfg, id, creds.KIND_FILE);
       return textResult(`✅ Jenkins keystore credential ${result}: \`${id}\` (${file_name})`);
     },
   );

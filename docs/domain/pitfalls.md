@@ -228,9 +228,11 @@ id 가 이미 있으면 갱신한다 — 그런데 종류(Secret text vs Secret 
   흔들리지 않는다. 메타데이터를 못 읽으면 막지 않는다 — 부재를 이유로 정상 작업을 차단하지 않는다.
 - Play SA 기본 id 는 `<앱>-playstore-sa` 다. 무엇을 담는지가 이름에 드러나야 범용 이름과 부딪히지 않는다.
 
-같은 종류끼리의 교체도 되돌릴 수 없으므로 세 도구 모두 **새 id 는 바로 만들고, 이미 있는 id 는
-`confirm: true` 가 있어야 교체**한다 (없으면 "이미 존재" dry-run — manifest `ownGate`).
-`jenkins_upload_playstore_sa` 만 한동안 말없이 덮어썼다가 같은 규칙으로 맞췄다.
+같은 종류끼리의 교체도 되돌릴 수 없고, 새 id 생성도 비밀을 외부(Jenkins)로 보내는 일이므로 세 도구 모두
+**`confirm: true` 전에는 아무것도 보내지 않는다** (dry-run 이 "생성 예정" 또는 "이미 존재 — 교체" 를 알려준다,
+manifest `ownGate`). 예전엔 새 id 는 확인 없이 바로 만들었는데, 플래그가 없는 그 경로는 사람 승인 게이트(§26)가
+잡지 못했다 — 그래서 manifest `approval` 에 넣었더니 교체 경로에서 대화상자가 두 번 떴다. 지금은 confirm 하나가
+모든 경로를 막아 대화상자도 실행 직전 한 번이다. `jenkins_upload_playstore_sa` 는 한동안 말없이 덮어쓰기까지 했다.
 
 새 credential 도구를 만든다면 upsert 전에 같은 검사를 붙일 것 (`jenkins-credentials.test.ts`).
 
@@ -386,9 +388,11 @@ So a call that arrives with a confirm-style flag set is held until the **user** 
   credential sync, public YouTube changes, paid generation, `confirmCreate`). A new tool that adds such a flag is
   covered from its first line. Matching three exact names once let `confirmCreate` through.
 - **The flag is not the only way to the dangerous branch.** `jenkins_save_config` / `ci_save_config` take a URL /
-  host, and the next credential upload (a *new* Jenkins id runs without a flag) goes there; the other
-  `*_save_config` replace a stored token; `ci_trigger_build` starts a deploy workflow with no flag. These are listed
-  in the manifest's `approval` and ask on **every** call. When you add a tool that changes where data goes, or that
+  host that every later credential upload goes to; the other `*_save_config` replace a stored token;
+  `ci_trigger_build` starts a deploy workflow with no flag. These are listed in the manifest's `approval` and ask on
+  **every** call. Prefer the other fix when you can: the Jenkins credential uploads used to create a *new* id with no
+  flag, and listing them in `approval` asked twice on the replace path — making `confirm` gate every path
+  (dry-run first, even for a new id) gives exactly one dialog, at the call that sends. When you add a tool that changes where data goes, or that
   sends a secret on a flagless path, add it there — `tool-manifest.test.ts` only checks the list is well-formed.
 - **Only `accept` + a ticked `approve` box runs.** `accept` alone could be one Enter keypress; an unticked box,
   decline, cancel, timeout, or a client error is a refusal. Never count a failure as consent.

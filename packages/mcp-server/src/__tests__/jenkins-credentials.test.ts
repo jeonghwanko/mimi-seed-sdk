@@ -271,7 +271,7 @@ describe('listCredentials', () => {
 });
 
 // 같은 종류의 기존 값(서명 keystore, 비밀값)을 조용히 갈아끼우는 것도 되돌릴 수 없다.
-// MCP 도구는 새 id 생성은 그대로 두고, 기존 id 교체만 confirm 뒤로 보낸다.
+// 라이브러리는 allowReplace=false 로 교체만 막고, MCP 도구는 dryRun 으로 새 id 까지 confirm 뒤로 보낸다.
 describe('allowReplace=false — 기존 id 는 쓰지 않는다', () => {
   const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
 
@@ -283,14 +283,31 @@ describe('allowReplace=false — 기존 id 는 쓰지 않는다', () => {
     expect(posted()).toBe(false);
   });
 
-  it('없으면 확인 없이 만든다', async () => {
+  it('없으면 확인 없이 만든다 (라이브러리 동작 — MCP 도구는 dryRun 으로 먼저 묻는다)', async () => {
     arrange(null);
     await expect(upsertSecretFile(cfg, 'my-app-keystore', 'x', 'k.jks', '', { allowReplace: false })).resolves.toBe('created');
     expect(posted()).toBe(true);
   });
 });
 
-describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 confirm', () => {
+describe('dryRun — 존재·종류만 보고 아무것도 보내지 않는다', () => {
+  const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
+
+  it('없으면 new, 있으면 exists — 어느 쪽도 POST 하지 않는다', async () => {
+    arrange(null);
+    await expect(upsertSecretText(cfg, 'my-app-new', 's', '', { dryRun: true })).resolves.toBe('new');
+    arrange({ _class: FILE_CLASS });
+    await expect(upsertSecretFile(cfg, 'my-app-keystore', 'x', 'k.jks', '', { dryRun: true, allowReplace: true })).resolves.toBe('exists');
+    expect(posted()).toBe(false);
+  });
+
+  it('다른 종류면 dryRun 이어도 오류로 멈춘다 (교체 가드가 먼저)', async () => {
+    arrange({ _class: TEXT_CLASS });
+    await expect(upsertSecretFile(cfg, 'my-app-keystore', 'x', 'k.jks', '', { dryRun: true })).rejects.toThrow(/different kind|다른 종류/);
+  });
+});
+
+describe('jenkins_upload_keystore / jenkins_create_credential — confirm 전에는 보내지 않는다', () => {
   const posted = () => fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'POST');
 
   it('기존 keystore 가 있으면 confirm 없이는 dry-run 만', async () => {
@@ -333,11 +350,18 @@ describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 conf
       rmSync(home, { recursive: true, force: true });
     }
   });
-  it('새 id 는 confirm 없이 생성된다', async () => {
+  // 새 id 도 비밀을 Jenkins(외부)로 보내는 작업이다. 확인 없이 바로 올리던 시절엔 confirm 플래그가 없는 이 경로를
+  // 사람 승인 게이트가 잡지 못했다 — 이제 새 id 도 dry-run 을 거쳐 confirm: true 에서만 보낸다.
+  it('새 id 도 confirm 없이는 아무것도 보내지 않고 "생성 예정" dry-run, confirm: true 면 생성', async () => {
     arrange(null);
     await withClient(async (client) => {
       const r = await client.callTool({ name: 'jenkins_create_credential', arguments: { id: 'my-app-new', secret: 's' } });
-      expect(text(r)).toContain('created');
+      expect(text(r)).toMatch(/dry-run[\s\S]*my-app-new[\s\S]*아직 없다/);
+      expect(text(r)).toContain('confirm: true');
+      expect(posted()).toBe(false);
+      const ok = await client.callTool({ name: 'jenkins_create_credential', arguments: { id: 'my-app-new', secret: 's', confirm: true } });
+      expect(text(ok)).toContain('created');
+      expect(posted()).toBe(true);
     });
   });
 
@@ -375,10 +399,13 @@ describe('jenkins_upload_keystore / jenkins_create_credential — 교체만 conf
       });
     });
 
-    it('새 id 는 confirm 없이 생성된다', async () => {
+    it('새 id 도 confirm 없이는 dry-run 만, confirm: true 면 생성', async () => {
       arrange(null);
       await withClient(async (client) => {
-        const r = await client.callTool({ name: 'jenkins_upload_playstore_sa', arguments: args() });
+        const dry = await client.callTool({ name: 'jenkins_upload_playstore_sa', arguments: args() });
+        expect(text(dry)).toMatch(/dry-run[\s\S]*app-playstore-sa[\s\S]*아직 없다/);
+        expect(posted()).toBe(false);
+        const r = await client.callTool({ name: 'jenkins_upload_playstore_sa', arguments: { ...args(), confirm: true } });
         expect(text(r)).toContain('Jenkins created');
         expect(posted()).toBe(true);
       });

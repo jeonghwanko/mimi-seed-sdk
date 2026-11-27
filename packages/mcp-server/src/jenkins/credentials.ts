@@ -208,13 +208,17 @@ function assertSameKind(id: string, existing: ExistingCredential, kind: Credenti
 
 /**
  * allowReplace=false 면 같은 id 가 이미 있을 때 **아무것도 쓰지 않고** 'exists' 를 돌려준다.
- * 같은 종류의 기존 값(예: 서명 keystore)을 조용히 갈아끼우면 되돌릴 수 없으므로, MCP 도구는
- * 사용자 confirm 전에는 이 모드로 부른다. 새 id 생성은 확인 없이 진행된다.
+ * 같은 종류의 기존 값(예: 서명 keystore)을 조용히 갈아끼우면 되돌릴 수 없으므로 교체에는 확인이 필요하다.
+ *
+ * dryRun=true 면 존재·종류만 확인하고 **아무것도 보내지 않는다** — 새 id 면 'new', 있으면 'exists'.
+ * MCP 도구는 confirm 전에 이 모드로 부른다: 새 id 도 비밀을 외부(Jenkins)로 내보내는 작업이라, 확인 없이
+ * 바로 올리던 시절엔 confirm 플래그가 없는 그 경로를 사람 승인 게이트가 잡지 못했다.
  */
 export interface UpsertOptions {
   allowReplace?: boolean;
+  dryRun?: boolean;
 }
-export type UpsertResult = 'created' | 'updated' | 'exists';
+export type UpsertResult = 'created' | 'updated' | 'exists' | 'new';
 
 export async function listCredentials(cfg: JenkinsConfig): Promise<JenkinsCredentialSummary[]> {
   const res = await fetchWithTimeout(`${storeBase(cfg.url)}/api/json?depth=1`, {
@@ -241,6 +245,7 @@ export async function upsertSecretText(
   const existing = await inspectCredential(cfg, id);
   if (existing) assertSameKind(id, existing.info, existing.kind, KIND_STRING);
   const exists = existing !== null;
+  if (options.dryRun) return exists ? 'exists' : 'new';
   if (exists && options.allowReplace === false) return 'exists';
   const payload = {
     credentials: {
@@ -287,6 +292,7 @@ export async function upsertSecretFile(
   const existing = await inspectCredential(cfg, id);
   if (existing) assertSameKind(id, existing.info, existing.kind, KIND_FILE);
   const exists = existing !== null;
+  if (options.dryRun) return exists ? 'exists' : 'new';
   if (exists && options.allowReplace === false) return 'exists';
   const payload = {
     credentials: {
