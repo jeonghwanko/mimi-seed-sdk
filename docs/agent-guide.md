@@ -90,6 +90,7 @@ Use the table to find tool names, then select only the active tools needed for t
 | Search indexing (Search Console / Naver) | `select:gsc_list_sites,gsc_list_sitemaps,gsc_get_sitemap,gsc_submit_sitemap,gsc_inspect_url,gsc_search_analytics,naver_check_page,naver_indexnow_submit` |
 | Social posting (Facebook / Instagram / Threads) | `select:facebook_current_config,facebook_save_config,facebook_list_pages,facebook_get_page,facebook_post_photo,facebook_post_multi_photo,instagram_save_config,instagram_get_account,instagram_post_image,instagram_post_carousel,threads_current_config,threads_save_config,threads_refresh_token,threads_get_account,threads_post,threads_post_video,threads_post_carousel` |
 | TikTok Business video publish | `select:tiktok_business_auth_status,tiktok_business_get_account,tiktok_business_get_video_settings,tiktok_business_plan_video_post,tiktok_business_publish_video,tiktok_business_get_publish_status,tiktok_business_list_publish_audits` |
+| Cross-post one announcement to several platforms | `select:mimi_seed_status,tiktok_business_plan_video_post,social_publish` |
 | Jenkins credentials + jobs | `select:jenkins_status,jenkins_save_config,jenkins_list_credentials,jenkins_create_credential,jenkins_delete_credential,jenkins_upload_keystore,jenkins_upload_playstore_sa,jenkins_list_jobs,jenkins_get_job_config,jenkins_create_job,jenkins_update_job` |
 | Jenkins build run + track | `select:jenkins_status,jenkins_trigger_build,jenkins_get_queue_item,jenkins_get_build_status` |
 | CI (GitHub/GitLab) | `select:ci_save_config,ci_list_workflows,ci_trigger_build,ci_get_build_status,ci_list_recent_builds,ci_cancel_build` |
@@ -137,6 +138,20 @@ every credential, which also tells them where to obtain each token
 all three Meta platforms in one pass. `mimi-seed auth social` does the same for every posting channel (YouTube,
 Facebook, Instagram, Threads, TikTok), skipping connected ones and reconnecting expiring tokens. It connects YouTube to
 the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools when `mimi_seed_status` names it.
+
+**Posting to several platforms.** When the user wants the same announcement on more than one platform, use
+`social_publish` instead of calling each `*_post_*` tool:
+
+1. Call `mimi_seed_status` to see which channels are connected (and which Google profile holds YouTube).
+2. For TikTok, first make a plan with `tiktok_business_plan_video_post` and pass its `planId` as `tiktok.planId`.
+3. Call `social_publish` **without** `confirm`. It returns a plan per target, and `ok: false` with `problems` if any
+   target cannot post. Fix those (per-platform `text`, images, `youtube.title`, …) and preview again.
+4. Show the plan, including YouTube's privacy, to the user and get explicit approval, then call again with the same
+   arguments plus `confirm: true`.
+5. Report the per-platform `results`. If something `failed`, the same call (same `requestId`) resends only what
+   did not post. A `requestId` belongs to one post: never reuse it for different content (it is refused). If a result
+   is `unknown_outcome`, do **not** retry. Ask the user to check that platform: the post may
+   be live, and a new `requestId` would post it again.
 
 All three Meta platforms can use named local profiles. Save one with
 `mimi-seed auth facebook|instagram|threads --profile <id>`, then select it per project with `.mimi-seed.json` →
@@ -252,6 +267,7 @@ per-domain inventory is [`docs/domain/tool-catalog.md`](domain/tool-catalog.md).
 | **Android signing** | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |
 | **Facebook / Instagram / Threads** | `facebook_post_photo` · `instagram_post_carousel` · `threads_post` · `threads_post_video` · `threads_refresh_token` |
 | **TikTok Business** | `tiktok_business_auth_status` · `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
+| **Cross-post** | `social_publish` — one post to several platforms; see "Posting to several platforms" below |
 | **Checks** | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | **AI / Auth** | `generate_release_notes_from_commits` · `generate_review_reply` · `mimi_seed_status` · `mimi_seed_auth_start` · `mimi_seed_auth_status` · `mimi_seed_remote_sync_credentials` |
 | **Video production** | `youtube_upload_video` · `youtube_get_video_status` · `youtube_update_video_privacy` · `video_save_plan` · `video_plan_from_story` · `video_research_youtube` · `video_search_stock_assets` · `video_synthesize_research` · `video_generate_image` · `video_build_timeline` · `video_render` · `video_job_status` · `video_validate` |
@@ -365,7 +381,7 @@ setup, beta invites — is
 3. Call again with the **same arguments** plus `confirm: true`.
 
 Some **D** tools gate themselves (`ownGate` in the manifest) and ask for confirmation only on the dangerous
-path: `tiktok_business_publish_video` uses `confirmPublish`; `appstore_phased_release` runs
+path: `tiktok_business_publish_video` uses `confirmPublish`; `social_publish` returns its own per-platform dry-run plan and posts only with `confirm: true`; `appstore_phased_release` runs
 `pause`/`resume`/`enable`/`status` directly; `jenkins_create_credential` / `jenkins_upload_keystore` /
 `jenkins_upload_playstore_sa` send nothing without `confirm: true` — their dry-run says whether the id is **new**
 (it will be created) or **already exists** (it will be replaced, which cannot be undone).
@@ -402,7 +418,7 @@ build is already in the queue, so track its `queue_id` and do not retrigger.
 | `appstore_delete_screenshot_set`, `playstore_delete_all_images`, `playstore_replace_images` | Deletes assets. |
 | `playstore_delete_product`, `jenkins_delete_credential`, `firebase_delete_*_app` | Destructive. |
 | `jenkins_trigger_build` | Runs a Jenkins job, which may deploy or publish. |
-| `facebook_post_*`, `instagram_post_*`, `threads_post*`, `*_reply_review`, `youtube_reply_comment` | Public, outward-facing. |
+| `facebook_post_*`, `instagram_post_*`, `threads_post*`, `social_publish`, `*_reply_review`, `youtube_reply_comment` | Public, outward-facing. |
 | `iam_create_key`, `iam_add_iam_policy_binding` | Issues a permanent credential / changes project IAM. |
 
 General rules:

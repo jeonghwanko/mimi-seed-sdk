@@ -1,5 +1,5 @@
 import type { FacebookConfig } from './config.js';
-import { metaApiError } from '../lib/meta-auth.js';
+import { metaApiError, type PublishHooks } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { catalog } from '#core/lang.js';
@@ -78,7 +78,9 @@ async function uploadUnpublishedPhoto(cfg: FacebookConfig, imageUrl: string): Pr
   return result.id as string;
 }
 
-export async function postPhoto(cfg: FacebookConfig, imageUrl: string, caption: string): Promise<PostResult> {
+export async function postPhoto(cfg: FacebookConfig, imageUrl: string, caption: string, hooks: PublishHooks = {}): Promise<PostResult> {
+  // A published photo is one request: it is the publishing step.
+  hooks.onPublishStart?.();
   const result = await fbPost(cfg.pageAccessToken, `/${encodePathSegment(cfg.pageId)}/photos`, {
     url: imageUrl,
     message: caption,
@@ -97,6 +99,7 @@ export async function postMultiPhoto(
   cfg: FacebookConfig,
   imageUrls: string[],
   caption: string,
+  hooks: PublishHooks = {},
 ): Promise<PostResult> {
   if (imageUrls.length < 2 || imageUrls.length > 10) {
     throw new Error(M().imageCount);
@@ -111,6 +114,8 @@ export async function postMultiPhoto(
 
   // Step 2: create feed post with all photos attached
   const attachedMedia = photoIds.map(id => JSON.stringify({ media_fbid: id }));
+  // The unpublished uploads above are invisible; this feed post is what publishes.
+  hooks.onPublishStart?.();
   const result = await fbPost(cfg.pageAccessToken, `/${encodePathSegment(cfg.pageId)}/feed`, {
     message: caption,
     attached_media: `[${attachedMedia.join(',')}]`,

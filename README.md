@@ -429,7 +429,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 ---
 
 <!-- generated:readme-tools-heading:start — edit scripts/docs-spec.mjs, then npm run plugin:sync -->
-## Local MCP Tool List (150+ tools · 24 domains)
+## Local MCP Tool List (150+ tools · 25 domains)
 <!-- generated:readme-tools-heading:end -->
 
 > These run via the **Local MCP** — Google OAuth on your machine. The Remote MCP exposes a smaller read/diagnostic subset plus App Store IAP review-note/review-screenshot writes. Always-current catalog: [`docs/domain/tool-catalog.md`](docs/domain/tool-catalog.md). Every tool carries MCP annotations (read-only / destructive / open-world), and destructive tools (submit, delete, public posts, …) return a dry-run preview unless called with `confirm: true`.
@@ -454,6 +454,7 @@ full tool catalog, the auth/credential model, and known pitfalls — start at
 | **GCP Billing** | 4 | `gcp_get_billing_info` · `gcp_list_billing_projects` · `gcp_list_budgets` · `gcp_create_budget` |
 | **Threads** | 7 | `threads_post` · `threads_post_video` · `threads_post_carousel` · `threads_refresh_token` |
 | **TikTok Business** | 7 | `tiktok_business_plan_video_post` · `tiktok_business_publish_video` · `tiktok_business_get_publish_status` |
+| **Cross-post** | 1 | `social_publish` |
 | **Checks / Risk** | 5 | `playstore_check_submission_risks` · `appstore_check_submission_risks` · `android_check_billing_compliance` · `screenshot_validate` · `release_status` |
 | **Instagram** | 4 | `instagram_post_image` · `instagram_post_carousel` · `instagram_save_config` |
 | **Android signing** | 3 | `android_signing_setup` · `android_generate_keystore` · `jenkins_upload_playstore_sa` |

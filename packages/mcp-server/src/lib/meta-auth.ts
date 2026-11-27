@@ -91,14 +91,33 @@ export function metaApiError(
     );
 
   if (needsReconnect) {
-    return new Error(
+    return withStatus(new Error(
       [
         M().revoked(LABEL[platform]),
         M().recovery(FIX[platform]),
         M().metaResponse(safeMessage),
       ].join('\n'),
-    );
+    ), status);
   }
 
-  return new Error(`${LABEL[platform]} API ${status}: ${safeMessage}`);
+  return withStatus(new Error(`${LABEL[platform]} API ${status}: ${safeMessage}`), status);
+}
+
+/** The HTTP status rides on the error, so callers can tell a rejection (4xx) from a server failure (5xx). */
+function withStatus(error: Error, status: number): Error {
+  return Object.assign(error, { status });
+}
+
+/** HTTP status of an error made by metaApiError, if any. */
+export function metaErrorStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Lets a caller learn when the request that makes a post visible is about to be sent. Anything that fails before it
+ * published nothing; after it, only a definite rejection proves nothing was published.
+ */
+export interface PublishHooks {
+  onPublishStart?: () => void;
 }

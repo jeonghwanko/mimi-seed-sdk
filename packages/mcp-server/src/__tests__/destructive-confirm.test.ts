@@ -136,6 +136,7 @@ const OVERRIDES: Record<string, Record<string, unknown>> = {
   facebook_post_multi_photo: { imageUrls: ['https://example.com/a.png', 'https://example.com/b.png'] },
   instagram_post_carousel: { imageUrls: ['https://example.com/a.png', 'https://example.com/b.png'] },
   threads_post_carousel: { imageUrls: ['https://example.com/a.png', 'https://example.com/b.png'] },
+  social_publish: { targets: ['threads'], text: 'x' },
 };
 
 /**
@@ -158,6 +159,7 @@ const SELF_GUARDED: Record<string, RegExp | 'needs-read'> = {
   playstore_deploy_recovery_action: /dry-run/,
   playstore_cancel_recovery_action: /dry-run/,
   tiktok_business_publish_video: /confirmPublish=true/,
+  social_publish: /dry-run/,
   // 설정이 없으면 존재 확인(읽기) 전에 멈춘다. 기존 id 교체 경로는 jenkins-credentials.test.ts 가 다룬다.
   jenkins_create_credential: /Jenkins 설정이 없습니다/,
   jenkins_upload_keystore: /Jenkins 설정이 없습니다/,
