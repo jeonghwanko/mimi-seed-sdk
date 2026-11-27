@@ -49,7 +49,7 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       'confirm 없이 부르면 dry-run 계획만 돌려줍니다: 플랫폼별 동작·본문·미디어와 게시를 막는 문제. 네트워크 호출은 하지 않습니다.',
       '한 대상이라도 문제가 있으면 어디에도 게시하지 않습니다. 사용자에게 계획을 보여주고 명시 승인을 받은 뒤 confirm: true 로 다시 호출하세요.',
       '미디어 규칙은 플랫폼별 도구와 같습니다: Facebook·Instagram 은 public HTTPS imageUrls(1~10장)가 필요하고, Threads 는 텍스트·이미지(1~20장)·videoUrl 중 하나, YouTube 는 로컬 videoFilePath 와 youtube.expectedChannelId, TikTok 은 tiktok_business_plan_video_post 로 만든 tiktok.planId 를 씁니다.',
-      '결과는 플랫폼별로 돌려줍니다. 같은 게시물(플랫폼·계정·내용이 같음)은 두 번 게시하지 않습니다: 다시 부르면 이미 게시된 곳은 건너뛰고, 실패한 곳만 보냅니다. 같은 내용을 일부러 다시 올리려면 repost 로 그 플랫폼을 지정합니다. 결과를 알 수 없는 게시가 있는 계정은 내용이 달라도 막히며, 사람이 그 플랫폼에서 확인한 뒤 resendUnknown 으로 지정해야만 다시 보냅니다.',
+      '결과는 플랫폼별로 돌려줍니다. 같은 게시물(플랫폼·계정·내용이 같음)은 두 번 게시하지 않습니다: 다시 부르면 이미 게시된 곳은 건너뛰고, 실패한 곳만 보냅니다. 같은 내용을 일부러 다시 올리려면 repost: [{ platform, at }] 으로 계획에 표시된 그 게시 기록의 at 을 지정합니다. 결과를 알 수 없는 게시가 있는 계정은 내용이 달라도 막히며, 사람이 그 플랫폼에서 확인한 뒤 resendUnknown: [{ platform, at }] 으로 계획에 표시된 at 을 지정해야만 다시 보냅니다. 승인은 지정한 기록 하나에만 쓰입니다.',
     ].join(' '),
     {
       targets: z.array(z.enum(SOCIAL_TARGETS)).min(1).max(SOCIAL_TARGETS.length).describe('게시할 플랫폼 목록 (이 순서대로 게시)'),

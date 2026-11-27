@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { CREDENTIAL_DIR_MODE, writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
 import { readCredentialFileSync } from '#core/credential-read.js';
 import { catalog } from '#core/lang.js';
@@ -120,14 +120,20 @@ const heldHere = new Set<string>();
 
 const isCode = (error: unknown, code: string) => (error as NodeJS.ErrnoException).code === code;
 
-function lockOwner(lock: string): number | null {
+/** The owner file holds "<pid> <token>": the pid says whether the holder is alive, the token which acquisition it is. */
+function readOwner(lock: string): { pid: number; token: string } | null {
   try {
-    const pid = Number(readCredentialFileSync(path.join(lock, 'owner')));
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
+    const [pidText, token = ''] = readCredentialFileSync(path.join(lock, 'owner')).trim().split(' ');
+    const pid = Number(pidText);
+    return Number.isInteger(pid) && pid > 0 ? { pid, token } : null;
   } catch {
     // No owner file: one caught between mkdir and the owner write. Decided by age instead.
     return null;
   }
+}
+
+function lockOwner(lock: string): number | null {
+  return readOwner(lock)?.pid ?? null;
 }
 
 /**
@@ -158,8 +164,15 @@ function lockState(lock: string): 'missing' | boolean {
 
 function takeLock(lock: string): AccountLock {
   fs.mkdirSync(lock, { mode: CREDENTIAL_DIR_MODE });
+  // A pid alone cannot tell two acquisitions in this same process apart (e.g. after a long suspend, another call
+  // here judged this lock stale and took it): the token can.
+  const token = randomUUID();
+  const ours = () => {
+    const owner = readOwner(lock);
+    return owner?.pid === process.pid && owner.token === token;
+  };
   try {
-    writeCredentialFile(path.join(lock, 'owner'), String(process.pid));
+    writeCredentialFile(path.join(lock, 'owner'), `${process.pid} ${token}`);
   } catch (error) {
     // Without the owner file the lock would block this account until it ages out; drop it before rethrowing.
     fs.rmSync(lock, { recursive: true, force: true });
@@ -182,14 +195,17 @@ function takeLock(lock: string): AccountLock {
   return {
     confirmHeld() {
       // Before every publishing call: after a suspend, another caller may have judged this lock stale and taken it.
-      if (lockOwner(lock) !== process.pid || !heldHere.has(lock)) throw new Error(M().inProgress);
+      if (!ours()) throw new Error(M().inProgress);
       refresh();
     },
     release() {
       clearInterval(heartbeat);
-      heldHere.delete(lock);
-      // Remove it only if it is still ours: after a suspend, another caller may have replaced it legitimately.
-      if (lockOwner(lock) === process.pid) fs.rmSync(lock, { recursive: true, force: true });
+      // Remove it (and its in-process entry) only if it is still this acquisition: after a suspend, another caller —
+      // possibly in this same process — may have replaced it legitimately.
+      if (ours()) {
+        heldHere.delete(lock);
+        fs.rmSync(lock, { recursive: true, force: true });
+      }
     },
   };
 }

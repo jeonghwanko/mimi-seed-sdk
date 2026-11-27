@@ -621,6 +621,85 @@ describe('review 6', () => {
   });
 });
 
+describe('review 7', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+  const launch: SocialPublishInput = { targets: ['threads'], text: 'Launch' };
+  const repostOf = (input: SocialPublishInput) =>
+    ({ ...input, repost: [{ platform: 'threads' as const, at: planPublish(input).posts[0].record!.at }] });
+
+  it('#1: a repost that fails cleanly leaves the post `posted`; a plain call afterwards still skips it', async () => {
+    await run(launch);
+    const before = readRecord('threads', targetKey('threads', launch)!);
+    api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    expect((await run(repostOf(launch)))[0].status).toBe('failed');
+    expect(readRecord('threads', targetKey('threads', launch)!)).toEqual(before); // not downgraded, id/url kept
+    expect((await run(launch))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+
+  it('#1: a repost with an unknown outcome keeps `posted` too, and blocks the account until checked', async () => {
+    await run(launch);
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(repostOf(launch)))[0].status).toBe('unknown_outcome');
+    expect(readRecord('threads', targetKey('threads', launch)!)!.state).toBe('posted');
+    expect((await run(launch))[0].status).toBe('already_posted'); // a skip needs nothing
+    expect(planPublish({ targets: ['threads'], text: 'Other' }).ok).toBe(false); // the account is pending
+  });
+
+  it('#2: an unresolved account adds no second, misleading problem', () => {
+    const problems = problemsOf({ targets: ['youtube'], text: 'T', videoFilePath: VIDEO });
+    expect(problems.youtube.join()).toMatch(/youtube options/);
+    expect(problems.youtube.join()).not.toMatch(/failed validation|Cannot tell which/);
+    api.ttOpenId = null;
+    expect(problemsOf({ targets: ['tiktok'], text: 'x', tiktok: { planId: 'p' } }).tiktok.join()).toMatch(/Cannot tell which tiktok account/);
+  });
+
+  it('#3: a marker left behind by a post that did finish does not block the account', async () => {
+    const ledgerModule = await import('../crosspost/ledger.js');
+    const clear = vi.spyOn(ledgerModule, 'clearPending').mockImplementationOnce(() => { throw new Error('EPERM'); });
+    try {
+      expect((await run(launch))[0]).toMatchObject({ status: 'posted', warning: expect.stringMatching(/EPERM/) });
+    } finally {
+      clear.mockRestore();
+    }
+    expect(readPending('threads', accountKey('threads', launch)!)).not.toBeNull(); // still on disk
+    expect((await run({ targets: ['threads'], text: 'Next week' }))[0].status).toBe('posted');
+  });
+
+  it('#4: if the unknown marker cannot be rewritten, record and marker still share one `at` — one approval', async () => {
+    const ledgerModule = await import('../crosspost/ledger.js');
+    const real = ledgerModule.writePending;
+    const write = vi.spyOn(ledgerModule, 'writePending').mockImplementation((platform, account, pending) => {
+      if (pending.state === 'unknown') throw new Error('ENOSPC');
+      real(platform, account, pending);
+    });
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    try {
+      expect((await run(launch))[0].status).toBe('unknown_outcome');
+    } finally {
+      write.mockRestore();
+    }
+    const blocked = planPublish(launch).posts[0];
+    const at = blocked.pending!.at;
+    expect(blocked.record!.at).toBe(at);
+    expect((await run({ ...launch, resendUnknown: [{ platform: 'threads', at }] }))[0].status).toBe('posted');
+  });
+
+  it('#5: a lock taken over in this same process is not confirmed or released by the earlier holder', () => {
+    const account = 'user:same-process';
+    const first = acquireAccountLock('threads', account);
+    const old = (Date.now() - 31 * 60 * 1000) / 1000;
+    utimesSync(accountLockPath('threads', account), old, old); // e.g. suspended for 40 minutes
+    const second = acquireAccountLock('threads', account); // judged stale and taken over, same pid
+    expect(() => first.confirmHeld()).toThrow(/publishing to this account/);
+    first.release();
+    expect(existsSync(accountLockPath('threads', account))).toBe(true); // the second holder's lock survives
+    expect(() => second.confirmHeld()).not.toThrow();
+    second.release();
+    expect(existsSync(accountLockPath('threads', account))).toBe(false);
+  });
+});
+
 describe('account lock', () => {
   const account = 'user:1';
   const lockOf = () => accountLockPath('threads', account);
