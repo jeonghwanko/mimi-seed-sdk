@@ -1,6 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
-import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getStoredCredentials, getGoogleAuthAttempt } from '../auth/google-auth.js';
+import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getGoogleAuthAttempt, loginOAuthClient, youtubeUploadProfiles } from '../auth/google-auth.js';
 import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
@@ -87,7 +87,9 @@ const A = catalog(
       oauthMissing: '❌ Google OAuth      — 미연결 → mimi_seed_auth_start',
       youtubeUpload: '✅ YouTube           — 업로드·상태 관리 권한 연결됨',
       youtubeRead: '✅ YouTube           — 채널·영상·성과 읽기 권한 연결됨',
-      youtubeMissing: '❌ YouTube           — 미연결 → mimi_seed_auth_start(domains=["youtube"])  (선택)',
+      youtubeMissing: '❌ YouTube           — 미연결 → mimi_seed_auth_start(profile="youtube", domains=["youtube"])  (선택)',
+      youtubeProfiles: (list: string, first: string) =>
+        `✅ YouTube           — 업로드 권한 연결됨 (프로필 ${list}) — youtube_* 도구에 profile="${first}" 를 넘기세요`,
       playOk: (count: number, detail: string) => `✅ Play Store SA     — ${count}개 등록 (${detail})`,
       playBroken: (broken: number, total: number, names: string) =>
         `⚠️  Play Store SA     — ${total}개 중 ${broken}개를 읽을 수 없음 (${names}) — 그 패키지는 SA 로 동작하지 않는다. setup_playstore_connection 으로 다시 등록`,
@@ -192,7 +194,9 @@ const A = catalog(
       oauthMissing: '❌ Google OAuth      — not connected → mimi_seed_auth_start',
       youtubeUpload: '✅ YouTube           — upload and status management permission connected',
       youtubeRead: '✅ YouTube           — channel, video, and performance read permission connected',
-      youtubeMissing: '❌ YouTube           — not connected → mimi_seed_auth_start(domains=["youtube"])  (optional)',
+      youtubeMissing: '❌ YouTube           — not connected → mimi_seed_auth_start(profile="youtube", domains=["youtube"])  (optional)',
+      youtubeProfiles: (list: string, first: string) =>
+        `✅ YouTube           — upload permission connected (profile ${list}) — pass profile="${first}" to youtube_* tools`,
       playOk: (count: number, detail: string) => `✅ Play Store SA     — ${count} registered (${detail})`,
       playBroken: (broken: number, total: number, names: string) =>
         `⚠️  Play Store SA     — ${broken} of ${total} cannot be read (${names}) — those packages won't work with an SA. Re-register with setup_playstore_connection`,
@@ -406,7 +410,13 @@ export function registerAuthTools(server: ToolRegistrar) {
           ? m.youtubeUpload
           : m.youtubeRead);
       } else {
-        lines.push(m.youtubeMissing);
+        // The default login has no YouTube grant, but a named profile (the recommended setup) may.
+        const profiles = youtubeUploadProfiles();
+        lines.push(profiles.length > 0
+          ? m.youtubeProfiles(
+            profiles.map((p) => (p.channelTitle ? `${p.profile}: ${p.channelTitle}` : p.profile)).join(', '),
+            profiles[0].profile)
+          : m.youtubeMissing);
       }
 
       // 2. Play Store SA
@@ -630,7 +640,7 @@ export function registerAuthTools(server: ToolRegistrar) {
       let clientId: string;
       let clientSecret: string;
       try {
-        ({ clientId, clientSecret } = await getMcpOAuthClient(getStoredCredentials(profile)));
+        ({ clientId, clientSecret } = await getMcpOAuthClient(loginOAuthClient(profile)));
       } catch (e) {
         const p = classifyError(e, { phase: 'login' });
         return textResult(`❌ [${p.code}] ${p.message}${p.hint ? `\n→ ${p.hint}` : ''}`);

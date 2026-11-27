@@ -22,6 +22,9 @@ npx mimi-seed auth meta
 npx mimi-seed auth status --all
 ```
 
+To also connect YouTube and TikTok in the same pass, run `npx mimi-seed auth social` instead. It skips
+anything already connected and reconnects expiring tokens.
+
 Or connect only what you use:
 
 ```bash

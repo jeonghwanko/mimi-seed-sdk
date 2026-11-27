@@ -134,7 +134,9 @@ every credential, which also tells them where to obtain each token
 | TikTok Business | `mimi-seed auth tiktok` → verify with `tiktok_business_auth_status` and `tiktok_business_get_account` |
 
 `mimi-seed auth meta` opens the combined social setup entry point when the user wants to review or reconnect
-all three Meta platforms in one pass.
+all three Meta platforms in one pass. `mimi-seed auth social` does the same for every posting channel (YouTube,
+Facebook, Instagram, Threads, TikTok), skipping connected ones and reconnecting expiring tokens. It connects YouTube to
+the `youtube` Google profile, so pass `profile: "youtube"` to `youtube_*` tools when `mimi_seed_status` names it.
 
 All three Meta platforms can use named local profiles. Save one with
 `mimi-seed auth facebook|instagram|threads --profile <id>`, then select it per project with `.mimi-seed.json` →

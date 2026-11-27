@@ -21,6 +21,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - `mimi-seed auth instagram` and `mimi-seed auth threads` can sign in through the browser with **your own Meta app**, with no server in between. Since the public console was retired, these commands could only take a pasted token. The first run asks for the app ID, app secret, and registered redirect URI. They are saved to `~/.mimi-seed/meta-apps.json` (`0600`, and encrypted like your other credentials when credential encryption is on) only after a successful login. The app secret is not shown on screen as you type it. After you approve, paste the redirected URL, or register an `http://localhost:<port>` redirect and the CLI catches it. `--reset-app` changes the saved app. A team broker (`MIMI_SEED_WEB_BASE`), `--manual-token`, and a token piped on standard input (`printf 'IGAA…' | mimi-seed auth instagram`) work as before.
+- `mimi-seed auth social` connects every posting channel (YouTube, Facebook, Instagram, Threads, and TikTok) in one pass. Anything already connected is skipped, and expired or expiring tokens are reconnected. Setup flags such as `--reconnect threads` pass through.
+- YouTube upload now appears in `mimi-seed setup`, `mimi-seed doctor`, and `mimi-seed auth status --all`. Connecting it signs in to a separate `youtube` Google profile (`mimi-seed auth login --profile youtube --domains youtube`), so a channel owned by a different Google account never replaces your default login for Play and Firebase. It counts as connected when the default login or any named profile has the YouTube upload permission. Pass `profile: "youtube"` to the `youtube_*` tools.
+
+### Changed
+
+- The first sign-in of a new named Google profile reuses the OAuth client saved by your default login, so you no longer have to set `MIMI_SEED_GOOGLE_CLIENT_ID` / `MIMI_SEED_GOOGLE_CLIENT_SECRET` again.
+- `mimi_seed_status` reports YouTube as connected when a named profile has the upload permission, and names the profile to pass. Before, it looked only at the default login.
 
 ### Tool changes
 

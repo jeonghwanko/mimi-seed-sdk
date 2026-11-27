@@ -198,6 +198,15 @@ commit together with `writeCredentialJson`. A denied/mismatched login leaves the
 `tokens.json` / `credentials.json` and their legacy fallback remain for callers that omit `profile`; named
 profiles never use that fallback. Fresh login scopes come from Google's response, never another account's
 stored scope. Refresh preserves channel metadata and refuses a stale grant after profile replacement.
+The one thing a profile *borrows* is the OAuth **client** at login start: `loginOAuthClient(profile)` uses the
+profile's own saved client, else the default login's `credentials.json` client (same desktop app, another
+account), else the environment variables. The client the login used is then saved into the profile. Tokens are never borrowed.
+
+YouTube is connected through a named profile on purpose. `--domains youtube` on the *default* login replaces
+`tokens.json` with whichever account signs in, so a channel owned by another Google account would silently
+disconnect Play and Firebase. `mimi-seed auth social` and `mimi-seed setup` therefore use the `youtube` profile
+(`mimi-seed auth login --profile youtube --domains youtube`). The CLI's YouTube detector and
+`mimi_seed_status` (`youtubeUploadProfiles()`) count an upload grant on the default login or on any profile.
 
 `mimi_seed_auth_status({profile:"travel"})` returns live channel verification, safe saved-profile metadata,
 and the current server's latest login attempt status. A failed attempt can coexist with an older valid grant;

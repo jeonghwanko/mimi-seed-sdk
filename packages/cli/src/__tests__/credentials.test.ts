@@ -22,9 +22,9 @@ import { setDataKeySourceForTests } from '#core/credential-keystore.js';
 let home: string;
 
 function writeCred(name: string, content: unknown): void {
-  const dir = path.join(home, '.mimi-seed');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), JSON.stringify(content));
+  const file = path.join(home, '.mimi-seed', name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, typeof content === 'string' ? content : JSON.stringify(content));
 }
 
 beforeEach(() => {
@@ -42,6 +42,28 @@ afterEach(() => {
 });
 
 describe('detectAll', () => {
+  it('YouTube 는 업로드 scope 가 부여된 기본 로그인 또는 이름 있는 프로필이 있을 때만 연결로 본다', () => {
+    const upload = 'openid https://www.googleapis.com/auth/youtube.force-ssl';
+    writeCred('tokens.json', { access_token: 'x' });
+    expect(detectAll(home).get('youtube')!.present).toBe(false); // scope 기록 없는 예전 토큰
+    writeCred('tokens.json', { access_token: 'x', scope: 'openid https://www.googleapis.com/auth/yt-analytics.readonly' });
+    expect(detectAll(home).get('youtube')!.present).toBe(false); // 읽기 권한만으로는 업로드 불가
+    writeCred('google-profiles/notes.txt', 'ignored');
+    writeCred('google-profiles/other.json', { tokens: { scope: 'openid' } });
+    expect(detectAll(home).get('youtube')!.present).toBe(false);
+    writeCred('google-profiles/youtube.json', { tokens: { scope: upload, youtubeChannel: { id: 'UCexample', title: 'Example\u001b[2J Channel' } } });
+    expect(detectAll(home).get('youtube')).toEqual({ present: true, detail: 'profile youtube (Example[2J Channel)' }); // ESC 제거
+    writeCred('tokens.json', { access_token: 'x', scope: upload });
+    expect(detectAll(home).get('youtube')!.detail).toBe('default, profile youtube (Example[2J Channel)');
+  });
+
+  it('YouTube 연결은 기본 Google 로그인을 건드리지 않도록 별도 프로필로 한다', () => {
+    expect(credById('youtube').setup).toEqual({
+      kind: 'mcp-bin', bin: 'mimi-seed-auth', args: ['--profile', 'youtube', '--domains', 'youtube'],
+    });
+    expect(credById('youtube').fix).toBe('mimi-seed auth login --profile youtube --domains youtube');
+  });
+
   it('빈 홈에서는 아무것도 감지하지 않는다', () => {
     const d = detectAll(home);
     expect([...d.values()].every((v) => !v.present)).toBe(true);

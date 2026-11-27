@@ -11,7 +11,7 @@ import { jsonFileProblem } from '../lib/json-file.js';
 import { AuthError, authText, classifyError, type AuthErrorPayload } from './errors.js';
 
 // 스코프 목록의 SSOT 는 scopes.ts (도메인 → 스코프 매핑). 여기서는 로그인 요청 조립만 한다.
-import { scopesForDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.js';
+import { scopesForDomains, summarizeGrantedDomains, IDENTITY_SCOPES, type AuthDomainId } from './scopes.js';
 import { writeCredentialJson } from '#core/atomic-write.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { catalog } from '#core/lang.js';
@@ -104,6 +104,27 @@ export function getStoredCredentials(profile?: string): { clientId: string; clie
     // 읽을 수 없으면 '미설정' — 깨진 파일은 mimi_seed_status 가 json-file 로 따로 보고한다
     return null;
   }
+}
+
+/**
+ * The OAuth client for starting a login. A profile's own saved client wins. A profile that has never signed in falls
+ * back to the default login's client: it is the same desktop app, just another Google account. Without this, the
+ * first sign-in of a new profile (e.g. a separate YouTube channel) demanded the client environment variables again.
+ */
+export function loginOAuthClient(profile?: string): { clientId: string; clientSecret: string } | null {
+  return getStoredCredentials(profile) ?? (profile !== undefined ? getStoredCredentials() : null);
+}
+
+/** Google profiles whose stored grant includes YouTube upload (`youtube` domain). Safe metadata only. */
+export function youtubeUploadProfiles(): Array<{ profile: string; channelTitle: string | null }> {
+  return listGoogleProfiles()
+    .filter(({ profile, connected }) =>
+      connected && summarizeGrantedDomains(readProfile(profile)?.tokens?.scope).granted.includes('youtube'))
+    // The title is channel-owner input: drop control characters before it reaches a terminal or an agent.
+    .map(({ profile, youtubeChannel }) => ({
+      profile,
+      channelTitle: youtubeChannel?.title ? youtubeChannel.title.replace(/\p{Cc}/gu, '').slice(0, 60) || null : null,
+    }));
 }
 
 export function saveCredentials(clientId: string, clientSecret: string) {

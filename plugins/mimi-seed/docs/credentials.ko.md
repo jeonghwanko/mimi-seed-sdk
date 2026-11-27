@@ -34,7 +34,7 @@ mimi-seed setup
 | Crashlytics / 애널리틱스 export 조회 | [Google OAuth](#google-oauth), OAuth 가 자꾸 막히면 [BigQuery SA](#bigquery) |
 | **Google Drive** 에 파일 올리기·교체 | 기존·공유 폴더는 [Drive 서비스 계정](#drive), mimi-seed 가 만드는 폴더는 [Google OAuth](#google-oauth) |
 | 광고 캠페인 리포트 | [Google Ads](#google-ads) |
-| 출시 공지 게시 | [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
+| 출시 공지 게시 — `mimi-seed auth social`로 한 번에 연결 | [YouTube](#google-oauth) (`youtube` 프로필) · [Facebook](#facebook) · [Instagram](#instagram) · [Threads](#threads) · [TikTok Business](#tiktok-business) |
 | AI 릴리스 노트 / 리뷰 답변 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) *(선택 — 없어도 동작한다)* |
 | story 기반 영상 리서치·제작 | [`ANTHROPIC_API_KEY`](#anthropic-api-key) + 실제로 쓸 공급자의 [영상 API 키](#video-api-keys) |
 | 호스팅 대시보드 / 원격 MCP | [Mimi Seed 계정](#cloud-pat) |
@@ -52,9 +52,11 @@ Cloud IAM · BigQuery 가 모두 같은 OAuth 토큰을 탄다. 여기서 시작
 
 Search Console 분석에는 `mimi-seed auth login --domains gsc_readonly`로 로그인한다. 기존 `gsc` 권한으로도 조회할 수 있고, 사이트맵 제출에는 `gsc` 권한이 필요하다. 이름 있는 Google 로그인 프로필로 GSC 도구에서 사용할 계정을 선택할 수 있다.
 
+**YouTube 게시:** `mimi-seed auth social`(또는 `mimi-seed setup`)은 YouTube를 별도의 `youtube` Google 프로필에 연결한다. 그래서 채널 계정이 Play·Firebase에 쓰는 계정과 달라도 된다. 기본 로그인의 OAuth 클라이언트를 재사용한다. `youtube_*` 도구에는 `profile: "youtube"`를 넘긴다. 직접 하려면 `mimi-seed auth login --profile youtube --domains youtube`.
+
 YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한다. 채널·영상 목록·댓글 조회는 이 권한이나 기존 게시용 `youtube` 권한으로 할 수 있고, 영상 관리 쓰기와 댓글 답글은 `youtube` 권한을 사용한다.
 
-처음 연결할 때는 Google Cloud에서 **데스크톱 앱** 유형 OAuth 클라이언트를 만들고 `MIMI_SEED_GOOGLE_CLIENT_ID`와 `MIMI_SEED_GOOGLE_CLIENT_SECRET`를 CLI 또는 MCP 서버 환경에 설정하세요. 같은 프로필의 재로그인은 저장된 클라이언트를 재사용합니다.
+처음 연결할 때는 Google Cloud에서 **데스크톱 앱** 유형 OAuth 클라이언트를 만들고 `MIMI_SEED_GOOGLE_CLIENT_ID`와 `MIMI_SEED_GOOGLE_CLIENT_SECRET`를 CLI 또는 MCP 서버 환경에 설정하세요. 같은 프로필의 재로그인은 저장된 클라이언트를, 새 이름 있는 프로필은 기본 로그인의 클라이언트를 재사용합니다.
 
 ```bash
 mimi-seed auth login
