@@ -10,7 +10,7 @@
         "source": "git-subdir",
         "url": "https://github.com/jeonghwanko/mimi-seed-sdk.git",
         "path": "./plugins/mimi-seed",
-        "ref": "v0.25.4"
+        "ref": "v0.25.5"
       },
       "policy": {
         "installation": "AVAILABLE",
