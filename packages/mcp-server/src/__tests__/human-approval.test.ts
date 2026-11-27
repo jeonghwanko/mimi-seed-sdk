@@ -44,7 +44,9 @@ async function boot(opts: { elicit?: Elicit; env?: NodeJS.ProcessEnv } = {}) {
   registrar.tool('store_read', 'read', { id: z.string() }, done('store_read'));
   registrar.tool('store_report', 'write with a new confirm flag name', { id: z.string(), confirmCreate: z.boolean().optional() }, done('store_report'));
   registrar.tool('store_save_config', 'changes where credentials go', { url: z.string(), token: z.string() }, done('store_save_config'));
-  registrar.tool('store_post', 'public post', { text: z.string(), profile: z.string() }, done('store_post'));
+  registrar.tool('store_post', 'public post', {
+    text: z.string(), profile: z.string(), inputs: z.record(z.string(), z.string()).optional(),
+  }, done('store_post'));
 
   const elicitations: ElicitRequest[] = [];
   const client = new Client({ name: 't', version: '0' }, { capabilities: opts.elicit ? { elicitation: {} } : {} });
@@ -58,7 +60,7 @@ async function boot(opts: { elicit?: Elicit; env?: NodeJS.ProcessEnv } = {}) {
     const r = await client.callTool({ name, arguments: args });
     return { isError: r.isError === true, text: (r.content as Array<{ text: string }>)[0].text };
   };
-  return { call, ran, elicitations, close: async () => { await client.close(); await server.close(); } };
+  return { call, client, ran, elicitations, close: async () => { await client.close(); await server.close(); } };
 }
 
 const approve: Elicit = () => ({ action: 'accept', content: { approve: true } });
@@ -151,6 +153,51 @@ describe('사람 승인 게이트 — elicitation 을 지원하는 클라이언�
     expect(message).not.toContain(rlo);
     expect(message).not.toContain(zwsp);
     expect(message).toContain('\\u202e');
+    await t.close();
+  });
+
+  it('태그 문자·한글 채움 문자처럼 BMP 밖이거나 기본 무시 문자도 보이게 바꾼다 (ASCII smuggling)', async () => {
+    const t = await boot({ elicit: approve });
+    const hidden = String.fromCodePoint(0xe0049, 0xe0047, 0xe004e);
+    const filler = String.fromCodePoint(0x3164);
+    await t.call('store_post', { text: `Hello${hidden}${filler}x`, profile: 'p', confirm: true });
+    const message = (t.elicitations[0].params as { message: string }).message;
+    expect(message).not.toContain(hidden);
+    expect(message).not.toContain(filler);
+    expect(message).toContain('\\u{e0049}');
+    expect(message).toContain('\\u3164');
+    await t.close();
+  });
+
+  it('흔한 CI 비밀 파라미터 이름(API_KEY · SIGNING_KEY · STORE_PASS · pwd)은 중첩돼 있어도 가린다', async () => {
+    const t = await boot({ elicit: approve });
+    const values = ['example-api', 'example-signing', 'example-store', 'example-pwd'];
+    await t.call('store_post', {
+      text: 'x', profile: 'p', confirm: true,
+      inputs: { API_KEY: values[0], SIGNING_KEY: values[1], STORE_PASS: values[2], pwd: values[3], keystore_path: '/k.jks' },
+    });
+    const message = (t.elicitations[0].params as { message: string }).message;
+    for (const v of values) expect(message).not.toContain(v);
+    await t.close();
+  });
+
+  it('클라이언트가 호출을 중단·타임아웃하면 거절로 치지 않는다 — 같은 호출을 다시 물을 수 있다', async () => {
+    let calls = 0;
+    const t = await boot({
+      elicit: () => {
+        calls += 1;
+        // 첫 대화상자는 답하지 않는다 (사용자가 자리를 비움 → 클라이언트 tools/call 타임아웃)
+        return calls === 1 ? new Promise<ElicitResult>(() => {}) : { action: 'accept', content: { approve: true } };
+      },
+    });
+    const first = await t.client.callTool({ name: 'store_delete', arguments: { id: 'same', confirm: true } }, undefined, { timeout: 200 })
+      .then(() => 'resolved', (e: unknown) => String(e));
+    expect(first).toMatch(/timed out|timeout/i);
+    await vi.waitFor(async () => {
+      const again = await t.call('store_delete', { id: 'same', confirm: true });
+      expect(again).toEqual({ isError: false, text: 'store_delete ran' });
+    });
+    expect(t.elicitations.length).toBeGreaterThanOrEqual(2);
     await t.close();
   });
 

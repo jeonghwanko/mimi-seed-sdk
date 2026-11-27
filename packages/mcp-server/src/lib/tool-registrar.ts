@@ -158,7 +158,10 @@ export function effectiveHints(annotations: ToolAnnotations | undefined): Requir
 
 // ── confirm guard ──────────────────────────────────────────────────────────
 
-const SECRET_KEY = /secret|token|password|passphrase|private|base64|credential_json|serviceAccountJson/i;
+// 키 이름으로 비밀을 가린다 (값은 모른다). `API_KEY`·`SIGNING_KEY`·`STORE_PASS`·`pwd` 같은 흔한 CI 파라미터 이름도 포함 —
+// 빠져 있던 시절엔 ci_trigger_build 의 inputs 가 승인 대화상자에 그대로 보였다. `keystore_path` 같은 경로 이름은 걸리지 않는다.
+const SECRET_KEY =
+  /secret|token|passw(or)?d|passphrase|(^|_)pass$|pwd|private|base64|credential_json|serviceAccountJson|api_?key|signing_?key|access_?key|client_?key/i;
 
 /**
  * 중첩된 객체·배열 안의 비밀처럼 보이는 키도 가린다 — 예: jenkins_trigger_build 의
@@ -216,11 +219,18 @@ export function previewArgLines(args: Record<string, unknown>): string[] {
 }
 
 /**
- * 줄바꿈·제어 문자에 더해, 화면에서 안 보이거나 글자 순서를 뒤집는 문자(zero-width, bidi override/isolate, BOM,
- * soft hyphen, 줄/문단 구분자)를 `\uXXXX` 로 보이게 만든다. JSON.stringify 는 U+0020 미만만 이스케이프한다.
+ * 줄바꿈·제어 문자에 더해, 화면에서 안 보이거나 글자 순서를 뒤집는 문자를 `\uXXXX` / `\u{XXXXX}` 로 보이게 만든다:
+ * 형식 문자(Cf — zero-width, bidi override/isolate, BOM, soft hyphen, **태그 문자 U+E0000–E007F**)와 기본 무시 문자
+ * (Default_Ignorable — 한글 채움 문자 U+3164, 변형 선택자). 태그 문자·변형 선택자는 보이지 않는 ASCII 를 실어 나를 수
+ * 있어(“ASCII smuggling”), 사용자가 “Hellox” 를 승인했는데 숨은 지시가 함께 게시될 수 있었다. 코드포인트 단위로
+ * 매칭해야(u 플래그) BMP 밖 문자도 잡힌다. JSON.stringify 는 U+0020 미만만 이스케이프한다.
  */
-const INVISIBLE = /[\u007F-\u009F\u00AD\u061C\u180E\u200B-\u200F\u2028-\u202E\u2060-\u2069\uFEFF]/g;
-const showInvisible = (s: string) => s.replace(INVISIBLE, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+const INVISIBLE = /[\p{Default_Ignorable_Code_Point}\p{Cf}\u007F-\u009F\u2028\u2029]/gu;
+const showInvisible = (s: string) =>
+  s.replace(INVISIBLE, (c) => {
+    const cp = c.codePointAt(0) ?? 0;
+    return cp > 0xffff ? `\\u{${cp.toString(16)}}` : `\\u${cp.toString(16).padStart(4, '0')}`;
+  });
 
 /** 승인 대화상자의 값 하나가 넘으면 가운데를 생략한다 — 앞 HEAD + 뒤 TAIL 은 항상 보인다. */
 const APPROVAL_VALUE_MAX = 1500;

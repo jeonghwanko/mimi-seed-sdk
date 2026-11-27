@@ -724,6 +724,9 @@
         "playstore_update_product_state",
         "playstore_update_product",
         "playstore_register_service_account"
+      ],
+      "approval": [
+        "playstore_register_service_account"
       ]
     },
     "threads": {
@@ -902,6 +905,10 @@
       ],
       "idempotent": [
         "drive_create_folder",
+        "drive_update_file_metadata"
+      ],
+      "approval": [
+        "drive_upload_file",
         "drive_update_file_metadata"
       ]
     }

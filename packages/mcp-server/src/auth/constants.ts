@@ -1,4 +1,4 @@
-import { consoleUrl } from '#core/console-url.js';
+import { consoleBase } from '#core/console-url.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { catalog } from '#core/lang.js';
 
@@ -39,8 +39,9 @@ export async function getMcpOAuthClient(stored?: { clientId: string; clientSecre
   if (id && secret) return { clientId: id, clientSecret: secret };
 
   if (stored?.clientId && stored.clientSecret) return stored;
-  const base = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
-  if (!base) throw new Error('mcp-auth-config: set MIMI_SEED_GOOGLE_CLIENT_ID and MIMI_SEED_GOOGLE_CLIENT_SECRET');
+  const base = consoleBase(process.env.MIMI_SEED_WEB_BASE);
+  // 'not configured' 를 메시지에 남긴다 — errors.ts 가 이걸 보고 재시도해도 소용없는 실패(retriable:false)로 분류한다.
+  if (!base) throw new Error('mcp-auth-config not configured: set MIMI_SEED_GOOGLE_CLIENT_ID and MIMI_SEED_GOOGLE_CLIENT_SECRET');
   if (cached?.base === base) return cached.client;
 
   let res: Response;

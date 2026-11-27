@@ -389,8 +389,10 @@ So a call that arrives with a confirm-style flag set is held until the **user** 
   covered from its first line. Matching three exact names once let `confirmCreate` through.
 - **The flag is not the only way to the dangerous branch.** `jenkins_save_config` / `ci_save_config` take a URL /
   host that every later credential upload goes to; the other `*_save_config` replace a stored token;
-  `ci_trigger_build` starts a deploy workflow with no flag. These are listed in the manifest's `approval` and ask on
-  **every** call. Prefer the other fix when you can: the Jenkins credential uploads used to create a *new* id with no
+  `ci_trigger_build` starts a deploy workflow with no flag; `drive_upload_file` / `drive_update_file_metadata` put any
+  local file (or move any folder) into any Drive folder; `playstore_register_service_account` replaces a stored key.
+  These are listed in the manifest's `approval` and ask on **every** call. Drive uploads additionally refuse anything
+  under `~/.mimi-seed/` (realpath, so a symlink cannot launder it). Prefer the other fix when you can: the Jenkins credential uploads used to create a *new* id with no
   flag, and listing them in `approval` asked twice on the replace path — making `confirm` gate every path
   (dry-run first, even for a new id) gives exactly one dialog, at the call that sends. When you add a tool that changes where data goes, or that
   sends a secret on a flagless path, add it there — `tool-manifest.test.ts` only checks the list is well-formed.
@@ -398,10 +400,13 @@ So a call that arrives with a confirm-style flag set is held until the **user** 
   decline, cancel, timeout, or a client error is a refusal. Never count a failure as consent.
 - **The dialog must not be forgeable by its own arguments.** Values are model-supplied: a `\n` in a post's text
   once rendered a fake `profile:` line and a "✅ Verified" footer, and a 200-char cut hid a URL appended after a
-  benign prefix. Strings render as JSON literals, invisible and bidi characters as `\uXXXX`, and a long value as
+  benign prefix. Strings render as JSON literals, format and default-ignorable characters (bidi controls, zero-width,
+  the Unicode *tag* block that can smuggle hidden ASCII, variation selectors, the Hangul filler) as `\uXXXX` / `\u{…}`, and a long value as
   head + tail with an explicit "middle omitted — decline if you can't check it" warning. Secrets are still redacted.
-- **Repeated asks are refused, not re-asked.** After a decline, timeout, or failure, the same tool + args is
-  refused for 5 min without a dialog, and only one dialog is open at a time — an injected agent cannot wear the
+- **Repeated asks are refused, not re-asked — but only after a real decline.** After the user declines, cancels, or
+  leaves the box unticked, the same tool + args is refused for 5 min without a dialog. A timeout or an interrupted
+  call (the client's `tools/call` timeout is 60 s by default; Esc aborts the turn) is *not* a decline — recording it as
+  one blocked the retry right after the user said "go ahead". Also, and only one dialog is open at a time — an injected agent cannot wear the
   user down with 25 identical prompts or race two dialogs.
 - **Unsupported clients degrade under `auto`, by design — but a typo does not.** Refusing outright would break
   every client without form elicitation. Teams that need the guarantee set `MIMI_SEED_APPROVAL=required`, and any

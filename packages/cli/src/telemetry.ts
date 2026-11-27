@@ -1,4 +1,4 @@
-import { consoleUrl } from "#core/console-url.js";
+import { consoleBase } from "#core/console-url.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,12 +15,14 @@ const M = catalog(
     enabled: "사용량 측정 켜짐. 임의 설치 ID·프로젝트 해시·버전·OS·결과 코드·실행시간을 전송합니다. 끄기: mimi-seed telemetry off\n",
     disabled: "사용량 측정 꺼짐. MIMI_SEED_TELEMETRY=0으로도 끌 수 있습니다.\n",
     invalid: "사용법: mimi-seed telemetry on|off|status\n",
+    noConsole: "사용량 측정은 팀 콘솔로만 보냅니다 — 켜려면 먼저 MIMI_SEED_WEB_BASE 에 팀 콘솔 주소를 지정하세요. 아무것도 바꾸지 않았습니다.\n",
   },
   {
     notice: "Optional usage measurement is off. Learn more: mimi-seed telemetry --help\n",
     enabled: "Usage measurement enabled: random installation ID, project hash, version, OS, result codes and duration. Disable: mimi-seed telemetry off\n",
     disabled: "Usage measurement disabled. MIMI_SEED_TELEMETRY=0 also disables it.\n",
     invalid: "Usage: mimi-seed telemetry on|off|status\n",
+    noConsole: "Usage measurement is sent only to a team console — set MIMI_SEED_WEB_BASE to your team console first. Nothing was changed.\n",
   },
 );
 
@@ -39,18 +41,26 @@ function writeConsent(value: Consent): void {
   writeCredentialJson(location(), value);
 }
 export function telemetryEnabled(): boolean {
-  const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  const webBase = consoleBase(process.env.MIMI_SEED_WEB_BASE);
   if (!webBase) return false;
   if (process.env.MIMI_SEED_TELEMETRY !== undefined) return process.env.MIMI_SEED_TELEMETRY === "1";
   return readConsent(webBase).enabled === true;
 }
-export function telemetryNotice(): string { return telemetryEnabled() ? "" : M().notice; }
+// 콘솔이 없으면 켤 방법도 없다 — 켜라는 안내를 매 실행마다 보이지 않는다.
+export function telemetryNotice(): string {
+  if (!consoleBase(process.env.MIMI_SEED_WEB_BASE)) return "";
+  return telemetryEnabled() ? "" : M().notice;
+}
 export function cmdTelemetry(argv: string[]): void {
   const action = argv[0] ?? "status";
   if (argv.length > 1 || !["on", "off", "status"].includes(action)) {
     process.stderr.write(M().invalid); process.exitCode = 2; return;
   }
-  const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  const webBase = consoleBase(process.env.MIMI_SEED_WEB_BASE);
+  if (action === "on" && !webBase) {
+    // 예전엔 아무것도 쓰지 않고 "꺼짐" 만 찍은 채 0 으로 끝났다 — 켠 줄 알게 만들었다.
+    process.stderr.write(M().noConsole); process.exitCode = 1; return;
+  }
   if (action === "on" && webBase) {
     const consent = readConsent(webBase);
     writeConsent({ webBase, enabled: true, installationId: consent.installationId ?? randomUUID(), salt: consent.salt ?? randomUUID() });
@@ -72,13 +82,17 @@ function frameworkAt(root: string): string {
 }
 export function usageRun(command: "check" | "setup", projectPath: string):
   (outcome: UsageOutcome, report?: ReleaseDoctorReport) => Promise<void> {
-  const baseUrl = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  const baseUrl = consoleBase(process.env.MIMI_SEED_WEB_BASE);
   if (!baseUrl || !telemetryEnabled()) return async () => {};
   try {
     const consent = readConsent(baseUrl);
     const installationId = consent.installationId ?? randomUUID();
     const salt = consent.salt ?? randomUUID();
-    if (!consent.installationId || !consent.salt) writeConsent({ webBase: baseUrl, enabled: consent.enabled, installationId, salt });
+    // 저장은 이 콘솔에 대한 사용자 동의가 있을 때만. MIMI_SEED_TELEMETRY=1 로 한 번 켠 실행이 다른 콘솔의 동의
+    // 파일을 이 콘솔 것(enabled:false)으로 덮어써, 원래 콘솔로 돌아가면 "꺼짐" 이 되던 문제를 막는다.
+    if (consent.enabled && (!consent.installationId || !consent.salt)) {
+      writeConsent({ webBase: baseUrl, enabled: true, installationId, salt });
+    }
     let normalized = path.resolve(projectPath);
     try { normalized = fs.realpathSync(normalized); } catch { /* A failed check can still be measured. */ }
     if (process.platform === "win32") normalized = normalized.toLowerCase();
@@ -91,7 +105,7 @@ export function usageRun(command: "check" | "setup", projectPath: string):
     };
     const started = Date.now();
     return async (outcome, report) => {
-      if (!telemetryEnabled() || consoleUrl(process.env.MIMI_SEED_WEB_BASE) !== baseUrl) return;
+      if (!telemetryEnabled() || consoleBase(process.env.MIMI_SEED_WEB_BASE) !== baseUrl) return;
       // Explicit allowlist projection: never spread a report, credential, error, or path into a payload.
       const payload = {
         ...base, outcome, durationMs: Math.min(86_400_000, Math.max(0, Date.now() - started)),

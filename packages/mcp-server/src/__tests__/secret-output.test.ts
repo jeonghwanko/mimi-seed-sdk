@@ -182,7 +182,7 @@ describe('키/keystore 경로 입력 — 봉쇄', () => {
     expect(text).not.toContain('PRIVATE KEY');
     expect(mocks.upsertSecretFile).toHaveBeenCalledWith(
       expect.anything(), 'app-playstore-sa', Buffer.from(keyJson).toString('base64'), 'com.example.app-sa.json',
-      'Play Store service account for com.example.app', { allowReplace: false },
+      'Play Store service account for com.example.app', { allowReplace: false, dryRun: true },
     );
   });
 });
@@ -223,9 +223,9 @@ describe('android_generate_keystore → Jenkins', () => {
     });
     expect(pw.isError).toBe(false);
     expect(pw.text).not.toContain(secrets.storePassword);
-    // 기존 id 교체는 confirm 뒤로 — confirm 없는 호출은 allowReplace:false 로 내려간다.
+    // confirm 없는 호출은 아무것도 보내지 않는 dry-run (allowReplace:false + dryRun:true) 으로 내려간다 — 새 id 도.
     expect(mocks.upsertSecretText).toHaveBeenCalledWith(
-      expect.anything(), 'myapp-android-store-password', secrets.storePassword, '', { allowReplace: false },
+      expect.anything(), 'myapp-android-store-password', secrets.storePassword, '', { allowReplace: false, dryRun: true },
     );
 
     const ks = await call('jenkins_upload_keystore', {
@@ -236,7 +236,7 @@ describe('android_generate_keystore → Jenkins', () => {
     expect(ks.isError).toBe(false);
     expect(mocks.upsertSecretFile).toHaveBeenCalledWith(
       expect.anything(), 'myapp-android-keystore', Buffer.from('FAKE-KEYSTORE-BYTES').toString('base64'), 'upload.jks', '',
-      { allowReplace: false },
+      { allowReplace: false, dryRun: true },
     );
   });
 });
@@ -246,7 +246,7 @@ describe('jenkins_create_credential — 기존 동작 유지', () => {
   it('secret:"" 는 예전처럼 빈 Secret text 로 저장한다', async () => {
     const r = await call('jenkins_create_credential', { id: 'example-empty', secret: '' });
     expect(r.isError).toBe(false);
-    expect(mocks.upsertSecretText).toHaveBeenCalledWith(expect.anything(), 'example-empty', '', '', { allowReplace: false });
+    expect(mocks.upsertSecretText).toHaveBeenCalledWith(expect.anything(), 'example-empty', '', '', { allowReplace: false, dryRun: true });
   });
 
   it('secret 도 secret_file 도 없으면 거부한다', async () => {
