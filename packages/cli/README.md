@@ -1,6 +1,6 @@
 # mimi-seed
 
-Find mobile release risks before connecting store accounts.
+[Mimi Seed](https://mimi-seed.oddbout.com/en/) helps you find mobile release risks before connecting store accounts.
 
 ```bash
 npx -y mimi-seed@latest check --local
@@ -12,7 +12,7 @@ Store Connect SDK minimum, and legacy Firebase Cloud Messaging API usage, with s
 Unresolved evidence remains a warning. A local pass does not guarantee store approval.
 
 The checker is bundled; it does not install the full MCP server. Optional usage measurement is off by
-default. See `mimi-seed telemetry --help` and the [privacy notice](https://mimi-seed.pryzm.gg/privacy/sdk-usage).
+default. See `mimi-seed telemetry --help` and the [measurement guide](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/growth/measurement.md).
 
 `@anthropic-ai/sdk` is an optional dependency, loaded only for AI release notes and review replies. A default
 `npm install` still includes it (about 33 MB). `check` and `--version` work without it:
@@ -26,14 +26,14 @@ project and set `ANTHROPIC_API_KEY`.
 
 ## Next steps
 
-- Connect store checks: `npx mimi-seed init`, then `npx mimi-seed setup`.
+- Connect accounts for the local MCP tools: `npx mimi-seed setup`.
 - Repeat in CI: `npx mimi-seed check --local --fail-on-blocker`.
 - Switch output language: `mimi-seed lang en`.
 - Full options: `mimi-seed <command> --help`.
 
 [Claude Code / Codex installation](https://github.com/jeonghwanko/mimi-seed-sdk#30-second-setup)
 · [CI workflow and badge](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-ci.md)
-· [Validation examples](https://mimi-seed.pryzm.gg/guides/validation-examples)
+· [Validation examples](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-validation.md)
 
 ## Commands
 

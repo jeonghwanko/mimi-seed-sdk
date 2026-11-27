@@ -14,7 +14,7 @@ metadata, screenshot and uploaded-build checks. Local results do not guarantee s
 
 [Install the plugin for Claude Code or Codex](https://github.com/jeonghwanko/mimi-seed-sdk#30-second-setup)
 · [English tool catalog](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/domain/tool-catalog.md)
-· [Release guides](https://mimi-seed.pryzm.gg/guides/expo-release-readiness)
+· [Release guides](https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/guides/expo-release-readiness.md)
 
 Use `npx mimi-seed setup` to connect only the accounts you need, then open a fresh client session.
 This package depends on the 16 `@googleapis/*` clients it actually calls, loaded on first use — not the
@@ -31,7 +31,7 @@ Licensed under PolyForm Noncommercial; commercial use requires a separate licens
 
 **Mimi Seed** — Firebase · AdMob · Google Play · App Store Connect를 AI 콘솔에서 관리. Claude Code / Codex / Cursor / 기타 MCP 클라이언트에서 한 줄 등록으로 사용.
 
-> 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. 웹 콘솔(Next.js 앱)은 <https://mimi-seed.pryzm.gg/tool>.
+> 이 패키지는 Mimi Seed의 **로컬 MCP 서버**만 포함합니다. [프로젝트 소개](https://mimi-seed.oddbout.com/)에서 첫 출시 점검과 작업별 가이드를 확인하세요.
 
 `googleapis` 메타 패키지 대신 실제로 호출하는 16개의 `@googleapis/*` 클라이언트만 의존하며 처음 쓸 때 로드합니다.
 `@anthropic-ai/sdk` 는 선택적 의존성이고, AI 릴리즈 노트·리뷰 답글·영상 스토리보드를 생성할 때만 로드됩니다.
@@ -327,8 +327,8 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받음:
 ## Links
 
 - CLI 패키지: [`mimi-seed`](https://www.npmjs.com/package/mimi-seed)
-- 웹 콘솔: <https://mimi-seed.pryzm.gg/tool>
-- 저장소: <https://github.com/jeonghwanko/mimi-seed>
+- 프로젝트 소개: <https://mimi-seed.oddbout.com/>
+- 저장소: <https://github.com/jeonghwanko/mimi-seed-sdk>
 
 ---
 
@@ -337,4 +337,4 @@ Preseed 시절(`~/.preseed/`) 데이터는 자동으로 이어받음:
 [PolyForm Noncommercial License 1.0.0](../../LICENSE) — 비상업적 사용만 허용.
 상업적 이용 문의: turbo08@gmail.com
 
-**Required Notice:** Copyright 2026 Pryzm GG (https://mimi-seed.pryzm.gg)
+[Required Notice](../../LICENSE)

@@ -25,7 +25,7 @@ docs/
   domain/        # domain ontology — architecture, tool catalog, pitfalls (start at _index.md)
 ```
 
-The private web console (`mimi-seed.pryzm.gg`) lives in a separate repo. Keep CLI/MCP
+The public [project site](https://mimi-seed.oddbout.com) lives in `website/`. The private web console lives in a separate repo. Keep CLI/MCP
 source here — don't move it back into the web repo.
 
 ## Development setup
