@@ -30,7 +30,7 @@
 | Firebase·AdMob·GA4·BigQuery 운영 | [클라우드와 분석](cloud-operations.ko.md) |
 | 영상 제작 후 YouTube 게시 | [영상 제작](video.ko.md) |
 | 소셜 채널 처음 설정하기 | [소셜 초기 설정 체크리스트](social-setup-checklist.ko.md) |
-| Facebook·Instagram·Threads·TikTok 게시 | [소셜 게시](social.ko.md) |
+| Facebook·Instagram·Threads·TikTok 게시 (하나씩 또는 한 번에) | [소셜 게시](social.ko.md) |
 | Claude Code·Codex와 팀에서 사용 | [팀·보안·자동화](team-security.ko.md) |
 
 ## 세 가지 사용 표면
