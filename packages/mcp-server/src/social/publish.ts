@@ -14,7 +14,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isTimeoutAbort } from '#core/http-errors.js';
 import { catalog } from '#core/lang.js';
 import { requireFacebookConfig } from '../facebook/config.js';
 import { requireInstagramConfig } from '../instagram/config.js';
@@ -24,7 +23,11 @@ import * as instagram from '../instagram/api.js';
 import * as threads from '../threads/api.js';
 import { requireAuth } from '../helpers.js';
 import { YOUTUBE_SCOPE, uploadYouTubeVideo } from '../video/youtube-publish.js';
-import { loadPostPlan, publishPlannedVideo } from '../tiktok-business/posting.js';
+import { preflightPlannedVideo, publishPlannedVideo } from '../tiktok-business/posting.js';
+import { TikTokApiError } from '../tiktok-business/api.js';
+import { metaErrorStatus } from '../lib/meta-auth.js';
+import { getStoredTokens } from '../auth/google-auth.js';
+import { summarizeGrantedDomains } from '../auth/scopes.js';
 import {
   acquirePublishLock, readLedger, recordPlatform,
   type PlatformRecord, type SocialTarget,
@@ -92,6 +95,11 @@ const M = catalog(
     youtubeFile: 'YouTube 는 로컬 영상 파일(videoFilePath)이 필요합니다.',
     youtubeTitle: 'YouTube 제목이 비었거나 100자를 넘습니다. youtube.title 을 지정하세요.',
     youtubeDescription: 'YouTube 설명이 5,000자를 넘습니다. youtube.description 을 지정하세요.',
+    youtubeTags: 'YouTube 태그를 쉼표로 이은 길이가 500자를 넘습니다.',
+    youtubeNotSignedIn: (profile?: string) =>
+      `YouTube 에 로그인돼 있지 않습니다${profile ? ` (프로필 ${profile})` : ''}. mimi-seed auth social 로 연결하세요.`,
+    youtubeNoUpload: (profile?: string) =>
+      `Google 로그인${profile ? ` (프로필 ${profile})` : ''}에 YouTube 업로드 권한이 없습니다. mimi-seed auth login${profile ? ` --profile ${profile}` : ''} --domains youtube 로 추가하세요.`,
     tiktokPlan: 'TikTok 은 tiktok_business_plan_video_post 로 만든 planId 가 필요합니다 (tiktok.planId).',
     tiktokPlanInvalid: (msg: string) => `TikTok 계획을 쓸 수 없습니다: ${msg}`,
     previousPosted: (at: string) => `이 requestId 로 이미 게시됐습니다 (${at}). 건너뜁니다.`,
@@ -103,6 +111,7 @@ const M = catalog(
     youtubeFileType: 'YouTube 영상은 .mp4, .mov, .webm 만 올릴 수 있습니다.',
     alreadyPostedAction: (at: string) => `이미 게시됨 (${at}) — 건너뜀`,
     planBlocked: '검증을 통과하지 못한 계획은 게시하지 않습니다.',
+    notSentNoLedger: (reason: string) => `게시 기록을 쓸 수 없어 보내지 않았습니다 (${reason}). 기록 문제를 고친 뒤 같은 requestId 로 다시 보내세요.`,
     tiktokCaption: '캡션은 TikTok 계획에 저장된 값을 씁니다 (text 무시).',
   },
   {
@@ -117,6 +126,11 @@ const M = catalog(
     youtubeFile: 'YouTube needs a local video file (videoFilePath).',
     youtubeTitle: 'The YouTube title is empty or over 100 characters. Set youtube.title.',
     youtubeDescription: 'The YouTube description is over 5,000 characters. Set youtube.description.',
+    youtubeTags: 'The YouTube tags joined with commas are over 500 characters.',
+    youtubeNotSignedIn: (profile?: string) =>
+      `YouTube is not signed in${profile ? ` (profile ${profile})` : ''}. Connect it with mimi-seed auth social.`,
+    youtubeNoUpload: (profile?: string) =>
+      `The Google login${profile ? ` (profile ${profile})` : ''} lacks the YouTube upload permission. Add it with mimi-seed auth login${profile ? ` --profile ${profile}` : ''} --domains youtube.`,
     tiktokPlan: 'TikTok needs a planId made by tiktok_business_plan_video_post (tiktok.planId).',
     tiktokPlanInvalid: (msg: string) => `Cannot use the TikTok plan: ${msg}`,
     previousPosted: (at: string) => `Already posted with this requestId (${at}). Skipping.`,
@@ -128,6 +142,7 @@ const M = catalog(
     youtubeFileType: 'YouTube uploads must be .mp4, .mov, or .webm.',
     alreadyPostedAction: (at: string) => `already posted (${at}) — skipped`,
     planBlocked: 'A plan that failed validation is never published.',
+    notSentNoLedger: (reason: string) => `Not sent: the publish record cannot be written (${reason}). Fix it, then resend with the same requestId.`,
     tiktokCaption: 'The caption comes from the TikTok plan (text is ignored).',
   },
 );
@@ -142,7 +157,8 @@ export function contentKey(input: SocialPublishInput): string {
     text: input.text,
     imageUrls: input.imageUrls ?? [],
     videoUrl: input.videoUrl ?? null,
-    videoFilePath: input.videoFilePath ?? null,
+    // The path alone would treat a re-rendered file as "already posted": include its size and modification time.
+    videoFile: input.videoFilePath ? { path: input.videoFilePath, ...fileIdentity(input.videoFilePath) } : null,
     facebook: input.facebook ?? null,
     instagram: input.instagram ?? null,
     threads: input.threads ?? null,
@@ -167,14 +183,36 @@ class AmbiguousOutcomeError extends Error {
   }
 }
 
-/**
- * Could the request have reached the platform? A timeout, or a transport failure (fetch rejects with a TypeError when
- * the connection drops; POSTs are never retried by lib/http.ts), leaves that open. A provider error response, or our
- * own validation, means nothing was published.
- */
 function isAmbiguous(error: unknown): boolean {
-  return error instanceof AmbiguousOutcomeError || isTimeoutAbort(error) || error instanceof TypeError;
+  return error instanceof AmbiguousOutcomeError;
 }
+
+/**
+ * Runs one platform's publishing call and classifies a failure by **whether the publishing request had been sent**.
+ * Each platform function calls onPublishStart right before the request that makes the post visible (Meta's publish
+ * step, YouTube's upload, TikTok's publish, Bluesky's createRecord). Before it, any failure — a timeout, a dropped
+ * connection, a rejected container — published nothing and is a clean `failed`. After it, only a definite rejection
+ * (`definite(error)`) proves nothing was published; anything else (a 5xx, a timeout, a lost response, a write that
+ * failed after success) is ambiguous and recorded `unknown`, so it is never resent.
+ */
+async function tracked<T>(run: (onPublishStart: () => void) => Promise<T>, definite: (error: unknown) => boolean): Promise<T> {
+  let started = false;
+  try {
+    return await run(() => { started = true; });
+  } catch (error) {
+    if (started && !definite(error)) throw new AmbiguousOutcomeError(error);
+    throw error;
+  }
+}
+
+/** Meta answered the publishing request with a 4xx: it refused it, so nothing was published. */
+const metaRejected = (error: unknown) => {
+  const status = metaErrorStatus(error);
+  return status !== undefined && status >= 400 && status < 500;
+};
+/** TikTok's known failures are rethrown as-is; its unknown outcomes are wrapped or flagged. */
+const tiktokRejected = (error: unknown) => error instanceof TikTokApiError && !error.outcomeUnknown;
+const neverDefinite = () => false;
 
 function errorText(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 500);
@@ -211,6 +249,16 @@ function planMeta(platform: 'facebook' | 'instagram' | 'threads', input: SocialP
   return { platform, action, text, media: images, problems };
 }
 
+function fileIdentity(file: string): { size: number; mtimeMs: number } | { missing: true } {
+  try {
+    const stat = fs.statSync(file);
+    return { size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs) };
+  } catch {
+    // A missing file is part of the identity too; the plan reports it as a problem separately.
+    return { missing: true };
+  }
+}
+
 function fileSize(file: string): number {
   try {
     const stat = fs.statSync(file);
@@ -240,6 +288,14 @@ function planYouTube(input: SocialPublishInput): PlannedPost {
   if (!title.trim() || title.length > 100) problems.push(M().youtubeTitle);
   const description = yt?.description ?? input.text;
   if (description.length > 5_000) problems.push(M().youtubeDescription);
+  // Same rule as the upload's tag check, so YouTube cannot fail after the other platforms have posted.
+  if ((yt?.tags ?? []).join(',').length > 500) problems.push(M().youtubeTags);
+  if (yt) {
+    // The stored grant only (no network): a missing login or a grant without the upload permission would fail later.
+    const tokens = getStoredTokens(yt.profile);
+    if (!tokens?.refresh_token) problems.push(M().youtubeNotSignedIn(yt.profile));
+    else if (tokens.scope && !summarizeGrantedDomains(tokens.scope).granted.includes('youtube')) problems.push(M().youtubeNoUpload(yt.profile));
+  }
   const privacy = yt?.privacyStatus ?? 'private';
   return {
     platform: 'youtube',
@@ -257,7 +313,9 @@ function planTikTok(input: SocialPublishInput): PlannedPost {
     problems.push(M().tiktokPlan);
   } else {
     try {
-      caption = loadPostPlan(input.tiktok.planId).request.post_info.caption;
+      // Every local check publishPlannedVideo makes (plan, account, duplicate audit), so TikTok cannot fail after
+      // the other platforms have posted.
+      caption = preflightPlannedVideo(input.tiktok.planId).request.post_info.caption;
     } catch (error) {
       problems.push(M().tiktokPlanInvalid(errorText(error)));
     }
@@ -299,29 +357,33 @@ async function send(platform: SocialTarget, input: SocialPublishInput, post: Pla
   switch (platform) {
     case 'facebook': {
       const cfg = requireFacebookConfig({ profile: input.facebook?.profile });
-      const r = images.length > 1 ? await facebook.postMultiPhoto(cfg, images, text) : await facebook.postPhoto(cfg, images[0], text);
+      const r = await tracked((onPublishStart) => (images.length > 1
+        ? facebook.postMultiPhoto(cfg, images, text, { onPublishStart })
+        : facebook.postPhoto(cfg, images[0], text, { onPublishStart })), metaRejected);
       return { id: r.id, url: r.permalink };
     }
     case 'instagram': {
       const cfg = requireInstagramConfig({ profile: input.instagram?.profile });
-      const r = images.length > 1 ? await instagram.postCarousel(cfg, images, text) : await instagram.postImage(cfg, images[0], text);
+      const r = await tracked((onPublishStart) => (images.length > 1
+        ? instagram.postCarousel(cfg, images, text, { onPublishStart })
+        : instagram.postImage(cfg, images[0], text, { onPublishStart })), metaRejected);
       return { id: r.id, url: r.permalink };
     }
     case 'threads': {
       const cfg = requireThreadsConfig({ profile: input.threads?.profile });
-      const r = input.videoUrl ? await threads.postVideo(cfg, input.videoUrl, text)
-        : images.length > 1 ? await threads.postCarousel(cfg, images, text)
-          : await threads.postText(cfg, text, images[0]);
+      const r = await tracked((onPublishStart) => (input.videoUrl
+        ? threads.postVideo(cfg, input.videoUrl, text, undefined, { onPublishStart })
+        : images.length > 1
+          ? threads.postCarousel(cfg, images, text, { onPublishStart })
+          : threads.postText(cfg, text, images[0], { onPublishStart })), metaRejected);
       return { id: r.id, url: r.permalink };
     }
     case 'youtube': {
       const yt = input.youtube!;
       const auth = await requireAuth(YOUTUBE_SCOPE, yt.profile);
       const privacyStatus = yt.privacyStatus ?? 'private';
-      // Failures before the upload request (auth, channel check, file validation) sent nothing. After it starts,
-      // a thrown error may still mean the video landed.
-      let uploading = false;
-      const r = await uploadYouTubeVideo(auth, {
+      // After the upload starts, even a response error may hide an uploaded video.
+      const r = await tracked((onUploadStart) => uploadYouTubeVideo(auth, {
         expectedChannelId: yt.expectedChannelId,
         filePath: input.videoFilePath!,
         title: youtubeTitle(input),
@@ -332,12 +394,11 @@ async function send(platform: SocialTarget, input: SocialPublishInput, post: Pla
         containsSyntheticMedia: yt.containsSyntheticMedia,
         // The person approved this exact plan (privacy shown in it) through social_publish's confirm gate.
         confirmVisible: privacyStatus !== 'private',
-      }, { onUploadStart: () => { uploading = true; } })
-        .catch((error: unknown) => { throw uploading ? new AmbiguousOutcomeError(error) : error; });
+      }, { onUploadStart }), neverDefinite);
       return { id: r.videoId ?? undefined, url: r.videoId ? `https://www.youtube.com/watch?v=${r.videoId}` : undefined };
     }
     case 'tiktok': {
-      const r = await publishPlannedVideo(input.tiktok!.planId, true);
+      const r = await tracked((onPublishStart) => publishPlannedVideo(input.tiktok!.planId, true, { onPublishStart }), tiktokRejected);
       return { id: r.publishId };
     }
   }
@@ -358,8 +419,14 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
     // Re-read under the lock: a call that finished in between may have posted some targets already.
     const ledger = readLedger(requestId);
     if (ledger.contentKey !== undefined && ledger.contentKey !== key) throw new Error(M().requestIdReused);
+    let ledgerBroken: string | null = null;
     for (const post of plan.posts) {
       const { platform } = post;
+      if (ledgerBroken) {
+        // Nothing can be recorded, so nothing more is sent: a resend could not be told apart from a first send.
+        outcomes.push({ platform, status: 'failed', error: M().notSentNoLedger(ledgerBroken) });
+        continue;
+      }
       const previous = ledger.platforms[platform];
       if (previous?.state === 'posted') {
         outcomes.push({ platform, status: 'already_posted', id: previous.id, url: previous.url, at: previous.at });
@@ -369,21 +436,42 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
         outcomes.push({ platform, status: 'unknown_outcome', error: previous.error, at: previous.at });
         continue;
       }
-      recordPlatform(requestId, platform, { state: 'sending', at: new Date().toISOString() }, key);
       try {
-        const sent = await send(platform, input, post);
-        recordPlatform(requestId, platform, { state: 'posted', at: new Date().toISOString(), ...sent }, key);
-        outcomes.push({ platform, status: 'posted', ...sent });
+        recordPlatform(requestId, platform, { state: 'sending', at: new Date().toISOString() }, key);
+      } catch (error) {
+        // Not sent. Stop here instead of throwing, so the results of platforms already posted are not lost.
+        ledgerBroken = errorText(error);
+        outcomes.push({ platform, status: 'failed', error: M().notSentNoLedger(ledgerBroken) });
+        continue;
+      }
+
+      let sent: { id?: string; url?: string };
+      try {
+        sent = await send(platform, input, post);
       } catch (error) {
         const at = new Date().toISOString();
-        if (isAmbiguous(error)) {
-          recordPlatform(requestId, platform, { state: 'unknown', at, error: errorText(error) }, key);
-          outcomes.push({ platform, status: 'unknown_outcome', error: errorText(error), at });
-        } else {
-          recordPlatform(requestId, platform, { state: 'failed', at, error: errorText(error) }, key);
-          outcomes.push({ platform, status: 'failed', error: errorText(error) });
+        const ambiguous = isAmbiguous(error);
+        const record: PlatformRecord = { state: ambiguous ? 'unknown' : 'failed', at, error: errorText(error) };
+        try {
+          recordPlatform(requestId, platform, record, key);
+        } catch (writeError) {
+          // The record stays `sending`, which a retry treats as unknown: safe, at worst it needs a manual check.
+          ledgerBroken = errorText(writeError);
         }
+        outcomes.push(ambiguous
+          ? { platform, status: 'unknown_outcome', error: errorText(error), at }
+          : { platform, status: 'failed', error: errorText(error) });
+        continue;
       }
+
+      // Posted. A failure to write that down must never turn into `failed` (which a retry would resend): the record
+      // keeps `sending`, so a retry reports it as unknown instead of posting it again.
+      try {
+        recordPlatform(requestId, platform, { state: 'posted', at: new Date().toISOString(), ...sent }, key);
+      } catch (writeError) {
+        ledgerBroken = errorText(writeError);
+      }
+      outcomes.push({ platform, status: 'posted', ...sent });
     }
     return outcomes;
   } finally {

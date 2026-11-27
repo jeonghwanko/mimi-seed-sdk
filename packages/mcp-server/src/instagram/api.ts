@@ -1,5 +1,5 @@
 import type { InstagramConfig } from './config.js';
-import { metaApiError } from '../lib/meta-auth.js';
+import { metaApiError, type PublishHooks } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { catalog } from '#core/lang.js';
@@ -168,6 +168,7 @@ export async function postImage(
   cfg: InstagramConfig,
   imageUrl: string,
   caption: string,
+  hooks: PublishHooks = {},
 ): Promise<PublishResult> {
   // Step 1: image container 생성
   const container = await igFetch<{ id: string }>(
@@ -178,6 +179,8 @@ export async function postImage(
   );
 
   // Step 2: publish
+  // Containers are invisible until media_publish; this request is what publishes.
+  hooks.onPublishStart?.();
   const published = await igFetch<{ id: string }>(
     cfg.accessToken,
     `/${encodePathSegment(cfg.userId)}/media_publish`,
@@ -195,6 +198,7 @@ export async function postCarousel(
   cfg: InstagramConfig,
   imageUrls: string[],
   caption: string,
+  hooks: PublishHooks = {},
 ): Promise<PublishResult> {
   if (imageUrls.length < 2 || imageUrls.length > 10) {
     throw new Error(M().carouselCount(imageUrls.length));
@@ -230,6 +234,8 @@ export async function postCarousel(
   await waitForContainer(cfg, carousel.id);
 
   // Step 3: publish
+  // Containers are invisible until media_publish; this request is what publishes.
+  hooks.onPublishStart?.();
   const published = await igFetch<{ id: string }>(
     cfg.accessToken,
     `/${encodePathSegment(cfg.userId)}/media_publish`,

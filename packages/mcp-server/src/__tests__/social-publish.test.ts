@@ -13,7 +13,7 @@ const api = vi.hoisted(() => {
   const state = {
     fbPhoto: vi.fn(), fbMulti: vi.fn(), igImage: vi.fn(), igCarousel: vi.fn(),
     thText: vi.fn(), thCarousel: vi.fn(), thVideo: vi.fn(), ytUpload: vi.fn(), ttPublish: vi.fn(), ttPlan: vi.fn(),
-    requireAuth: vi.fn(), connected: { facebook: true, instagram: true, threads: true } as Record<string, boolean>,
+    requireAuth: vi.fn(), tokens: vi.fn(), connected: { facebook: true, instagram: true, threads: true } as Record<string, boolean>,
     cfg: { accessToken: 'example', userId: '1', pageAccessToken: 'example', pageId: '1' },
     loader: (platform: string) => () => {
       if (!state.connected[platform]) throw new Error(`${platform} is not connected`);
@@ -31,10 +31,30 @@ vi.mock('../instagram/api.js', () => ({ postImage: api.igImage, postCarousel: ap
 vi.mock('../threads/api.js', () => ({ postText: api.thText, postCarousel: api.thCarousel, postVideo: api.thVideo }));
 vi.mock('../helpers.js', () => ({ requireAuth: api.requireAuth }));
 vi.mock('../video/youtube-publish.js', () => ({ YOUTUBE_SCOPE: 'youtube-scope', uploadYouTubeVideo: api.ytUpload }));
-vi.mock('../tiktok-business/posting.js', () => ({ loadPostPlan: api.ttPlan, publishPlannedVideo: api.ttPublish }));
+vi.mock('../tiktok-business/posting.js', () => ({ preflightPlannedVideo: api.ttPlan, publishPlannedVideo: api.ttPublish }));
+vi.mock('../auth/google-auth.js', () => ({ getStoredTokens: api.tokens }));
+// The real ledger, with recordPlatform observable so a test can make one write fail.
+const ledger = vi.hoisted(() => ({ realRecord: null as null | ((...args: never[]) => void) }));
+vi.mock('../social/publish-ledger.js', async (original) => {
+  const actual = await original<typeof import('../social/publish-ledger.js')>();
+  ledger.realRecord = actual.recordPlatform as never;
+  return { ...actual, recordPlatform: vi.fn(actual.recordPlatform) };
+});
 
 import { autoRequestId, executePublish, planPublish, type SocialPublishInput } from '../social/publish.js';
-import { acquirePublishLock, ledgerPath } from '../social/publish-ledger.js';
+import { acquirePublishLock, ledgerPath, recordPlatform } from '../social/publish-ledger.js';
+import { TikTokApiError } from '../tiktok-business/api.js';
+
+type Hooks = { onPublishStart?: () => void; onUploadStart?: () => void };
+/** A platform call that reaches its publishing request, then fails with `error`. */
+const failAfterPublishStart = (error: unknown) => async (...args: unknown[]) => {
+  const hooks = args.find((a): a is Hooks => !!a && typeof a === 'object' && ('onPublishStart' in a || 'onUploadStart' in a));
+  hooks?.onPublishStart?.();
+  hooks?.onUploadStart?.();
+  throw error;
+};
+const metaError = (status: number) => Object.assign(new Error(`Meta API ${status}`), { status });
+const timeout = () => new Error('timed out', { cause: Object.assign(new Error('t'), { name: 'TimeoutError' }) });
 
 const IMG = ['https://example.com/a.png', 'https://example.com/b.png'];
 let VIDEO = '';
@@ -53,6 +73,8 @@ beforeEach(() => {
   api.ttPublish.mockReset().mockResolvedValue({ publishId: 'pub1', state: 'pending' });
   api.ttPlan.mockReset().mockReturnValue({ request: { post_info: { caption: 'planned caption' } } });
   api.requireAuth.mockReset().mockResolvedValue({});
+  api.tokens.mockReset().mockReturnValue({ refresh_token: 'r', scope: 'https://www.googleapis.com/auth/youtube.force-ssl' });
+  vi.mocked(recordPlatform).mockReset().mockImplementation(ledger.realRecord as typeof recordPlatform);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -118,6 +140,29 @@ describe('planPublish', () => {
     expect(planPublish({ targets: ['threads', 'threads'], text: 'hi' }).posts[1].problems.join()).toMatch(/listed twice/);
   });
 
+  it('YouTube: tag length, a missing login, and a login without upload permission block before anything posts', () => {
+    const base: SocialPublishInput = { targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
+    expect(problemsOf({ ...base, youtube: { expectedChannelId: CHANNEL, tags: Array.from({ length: 60 }, () => 'tagtagtag') } }).youtube.join())
+      .toMatch(/tags joined with commas are over 500/);
+    api.tokens.mockReturnValueOnce(null);
+    expect(problemsOf(base).youtube.join()).toMatch(/not signed in/);
+    api.tokens.mockReturnValueOnce({ refresh_token: 'r', scope: 'https://www.googleapis.com/auth/yt-analytics.readonly' });
+    expect(problemsOf(base).youtube.join()).toMatch(/lacks the YouTube upload permission/);
+    expect(problemsOf(base).youtube).toEqual([]);
+  });
+
+  it('TikTok: the same local checks as publishing (account, duplicate audit) run in the plan', () => {
+    api.ttPlan.mockImplementationOnce(() => { throw new Error('Duplicate publish blocked: existing record state=published.'); });
+    expect(problemsOf({ targets: ['threads', 'tiktok'], text: 'x', tiktok: { planId: 'plan-1' } }).tiktok.join()).toMatch(/Duplicate publish blocked/);
+  });
+
+  it('a re-rendered video file is new content, not "already posted"', () => {
+    const input: SocialPublishInput = { targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
+    const before = autoRequestId(input);
+    writeFileSync(VIDEO, 'a different render, longer than before');
+    expect(autoRequestId(input)).not.toBe(before);
+  });
+
   it('the automatic requestId ignores target order but not content', () => {
     const a = autoRequestId({ targets: ['threads', 'instagram'], text: 'hi', imageUrls: IMG });
     expect(autoRequestId({ targets: ['instagram', 'threads'], text: 'hi', imageUrls: IMG })).toBe(a);
@@ -141,8 +186,8 @@ describe('executePublish', () => {
       { platform: 'facebook', status: 'posted', id: 'post-1', url: 'https://example.com/p/1' },
       { platform: 'threads', status: 'posted', id: 'post-1', url: 'https://example.com/p/1' },
     ]);
-    expect(api.fbPhoto).toHaveBeenCalledWith(cfg, IMG[0], 'hi');
-    expect(api.thText).toHaveBeenCalledWith(cfg, 'hi', IMG[0]);
+    expect(api.fbPhoto).toHaveBeenCalledWith(cfg, IMG[0], 'hi', { onPublishStart: expect.any(Function) });
+    expect(api.thText).toHaveBeenCalledWith(cfg, 'hi', IMG[0], { onPublishStart: expect.any(Function) });
     const again = await run(input);
     expect(again.map((r) => r.status)).toEqual(['already_posted', 'already_posted']);
     expect(api.fbPhoto).toHaveBeenCalledTimes(1);
@@ -157,8 +202,8 @@ describe('executePublish', () => {
     expect(api.thText).toHaveBeenCalledTimes(2);
   });
 
-  it('a timeout is an unknown outcome: never resent, and the next plan says so', async () => {
-    api.thText.mockRejectedValueOnce(new Error('timed out', { cause: Object.assign(new Error('t'), { name: 'TimeoutError' }) }));
+  it('a timeout after the publishing request was sent is unknown: never resent, and the next plan says so', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
     const input: SocialPublishInput = { targets: ['threads'], text: 'hi', requestId: 'req-3' };
     expect((await run(input))[0].status).toBe('unknown_outcome');
     const plan = planPublish(input);
@@ -203,11 +248,64 @@ describe('executePublish', () => {
     expect(api.ytUpload).toHaveBeenCalledWith({}, expect.objectContaining({ privacyStatus: 'public', confirmVisible: true }), expect.anything());
   });
 
-  it('a dropped connection (fetch TypeError) is an unknown outcome, not a retryable failure', async () => {
-    api.fbPhoto.mockRejectedValueOnce(new TypeError('fetch failed'));
+  it('a dropped connection on the publishing request is unknown, not a retryable failure', async () => {
+    api.fbPhoto.mockImplementationOnce(failAfterPublishStart(new TypeError('fetch failed')));
     const input: SocialPublishInput = { targets: ['facebook'], text: 'hi', imageUrls: [IMG[0]], requestId: 'req-net' };
     expect((await run(input))[0].status).toBe('unknown_outcome');
     expect(planPublish(input).ok).toBe(false);
+  });
+
+  it('a timeout or dropped connection BEFORE the publishing request is a clean, retryable failure', async () => {
+    api.igImage.mockRejectedValueOnce(timeout()).mockRejectedValueOnce(new TypeError('fetch failed'));
+    const input: SocialPublishInput = { targets: ['instagram'], text: 'hi', imageUrls: [IMG[0]], requestId: 'req-pre' };
+    expect((await run(input))[0].status).toBe('failed'); // e.g. waiting for the container timed out
+    expect((await run(input))[0].status).toBe('failed');
+    expect((await run(input))[0].status).toBe('posted');
+  });
+
+  it('Meta: a 5xx on the publishing request is unknown (the post may exist); a 4xx is a clean rejection', async () => {
+    api.igImage.mockImplementationOnce(failAfterPublishStart(metaError(500)));
+    expect((await run({ targets: ['instagram'], text: 'a', imageUrls: [IMG[0]], requestId: 'req-5xx' }))[0].status).toBe('unknown_outcome');
+    api.igImage.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    expect((await run({ targets: ['instagram'], text: 'b', imageUrls: [IMG[0]], requestId: 'req-4xx' }))[0].status).toBe('failed');
+  });
+
+  it('TikTok: an unknown publish outcome is unknown; a known rejection is a clean failure', async () => {
+    const input = (id: string): SocialPublishInput => ({ targets: ['tiktok'], text: 'x', tiktok: { planId: 'plan-1' }, requestId: id });
+    api.ttPublish.mockImplementationOnce(failAfterPublishStart(new Error('outcome unknown', { cause: new TikTokApiError('t', 1, 'r', true) })));
+    expect((await run(input('tt-1')))[0].status).toBe('unknown_outcome');
+    api.ttPublish.mockImplementationOnce(failAfterPublishStart(new TikTokApiError('no share_id', undefined, undefined, true)));
+    expect((await run(input('tt-2')))[0].status).toBe('unknown_outcome');
+    api.ttPublish.mockImplementationOnce(failAfterPublishStart(new Error('audit write failed after success')));
+    expect((await run(input('tt-3')))[0].status).toBe('unknown_outcome');
+    api.ttPublish.mockImplementationOnce(failAfterPublishStart(new TikTokApiError('rejected', 40001)));
+    expect((await run(input('tt-4')))[0].status).toBe('failed');
+  });
+
+  it('if the "sending" record cannot be written, nothing is sent and the results so far come back instead of a throw', async () => {
+    vi.mocked(recordPlatform).mockImplementation(() => { throw new Error('EACCES'); });
+    const outcomes = await run({ targets: ['facebook', 'threads'], text: 'hi', imageUrls: [IMG[0]], requestId: 'req-send' });
+    expect(outcomes.map((o) => o.status)).toEqual(['failed', 'failed']);
+    expect(outcomes[0]).toMatchObject({ error: expect.stringMatching(/Not sent: the publish record cannot be written \(EACCES\)/) });
+    expect(api.fbPhoto).not.toHaveBeenCalled();
+  });
+
+  it('if the "posted" record cannot be written, it is still reported posted and a retry never resends it', async () => {
+    const real = ledger.realRecord as typeof recordPlatform;
+    vi.mocked(recordPlatform).mockImplementation((id, platform, record, key) => {
+      if (record.state === 'posted') throw new Error('ENOSPC');
+      real(id, platform, record, key);
+    });
+    const input: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'hi', imageUrls: [IMG[0]], requestId: 'req-ledger' };
+    const outcomes = await run(input);
+    expect(outcomes[0]).toMatchObject({ platform: 'facebook', status: 'posted' });
+    expect(outcomes[1]).toMatchObject({ platform: 'threads', status: 'failed' }); // not sent: nothing could be recorded
+    expect(api.thText).not.toHaveBeenCalled();
+    // The record still says `sending` for Facebook, so the next plan refuses to resend it.
+    vi.mocked(recordPlatform).mockImplementation(real);
+    const next = planPublish(input);
+    expect(next.posts[0].problems.join()).toMatch(/outcome of the previous attempt .* is unknown/);
+    expect(api.fbPhoto).toHaveBeenCalledTimes(1);
   });
 
   it('a requestId reused for different content is refused, so a new post is never skipped as "already posted"', async () => {
@@ -239,7 +337,7 @@ describe('executePublish', () => {
   it('TikTok publishes the approved plan', async () => {
     const input: SocialPublishInput = { targets: ['tiktok'], text: 'ignored', tiktok: { planId: 'plan-1' } };
     expect(await run(input)).toEqual([{ platform: 'tiktok', status: 'posted', id: 'pub1' }]);
-    expect(api.ttPublish).toHaveBeenCalledWith('plan-1', true);
+    expect(api.ttPublish).toHaveBeenCalledWith('plan-1', true, { onPublishStart: expect.any(Function) });
   });
 
   it('a concurrent call with the same requestId is refused', async () => {

@@ -12,7 +12,7 @@ import { registerAuthTools } from './registers/auth.js';
 import { registerCiTools } from './registers/ci.js';
 import { registerInstagramTools } from './registers/instagram.js';
 import { registerThreadsTools } from './registers/threads.js';
-import { registerSocialTools } from './registers/social.js';
+import { registerCrosspostTools } from './registers/crosspost.js';
 import { registerFacebookTools } from './registers/facebook.js';
 import { registerGoogleAdsTools } from './registers/googleads.js';
 import { registerGscTools } from './registers/gsc.js';
@@ -89,7 +89,7 @@ export function buildServer(version: string, options: { env?: NodeJS.ProcessEnv;
   registerVideoTools(registrar);
   registerYouTubeTools(registrar);
   registerTikTokBusinessTools(registrar);
-  registerSocialTools(registrar);
+  registerCrosspostTools(registrar);
   registerDriveTools(registrar);
   // 모든 언어에 적용한다 — `$schema` 제거는 언어와 무관하다. 번역은 en 일 때만.
   localizeToolList(server, toolLang === 'en' ? translate : undefined);

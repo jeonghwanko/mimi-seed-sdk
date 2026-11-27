@@ -36,7 +36,7 @@ const metaOptions = z.object({
   text: z.string().optional().describe('이 플랫폼에만 쓸 본문 (생략 시 공통 text)'),
 }).optional();
 
-export function registerSocialTools(server: ToolRegistrar) {
+export function registerCrosspostTools(server: ToolRegistrar) {
   server.tool(
     'social_publish',
     [

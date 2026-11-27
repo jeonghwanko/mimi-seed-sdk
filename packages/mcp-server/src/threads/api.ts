@@ -1,5 +1,5 @@
 import type { ThreadsConfig } from './config.js';
-import { metaApiError } from '../lib/meta-auth.js';
+import { metaApiError, type PublishHooks } from '../lib/meta-auth.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { encodePathSegment } from '../lib/url-path.js';
 import { catalog } from '#core/lang.js';
@@ -178,7 +178,9 @@ async function waitForContainer(cfg: ThreadsConfig, containerId: string): Promis
   throw new Error(M().mediaTimeout);
 }
 
-async function publish(cfg: ThreadsConfig, creationId: string): Promise<PublishResult> {
+async function publish(cfg: ThreadsConfig, creationId: string, hooks: PublishHooks = {}): Promise<PublishResult> {
+  // Containers are invisible until threads_publish; this request is what publishes.
+  hooks.onPublishStart?.();
   const published = await thFetch<{ id: string }>(
     cfg.accessToken,
     '/me/threads_publish',
@@ -193,6 +195,7 @@ export async function postText(
   cfg: ThreadsConfig,
   text: string,
   imageUrl?: string,
+  hooks: PublishHooks = {},
 ): Promise<PublishResult> {
   const params: Record<string, string> = {
     media_type: imageUrl ? 'IMAGE' : 'TEXT',
@@ -209,7 +212,7 @@ export async function postText(
   );
 
   if (imageUrl) await waitForContainer(cfg, container.id); // 미디어만 처리 대기
-  return publish(cfg, container.id);
+  return publish(cfg, container.id, hooks);
 }
 
 /** public URL의 영상을 Threads 미디어 컨테이너로 만든 뒤 처리 완료 후 게시한다. */
@@ -218,6 +221,7 @@ export async function postVideo(
   videoUrl: string,
   text = '',
   altText?: string,
+  hooks: PublishHooks = {},
 ): Promise<PublishResult> {
   const params: Record<string, string> = {
     media_type: 'VIDEO',
@@ -235,13 +239,14 @@ export async function postVideo(
   );
 
   await waitForContainer(cfg, container.id);
-  return publish(cfg, container.id);
+  return publish(cfg, container.id, hooks);
 }
 
 export async function postCarousel(
   cfg: ThreadsConfig,
   imageUrls: string[],
   text: string,
+  hooks: PublishHooks = {},
 ): Promise<PublishResult> {
   if (imageUrls.length < 2 || imageUrls.length > 20) {
     throw new Error(M().carouselCount(imageUrls.length));
@@ -274,5 +279,5 @@ export async function postCarousel(
   await waitForContainer(cfg, carousel.id);
 
   // Step 3: publish
-  return publish(cfg, carousel.id);
+  return publish(cfg, carousel.id, hooks);
 }
