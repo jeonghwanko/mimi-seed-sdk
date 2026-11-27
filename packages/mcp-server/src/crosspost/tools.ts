@@ -8,7 +8,25 @@
 //      the post on three platforms and missing from two;
 //   3. a preflight: every target's network-side checks (tokens, the YouTube channel and video stream, the TikTok
 //      publish scope) run before anything is sent, so one platform cannot fail after others have posted;
-//   4. per-platform results and the at-most-once ledger (ledger.ts), so a retry finishes only what is left.
+//   4. per-platform results and an at-most-once record per post (ledger.ts), so sending again finishes only what is
+//      left and never posts the same thing twice.
+//
+// The one rule for "is this the same post as before?" (decide()):
+//   a post = a platform + the account it resolves to + exactly what that platform receives (targetKey). Nothing else
+//   — no request id, no other target, no grouping — makes two posts the same or different. Its record says:
+//
+//     record       | resendUnknown names it | decision
+//     -------------+------------------------+-----------------------------------------------------------------
+//     none         | —                      | send
+//     failed       | —                      | send (nothing went out)
+//     posted       | —                      | skip, report already_posted
+//     sending      | no                     | block: it may be live; a person must check the platform
+//     unknown      | no                     | block (same)
+//     sending      | yes                    | send (the person checked: it is not live)
+//     unknown      | yes                    | send (same)
+//
+//   Changing any part of a platform's content (its text, images, a re-rendered video, the title, another Page) makes
+//   a different post with its own record, so it is sent; the platforms whose content did not change stay skipped.
 //
 // Media rules mirror the per-platform tools: Meta fetches public HTTPS URLs; YouTube uploads a local file; TikTok
 // publishes a plan made by tiktok_business_plan_video_post (its own consent, settings, and duplicate checks).
@@ -35,8 +53,7 @@ import { metaErrorStatus } from '../lib/meta-auth.js';
 import { getStoredTokens } from '../auth/google-auth.js';
 import { summarizeGrantedDomains } from '../auth/scopes.js';
 import {
-  acquirePublishLock, findPosted, readLedger, recordPlatform, recordPosted,
-  type PlatformRecord, type SocialTarget,
+  acquirePostLock, inProgressMessage, isPostLocked, readRecord, writeRecord, type PostRecord, type SocialTarget,
 } from './ledger.js';
 
 export const SOCIAL_TARGETS = ['facebook', 'instagram', 'threads', 'youtube', 'tiktok'] as const satisfies readonly SocialTarget[];
@@ -61,7 +78,8 @@ export interface SocialPublishInput {
     containsSyntheticMedia?: boolean;
   };
   tiktok?: { planId: string };
-  requestId?: string;
+  /** Platforms whose previous outcome was unknown and that a person has checked are not live: send them again. */
+  resendUnknown?: SocialTarget[];
 }
 
 export interface PlannedPost {
@@ -72,12 +90,11 @@ export interface PlannedPost {
   media?: string[];
   /** Why this target cannot be posted. Any problem in any target blocks the whole publish. */
   problems: string[];
-  /** What a previous call with the same requestId recorded. */
-  previous?: PlatformRecord;
+  /** What an earlier call recorded for this exact post, if anything. */
+  record?: PostRecord;
 }
 
 export interface PublishPlan {
-  requestId: string;
   ok: boolean;
   posts: PlannedPost[];
 }
@@ -108,21 +125,19 @@ const M = catalog(
       `Google 로그인${profile ? ` (프로필 ${profile})` : ''}에 YouTube 업로드 권한이 없습니다. mimi-seed auth login${profile ? ` --profile ${profile}` : ''} --domains youtube 로 추가하세요.`,
     tiktokPlan: 'TikTok 은 tiktok_business_plan_video_post 로 만든 planId 가 필요합니다 (tiktok.planId).',
     tiktokPlanInvalid: (msg: string) => `TikTok 계획을 쓸 수 없습니다: ${msg}`,
-    previousPosted: (at: string) => `이 requestId 로 이미 게시됐습니다 (${at}). 건너뜁니다.`,
-    previousUnknown: (at: string) =>
-      `이전 시도(${at})의 결과를 알 수 없습니다 — 게시됐을 수 있습니다. 플랫폼에서 직접 확인하고, 다시 올리려면 새 requestId 를 쓰세요.`,
+    previousUnknown: (p: string, at: string) =>
+      `이전 시도(${at})의 결과를 알 수 없습니다 — 게시됐을 수 있습니다. ${p} 에서 직접 확인하고, 게시되지 않았다면 resendUnknown: ["${p}"] 를 더해 다시 보내세요.`,
+    resendingUnknown: (at: string) => `이전 시도(${at})의 결과를 알 수 없었지만 확인 후 다시 보냄 (resendUnknown)`,
     privacy: (p: string) => `공개 상태: ${p}`,
-    requestIdReused: (p: string) =>
-      `이 requestId 로 ${p} 에 다른 내용을 이미 보냈습니다. 같은 게시를 고쳐 보내는 거라면 ${p} 는 그대로 두고 실패한 대상의 플랫폼별 옵션(예: threads.text)만 바꾸세요. 새 게시물이면 새 requestId 를 쓰세요.`,
     youtubeAngle: 'YouTube 제목·설명·태그에는 < 와 > 를 쓸 수 없습니다.',
-    alreadyPostedElsewhere: (at: string) => `같은 내용이 이미 게시됨 (${at}) — 건너뜀. 의도한 재게시라면 새 requestId 를 명시하세요.`,
     preflightFailed: (p: string, msg: string) => `게시 전 확인 실패 (${p}): ${msg}`,
     notSentPreflight: (p: string) => `보내지 않음: ${p} 의 게시 전 확인이 실패해 어느 플랫폼에도 게시하지 않았습니다.`,
     youtubeFileMissing: (f: string) => `영상 파일을 찾을 수 없거나 비어 있습니다: ${f}`,
     youtubeFileType: 'YouTube 영상은 .mp4, .mov, .webm 만 올릴 수 있습니다.',
     alreadyPostedAction: (at: string) => `이미 게시됨 (${at}) — 건너뜀`,
     planBlocked: '검증을 통과하지 못한 계획은 게시하지 않습니다.',
-    notSentNoLedger: (reason: string) => `게시 기록을 쓸 수 없어 보내지 않았습니다 (${reason}). 기록 문제를 고친 뒤 같은 requestId 로 다시 보내세요.`,
+    notSentNoLedger: (reason: string) => `게시 기록을 쓸 수 없어 보내지 않았습니다 (${reason}). 기록 문제를 고친 뒤 다시 보내세요.`,
+    youtubeFileChanged: '사전 확인 뒤 영상 파일이 바뀌었습니다 (크기·수정 시각). 파일이 다 써진 뒤 다시 보내세요.',
     tiktokCaption: '캡션은 TikTok 계획에 저장된 값을 씁니다 (text 무시).',
   },
   {
@@ -144,21 +159,19 @@ const M = catalog(
       `The Google login${profile ? ` (profile ${profile})` : ''} lacks the YouTube upload permission. Add it with mimi-seed auth login${profile ? ` --profile ${profile}` : ''} --domains youtube.`,
     tiktokPlan: 'TikTok needs a planId made by tiktok_business_plan_video_post (tiktok.planId).',
     tiktokPlanInvalid: (msg: string) => `Cannot use the TikTok plan: ${msg}`,
-    previousPosted: (at: string) => `Already posted with this requestId (${at}). Skipping.`,
-    previousUnknown: (at: string) =>
-      `The outcome of the previous attempt (${at}) is unknown — it may have been posted. Check the platform, and use a new requestId to post again.`,
+    previousUnknown: (p: string, at: string) =>
+      `The outcome of the previous attempt (${at}) is unknown — it may have been posted. Check ${p}; if it is not there, send again with resendUnknown: ["${p}"].`,
+    resendingUnknown: (at: string) => `the previous attempt (${at}) had an unknown outcome; resending after a check (resendUnknown)`,
     privacy: (p: string) => `privacy: ${p}`,
-    requestIdReused: (p: string) =>
-      `This requestId already sent different content to ${p}. If you are fixing the same post, leave ${p} as it was and change only the failed target's own options (e.g. threads.text). For a new post, use a new requestId.`,
     youtubeAngle: 'YouTube titles, descriptions, and tags cannot contain < or >.',
-    alreadyPostedElsewhere: (at: string) => `the same content was already posted (${at}) — skipped. To repost it on purpose, pass a new requestId.`,
     preflightFailed: (p: string, msg: string) => `Pre-send check failed (${p}): ${msg}`,
     notSentPreflight: (p: string) => `Not sent: the pre-send check for ${p} failed, so nothing was posted anywhere.`,
     youtubeFileMissing: (f: string) => `The video file is missing or empty: ${f}`,
     youtubeFileType: 'YouTube uploads must be .mp4, .mov, or .webm.',
     alreadyPostedAction: (at: string) => `already posted (${at}) — skipped`,
     planBlocked: 'A plan that failed validation is never published.',
-    notSentNoLedger: (reason: string) => `Not sent: the publish record cannot be written (${reason}). Fix it, then resend with the same requestId.`,
+    notSentNoLedger: (reason: string) => `Not sent: the publish record cannot be written (${reason}). Fix it, then send again.`,
+    youtubeFileChanged: 'The video file changed after the pre-send check (size or modification time). Send again once it is fully written.',
     tiktokCaption: 'The caption comes from the TikTok plan (text is ignored).',
   },
 );
@@ -166,11 +179,7 @@ const M = catalog(
 const TEXT_LIMIT: Record<'facebook' | 'instagram' | 'threads', number> = { facebook: 63_206, instagram: 2_200, threads: 500 };
 const IMAGE_LIMIT: Record<'facebook' | 'instagram' | 'threads', number> = { facebook: 10, instagram: 10, threads: 20 };
 
-/**
- * Fingerprint of exactly what one platform would receive (its account, text, media, and options). Stored with each
- * ledger record: a platform that already posted is refused only if *its own* content changed, so fixing another
- * target's text never touches it.
- */
+/** The Page or account a Meta profile resolves to (project mapping, default file), or null when not connected. */
 function metaAccount(platform: 'facebook' | 'instagram' | 'threads', input: SocialPublishInput): string | null {
   const profile = input[platform]?.profile;
   try {
@@ -183,7 +192,10 @@ function metaAccount(platform: 'facebook' | 'instagram' | 'threads', input: Soci
   }
 }
 
-/** Null when a Meta target's account cannot be resolved (not connected): its content identity is unknown. */
+/**
+ * The identity of one post: exactly what one platform would receive (the account, text, media, and options). Null
+ * when a Meta target's account cannot be resolved (not connected): its identity is unknown, and the plan blocks it.
+ */
 export function targetKey(platform: SocialTarget, input: SocialPublishInput): string | null {
   const images = input.imageUrls ?? [];
   const payload = platform === 'youtube'
@@ -209,23 +221,6 @@ export function targetKey(platform: SocialTarget, input: SocialPublishInput): st
 }
 
 const UNRESOLVED = Symbol('unresolved account');
-
-/**
- * Stable id for one announcement: the targets and the **shared** content only. Per-platform overrides are left out,
- * so correcting a failed target's own text (e.g. threads.text) keeps the id, and the platforms that already posted
- * are skipped instead of posted again.
- */
-export function autoRequestId(input: SocialPublishInput): string {
-  const canonical = JSON.stringify({
-    targets: [...input.targets].sort(),
-    text: input.text,
-    imageUrls: input.imageUrls ?? [],
-    videoUrl: input.videoUrl ?? null,
-    videoFilePath: input.videoFilePath ?? null,
-    tiktokPlanId: input.tiktok?.planId ?? null,
-  });
-  return `auto-${createHash('sha256').update(canonical).digest('hex').slice(0, 32)}`;
-}
 
 /**
  * An error raised after the request may already have taken effect (e.g. a YouTube upload that failed while reading
@@ -385,41 +380,24 @@ function planTikTok(input: SocialPublishInput): PlannedPost {
   return { platform: 'tiktok', action: `tiktok planned video — ${M().tiktokCaption}`, text: caption, problems };
 }
 
-/**
- * Decide, per target, whether a previous call already took care of it. Same rule in the plan and under the lock.
- * Returns the outcome to report instead of sending, a problem that blocks the plan, or null to send.
- */
-function previousState(
-  platform: SocialTarget,
-  key: string | null,
-  previous: PlatformRecord | undefined,
-  explicitRequestId: boolean,
-): { skip: PublishOutcome } | { problem: string } | null {
-  // key null: the account cannot be resolved now (disconnected). It cannot be sent anyway, so a posted record stands.
-  const sameContent = key === null || previous?.key === undefined || previous.key === key;
-  if (previous?.state === 'posted') {
-    if (sameContent) return { skip: { platform, status: 'already_posted', id: previous.id, url: previous.url, at: previous.at } };
-    // An explicit requestId names one post: different content under it is a mistake. A generated id only shares the
-    // targets and shared text, so different content for this platform (a re-rendered video, a new title, another
-    // Page) is simply a new post — falling through sends it.
-    if (explicitRequestId) return { problem: M().requestIdReused(platform) };
-  } else if (previous?.state === 'sending' || previous?.state === 'unknown') {
-    // Whatever the content, an earlier send to this platform may be live: a person has to check first.
-    return { problem: M().previousUnknown(previous.at) };
+type Decision =
+  | { kind: 'send'; note?: string }
+  | { kind: 'skip'; outcome: PublishOutcome }
+  | { kind: 'block'; problem: string };
+
+/** The single "same post?" rule — see the table at the top of this file. Same answer in the plan and under the lock. */
+export function decide(platform: SocialTarget, record: PostRecord | null, resendUnknown: readonly SocialTarget[]): Decision {
+  if (!record || record.state === 'failed') return { kind: 'send' };
+  if (record.state === 'posted') {
+    return { kind: 'skip', outcome: { platform, status: 'already_posted', id: record.id, url: record.url, at: record.at } };
   }
-  // Without an explicit requestId, identical content already posted to this platform under another id is the
-  // same post sent again (e.g. after editing another target). A new explicit requestId means a deliberate repost.
-  if (!explicitRequestId && key !== null) {
-    const posted = findPosted(platform, key);
-    if (posted) return { skip: { platform, status: 'already_posted', id: posted.id, url: posted.url, at: posted.at } };
-  }
-  return null;
+  // sending / unknown: an earlier send may be live.
+  if (resendUnknown.includes(platform)) return { kind: 'send', note: M().resendingUnknown(record.at) };
+  return { kind: 'block', problem: M().previousUnknown(platform, record.at) };
 }
 
-/** No network: config files, the TikTok plan file, the ledger, and the posted index are all local. */
+/** No network: config files, the TikTok plan file, and the post records are all local. */
 export function planPublish(input: SocialPublishInput): PublishPlan {
-  const requestId = input.requestId ?? autoRequestId(input);
-  const ledger = readLedger(requestId);
   const seen = new Set<SocialTarget>();
   const posts = input.targets.map((platform): PlannedPost => {
     const post = platform === 'youtube' ? planYouTube(input)
@@ -427,21 +405,25 @@ export function planPublish(input: SocialPublishInput): PublishPlan {
         : planMeta(platform, input);
     const duplicate = seen.has(platform);
     seen.add(platform);
-    const previous = ledger.platforms[platform];
-    if (previous) post.previous = previous;
-    const state = previousState(platform, targetKey(platform, input), previous, input.requestId !== undefined);
-    if (state && 'skip' in state) {
+    const key = targetKey(platform, input);
+    // key null: not connected, already reported by the platform's own plan check.
+    const record = key === null ? null : readRecord(platform, key);
+    if (record) post.record = record;
+    const decision = decide(platform, record, input.resendUnknown ?? []);
+    if (decision.kind === 'skip') {
       // It will not be sent again, so its current state (e.g. a since-expired token) must not block the others.
-      const at = state.skip.status === 'already_posted' ? state.skip.at : '';
-      post.action = previous?.state === 'posted' ? M().alreadyPostedAction(at) : M().alreadyPostedElsewhere(at);
+      post.action = M().alreadyPostedAction(record!.at);
       post.problems = [];
-    } else if (state) {
-      post.problems.push(state.problem);
+    } else if (decision.kind === 'block') {
+      // `sending` with a live lock is not a crash: another call is publishing this very post right now.
+      post.problems.push(record?.state === 'sending' && key !== null && isPostLocked(platform, key) ? inProgressMessage() : decision.problem);
+    } else if (decision.note) {
+      post.action = `${post.action} — ${decision.note}`;
     }
     if (duplicate) post.problems.push(M().duplicateTarget(platform));
     return post;
   });
-  return { requestId, ok: posts.every((p) => p.problems.length === 0), posts };
+  return { ok: posts.every((p) => p.problems.length === 0), posts };
 }
 
 function youtubeUploadInput(input: SocialPublishInput): UploadYouTubeVideoInput {
@@ -461,15 +443,20 @@ function youtubeUploadInput(input: SocialPublishInput): UploadYouTubeVideoInput 
   };
 }
 
+/** What a preflight learned that the send can reuse instead of repeating (YouTube's auth and checked upload). */
+interface Prepared {
+  youtube?: {
+    auth: Awaited<ReturnType<typeof requireAuth>>;
+    upload: PreparedYouTubeUpload;
+    /** The file as it was checked; the upload refuses a file that changed since (a render still writing it). */
+    file: ReturnType<typeof fileIdentity>;
+  };
+}
+
 /**
  * The network-side checks each platform's publish makes before sending: a live token (Meta), the sign-in, channel
  * and video stream (YouTube), the publish scope and the plan (TikTok). Run for every target before sending to any.
  */
-/** What a preflight learned that the send can reuse instead of repeating (YouTube's auth and checked upload). */
-interface Prepared {
-  youtube?: { auth: Awaited<ReturnType<typeof requireAuth>>; upload: PreparedYouTubeUpload };
-}
-
 async function preflight(platform: SocialTarget, input: SocialPublishInput, prepared: Prepared): Promise<void> {
   switch (platform) {
     case 'facebook':
@@ -483,7 +470,8 @@ async function preflight(platform: SocialTarget, input: SocialPublishInput, prep
       return;
     case 'youtube': {
       const auth = await requireAuth(YOUTUBE_SCOPE, input.youtube?.profile);
-      prepared.youtube = { auth, upload: await prepareYouTubeUpload(auth, youtubeUploadInput(input)) };
+      const file = fileIdentity(input.videoFilePath!);
+      prepared.youtube = { auth, upload: await prepareYouTubeUpload(auth, youtubeUploadInput(input)), file };
       return;
     }
     case 'tiktok':
@@ -522,6 +510,11 @@ async function send(platform: SocialTarget, input: SocialPublishInput, post: Pla
     }
     case 'youtube': {
       const auth = prepared.youtube?.auth ?? await requireAuth(YOUTUBE_SCOPE, input.youtube!.profile);
+      // Other platforms may have taken minutes. A file still being written would upload bytes nobody checked, and its
+      // fingerprint (in targetKey) would no longer match: refuse before the upload starts, which is a clean failure.
+      if (prepared.youtube && JSON.stringify(fileIdentity(input.videoFilePath!)) !== JSON.stringify(prepared.youtube.file)) {
+        throw new Error(M().youtubeFileChanged);
+      }
       // After the upload starts, only a 4xx proves no video was created.
       const r = await tracked(
         (onUploadStart) => uploadYouTubeVideo(auth, youtubeUploadInput(input), { onUploadStart }, prepared.youtube?.upload),
@@ -537,55 +530,59 @@ async function send(platform: SocialTarget, input: SocialPublishInput, post: Pla
 }
 
 /**
- * Publish to every target in order. Call only with an approved plan whose `ok` is true. Every target's preflight
- * runs first; if one fails, nothing is sent. A timeout or crash after a publishing request leaves the platform
- * `unknown`, so it is never retried automatically.
+ * Publish to every target in order. Call only with an approved plan whose `ok` is true.
+ *   1. Lock every post (platform + account + content) it will send, so a concurrent call with the same post waits
+ *      its turn instead of posting it too; then re-apply decide() to the records under the locks.
+ *   2. Preflight every post that will be sent; if one fails, nothing is sent.
+ *   3. Send in order, recording `sending` before and the outcome after each publishing call.
  */
 export async function executePublish(input: SocialPublishInput, plan: PublishPlan): Promise<PublishOutcome[]> {
   // The tool checks this too; refusing here keeps a future caller from posting a plan that failed validation.
   if (!plan.ok) throw new Error(M().planBlocked);
-  const { requestId } = plan;
-  const explicit = input.requestId !== undefined;
-  const release = acquirePublishLock(requestId);
+  const resendUnknown = input.resendUnknown ?? [];
+  const releases: Array<() => void> = [];
   try {
-    // Re-read under the lock: a call that finished in between may have posted some targets already.
-    const ledger = readLedger(requestId);
     const decisions = plan.posts.map((post) => {
       const key = targetKey(post.platform, input);
-      return { post, key, state: previousState(post.platform, key, ledger.platforms[post.platform], explicit) };
+      // The plan blocks unresolvable targets unless they already posted; such a key is never sent.
+      if (key === null) return { post, key, decision: { kind: 'block', problem: M().planBlocked } as Decision };
+      releases.push(acquirePostLock(post.platform, key));
+      return { post, key, decision: decide(post.platform, readRecord(post.platform, key), resendUnknown) };
     });
-    const blocked = decisions.find((d) => d.state && 'problem' in d.state);
-    if (blocked?.state && 'problem' in blocked.state) throw new Error(blocked.state.problem);
+    // Re-checked under the locks: a concurrent call may have changed a record since the plan was made.
+    const blocked = decisions.find((d) => d.decision.kind === 'block');
+    if (blocked && blocked.decision.kind === 'block') throw new Error(blocked.decision.problem);
 
-    // Preflight every target that will be sent, before sending to any.
+    // Preflight every post that will be sent, before sending to any.
     const prepared: Prepared = {};
-    for (const { post, state } of decisions) {
-      if (state) continue;
+    for (const { post, decision } of decisions) {
+      if (decision.kind !== 'send') continue;
       try {
         await preflight(post.platform, input, prepared);
       } catch (error) {
         const reason = M().preflightFailed(post.platform, errorText(error));
-        return decisions.map(({ post: p, state: s }) => (s && 'skip' in s
-          ? s.skip
+        return decisions.map(({ post: p, decision: d }) => (d.kind === 'skip'
+          ? d.outcome
           : { platform: p.platform, status: 'failed' as const, error: p.platform === post.platform ? reason : M().notSentPreflight(post.platform) }));
       }
     }
 
     const outcomes: PublishOutcome[] = [];
     let ledgerBroken: string | null = null;
-    for (const { post, key, state } of decisions) {
+    for (const { post, key, decision } of decisions) {
       const { platform } = post;
-      if (state && 'skip' in state) {
-        outcomes.push(state.skip);
+      if (decision.kind === 'skip') {
+        outcomes.push(decision.outcome);
         continue;
       }
+      if (decision.kind !== 'send' || key === null) continue; // unreachable: blocked plans were refused above
       if (ledgerBroken) {
         // Nothing can be recorded, so nothing more is sent: a resend could not be told apart from a first send.
         outcomes.push({ platform, status: 'failed', error: M().notSentNoLedger(ledgerBroken) });
         continue;
       }
       try {
-        recordPlatform(requestId, platform, { state: 'sending', at: new Date().toISOString(), key: key ?? undefined });
+        writeRecord(platform, key, { state: 'sending', at: new Date().toISOString() });
       } catch (error) {
         // Not sent. Stop here instead of throwing, so the results of platforms already posted are not lost.
         ledgerBroken = errorText(error);
@@ -599,11 +596,10 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       } catch (error) {
         const at = new Date().toISOString();
         const ambiguous = isAmbiguous(error);
-        const record: PlatformRecord = { state: ambiguous ? 'unknown' : 'failed', at, key: key ?? undefined, error: errorText(error) };
         try {
-          recordPlatform(requestId, platform, record);
+          writeRecord(platform, key, { state: ambiguous ? 'unknown' : 'failed', at, error: errorText(error) });
         } catch (writeError) {
-          // The record stays `sending`, which a retry treats as unknown: safe, at worst it needs a manual check.
+          // The record stays `sending`, which decide() treats like unknown: safe, at worst it needs a manual check.
           ledgerBroken = errorText(writeError);
         }
         outcomes.push(ambiguous
@@ -612,24 +608,17 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
         continue;
       }
 
-      // Posted. A failure to write that down must never turn into `failed` (which a retry would resend): the record
-      // keeps `sending`, so a retry reports it as unknown instead of posting it again.
-      const at = new Date().toISOString();
+      // Posted. A failure to write that down must never turn into `failed` (which would be resent): the record keeps
+      // `sending`, so the next call reports it as unknown instead of posting it again.
       try {
-        recordPlatform(requestId, platform, { state: 'posted', at, key: key ?? undefined, ...sent });
+        writeRecord(platform, key, { state: 'posted', at: new Date().toISOString(), ...sent });
       } catch (writeError) {
         ledgerBroken = errorText(writeError);
-      }
-      try {
-        if (key !== null) recordPosted(platform, key, { requestId, at, ...sent });
-      } catch {
-        // The per-request record above already prevents a same-requestId resend; the cross-request index is a
-        // second line of defence, so failing to write it does not change this result.
       }
       outcomes.push({ platform, status: 'posted', ...sent });
     }
     return outcomes;
   } finally {
-    release();
+    for (const release of releases.reverse()) release();
   }
 }

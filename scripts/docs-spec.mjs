@@ -287,7 +287,7 @@ export const catalog = {
       'owned Business Account에 공개 게시 — 명시 확인 필수, 원자적 중복 예약, POST 결과 불명 시 자동 재시도 금지',
     // Cross-post
     social_publish:
-      'dry-run plan by default; nothing posts if any target has a problem; per-platform results; a same-requestId retry skips posted targets and never resends an unknown outcome',
+      'dry-run plan by default; nothing posts if any target has a problem; every pre-send check runs before anything is sent; the same post (platform + account + content) is never posted twice; an unknown outcome is resent only via resendUnknown',
   },
 };
 
