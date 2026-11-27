@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The tool list the MCP server sends to the agent on every connection is about 8% smaller. Each tool's input schema no longer carries the `$schema` dialect URL, and tool annotations omit hints equal to the MCP defaults (`readOnlyHint: false`, `idempotentHint: false`, `openWorldHint: true`). `destructiveHint` is always stated. Tool names, schemas, and behavior are unchanged.
+
 ## [0.25.1] - 2026-11-27
 
 ### Fixed

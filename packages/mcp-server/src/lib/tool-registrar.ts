@@ -122,14 +122,29 @@ export function toolTitle(name: string): string {
   return brand ? `${brand[1]}: ${capitalized}` : capitalized;
 }
 
+/**
+ * MCP 명세의 기본값(readOnlyHint=false · idempotentHint=false · openWorldHint=true)과 같은 힌트는 싣지 않는다 —
+ * 도구 목록은 연결마다 에이전트 컨텍스트에 실리고, 생략과 기본값은 명세상 같은 뜻이다. destructiveHint 는 예외로
+ * 항상 싣는다: 기본값이 true 라, 생략하면 명세를 느슨하게 읽는 클라이언트가 읽기 도구에도 "파괴" 경고를 붙일 수 있다.
+ */
 export function annotationsFor(meta: ToolMeta): ToolAnnotations & { title: string } {
   const title = meta.deprecatedFor ? `${toolTitle(meta.name)} (deprecated)` : toolTitle(meta.name);
   return {
     title,
-    readOnlyHint: meta.kind === 'read',
+    ...(meta.kind === 'read' ? { readOnlyHint: true } : {}),
     destructiveHint: meta.kind === 'destructive',
-    idempotentHint: meta.idempotent,
-    openWorldHint: !meta.local,
+    ...(meta.idempotent ? { idempotentHint: true } : {}),
+    ...(meta.local ? { openWorldHint: false } : {}),
+  };
+}
+
+/** 생략된 힌트를 명세 기본값으로 채운 실효값 — 테스트·카탈로그가 "이 도구는 읽기 전용인가"를 물을 때 쓴다. */
+export function effectiveHints(annotations: ToolAnnotations | undefined): Required<Omit<ToolAnnotations, 'title'>> {
+  return {
+    readOnlyHint: annotations?.readOnlyHint ?? false,
+    destructiveHint: annotations?.destructiveHint ?? true,
+    idempotentHint: annotations?.idempotentHint ?? false,
+    openWorldHint: annotations?.openWorldHint ?? true,
   };
 }
 
