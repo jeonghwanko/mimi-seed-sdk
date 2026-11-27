@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The license notice now names **Lucas Foundation** (https://mimi-seed.oddbout.com) as the copyright holder, replacing Pryzm GG and the retired console URL. The license itself (PolyForm Noncommercial 1.0.0) is unchanged.
+
 ### Fixed
 
 - `social_publish`: after a repost whose outcome was unknown, `resendUnknown` alone now resends it, as the message advises. Before, the call returned `already_posted` and the account stayed blocked.
