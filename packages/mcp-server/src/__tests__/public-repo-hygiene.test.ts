@@ -16,9 +16,10 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
-const SCAN_ROOTS = ['packages/cli/src', 'packages/mcp-server/src', 'packages/core/src', 'docs', 'skills'];
+// website/ 도 공개된다 — 개인정보처리방침에 사설 도메인 연락처가 들어간 적이 있다 (#138).
+const SCAN_ROOTS = ['packages/cli/src', 'packages/mcp-server/src', 'packages/core/src', 'docs', 'skills', 'website'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git']);
-const SCAN_EXTENSIONS = ['.ts', '.md', '.json'];
+const SCAN_EXTENSIONS = ['.ts', '.md', '.json', '.html'];
 
 /** 이 저장소가 쓰기로 한 플레이스홀더 어휘. 새 예시는 이 모양을 따를 것. */
 const ALLOWED_PLACEHOLDER_HINTS = [
