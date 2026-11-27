@@ -196,8 +196,20 @@ export async function prepareYouTubeUpload(auth: OAuth2Client, input: UploadYouT
   return { channel, privacyStatus, file, validation, facts };
 }
 
-export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTubeVideoInput, hooks: UploadYouTubeVideoHooks = {}) {
-  const { channel, privacyStatus, file, validation, facts } = await prepareYouTubeUpload(auth, input);
+export type PreparedYouTubeUpload = Awaited<ReturnType<typeof prepareYouTubeUpload>>;
+
+/**
+ * `prepared` skips the pre-upload checks when the caller already ran prepareYouTubeUpload for this exact input
+ * (social_publish does, before posting anywhere): repeating them would cost quota and an ffprobe, and could fail
+ * late on a transient error after other platforms are live.
+ */
+export async function uploadYouTubeVideo(
+  auth: OAuth2Client,
+  input: UploadYouTubeVideoInput,
+  hooks: UploadYouTubeVideoHooks = {},
+  prepared?: PreparedYouTubeUpload,
+) {
+  const { channel, privacyStatus, file, validation, facts } = prepared ?? await prepareYouTubeUpload(auth, input);
 
   const youtube = google.youtube({ version: 'v3', auth });
   // try 는 업로드 호출만 감싼다 — 응답 검사(videoId 없음)를 같은 try 에 두면 catch 에서 메시지 문구로 구분해야 했다.

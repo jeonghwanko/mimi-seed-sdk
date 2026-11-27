@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,9 +15,10 @@ const api = vi.hoisted(() => {
     thText: vi.fn(), thCarousel: vi.fn(), thVideo: vi.fn(), ytUpload: vi.fn(), ttPublish: vi.fn(), ttPlan: vi.fn(),
     requireAuth: vi.fn(), tokens: vi.fn(), fbPage: vi.fn(), igAccount: vi.fn(), thAccount: vi.fn(), ytPrepare: vi.fn(), ttConfig: vi.fn(), connected: { facebook: true, instagram: true, threads: true } as Record<string, boolean>,
     cfg: { accessToken: 'example', userId: '1', pageAccessToken: 'example', pageId: '1' },
-    loader: (platform: string) => () => {
+    // A named profile resolves to its own account (pageId / userId = the profile name); no profile → account '1'.
+    loader: (platform: string) => (options: { profile?: string } = {}) => {
       if (!state.connected[platform]) throw new Error(`${platform} is not connected`);
-      return state.cfg;
+      return options.profile ? { ...state.cfg, pageId: options.profile, userId: options.profile } : state.cfg;
     },
   };
   return state;
@@ -228,7 +229,7 @@ describe('executePublish', () => {
     expect((await run(input))[0]).toMatchObject({ platform: 'youtube', status: 'unknown_outcome' });
     expect(api.ytUpload).toHaveBeenCalledWith({}, expect.objectContaining({
       title: 'Title line', privacyStatus: 'private', confirmVisible: false, expectedChannelId: CHANNEL,
-    }), expect.objectContaining({ onUploadStart: expect.any(Function) }));
+    }), expect.objectContaining({ onUploadStart: expect.any(Function) }), expect.anything());
   });
 
   it('a YouTube error before the upload started (e.g. channel mismatch) is a clean, retryable failure', async () => {
@@ -247,7 +248,7 @@ describe('executePublish', () => {
     };
     expect((await run(input))[0]).toMatchObject({ status: 'failed', error: 'Pre-send check failed (youtube): not signed in' });
     await run(input);
-    expect(api.ytUpload).toHaveBeenCalledWith({}, expect.objectContaining({ privacyStatus: 'public', confirmVisible: true }), expect.anything());
+    expect(api.ytUpload).toHaveBeenCalledWith({}, expect.objectContaining({ privacyStatus: 'public', confirmVisible: true }), expect.anything(), expect.anything());
   });
 
   it('a dropped connection on the publishing request is unknown, not a retryable failure', async () => {
@@ -409,6 +410,70 @@ describe('executePublish', () => {
     expect(() => acquirePublishLock('req-lock')).toThrow(/already running/); // owned by this live process now
     release();
     expect(() => acquirePublishLock('req-lock')()).not.toThrow();
+  });
+
+  const lockOf = (id: string) => ledgerPath(id).replace(/\.json$/, '.lock');
+  const staleLock = (id: string, owner: string) => {
+    mkdirSync(lockOf(id), { recursive: true });
+    writeFileSync(path.join(lockOf(id), 'owner'), owner);
+  };
+
+  it('review 3 #1: a stale lock is not replaced while another caller is replacing it (breaker held)', () => {
+    staleLock('req-break', '2147483646');
+    mkdirSync(`${lockOf('req-break')}.break`); // another caller is mid-replacement
+    expect(() => acquirePublishLock('req-break')).toThrow(/already running/);
+    rmSync(`${lockOf('req-break')}.break`, { recursive: true });
+    expect(() => acquirePublishLock('req-break')()).not.toThrow(); // once it is done, the dead lock is replaced
+  });
+
+  it('review 3 #2: a lock naming our own pid that we do not hold (an earlier run that died) is stale', () => {
+    staleLock('req-ownpid', String(process.pid));
+    expect(() => acquirePublishLock('req-ownpid')()).not.toThrow();
+  });
+
+  it('review 3 #2: past the age limit a lock is stale even if a process with its pid is alive (pid reuse)', () => {
+    staleLock('req-old', String(process.ppid)); // a live process that is not the owner
+    expect(() => acquirePublishLock('req-old')).toThrow(/already running/);
+    const sevenHoursAgo = (Date.now() - 7 * 60 * 60 * 1000) / 1000;
+    utimesSync(lockOf('req-old'), sevenHoursAgo, sevenHoursAgo);
+    expect(() => acquirePublishLock('req-old')()).not.toThrow();
+  });
+
+  it('review 3 #3: without a requestId, a re-rendered video or a new title is a new post, not "requestId reused"', async () => {
+    const week1: SocialPublishInput = { targets: ['youtube'], text: 'Launch', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL, title: 'v1' } };
+    expect((await run(week1))[0].status).toBe('posted');
+    writeFileSync(VIDEO, 'week two render, a different file');
+    const week2: SocialPublishInput = { ...week1, youtube: { expectedChannelId: CHANNEL, title: 'v2' } };
+    expect(autoRequestId(week2)).toBe(autoRequestId(week1));
+    expect(planPublish(week2).ok).toBe(true);
+    expect((await run(week2))[0].status).toBe('posted');
+    expect(api.ytUpload).toHaveBeenCalledTimes(2);
+    // With an explicit requestId, different content under it is still refused.
+    await run({ ...week1, requestId: 'launch-explicit' });
+    expect(planPublish({ ...week2, requestId: 'launch-explicit' }).posts[0].problems.join()).toMatch(/already sent different content to youtube/);
+  });
+
+  it('review 3 #4: the same content for another account is a different post, not "already posted"', async () => {
+    const brandA: SocialPublishInput = { targets: ['facebook'], text: 'Holiday sale', imageUrls: [IMG[0]], facebook: { profile: 'brand-a' } };
+    expect((await run(brandA))[0].status).toBe('posted');
+    const brandB: SocialPublishInput = { ...brandA, facebook: { profile: 'brand-b' } };
+    expect((await run(brandB))[0].status).toBe('posted');
+    expect(api.fbPhoto).toHaveBeenCalledTimes(2);
+    expect(targetKey('facebook', brandA)).not.toBe(targetKey('facebook', brandB));
+  });
+
+  it('review 3 #5: a < or > in a YouTube tag is caught in the plan', () => {
+    expect(problemsOf({ targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL, tags: ['<3 launch'] } }).youtube.join())
+      .toMatch(/cannot contain < or >/);
+  });
+
+  it('review 3 #6: the YouTube checks from the preflight are reused for the upload, not repeated', async () => {
+    const preparedUpload = { channel: { id: CHANNEL }, prepared: true };
+    api.ytPrepare.mockResolvedValueOnce(preparedUpload);
+    await run({ targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL }, requestId: 'req-prep' });
+    expect(api.ytPrepare).toHaveBeenCalledTimes(1);
+    expect(api.requireAuth).toHaveBeenCalledTimes(1);
+    expect(api.ytUpload).toHaveBeenCalledWith({}, expect.anything(), expect.anything(), preparedUpload);
   });
 
   it('a concurrent call with the same requestId is refused', async () => {

@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { CREDENTIAL_DIR_MODE, writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
 import { readCredentialFileSync } from '#core/credential-read.js';
 import { catalog } from '#core/lang.js';
@@ -117,57 +117,109 @@ export function recordPosted(platform: SocialTarget, key: string, entry: PostedI
   writeCredentialJson(postedIndexPath(platform, key), entry);
 }
 
-function ownerAlive(lock: string): boolean | null {
-  let pid: number;
+/** Locks this process holds right now. A lock naming our pid that is not here was left by an earlier run. */
+const heldHere = new Set<string>();
+
+/** A breaker held longer than this belongs to a process that died while replacing a stale lock (it takes ms). */
+const STALE_BREAKER_MS = 60 * 1000;
+
+function lockOwner(lock: string): number | null {
   try {
-    pid = Number(readCredentialFileSync(path.join(lock, 'owner')));
+    const pid = Number(readCredentialFileSync(path.join(lock, 'owner')));
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
   } catch {
-    // No owner file (an older lock, or one caught mid-creation): fall back to the lock's age.
+    // No owner file: an older lock, or one caught between mkdir and the owner write. Decided by age instead.
     return null;
   }
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  if (pid === process.pid) return true;
+}
+
+/**
+ * 'missing' (released meanwhile), true (its owner is gone), or false (in use). Past STALE_LOCK_MS a lock is stale
+ * whatever its pid says: a pid can be reused, so "a process with that pid is alive" does not prove the owner is.
+ */
+function lockState(lock: string): 'missing' | boolean {
+  let age: number;
+  try {
+    age = Date.now() - fs.statSync(lock).mtimeMs;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing';
+    throw error;
+  }
+  if (age >= STALE_LOCK_MS) return true;
+  const pid = lockOwner(lock);
+  if (pid === null) return false;
+  // Our own pid: ours only if we hold it now. Otherwise an earlier run of this server, with the same pid, died.
+  if (pid === process.pid) return !heldHere.has(lock);
   try {
     process.kill(pid, 0);
-    return true;
+    return false;
   } catch (error) {
-    // EPERM: the process exists but belongs to someone else — still alive.
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    // EPERM: the process exists but belongs to someone else — still in use. ESRCH: gone.
+    return (error as NodeJS.ErrnoException).code !== 'EPERM';
   }
 }
+
+function takeLock(lock: string): () => void {
+  fs.mkdirSync(lock, { mode: CREDENTIAL_DIR_MODE });
+  try {
+    writeCredentialFile(path.join(lock, 'owner'), String(process.pid));
+  } catch (error) {
+    // Without the owner file the lock would block this requestId until it ages out; drop it before rethrowing.
+    fs.rmSync(lock, { recursive: true, force: true });
+    throw error;
+  }
+  heldHere.add(lock);
+  return () => {
+    heldHere.delete(lock);
+    fs.rmSync(lock, { recursive: true, force: true });
+  };
+}
+
+const isCode = (error: unknown, code: string) => (error as NodeJS.ErrnoException).code === code;
 
 /** Reserve the requestId for this process. Returns the release function; throws if another call holds it. */
 export function acquirePublishLock(requestId: string): () => void {
   fs.mkdirSync(ledgerDir(), { recursive: true, mode: CREDENTIAL_DIR_MODE });
   const lock = path.join(ledgerDir(), `${hash(requestId)}.lock`);
+  const breaker = `${lock}.break`;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      fs.mkdirSync(lock, { mode: CREDENTIAL_DIR_MODE });
-      writeCredentialFile(path.join(lock, 'owner'), String(process.pid));
-      return () => fs.rmSync(lock, { recursive: true, force: true });
+      return takeLock(lock);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (!isCode(error, 'EEXIST')) throw error;
     }
-    let age: number;
+    const state = lockState(lock);
+    if (state === 'missing') continue;
+    if (!state) throw new Error(M().inProgress);
+
+    // Replacing a stale lock is serialized by a breaker directory, and staleness is checked again while holding
+    // it. Without that, two callers that both saw the old lock could each replace it — the second one deleting the
+    // fresh lock the first had just taken — and both would publish.
     try {
-      age = Date.now() - fs.statSync(lock).mtimeMs;
+      fs.mkdirSync(breaker, { mode: CREDENTIAL_DIR_MODE });
     } catch (error) {
-      // Released between our mkdir and stat: try again.
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw error;
+      if (!isCode(error, 'EEXIST')) throw error;
+      try {
+        if (Date.now() - fs.statSync(breaker).mtimeMs >= STALE_BREAKER_MS) fs.rmSync(breaker, { recursive: true, force: true });
+      } catch (statError) {
+        if (!isCode(statError, 'ENOENT')) throw statError;
+      }
+      throw new Error(M().inProgress, { cause: error });
     }
-    const alive = ownerAlive(lock);
-    if (alive === true || (alive === null && age < STALE_LOCK_MS)) throw new Error(M().inProgress);
-    // The owner died. Move the stale lock aside atomically before deleting it, so two callers cannot both delete
-    // it and then both take a new one: only one rename succeeds; the other sees ENOENT and retries the mkdir.
-    const tombstone = `${lock}.stale-${randomUUID()}`;
     try {
-      fs.renameSync(lock, tombstone);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw error;
+      const again = lockState(lock);
+      if (again === false) throw new Error(M().inProgress);
+      if (again === true) fs.rmSync(lock, { recursive: true, force: true });
+      try {
+        return takeLock(lock);
+      } catch (error) {
+        // Someone took it the ordinary way after we removed the stale one: it is theirs.
+        if (isCode(error, 'EEXIST')) throw new Error(M().inProgress, { cause: error });
+        throw error;
+      }
+    } finally {
+      fs.rmSync(breaker, { recursive: true, force: true });
     }
-    fs.rmSync(tombstone, { recursive: true, force: true });
   }
   throw new Error(M().inProgress);
 }
