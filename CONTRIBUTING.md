@@ -101,13 +101,13 @@ Once the publish job is green, release the plugin to Claude Code users in a foll
 
 ```bash
 git switch -c chore/marketplace-0.9.0
-npm run release:marketplace   # checks npm has the version and GitHub has the tag, then moves the marketplace ref
-git commit -am "chore(release): point the Claude marketplace at v0.9.0"
+npm run release:marketplace   # checks npm has the version and GitHub has the tag, then moves the Claude + Codex marketplace refs
+git commit -am "chore(release): point the marketplaces at v0.9.0"
 ```
 
 `npm run version:set` already pinned the plugin's `.mcp.json` to the new server version (stable versions only), so
-inside the tag the plugin version, its server pin, and the npm package agree. The Claude marketplace serves that
-tag, not `main`: a marketplace that served `main` would hand out the plugin before npm had its server, and Claude
+inside the tag the plugin version, its server pin, and the npm package agree. Both marketplaces (Claude and Codex)
+serve that tag, not `main`: a marketplace that served `main` would hand out the plugin before npm had its server, and Claude
 Code updates a plugin only when its version changes, so a later fix-up commit could not reach users who already
 updated. `npm run plugin:check` rejects a dist-tag or range in `.mcp.json`, extra arguments, and a marketplace
 tag ahead of the root version. Why: [`docs/domain/skills-plugins.md`](docs/domain/skills-plugins.md).

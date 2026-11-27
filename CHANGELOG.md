@@ -28,6 +28,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The first sign-in of a new named Google profile reuses the OAuth client saved by your default login, so you no longer have to set `MIMI_SEED_GOOGLE_CLIENT_ID` / `MIMI_SEED_GOOGLE_CLIENT_SECRET` again.
 - `mimi_seed_status` reports YouTube as connected when a named profile has the upload permission, and names the profile to pass. Before, it looked only at the default login.
+- `jenkins_create_credential`, `jenkins_upload_keystore`, and `jenkins_upload_playstore_sa` now send nothing to Jenkins without `confirm: true`, including for a new credential id. The dry-run says whether the id will be created or replaced. Before, a new id was created on the first call, so a secret could leave your machine with no confirmation, and the replace path showed the approval dialog twice. Now it is shown once, when the upload actually happens.
+- The Codex plugin marketplace, like the Claude Code one, now offers a release only after its server version is on npm. Installing or updating the plugin between a release merge and its npm publish no longer fails to start the server.
+
+### Fixed
+
+- `mimi-seed auth instagram` / `threads` with your own Meta app:
+  - Cancelling consent now ends the login at once with "consent was cancelled". Before, a local redirect left it waiting 10 minutes, and a pasted URL was reported as the wrong address.
+  - The app secret can no longer be recalled with ↑ at a later prompt.
+  - Ctrl-C cancels with exit code 130 instead of finishing as a success.
+  - The setup now says to enter the redirect URI exactly as the Meta dashboard saved it, including a trailing `/`.
+- `MIMI_SEED_WEB_BASE`:
+  - Must be the team console's root address. With a path (`https://console.example.com/team`), some commands dropped the path and sent your token to the root of the host. A bare `?` or `#` broke every endpoint.
+  - When it is set but not accepted, every `mimi-seed` command now says why, instead of acting as if it were not set.
+  - A local `http://localhost` console no longer blocks Instagram/Threads sign-in; it falls back to the local login.
+- `mimi-seed telemetry`:
+  - `telemetry on` without a team console now explains that one is needed and exits 1, instead of printing "disabled".
+  - The "usage measurement is off" notice is no longer shown when there is no console to send it to.
+  - A one-off `MIMI_SEED_TELEMETRY=1` against another console no longer resets your saved consent.
+- A Google sign-in with no OAuth client configured is reported as not retriable, so agents ask you to set one up instead of retrying. The Google OAuth guide now covers what your own client's project needs: the consent screen, the APIs to enable, and the 7-day sign-in limit of *Testing* mode.
+
+### Security
+
+- The approval dialog also asks before `drive_upload_file` and `drive_update_file_metadata`, which can put a local file or move a folder into any Drive folder, and before `playstore_register_service_account`, which replaces a stored Play key. Drive uploads also refuse files inside `~/.mimi-seed/`.
+- The approval dialog:
+  - Shows hidden Unicode (tag characters, variation selectors, the Hangul filler) as escapes, so approved text cannot carry an invisible payload.
+  - Redacts common CI secret names such as `API_KEY`, `SIGNING_KEY`, and `STORE_PASS`.
+  - Treats a timed-out or interrupted dialog as unanswered rather than declined, so the call can be asked again right away.
 
 ### Tool changes
 

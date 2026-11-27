@@ -276,7 +276,10 @@ export function classifyError(e: unknown, ctx: ClassifyContext): AuthErrorPayloa
   // OAuth client 설정 조회 실패 — 구글이 아니라 mimi-seed 웹 콘솔 쪽 문제.
   // 네트워크 분류보다 먼저 검사해야 "oauth2.googleapis.com 연결 실패" 오진을 막는다.
   if (/mcp-auth-config/i.test(raw)) {
-    return make('CONFIG_FETCH_FAILED', T.configFetchFailed, { retriable: true, needsReauth: false });
+    // 클라이언트가 아예 설정되지 않은 경우는 다시 시도해도 같다 — 에이전트가 재시도 대신 사용자에게 설정을 안내하게.
+    // 콘솔 접속 실패·잘못된 응답은 일시적일 수 있어 그대로 재시도 가능.
+    const notConfigured = /mcp-auth-config not configured/i.test(raw);
+    return make('CONFIG_FETCH_FAILED', T.configFetchFailed, { retriable: !notConfigured, needsReauth: false });
   }
 
   // 네트워크 / 시스템 레벨

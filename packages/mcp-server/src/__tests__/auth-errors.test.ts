@@ -30,6 +30,16 @@ describe('classifyError — CONFIG_FETCH_FAILED (mcp-auth-config 마커)', () =>
   });
 });
 
+describe('classifyError — CONFIG_FETCH_FAILED 재시도 여부', () => {
+  it('클라이언트가 설정되지 않은 경우는 재시도 불가, 콘솔 접속 실패는 재시도 가능', () => {
+    const none = classifyError(new Error('mcp-auth-config not configured: set MIMI_SEED_GOOGLE_CLIENT_ID and MIMI_SEED_GOOGLE_CLIENT_SECRET'), { phase: 'login' });
+    expect(none.code).toBe('CONFIG_FETCH_FAILED');
+    expect(none.retriable).toBe(false);
+    const network = classifyError(new Error('mcp-auth-config fetch failed (cannot reach https://console.example.test: ECONNRESET)'), { phase: 'login' });
+    expect(network.retriable).toBe(true);
+  });
+});
+
 describe('classifyError — access_denied (미검증 앱 안내)', () => {
   it('테스트 사용자 등록 안내를 포함한다 (무한 재시도 루프 방지)', () => {
     const p = classifyError(new Error('access_denied'), { phase: 'login' });

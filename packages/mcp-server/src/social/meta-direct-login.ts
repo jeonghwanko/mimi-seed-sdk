@@ -91,8 +91,10 @@ export function parsePastedRedirect(input: string, app: MetaAppConfig, state: st
   try { url = new URL(input.trim()); } catch { throw new MetaDirectLoginError('state'); }
   const expected = new URL(app.redirectUri);
   if (url.origin !== expected.origin || url.pathname !== expected.pathname) throw new MetaDirectLoginError('state');
-  if (!sameState(url.searchParams.get('state') ?? '', state)) throw new MetaDirectLoginError('state');
+  // Meta's cancel redirect (?error=access_denied&error_reason=user_denied…) carries no state, so check it first —
+  // otherwise a cancelled consent is reported as "not this login's redirect". A denial can only abort the login.
   if (url.searchParams.has('error')) throw new MetaDirectLoginError('denied');
+  if (!sameState(url.searchParams.get('state') ?? '', state)) throw new MetaDirectLoginError('state');
   // Instagram appends "#_" to the redirect; URL parsing already moves it into the fragment.
   const code = url.searchParams.get('code');
   if (!validCode(code)) throw new MetaDirectLoginError('exchange');
@@ -204,14 +206,17 @@ async function captureLoopback(app: MetaAppConfig, state: string, timeoutMs: num
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     if (req.method !== 'GET' || url.pathname !== redirect.pathname) { res.writeHead(404).end(); return; }
-    if (!sameState(url.searchParams.get('state') ?? '', state)) { res.writeHead(400).end('Invalid login state.'); return; }
     if (settled) { res.writeHead(409).end('Login already handled.'); return; }
-    if (url.searchParams.has('error')) {
+    // Meta's cancel redirect carries no state. Checking state first answered "Invalid login state." and left the CLI
+    // waiting out the full timeout. A forged denial (state absent or matching) can only end this local login early.
+    const returned = url.searchParams.get('state');
+    if (url.searchParams.has('error') && (returned === null || sameState(returned, state))) {
       settled = true;
       res.writeHead(400).end('Login cancelled. Return to Mimi Seed.');
       fail(new MetaDirectLoginError('denied'));
       return;
     }
+    if (!sameState(returned ?? '', state)) { res.writeHead(400).end('Invalid login state.'); return; }
     const code = url.searchParams.get('code');
     if (!validCode(code)) { res.writeHead(400).end('Invalid callback.'); return; }
     settled = true;

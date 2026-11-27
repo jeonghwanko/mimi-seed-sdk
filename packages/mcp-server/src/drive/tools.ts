@@ -1,6 +1,7 @@
 import type { JWT, OAuth2Client } from 'google-auth-library';
 import { createHash } from 'node:crypto';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, realpathSync, statSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { google, type drive_v3 } from '../lib/googleapis-lite.js';
 import { mediaUploadOptions } from '../lib/google-timeouts.js';
@@ -43,6 +44,7 @@ const M = catalog(
     notFile: (p: string) => `파일이 아니야: ${p}`,
     unreadable: (p: string) => `파일을 읽을 수 없어: ${p}`,
     emptyFile: (p: string) => `빈 파일은 올리지 않아: ${p}`,
+    credentialDir: (p: string) => `~/.mimi-seed 안의 파일은 올리지 않아 (자격증명 폴더): ${p}`,
     conflict: (name: string, id: string) =>
       `같은 폴더에 "${name}" 이 이미 있어 (fileId ${id}). ` +
       '내용을 바꾸려면 drive_update_file_content, 하나 더 만들려면 onConflict="create_new".',
@@ -77,6 +79,7 @@ const M = catalog(
     notFile: (p: string) => `Not a file: ${p}`,
     unreadable: (p: string) => `Cannot read the file: ${p}`,
     emptyFile: (p: string) => `Empty files are not uploaded: ${p}`,
+    credentialDir: (p: string) => `Files inside ~/.mimi-seed are not uploaded (the credentials folder): ${p}`,
     conflict: (name: string, id: string) =>
       `"${name}" already exists in the same folder (fileId ${id}). ` +
       'To replace its content use drive_update_file_content; to create another one use onConflict="create_new".',
@@ -310,6 +313,17 @@ export interface LocalFile {
 }
 
 /** 업로드할 로컬 파일 점검 — 절대 경로, 일반 파일, 비어 있지 않음. */
+function isInsideCredentialDir(filePath: string): boolean {
+  let base: string;
+  try {
+    base = realpathSync(path.join(os.homedir(), '.mimi-seed'));
+  } catch {
+    return false; // 폴더가 없으면 그 안의 파일도 없다
+  }
+  const rel = path.relative(base, realpathSync(filePath));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
 export function inspectLocalFile(filePath: string, mimeType?: string): LocalFile {
   if (!path.isAbsolute(filePath)) throw new Error(M().notAbsolute);
   let size: number;
@@ -322,6 +336,9 @@ export function inspectLocalFile(filePath: string, mimeType?: string): LocalFile
     throw new Error(M().unreadable(filePath), { cause: e });
   }
   if (size === 0) throw new Error(M().emptyFile(filePath));
+  // filePath 는 프롬프트 인젝션이 고를 수 있는 값이다. 자격증명 폴더의 파일을 공유 폴더로 올리는 경로를 막는다
+  // (심볼릭 링크로 빠져나가지 못하게 realpath 로 비교). 그 밖의 파일은 승인 대화상자가 사용자에게 보여 준다.
+  if (isInsideCredentialDir(filePath)) throw new Error(M().credentialDir(filePath));
   return { path: filePath, size, mimeType: mimeType ?? guessMimeType(filePath) };
 }
 

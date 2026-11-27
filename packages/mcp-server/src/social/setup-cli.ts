@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { consoleUrl } from '#core/console-url.js';
+import { socialBrokerBase } from './broker-base.js';
 // mimi-seed-social-auth — Facebook 페이지 / Instagram 계정 연결.
 //
 // 검증·저장 구현은 facebook/setup.ts · instagram/setup.ts 에 있고, MCP 도구
@@ -100,7 +100,7 @@ const ko = {
     '   3. 같은 화면의 **Threads 앱 ID / 앱 시크릿**',
     '   4. 앱이 개발 모드면: 앱 역할 → Threads 테스터에 내 계정 추가 → threads.net 설정 → 웹사이트 권한에서 초대 수락',
   ],
-  redirectSuggest: (uri: string) => `  리디렉션 주소 (권장): ${uri}`,
+  redirectSuggest: (uri: string) => `  리디렉션 주소 (권장): ${uri}\n  (대시보드가 끝에 / 를 붙여 저장하면 그 모양 그대로 입력해야 합니다 — Meta 는 한 글자라도 다르면 거부합니다.)`,
   askAppId: (label: string) => `  ${label} 앱 ID (엔터: 토큰 직접 입력으로 전환): `,
   askAppSecret: (label: string) => `  ${label} 앱 시크릿: `,
   askRedirect: (def: string) => `  등록한 리디렉션 URI (엔터: ${def}): `,
@@ -170,7 +170,7 @@ const en: typeof ko = {
   thAskUserId: '  Threads user ID (optional, Enter to look it up): ',
   thExistingAction: '  [Enter/y] refresh current token  [r] reconnect  [n] skip: ',
   thRefreshing: '  🔄 Refreshing the existing Threads token...',
-  thRefreshFallback: '  Automatic refresh failed. Reconnecting in your browser.',
+  thRefreshFallback: '  Automatic refresh failed. Reconnecting.',
   profile: (id: string) => `  Social profile: ${id}`,
   invalidArgs: '  Usage: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token] [--reset-app]',
 
@@ -190,7 +190,7 @@ const en: typeof ko = {
     '   3. The **Threads app ID / app secret** on that screen',
     '   4. If the app is in development mode: App roles → add your account as a Threads Tester → accept under threads.net Settings → Website permissions',
   ],
-  redirectSuggest: (uri: string) => `  Redirect URI (suggested): ${uri}`,
+  redirectSuggest: (uri: string) => `  Redirect URI (suggested): ${uri}\n  (If the dashboard saves it with a trailing /, enter it exactly that way — Meta rejects any difference.)`,
   askAppId: (label: string) => `  ${label} app ID (Enter: paste a token instead): `,
   askAppSecret: (label: string) => `  ${label} app secret: `,
   askRedirect: (def: string) => `  Registered redirect URI (Enter: ${def}): `,
@@ -216,7 +216,15 @@ const en: typeof ko = {
 
 const M = resolveLang() === 'en' ? en : ko;
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+// historySize 0: 입력 기록이 남으면 숨겨 입력한 앱 시크릿이 다음 프롬프트에서 ↑ 키로 그대로 되살아난다.
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout, historySize: 0 });
+// readline 이 stdin 을 raw 모드로 잡고 있어 Ctrl-C 가 프로세스에 가지 않는다. 리스너가 없으면 rl 만 닫혀
+// 로그인 대기(로컬 콜백 서버)가 시간 초과까지 살아 있고, 프롬프트에서의 취소가 exit 0 (성공)으로 끝났다.
+rl.on('SIGINT', () => {
+  console.log(`\n${M.cancelled}`);
+  rl.close();
+  process.exit(130);
+});
 const ask = (q: string) => new Promise<string>((r) => rl.question(q, (a) => r(a.trim())));
 
 /**
@@ -383,7 +391,7 @@ async function setupInstagram(profile?: string, manualToken = false, resetApp = 
     return true;
   }
 
-  if (!manualToken && consoleUrl(process.env.MIMI_SEED_WEB_BASE)) {
+  if (!manualToken && socialBrokerBase()) {
     console.log(M.igBrowser);
     try {
       const result = await connectInstagramInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); console.log(M.thResume); } });
@@ -444,7 +452,7 @@ async function setupThreads(profile?: string, manualToken = false, resetApp = fa
     }
   }
 
-  if (!manualToken && consoleUrl(process.env.MIMI_SEED_WEB_BASE)) {
+  if (!manualToken && socialBrokerBase()) {
     console.log(M.thBrowser);
     try {
       const result = await connectThreadsInBrowser({ ...options, onUrl: (url) => { console.log(M.thUrl); console.log(url); console.log(M.thResume); } });

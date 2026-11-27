@@ -254,8 +254,8 @@ export const catalog = {
     threads_post_video: 'public; public video URL',
     threads_post_carousel: 'public; 2–20',
     // Build / CI / signing
-    jenkins_upload_keystore: '새 id 는 바로 생성, 기존 id 교체만 confirm',
-    jenkins_upload_playstore_sa: '새 id 는 바로 생성, 기존 id 교체만 confirm',
+    jenkins_upload_keystore: 'confirm 전에는 보내지 않음 — dry-run 이 새 id 생성/기존 id 교체를 알려줌',
+    jenkins_upload_playstore_sa: 'confirm 전에는 보내지 않음 — dry-run 이 새 id 생성/기존 id 교체를 알려줌',
     jenkins_create_job: '`overwrite=true` replaces',
     jenkins_update_job: 'replaces config.xml',
     jenkins_trigger_build: 'confirm 필요; 같은 `request_id` 는 로컬 기록으로 한 번만 발송',

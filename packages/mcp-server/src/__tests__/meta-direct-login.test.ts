@@ -77,6 +77,10 @@ describe('pasted redirect', () => {
     expect(() => parsePastedRedirect(`https://localhost:8765/callback?error=access_denied&state=${state}`, pasteApp, state))
       .toThrow(expect.objectContaining({ code: 'denied' }));
   });
+  it('reports Meta\'s cancel redirect, which carries no state, as a denial (not a wrong URL)', () => {
+    expect(() => parsePastedRedirect('https://localhost:8765/callback?error=access_denied&error_reason=user_denied#_', pasteApp, state))
+      .toThrow(expect.objectContaining({ code: 'denied' }));
+  });
 });
 
 describe('code exchange', () => {
@@ -138,6 +142,23 @@ describe('connectWithMetaApp', () => {
       },
     });
     expect(connectInstagram).toHaveBeenCalledTimes(1);
+  });
+
+  it('loopback mode: Meta\'s cancel redirect without state ends the login at once as denied', async () => {
+    const port = 20000 + Math.floor(Math.random() * 20000);
+    const app = { ...pasteApp, redirectUri: `http://127.0.0.1:${port}/cb` };
+    const started = Date.now();
+    await expect(connectWithMetaApp('threads', {
+      app, timeoutMs: 5000,
+      openBrowser: async () => {
+        await new Promise<void>((resolve, reject) => {
+          const req = request(`http://127.0.0.1:${port}/cb?error=access_denied&error_reason=user_denied`, (res) => { res.resume(); res.on('end', resolve); });
+          req.on('error', reject); req.end();
+        });
+      },
+    })).rejects.toMatchObject({ code: 'denied' });
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(connectThreads).not.toHaveBeenCalled();
   });
 
   it('loopback mode: times out without saving and releases the port', async () => {

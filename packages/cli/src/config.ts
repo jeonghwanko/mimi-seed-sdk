@@ -1,4 +1,4 @@
-import { consoleUrl } from "#core/console-url.js";
+import { consoleBase, consoleUrl } from "#core/console-url.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -58,7 +58,7 @@ export const CONFIG_LOCATION = CONFIG_PATH;
 export async function getEffectiveConfig(): Promise<MimiSeedConfig | null> {
   const envToken = process.env.MIMI_SEED_TOKEN;
   if (envToken) {
-    const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+    const webBase = consoleBase(process.env.MIMI_SEED_WEB_BASE);
     if (!webBase) return null;
     return {
       token: envToken,
@@ -69,5 +69,5 @@ export async function getEffectiveConfig(): Promise<MimiSeedConfig | null> {
     };
   }
   const saved = await readConfig();
-  return saved?.token && consoleUrl(saved.webBase) && consoleUrl(saved.endpoint) ? saved : null;
+  return saved?.token && consoleBase(saved.webBase) && consoleUrl(saved.endpoint) ? saved : null;
 }

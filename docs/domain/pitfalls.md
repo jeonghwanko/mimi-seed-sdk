@@ -228,9 +228,11 @@ id 가 이미 있으면 갱신한다 — 그런데 종류(Secret text vs Secret 
   흔들리지 않는다. 메타데이터를 못 읽으면 막지 않는다 — 부재를 이유로 정상 작업을 차단하지 않는다.
 - Play SA 기본 id 는 `<앱>-playstore-sa` 다. 무엇을 담는지가 이름에 드러나야 범용 이름과 부딪히지 않는다.
 
-같은 종류끼리의 교체도 되돌릴 수 없으므로 세 도구 모두 **새 id 는 바로 만들고, 이미 있는 id 는
-`confirm: true` 가 있어야 교체**한다 (없으면 "이미 존재" dry-run — manifest `ownGate`).
-`jenkins_upload_playstore_sa` 만 한동안 말없이 덮어썼다가 같은 규칙으로 맞췄다.
+같은 종류끼리의 교체도 되돌릴 수 없고, 새 id 생성도 비밀을 외부(Jenkins)로 보내는 일이므로 세 도구 모두
+**`confirm: true` 전에는 아무것도 보내지 않는다** (dry-run 이 "생성 예정" 또는 "이미 존재 — 교체" 를 알려준다,
+manifest `ownGate`). 예전엔 새 id 는 확인 없이 바로 만들었는데, 플래그가 없는 그 경로는 사람 승인 게이트(§26)가
+잡지 못했다 — 그래서 manifest `approval` 에 넣었더니 교체 경로에서 대화상자가 두 번 떴다. 지금은 confirm 하나가
+모든 경로를 막아 대화상자도 실행 직전 한 번이다. `jenkins_upload_playstore_sa` 는 한동안 말없이 덮어쓰기까지 했다.
 
 새 credential 도구를 만든다면 upsert 전에 같은 검사를 붙일 것 (`jenkins-credentials.test.ts`).
 
@@ -386,18 +388,25 @@ So a call that arrives with a confirm-style flag set is held until the **user** 
   credential sync, public YouTube changes, paid generation, `confirmCreate`). A new tool that adds such a flag is
   covered from its first line. Matching three exact names once let `confirmCreate` through.
 - **The flag is not the only way to the dangerous branch.** `jenkins_save_config` / `ci_save_config` take a URL /
-  host, and the next credential upload (a *new* Jenkins id runs without a flag) goes there; the other
-  `*_save_config` replace a stored token; `ci_trigger_build` starts a deploy workflow with no flag. These are listed
-  in the manifest's `approval` and ask on **every** call. When you add a tool that changes where data goes, or that
+  host that every later credential upload goes to; the other `*_save_config` replace a stored token;
+  `ci_trigger_build` starts a deploy workflow with no flag; `drive_upload_file` / `drive_update_file_metadata` put any
+  local file (or move any folder) into any Drive folder; `playstore_register_service_account` replaces a stored key.
+  These are listed in the manifest's `approval` and ask on **every** call. Drive uploads additionally refuse anything
+  under `~/.mimi-seed/` (realpath, so a symlink cannot launder it). Prefer the other fix when you can: the Jenkins credential uploads used to create a *new* id with no
+  flag, and listing them in `approval` asked twice on the replace path — making `confirm` gate every path
+  (dry-run first, even for a new id) gives exactly one dialog, at the call that sends. When you add a tool that changes where data goes, or that
   sends a secret on a flagless path, add it there — `tool-manifest.test.ts` only checks the list is well-formed.
 - **Only `accept` + a ticked `approve` box runs.** `accept` alone could be one Enter keypress; an unticked box,
   decline, cancel, timeout, or a client error is a refusal. Never count a failure as consent.
 - **The dialog must not be forgeable by its own arguments.** Values are model-supplied: a `\n` in a post's text
   once rendered a fake `profile:` line and a "✅ Verified" footer, and a 200-char cut hid a URL appended after a
-  benign prefix. Strings render as JSON literals, invisible and bidi characters as `\uXXXX`, and a long value as
+  benign prefix. Strings render as JSON literals, format and default-ignorable characters (bidi controls, zero-width,
+  the Unicode *tag* block that can smuggle hidden ASCII, variation selectors, the Hangul filler) as `\uXXXX` / `\u{…}`, and a long value as
   head + tail with an explicit "middle omitted — decline if you can't check it" warning. Secrets are still redacted.
-- **Repeated asks are refused, not re-asked.** After a decline, timeout, or failure, the same tool + args is
-  refused for 5 min without a dialog, and only one dialog is open at a time — an injected agent cannot wear the
+- **Repeated asks are refused, not re-asked — but only after a real decline.** After the user declines, cancels, or
+  leaves the box unticked, the same tool + args is refused for 5 min without a dialog. A timeout or an interrupted
+  call (the client's `tools/call` timeout is 60 s by default; Esc aborts the turn) is *not* a decline — recording it as
+  one blocked the retry right after the user said "go ahead". Also, and only one dialog is open at a time — an injected agent cannot wear the
   user down with 25 identical prompts or race two dialogs.
 - **Unsupported clients degrade under `auto`, by design — but a typo does not.** Refusing outright would break
   every client without form elicitation. Teams that need the guarantee set `MIMI_SEED_APPROVAL=required`, and any

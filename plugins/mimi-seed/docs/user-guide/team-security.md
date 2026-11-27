@@ -33,7 +33,8 @@ release, an IAM key, or a public post. Keep a person in the loop:
 - **Do not auto-approve Mimi Seed's write tools.** Leave them out of the client's allow list, and don't run Mimi
   Seed in a mode that skips permission prompts. Read-only tools are the safe ones to allow.
 - **Answer the approval dialog yourself.** When the agent confirms an action that is hard to undo or that
-  publishes — or saves a connection setting, uploads a credential to Jenkins, or starts a CI workflow — Mimi Seed
+  publishes — or saves a connection setting, uploads a credential to Jenkins, starts a CI workflow, uploads or
+  moves Drive files, or registers a Play service account — Mimi Seed
   opens a dialog in the client with the tool and its arguments, and runs only if you tick *approve* and confirm.
   Check the target app, track, version, URL, and text against what you asked for. If the dialog says a value was
   shortened and you can't check the hidden part, decline.

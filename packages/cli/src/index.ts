@@ -23,6 +23,7 @@ import { printMcpSetup, writeCodexMcpConfig, claudeMcpAddCommand } from "./mcp-c
 import { printCommandHelp, printHelp } from "./help.js";
 import { runMcpBin } from "./mcp-bin.js";
 import { catalog, t } from "./i18n.js";
+import { consoleBaseProblem, type ConsoleUrlProblem } from "#core/console-url.js";
 import { version as CLI_VERSION } from "../package.json";
 
 // 이 파일에서만 쓰는 문구. 공통 문구(common.error 등)는 i18n.ts 의 t() 에 있다.
@@ -47,6 +48,15 @@ const M = catalog(
     claudeTitle: "Claude Code MCP 등록 — 아래 한 줄을 그대로 실행하세요:",
     claudeWarn:
       "  ⚠ 실제 토큰이 포함된 명령입니다 (셸 히스토리에 남음). 토큰은 ~/.mimi-seed/config.json 에도 저장되어 있습니다.",
+    webBaseIgnored: (problem: ConsoleUrlProblem) =>
+      `⚠ MIMI_SEED_WEB_BASE 를 무시합니다: ${({
+        invalid: "URL 형식이 아닙니다",
+        retired: "종료된 공개 콘솔 주소입니다",
+        "not-https": "https 가 아닙니다 (http 는 localhost 개발 서버만)",
+        credentials: "URL 에 사용자 정보가 들어 있습니다",
+        query: "? 나 # 를 포함할 수 없습니다",
+        path: "팀 콘솔의 루트 주소만 받습니다 (예: https://console.example.com — 경로 없이)",
+      } satisfies Record<ConsoleUrlProblem, string>)[problem]}. 원격 기능은 연결되지 않은 것으로 동작합니다.`,
   },
   {
     notConnected: "For remote commands, set MIMI_SEED_WEB_BASE to your team console and run mimi-seed init.",
@@ -69,6 +79,15 @@ const M = catalog(
     claudeTitle: "Claude Code MCP registration — run this one line as-is:",
     claudeWarn:
       "  ⚠ This command contains the real token (it stays in your shell history). The token is also stored in ~/.mimi-seed/config.json.",
+    webBaseIgnored: (problem: ConsoleUrlProblem) =>
+      `⚠ Ignoring MIMI_SEED_WEB_BASE: ${({
+        invalid: "it is not a URL",
+        retired: "it is the retired public console",
+        "not-https": "it is not https (http only for a localhost dev server)",
+        credentials: "it contains user credentials",
+        query: "it cannot contain ? or #",
+        path: "only the team console's root address is accepted (e.g. https://console.example.com, no path)",
+      } satisfies Record<ConsoleUrlProblem, string>)[problem]}. Remote features behave as not connected.`,
   },
 );
 
@@ -151,6 +170,11 @@ async function main(): Promise<void> {
     log(CLI_VERSION);
     return;
   }
+
+  // 설정했는데 받아들이지 않은 콘솔 주소는 조용히 "미설정" 으로 바뀌면 안 된다 — status·doctor·init 이 이유 없이
+  // "MIMI_SEED_WEB_BASE 를 지정하라" 고만 말했다. 어느 명령이든 한 번 이유를 알린다 (stderr — 출력 파싱을 깨지 않게).
+  const webBaseProblem = consoleBaseProblem(process.env.MIMI_SEED_WEB_BASE);
+  if (webBaseProblem) process.stderr.write(`${M().webBaseIgnored(webBaseProblem)}\n`);
 
   // 명령별 --help / -h. auth 는 cmdAuth 가 자체 상세 help 를 출력하므로 위임.
   if (cmd && cmd !== "auth" && (restArgs.includes("--help") || restArgs.includes("-h"))) {
