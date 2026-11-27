@@ -148,7 +148,7 @@
 | Facebook (`facebook.ts`) | `facebook_list_pages` · `facebook_get_page` · `facebook_current_config` · **W** `facebook_save_config` · **D** `facebook_post_photo` (public) · **D** `facebook_post_multi_photo` (public) |
 | Instagram (`instagram.ts`) | `instagram_get_account` · **W** `instagram_save_config` · **D** `instagram_post_image` (public) · **D** `instagram_post_carousel` (public) |
 | Threads (`threads.ts`) — Meta Threads Graph API, **text-first** (IG 와 별개 계정·토큰) | `threads_get_account` · `threads_current_config` · **W** `threads_save_config` · **W** `threads_refresh_token` · **D** `threads_post` (public; text or image) · **D** `threads_post_video` (public; public video URL) · **D** `threads_post_carousel` (public; 2–20) |
-| Cross-post (`crosspost.ts`) — one post to Facebook / Instagram / Threads / YouTube / TikTok through the per-platform functions | **D** `social_publish` (dry-run plan by default; nothing posts if any target has a problem; every pre-send check runs before anything is sent; the same post (platform + account + content) is never posted twice; an unknown outcome is resent only via resendUnknown) |
+| Cross-post (`crosspost.ts`) — one post to Facebook / Instagram / Threads / YouTube / TikTok through the per-platform functions | **D** `social_publish` (dry-run plan by default; nothing posts if any target has a problem; every pre-send check runs before anything is sent; the same post (platform + account + content) is never posted twice unless named in repost; an unknown outcome blocks that account until resendUnknown) |
 <!-- generated:catalog-table:cloud:end -->
 
 ## Build / CI / signing

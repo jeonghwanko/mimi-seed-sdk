@@ -1,18 +1,22 @@
-// social_publish's at-most-once record, one per **post**: a platform + the account it resolves to + the exact content
-// (tools.ts targetKey). That is the whole notion of "the same post"; there is no request id.
+// social_publish's at-most-once records.
 //
-//   ~/.mimi-seed/social-publish/targets/<sha256(platform:key)>.json   (0600)  { state, at, id?, url?, error? }
-//   ~/.mimi-seed/social-publish/targets/<sha256(platform:key)>.lock/  (0700)  owner pid; held while publishing it
+//   ~/.mimi-seed/social-publish/targets/<sha256(platform:postKey)>.json      one per **post** (platform + account +
+//                                                                           exact content): { state, at, id?, url?, error? }
+//   ~/.mimi-seed/social-publish/accounts/<sha256(platform:account)>.json     one per **account** while a send to it is
+//                                                                           unresolved: { postKey, state, at }
+//   ~/.mimi-seed/social-publish/accounts/<sha256(platform:account)>.lock/    held while publishing to that account
 //
-// A post is marked `sending` before its publishing call and `posted` / `failed` / `unknown` after it. The lock makes
-// two concurrent calls with the same post (whatever else they contain) take turns, so the second one sees `posted`.
+// The account marker exists from just before a publishing call until its outcome is known. A `sending` or `unknown`
+// marker blocks every post to that account — even edited content — until a person checks the platform and passes
+// markPosted (it is live) or resendUnknown (it is not), so a post whose outcome is unknown can never go out a second
+// time in another form.
 // Not a credential, but it lives under ~/.mimi-seed and uses the same atomic 0600 writer. This module is its only
 // writer.
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { CREDENTIAL_DIR_MODE, writeCredentialFile, writeCredentialJson } from '#core/atomic-write.js';
 import { readCredentialFileSync } from '#core/credential-read.js';
 import { catalog } from '#core/lang.js';
@@ -28,16 +32,25 @@ export interface PostRecord {
   error?: string;
 }
 
+/** An account with a send whose outcome is not known yet (or never became known). */
+export interface PendingRecord {
+  postKey: string;
+  state: 'sending' | 'unknown';
+  at: string;
+}
+
 const M = catalog(
   {
     unreadable: (file: string) =>
       `게시 기록 파일을 읽을 수 없어 이미 게시됐는지 판단할 수 없습니다: ${file}. 파일을 확인한 뒤 다시 시도하세요.`,
-    inProgress: '같은 게시물이 지금 다른 호출에서 게시되고 있습니다. 끝난 뒤 결과를 확인하세요.',
+    inProgress: '이 계정에 지금 다른 호출이 게시하고 있습니다. 끝난 뒤 다시 보내세요 — 이미 게시된 곳은 건너뜁니다.',
+    deadBreaker: (dir: string) => `이전 실행이 잠금 정리 도중 종료되어 표시가 남았습니다. 다른 게시가 진행 중이 아니라면 ${dir} 폴더를 지우고 다시 보내세요.`,
   },
   {
     unreadable: (file: string) =>
       `Cannot read the publish record, so it is unknown whether this was already posted: ${file}. Check the file, then try again.`,
-    inProgress: 'The same post is being published by another call right now. Check its result when it finishes.',
+    inProgress: 'Another call is publishing to this account right now. Send again once it finishes — whatever it posted is skipped.',
+    deadBreaker: (dir: string) => `An earlier run stopped while clearing a lock and left a marker behind. If nothing else is publishing, delete the folder ${dir} and send again.`,
   },
 );
 
@@ -47,21 +60,28 @@ const HEARTBEAT_MS = 60 * 1000;
 /** A breaker held longer than this belongs to a process that died while replacing a stale lock (it takes ms). */
 const STALE_BREAKER_MS = 60 * 1000;
 
-function targetsDir(): string {
-  return path.join(os.homedir(), '.mimi-seed', 'social-publish', 'targets');
+function root(): string {
+  return path.join(os.homedir(), '.mimi-seed', 'social-publish');
 }
 
-function base(platform: SocialTarget, key: string): string {
-  return path.join(targetsDir(), createHash('sha256').update(`${platform}:${key}`).digest('hex'));
+function hashed(dir: string, platform: SocialTarget, id: string): string {
+  return path.join(root(), dir, createHash('sha256').update(`${platform}:${id}`).digest('hex'));
 }
 
-export function recordPath(platform: SocialTarget, key: string): string {
-  return `${base(platform, key)}.json`;
+export function recordPath(platform: SocialTarget, postKey: string): string {
+  return `${hashed('targets', platform, postKey)}.json`;
 }
 
-/** Missing → null. Unreadable → throw: treating it as missing would post again what it recorded. */
-export function readRecord(platform: SocialTarget, key: string): PostRecord | null {
-  const file = recordPath(platform, key);
+function pendingPath(platform: SocialTarget, account: string): string {
+  return `${hashed('accounts', platform, account)}.json`;
+}
+
+function lockPath(platform: SocialTarget, account: string): string {
+  return `${hashed('accounts', platform, account)}.lock`;
+}
+
+/** Missing → null. Unreadable → throw: treating it as missing could post again what it recorded. */
+function readJsonRecord<T>(file: string, valid: (value: Partial<T>) => boolean): T | null {
   if (!fs.existsSync(file)) return null;
   let parsed: unknown;
   try {
@@ -69,32 +89,70 @@ export function readRecord(platform: SocialTarget, key: string): PostRecord | nu
   } catch (error) {
     throw new Error(M().unreadable(file), { cause: error });
   }
-  const record = parsed as Partial<PostRecord> | null;
-  if (!record || typeof record !== 'object' || typeof record.state !== 'string' || typeof record.at !== 'string') {
-    throw new Error(M().unreadable(file));
-  }
-  return record as PostRecord;
+  if (!parsed || typeof parsed !== 'object' || !valid(parsed)) throw new Error(M().unreadable(file));
+  return parsed as T;
 }
 
-export function writeRecord(platform: SocialTarget, key: string, record: PostRecord): void {
-  writeCredentialJson(recordPath(platform, key), record);
+export function readRecord(platform: SocialTarget, postKey: string): PostRecord | null {
+  return readJsonRecord<PostRecord>(recordPath(platform, postKey), (r) => typeof r.state === 'string' && typeof r.at === 'string');
 }
 
-// ── lock ─────────────────────────────────────────────────────────────────────
+export function writeRecord(platform: SocialTarget, postKey: string, record: PostRecord): void {
+  writeCredentialJson(recordPath(platform, postKey), record);
+}
+
+export function readPending(platform: SocialTarget, account: string): PendingRecord | null {
+  return readJsonRecord<PendingRecord>(pendingPath(platform, account),
+    (r) => typeof r.postKey === 'string' && (r.state === 'sending' || r.state === 'unknown') && typeof r.at === 'string');
+}
+
+export function writePending(platform: SocialTarget, account: string, pending: PendingRecord): void {
+  writeCredentialJson(pendingPath(platform, account), pending);
+}
+
+export function clearPending(platform: SocialTarget, account: string): void {
+  fs.rmSync(pendingPath(platform, account), { force: true });
+}
+
+/**
+ * Compare-and-set on the account marker: replace it with `next` (or remove it, for null) only if it is still the
+ * one this send wrote (same postKey and `at`). Returns false — and changes nothing — when another call has replaced
+ * it meanwhile (possible only after this call's lock went stale), so one call's outcome never erases another's.
+ */
+export function replacePendingIfOurs(
+  platform: SocialTarget,
+  account: string,
+  ours: { postKey: string; at: string },
+  next: PendingRecord | null,
+): boolean {
+  const current = readPending(platform, account);
+  if (!current || current.postKey !== ours.postKey || current.at !== ours.at) return false;
+  if (next) writePending(platform, account, next);
+  else clearPending(platform, account);
+  return true;
+}
+
+// ── account lock ─────────────────────────────────────────────────────────────
 
 /** Locks this process holds right now. A lock naming our pid that is not here was left by an earlier run. */
 const heldHere = new Set<string>();
 
 const isCode = (error: unknown, code: string) => (error as NodeJS.ErrnoException).code === code;
 
-function lockOwner(lock: string): number | null {
+/** The owner file holds "<pid> <token>": the pid says whether the holder is alive, the token which acquisition it is. */
+function readOwner(lock: string): { pid: number; token: string } | null {
   try {
-    const pid = Number(readCredentialFileSync(path.join(lock, 'owner')));
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
+    const [pidText, token = ''] = readCredentialFileSync(path.join(lock, 'owner')).trim().split(' ');
+    const pid = Number(pidText);
+    return Number.isInteger(pid) && pid > 0 ? { pid, token } : null;
   } catch {
     // No owner file: one caught between mkdir and the owner write. Decided by age instead.
     return null;
   }
+}
+
+function lockOwner(lock: string): number | null {
+  return readOwner(lock)?.pid ?? null;
 }
 
 /**
@@ -123,48 +181,77 @@ function lockState(lock: string): 'missing' | boolean {
   }
 }
 
-function takeLock(lock: string): () => void {
+function takeLock(lock: string): AccountLock {
   fs.mkdirSync(lock, { mode: CREDENTIAL_DIR_MODE });
+  // A pid alone cannot tell two acquisitions in this same process apart (e.g. after a long suspend, another call
+  // here judged this lock stale and took it): the token can.
+  const token = randomUUID();
+  const ours = () => {
+    const owner = readOwner(lock);
+    return owner?.pid === process.pid && owner.token === token;
+  };
   try {
-    writeCredentialFile(path.join(lock, 'owner'), String(process.pid));
+    writeCredentialFile(path.join(lock, 'owner'), `${process.pid} ${token}`);
   } catch (error) {
-    // Without the owner file the lock would block this post until it ages out; drop it before rethrowing.
+    // Without the owner file the lock would block this account until it ages out; drop it before rethrowing.
     fs.rmSync(lock, { recursive: true, force: true });
     throw error;
   }
   heldHere.add(lock);
+  const refresh = () => {
+    const now = new Date();
+    fs.utimesSync(lock, now, now);
+  };
   // Keep the lock fresh while a long upload runs, so it never looks stale to another caller.
   const heartbeat = setInterval(() => {
     try {
-      const now = new Date();
-      fs.utimesSync(lock, now, now);
+      refresh();
     } catch {
-      // Removed under us (a breaker judged it stale after a long suspend): release() below copes with that.
+      // Removed under us (judged stale after a long suspend): confirmHeld() before each send catches that.
     }
   }, HEARTBEAT_MS);
   heartbeat.unref();
-  return () => {
-    clearInterval(heartbeat);
-    heldHere.delete(lock);
-    // Remove it only if it is still ours: after a suspend, another caller may have replaced it legitimately.
-    if (lockOwner(lock) === process.pid) fs.rmSync(lock, { recursive: true, force: true });
+  return {
+    confirmHeld() {
+      // Before every publishing call: after a suspend, another caller may have judged this lock stale and taken it.
+      if (!ours()) throw new Error(M().inProgress);
+      refresh();
+    },
+    release() {
+      clearInterval(heartbeat);
+      // Remove it (and its in-process entry) only if it is still this acquisition: after a suspend, another caller —
+      // possibly in this same process — may have replaced it legitimately.
+      if (ours()) {
+        heldHere.delete(lock);
+        fs.rmSync(lock, { recursive: true, force: true });
+      }
+    },
   };
 }
 
-/** True while a live call holds this post's lock (it is being published right now). */
-export function isPostLocked(platform: SocialTarget, key: string): boolean {
-  return lockState(`${base(platform, key)}.lock`) === false;
+export interface AccountLock {
+  /** Throws if the lock is no longer ours; refreshes it otherwise. Call right before each publishing call. */
+  confirmHeld(): void;
+  release(): void;
 }
 
-/** The message for a post another call is publishing right now. */
+/** True while a live call holds this account's lock (it is publishing to it right now). */
+export function isAccountLocked(platform: SocialTarget, account: string): boolean {
+  return lockState(lockPath(platform, account)) === false;
+}
+
 export function inProgressMessage(): string {
   return M().inProgress;
 }
 
-/** Reserve one post for this process. Returns the release function; throws if another call is publishing it. */
-export function acquirePostLock(platform: SocialTarget, key: string): () => void {
-  fs.mkdirSync(targetsDir(), { recursive: true, mode: CREDENTIAL_DIR_MODE });
-  const lock = `${base(platform, key)}.lock`;
+/**
+ * Reserve an account for this process; throws "in progress" if another live call holds it. A stale lock is replaced
+ * only while holding a breaker directory (mkdir, so one caller at a time) and after re-checking it. A breaker is never
+ * removed by anyone but its creator; one left by a run that died is reported for a person to delete.
+ */
+export function acquireAccountLock(platform: SocialTarget, account: string): AccountLock {
+  fs.mkdirSync(path.join(root(), 'accounts'), { recursive: true, mode: CREDENTIAL_DIR_MODE });
+  const lock = lockPath(platform, account);
   const breaker = `${lock}.break`;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -176,8 +263,6 @@ export function acquirePostLock(platform: SocialTarget, key: string): () => void
     if (state === 'missing') continue;
     if (!state) throw new Error(M().inProgress);
 
-    // Replacing a stale lock is serialized by a breaker directory, and staleness is checked again while holding it,
-    // so two callers that both saw the old lock cannot each replace it and both publish.
     try {
       fs.mkdirSync(breaker, { mode: CREDENTIAL_DIR_MODE });
     } catch (error) {
@@ -189,10 +274,10 @@ export function acquirePostLock(platform: SocialTarget, key: string): () => void
         if (!isCode(statError, 'ENOENT')) throw statError;
         continue; // the other breaker finished: look again
       }
-      if (breakerAge < STALE_BREAKER_MS) throw new Error(M().inProgress, { cause: error });
-      // Its holder died mid-replacement: clear it and look again.
-      fs.rmSync(breaker, { recursive: true, force: true });
-      continue;
+      // A breaker is held for milliseconds; an old one means a run died in that instant. Removing it automatically
+      // cannot be made race-free (whatever is at the path may already be someone else's fresh one), so a person does.
+      if (breakerAge >= STALE_BREAKER_MS) throw new Error(M().deadBreaker(breaker), { cause: error });
+      throw new Error(M().inProgress, { cause: error });
     }
     try {
       const again = lockState(lock);

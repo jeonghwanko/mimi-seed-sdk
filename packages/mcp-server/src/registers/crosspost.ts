@@ -36,6 +36,11 @@ const metaOptions = z.object({
   text: z.string().optional().describe('이 플랫폼에만 쓸 본문 (생략 시 공통 text)'),
 }).optional();
 
+const approval = z.object({
+  platform: z.enum(SOCIAL_TARGETS),
+  at: z.string().min(1).max(64).describe('계획에 표시된 그 기록의 at (승인 대상 기록을 정확히 지목)'),
+});
+
 export function registerCrosspostTools(server: ToolRegistrar) {
   server.tool(
     'social_publish',
@@ -44,7 +49,7 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       'confirm 없이 부르면 dry-run 계획만 돌려줍니다: 플랫폼별 동작·본문·미디어와 게시를 막는 문제. 네트워크 호출은 하지 않습니다.',
       '한 대상이라도 문제가 있으면 어디에도 게시하지 않습니다. 사용자에게 계획을 보여주고 명시 승인을 받은 뒤 confirm: true 로 다시 호출하세요.',
       '미디어 규칙은 플랫폼별 도구와 같습니다: Facebook·Instagram 은 public HTTPS imageUrls(1~10장)가 필요하고, Threads 는 텍스트·이미지(1~20장)·videoUrl 중 하나, YouTube 는 로컬 videoFilePath 와 youtube.expectedChannelId, TikTok 은 tiktok_business_plan_video_post 로 만든 tiktok.planId 를 씁니다.',
-      '결과는 플랫폼별로 돌려줍니다. 같은 게시물(플랫폼·계정·내용이 같음)은 두 번 게시하지 않습니다: 다시 부르면 이미 게시된 곳은 건너뛰고, 실패한 곳만 보냅니다. 결과를 알 수 없는 플랫폼(타임아웃 등)은 사람이 그 플랫폼에서 확인한 뒤 resendUnknown 으로 지정해야만 다시 보냅니다.',
+      '결과는 플랫폼별로 돌려줍니다. 같은 게시물(플랫폼·계정·내용이 같음)은 두 번 게시하지 않습니다: 다시 부르면 이미 게시된 곳은 건너뛰고, 실패한 곳만 보냅니다. 같은 내용을 일부러 다시 올리려면 repost: [{ platform, at }] 으로 계획에 표시된 그 게시 기록의 at 을 지정합니다. 결과를 알 수 없는 게시가 있는 계정은 내용이 달라도 막히며, 사람이 그 플랫폼에서 확인한 뒤 resendUnknown: [{ platform, at }] 으로 계획에 표시된 at 을 지정해야만 다시 보냅니다. 확인해 보니 이미 올라가 있다면 markPosted: [{ platform, at }] 으로 게시됨으로 기록합니다. 승인은 지정한 기록 하나에만 쓰입니다.',
     ].join(' '),
     {
       targets: z.array(z.enum(SOCIAL_TARGETS)).min(1).max(SOCIAL_TARGETS.length).describe('게시할 플랫폼 목록 (이 순서대로 게시)'),
@@ -68,7 +73,9 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       tiktok: z.object({
         planId: z.string().min(1).max(128).describe('tiktok_business_plan_video_post 가 만든 계획 ID (캡션·설정은 계획의 값을 씁니다)'),
       }).optional(),
-      resendUnknown: z.array(z.enum(SOCIAL_TARGETS)).max(SOCIAL_TARGETS.length).optional().describe('결과를 알 수 없었던 플랫폼 중, 사용자가 그 플랫폼에서 게시되지 않았음을 확인한 것만. 다시 보냅니다.'),
+      resendUnknown: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('사용자가 그 플랫폼에서 게시되지 않았음을 확인한, 결과를 알 수 없었던 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록만 다시 보내며, 이후 새로 생긴 결과 불명은 다시 막힙니다.'),
+      repost: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('사용자가 일부러 다시 게시하려는 이미 게시된 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 한 번 다시 게시되면 그 승인은 더 이상 맞지 않아 재시도로 반복 게시되지 않습니다.'),
+      markPosted: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('결과를 알 수 없었던 기록 중, 사용자가 그 플랫폼에서 실제로 올라가 있음을 확인한 것. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록을 게시됨으로 남기고 계정 차단을 풉니다 (보내지는 않음).'),
       confirm: z.boolean().default(false).describe('사용자의 명시 승인 후 true. false 면 dry-run 계획만 반환합니다.'),
     },
     async ({ confirm, ...input }) => {
