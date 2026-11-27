@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SOCIAL_PROFILE_ID_PATTERN } from '#core/project-manifest.js';
 import { GOOGLE_PROFILE_ID } from '../auth/google-auth.js';
 import { YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
-import { executePublish, planPublish, SOCIAL_TARGETS } from '../social/publish.js';
+import { executePublish, planPublish, SOCIAL_TARGETS } from '../crosspost/tools.js';
 import { jsonResult } from '../lib/mcp-response.js';
 import { catalog } from '#core/lang.js';
 
@@ -14,7 +14,7 @@ const M = catalog(
     preview:
       'dry-run — 아무것도 게시하지 않았습니다. 아래 계획을 사용자에게 보여주고 명시 승인을 받은 뒤, 같은 인자에 confirm: true 를 더해 다시 호출하세요.',
     blocked: '문제가 있는 대상이 있어 아무 곳에도 게시하지 않았습니다. problems 를 고친 뒤 다시 미리보기하세요.',
-    done: '게시를 마쳤습니다. 실패한 대상만 다시 보내려면 같은 requestId 로 다시 호출하세요 — 이미 게시된 곳은 건너뜁니다.',
+    done: '게시를 마쳤습니다. 실패한 대상을 다시 보내려면 같은 requestId 로 다시 호출하세요 — 이미 게시된 곳은 건너뜁니다. 고쳐야 한다면 공통 text 가 아니라 실패한 대상의 플랫폼별 옵션(예: threads.text)만 바꾸세요. 결과를 알 수 없는 대상은 플랫폼에서 먼저 확인하세요.',
   },
   {
     httpsOnly: 'Only HTTPS URLs are allowed.',
@@ -22,7 +22,7 @@ const M = catalog(
     preview:
       'dry-run — nothing was posted. Show the user the plan below, get their explicit approval, then call again with the same arguments plus confirm: true.',
     blocked: 'Nothing was posted because some targets have problems. Fix the problems, then preview again.',
-    done: 'Publishing finished. To resend only the failed targets, call again with the same requestId — platforms that already posted are skipped.',
+    done: 'Publishing finished. To resend the failed targets, call again with the same requestId — platforms that already posted are skipped. To fix something, change only the failed target\'s own options (e.g. threads.text), not the shared text. Check any unknown-outcome target on the platform first.',
   },
 );
 
