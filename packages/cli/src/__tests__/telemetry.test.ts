@@ -43,5 +43,9 @@ describe('optional usage privacy', () => {
     vi.mocked(fetch).mockRejectedValue(new Error('network down'));
     await expect(usageRun('check', home)('failed')).resolves.toBeUndefined();
     expect(calls[0][1]!.redirect).toBe('error');
+    vi.mocked(fetch).mockClear();
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://other.example.test');
+    await usageRun('check', home)('completed');
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
