@@ -508,7 +508,9 @@ function applyMarks(platform: SocialTarget, key: string, record: PostRecord | nu
   let view = { record, pending };
   if (pending && approves(opts.markPosted, platform, pending.at)) {
     marked = pending.at;
-    view = { record: pending.postKey === key && record?.state !== 'posted' ? { state: 'posted', at: pending.at } : record, pending: null };
+    // The marked send becomes this post's latest `posted` record — a repost's too (keeping the original's id/url), so
+    // the repost approval that named the older `at` is used up and cannot send the post once more.
+    view = { record: pending.postKey === key ? { ...(record?.state === 'posted' ? record : {}), state: 'posted', at: pending.at } : record, pending: null };
   }
   if (view.record && (view.record.state === 'unknown' || view.record.state === 'sending') && approves(opts.markPosted, platform, view.record.at)) {
     marked = view.record.at;
@@ -714,7 +716,10 @@ function persistMarks(input: SocialPublishInput, videoFile: ReturnType<typeof fi
     try {
       const pending = readPending(platform, account);
       if (pending && approves(marks, platform, pending.at)) {
-        if (readRecord(platform, pending.postKey)?.state !== 'posted') writeRecord(platform, pending.postKey, { state: 'posted', at: pending.at });
+        // Also when the post is already `posted` (the marker is a repost's): move its `at` forward, so a repost
+        // approval naming the older `at` no longer matches (same as applyMarks).
+        const itsPost = readRecord(platform, pending.postKey);
+        writeRecord(platform, pending.postKey, { ...(itsPost?.state === 'posted' ? itsPost : {}), state: 'posted', at: pending.at });
         replacePendingIfOurs(platform, account, pending, null);
       }
       const record = readRecord(platform, key);

@@ -830,3 +830,43 @@ describe('account lock', () => {
     expect(readRecord('threads', 'x')).toBeNull();
   });
 });
+
+describe('review 9', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+  const launch: SocialPublishInput = { targets: ['threads'], text: 'Launch' };
+  const later = () => new Promise((resolve) => setTimeout(resolve, 5)); // distinct `at` timestamps
+
+  it('#1: a repost marked live uses up the repost approval, so repeating the call sends nothing', async () => {
+    expect((await run(launch))[0].status).toBe('posted');
+    const t0 = readRecord('threads', targetKey('threads', launch)!)!.at;
+    await later();
+    const repost: SocialPublishInput = { ...launch, repost: [{ platform: 'threads', at: t0 }] };
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(repost))[0].status).toBe('unknown_outcome');
+    const t = readPending('threads', accountKey('threads', launch)!)!.at;
+    // The person found the repost live and sends the same arguments with markPosted, as the message says.
+    expect((await run({ ...repost, markPosted: [{ platform: 'threads', at: t }] }))[0].status).toBe('already_posted');
+    expect(readRecord('threads', targetKey('threads', launch)!)).toMatchObject({ state: 'posted', at: t });
+    expect((await run(repost))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+
+  it('#1: a repost that posted but could not be recorded, once marked, is not posted a third time', async () => {
+    expect((await run(launch))[0].status).toBe('posted');
+    const t0 = readRecord('threads', targetKey('threads', launch)!)!.at;
+    await later();
+    const repost: SocialPublishInput = { ...launch, repost: [{ platform: 'threads', at: t0 }] };
+    const real = ledger.realWrite as typeof writeRecord;
+    vi.mocked(writeRecord).mockImplementation((platform, key, record) => {
+      if (record.state === 'posted') throw new Error('ENOSPC');
+      real(platform, key, record);
+    });
+    const outcome = (await run(repost))[0];
+    vi.mocked(writeRecord).mockImplementation(real);
+    expect(outcome).toMatchObject({ status: 'posted', warning: expect.stringMatching(/markPosted/) });
+    const t = readPending('threads', accountKey('threads', launch)!)!.at;
+    expect((await run({ ...repost, markPosted: [{ platform: 'threads', at: t }] }))[0].status).toBe('already_posted');
+    expect((await run(repost))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+});

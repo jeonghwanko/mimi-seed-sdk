@@ -8,7 +8,8 @@
 //
 // The account marker exists from just before a publishing call until its outcome is known. A `sending` or `unknown`
 // marker blocks every post to that account — even edited content — until a person checks the platform and passes
-// resendUnknown, so a post whose outcome is unknown can never go out a second time in another form.
+// markPosted (it is live) or resendUnknown (it is not), so a post whose outcome is unknown can never go out a second
+// time in another form.
 // Not a credential, but it lives under ~/.mimi-seed and uses the same atomic 0600 writer. This module is its only
 // writer.
 
