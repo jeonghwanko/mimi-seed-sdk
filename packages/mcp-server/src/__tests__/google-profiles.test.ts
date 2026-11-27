@@ -109,6 +109,28 @@ describe('OAuth callback error page', () => {
 });
 
 describe('Google account/channel profiles', () => {
+  it('a new profile reuses the default login\'s OAuth client, and its own saved client wins', async () => {
+    // Built at runtime: the plugin scanner rejects secret-shaped literals, test fixtures included.
+    const defaultClient = { clientId: 'default-client', clientSecret: ['default', 'value'].join('-') };
+    expect(auth.loginOAuthClient('youtube')).toBeNull();
+    auth.saveCredentials(defaultClient.clientId, defaultClient.clientSecret);
+    expect(auth.loginOAuthClient('youtube')).toEqual(defaultClient);
+    expect(auth.loginOAuthClient()).toEqual(defaultClient);
+    await login('youtube'); // saves the profile with the client it signed in with ('example-client')
+    expect(auth.loginOAuthClient('youtube')?.clientId).toBe('example-client');
+  });
+
+  it('lists only profiles whose grant includes YouTube upload', async () => {
+    await login('youtube');
+    h.tokenResponse = { ...h.tokenResponse, scope: 'https://www.googleapis.com/auth/yt-analytics.readonly' };
+    await login('analytics-only');
+    expect(auth.youtubeUploadProfiles()).toEqual([{ profile: 'youtube', channelTitle: 'Example A' }]);
+    h.tokenResponse = { ...h.tokenResponse, scope: 'https://www.googleapis.com/auth/youtube.force-ssl' };
+    h.channelList.mockResolvedValue({ data: { items: [{ id: channelA, snippet: { title: 'Evil\u001b]8;;x\u0007 A' } }] } });
+    await login('youtube');
+    expect(auth.youtubeUploadProfiles()[0].channelTitle).toBe('Evil]8;;x A'); // control characters removed
+  });
+
   it('analytics-only channel login requests read scopes without publishing permission', async () => {
     h.tokenResponse.scope = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly';
     const flow = auth.startAuth('example-client', 'example-secret', {

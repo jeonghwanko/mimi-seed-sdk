@@ -19,6 +19,7 @@ npx mimi-seed auth bigquery
 npx mimi-seed auth jenkins
 npx mimi-seed auth ci
 npx mimi-seed auth googleads
+npx mimi-seed auth social      # YouTube + Facebook + Instagram + Threads + TikTok
 npx mimi-seed auth meta        # Facebook + Instagram + Threads
 ```
 
