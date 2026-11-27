@@ -1,3 +1,4 @@
+import { consoleUrl } from "#core/console-url.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -21,7 +22,7 @@ export interface MimiSeedConfig {
   token: string;
   prefix: string;
   endpoint: string; // MCP endpoint
-  webBase: string; // https://mimi-seed.pryzm.gg
+  webBase: string;
   createdAt: string;
   /** @deprecated → `~/.mimi-seed/jenkins.json`. `migrateLegacyJenkins()` 가 1회 이관한다. */
   jenkins?: LegacyJenkinsConfig;
@@ -57,7 +58,8 @@ export const CONFIG_LOCATION = CONFIG_PATH;
 export async function getEffectiveConfig(): Promise<MimiSeedConfig | null> {
   const envToken = process.env.MIMI_SEED_TOKEN;
   if (envToken) {
-    const webBase = process.env.MIMI_SEED_WEB_BASE ?? "https://mimi-seed.pryzm.gg";
+    const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+    if (!webBase) return null;
     return {
       token: envToken,
       prefix: envToken.slice(0, 8),
@@ -66,5 +68,6 @@ export async function getEffectiveConfig(): Promise<MimiSeedConfig | null> {
       createdAt: new Date().toISOString(),
     };
   }
-  return readConfig();
+  const saved = await readConfig();
+  return saved?.token && consoleUrl(saved.webBase) && consoleUrl(saved.endpoint) ? saved : null;
 }

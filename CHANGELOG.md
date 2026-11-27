@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Initialize SDK projects locally without the retired public console. Google sign-in reuses stored OAuth clients, and remote workflows require a team console URL.
+
 ### Security
 
 - Google login now binds the authorization code with PKCE (S256), on top of the existing `state` check. A code intercepted on the local callback (another process holding the port, a browser extension reading the redirect URL) can no longer be exchanged for a refresh token, because the matching verifier never leaves the process that started the login. Existing saved logins keep working; nothing to re-run.

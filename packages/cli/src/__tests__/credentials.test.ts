@@ -33,6 +33,7 @@ beforeEach(() => {
   // 같은 워커를 쓰는 다른 테스트 파일까지 오염시킨다.
   vi.stubEnv('ANTHROPIC_API_KEY', '');
   vi.stubEnv('MIMI_SEED_TOKEN', '');
+  vi.stubEnv('MIMI_SEED_WEB_BASE', '');
 });
 
 afterEach(() => {
@@ -101,6 +102,8 @@ describe('detectAll', () => {
 
   it('MIMI_SEED_TOKEN 이 있으면 config.json 없이도 mimiseed 는 연결로 본다 (CI 모드)', () => {
     process.env.MIMI_SEED_TOKEN = 'tok';
+    expect(detectAll(home).get('mimiseed')!.present).toBe(false);
+    vi.stubEnv('MIMI_SEED_WEB_BASE', 'https://console.example.test');
     expect(detectAll(home).get('mimiseed')!.present).toBe(true);
   });
 
@@ -231,9 +234,10 @@ describe('missingRequired', () => {
     expect(missingRequired(detectAll(home), ['android'])).toEqual([]);
   });
 
-  it('OAuth 와 클라우드 계정은 항상 필수다', () => {
+  it('로컬 설정에는 클라우드 계정이 필요하지 않다', () => {
     const missing = missingRequired(detectAll(home), []);
-    expect(missing.map((s) => s.id).sort()).toEqual(['mimiseed', 'oauth']);
+    expect(missing.map((s) => s.id).sort()).toEqual(['oauth']);
+    expect(planSetup(detectAll(home)).map(s => s.id)).not.toContain('mimiseed');
   });
 });
 

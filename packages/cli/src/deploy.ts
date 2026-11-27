@@ -101,7 +101,7 @@ const M = catalog(
       `  빌드가 이미 완료됐다면: mimi-seed deploy --skip-build --version-code ${versionCode} --platform ${platform}`,
 
     // cmdDeploy
-    noAccount: "연결된 계정 없음. `mimi-seed init` 실행.",
+    noAccount: "원격 기능은 MIMI_SEED_WEB_BASE를 팀 콘솔 주소로 설정하고 `mimi-seed init`으로 연결하세요.",
     title: (platform: string) => `mimi-seed deploy — ${platform}`,
     dryRunNotice: "  [dry-run 모드] 실제 배포하지 않습니다",
     ciLine: (kind: string) => `  CI: ${kind}`,
@@ -205,7 +205,7 @@ const M = catalog(
       `  If the build already finished: mimi-seed deploy --skip-build --version-code ${versionCode} --platform ${platform}`,
 
     // cmdDeploy
-    noAccount: "No account connected. Run `mimi-seed init`.",
+    noAccount: "For remote commands, set MIMI_SEED_WEB_BASE to your team console and run `mimi-seed init`.",
     title: (platform: string) => `mimi-seed deploy — ${platform}`,
     dryRunNotice: "  [dry-run] nothing will actually be deployed",
     ciLine: (kind: string) => `  CI: ${kind}`,

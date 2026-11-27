@@ -71,9 +71,9 @@ const ko = {
       '직접 거부했다면 다시 시도해 모든 권한에 동의해주세요.',
   },
   configFetchFailed: {
-    message: 'Mimi Seed 서버에서 OAuth 클라이언트 설정을 받지 못했습니다.',
+    message: '사용할 Google OAuth 클라이언트 설정이 없습니다.',
     hint:
-      'mimi-seed.pryzm.gg 접속 가능 여부를 확인하거나, ' +
+      'Google 데스크톱 앱용 OAuth 클라이언트를 만든 뒤 ' +
       '환경변수 MIMI_SEED_GOOGLE_CLIENT_ID / MIMI_SEED_GOOGLE_CLIENT_SECRET 로 자체 OAuth 클라이언트를 지정하세요.',
   },
   networkError: {
@@ -160,9 +160,9 @@ const en: typeof ko = {
       'If you denied it, try again and accept every permission.',
   },
   configFetchFailed: {
-    message: 'Could not fetch the OAuth client configuration from the Mimi Seed server.',
+    message: 'Google OAuth client configuration is unavailable.',
     hint:
-      'Check that mimi-seed.pryzm.gg is reachable, or set your own OAuth client with ' +
+      'Set your Google Desktop app OAuth client with ' +
       'MIMI_SEED_GOOGLE_CLIENT_ID / MIMI_SEED_GOOGLE_CLIENT_SECRET.',
   },
   networkError: {

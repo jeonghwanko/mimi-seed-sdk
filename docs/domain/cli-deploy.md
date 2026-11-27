@@ -12,7 +12,7 @@ Routed by `main()` in `cli/src/index.ts`:
 
 | Command | Module | What it does |
 |---|---|---|
-| `init` | `init.ts` | detect app → browser PAT handshake → register apps → scaffold project context files |
+| `init` | `init.ts` | detect app → scaffold project context files; an explicitly configured console enables PAT login and registration |
 | `setup` | `setup.ts` | ★ guided wizard over **all** credentials — status table, then prompts only for what's missing (idempotent/resumable). `--only` / `--reconnect` / `--fail-on-missing`; **never spawns or prompts when non-interactive** (the setup bins block on stdin, so a CI run would hang forever) |
 | `lang` | `lang.ts` | CLI output language (`ko` / `en`) → `~/.mimi-seed/settings.json`. `setup` asks on first run; `MIMI_SEED_LANG` overrides |
 | `credentials` | `credentials-cmd.ts` | credential encryption at rest: `status`, `mode <file\|keychain\|auto>` (→ `settings.json` `credentialStore`; refuses while an MCP registration is pinned to a release from before encrypted-credential reading (`FIRST_ENVELOPE_READER`; a range pin is judged by the newest version it resolves to), `--force` to override; warns when `MIMI_SEED_CREDENTIAL_STORE` overrides it; `keychain` checks the key store first), `encrypt` / `decrypt` (rewrite every in-scope file through the core writer). Logic is in `core/src/credential-store.ts` ([`../design/credential-encryption.md`](../design/credential-encryption.md)) |
@@ -20,7 +20,7 @@ Routed by `main()` in `cli/src/index.ts`:
 | `auth` | `auth.ts` | per-credential auth: `login` / `appstore` / `playstore` / `bigquery` / `jenkins` / `ci` / `googleads` / `facebook` / `instagram` / `threads` / `tiktok`; `meta` opens the combined Meta setup — each shells out to the matching `mimi-seed-*-auth` bin (`mcp-bin.ts`) |
 | `firebase` / `admob` / `ga4` | `cloud.ts` | create/list Firebase apps, AdMob, GA4 properties |
 | `tools` | `index.ts` → MCP tools bin | Show the shared service menu and return the selected services and deduplicated tool names. The terminal accepts menu numbers or IDs. |
-| `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI). Exits `0` by default even with ✗ rows — it is the final "verify" step of the install skill and getting-started guide, where a ✗ is often expected. `--strict` exits `1` on any ✗ (the CI gate); `--json` prints the report (with `ok`) instead. The cloud token is only a failure when remote use is configured (`MIMI_SEED_TOKEN`, `MIMI_SEED_WEB_BASE`, or a `.mimi-seed-link.json`) — local-stdio-only users get a ⚠. A platform credential (App Store Connect) fails only when that platform is detected in the project, the same rule as `setup` / `missingRequired()` |
+| `doctor` | `doctor.ts` | environment diagnostics (token · Node · Git · project · CI). Exits `0` by default even with ✗ rows — it is the final "verify" step of the install skill and getting-started guide, where a ✗ is often expected. `--strict` exits `1` on any ✗ (the CI gate); `--json` prints the report (with `ok`) instead. The cloud token is only a failure when remote use is configured (a usable console URL in `MIMI_SEED_WEB_BASE` or the project link) — local-stdio-only users get a ⚠. A platform credential (App Store Connect) fails only when that platform is detected in the project, the same rule as `setup` / `missingRequired()` |
 | `check` | `check.ts` | pre-release readiness. With no connected remote account (or `--local`), runs the bundled no-login Release Doctor in-process; connected users retain the remote score. `--fail-on-blocker` is the CI gate |
 | `telemetry` | `telemetry.ts` | opt-in SDK usage measurement and consent settings; projects are represented by installation-salted hashes |
 | `notes` | `notes.ts` | release notes: git log → AI → optional store apply |
@@ -96,9 +96,9 @@ social tokens in its reconnect plan; the setup bin still performs the authoritat
 | Var | Effect |
 |---|---|
 | `MIMI_SEED_TOKEN` | PAT for headless/CI mode — `init` skips the browser handshake when set |
-| `MIMI_SEED_WEB_BASE` | web/remote-MCP base (default `https://mimi-seed.pryzm.gg`; `/api/mcp` is appended) |
+| `MIMI_SEED_WEB_BASE` | web/remote-MCP base (optional, no public default; `/api/mcp` is appended) |
 | `MIMI_SEED_LANG` | forces CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json`, and `runMcpBin` passes it down to the spawned setup bins |
-| `MIMI_SEED_GOOGLE_CLIENT_ID` / `_SECRET` | use your own Google OAuth client; unset, the client is fetched from the web console at login |
+| `MIMI_SEED_GOOGLE_CLIENT_ID` / `_SECRET` | use your own Google OAuth client; returning profiles can reuse their saved client; a configured team console can supply one |
 | `ANTHROPIC_API_KEY` | enables AI note/reply generation |
 
 (The MCP server has its own set — media/video API keys and `MIMI_SEED_FFMPEG_PATH` — in [[auth-credentials]].)
@@ -109,7 +109,7 @@ social tokens in its reconnect plan; the setup bin still performs the authoritat
    resolvable JSON imports in `app.config.js`/`.ts`), Gradle, `Info.plist`/`pbxproj`, and Unity
    `ProjectSettings/ProjectSettings.asset` to infer `{ name, packageName, bundleId }`. Dynamic executable
    config is never evaluated; unresolved expressions remain absent instead of being guessed.
-2. **Handshake** (`handshake.ts`): `awaitHandshake()` opens a localhost callback server, the CLI opens
+2. **With a configured console only** (`--local` skips this and remote registration). **Handshake** (`handshake.ts`): `awaitHandshake()` opens a localhost callback server, the CLI opens
    `<webBase>/cli/connect?...` in the browser, the user logs in, and a PAT is returned to localhost. (In CI,
    `MIMI_SEED_TOKEN` short-circuits this.)
 3. **Persist** (`config.ts`): `writeConfig()` stores the PAT prefix + endpoint in `~/.mimi-seed/config.json`.
@@ -169,5 +169,4 @@ CI build (ci-providers.ts)  →  check (readiness)  →  notes (git → AI)  →
 
 The CLI handles PATs and opens auth URLs. When editing it: never log full tokens (the code prints only the
 `prefix…`), keep `config.toml`/`config.json` writes at user-readable perms, and keep the localhost callback
-restricted to localhost. Don't hard-code real endpoints other than the public `mimi-seed.pryzm.gg` default
-already present, and never embed a token in committed code, tests, or docs.
+restricted to localhost. Use an explicitly configured team console. Never embed a token in committed code, tests, or docs.

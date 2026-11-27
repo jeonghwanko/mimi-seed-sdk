@@ -1,3 +1,4 @@
+import { consoleUrl } from "#core/console-url.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,6 @@ import { writeCredentialJson } from "#core/atomic-write.js";
 import type { ReleaseDoctorReport } from "#core/checks/release-doctor.js";
 import { version } from "../package.json";
 
-const ENDPOINT = "https://mimi-seed.pryzm.gg/api/sdk-usage";
 const M = catalog(
   {
     notice: "선택적 사용량 측정은 꺼져 있습니다. 안내: mimi-seed telemetry --help\n",
@@ -24,10 +24,14 @@ const M = catalog(
   },
 );
 
-interface Consent { enabled: boolean; installationId?: string; salt?: string }
+interface Consent { enabled: boolean; webBase?: string; installationId?: string; salt?: string }
 const location = () => path.join(os.homedir(), ".mimi-seed", "telemetry.json");
-function readConsent(): Consent {
-  try { return JSON.parse(fs.readFileSync(location(), "utf8")) as Consent; }
+function readConsent(webBase: string): Consent {
+  try {
+    const saved = JSON.parse(fs.readFileSync(location(), "utf8")) as Consent;
+    // Consent and pseudonymous identifiers belong to the collector the user selected.
+    return saved.webBase === webBase ? saved : { enabled: false };
+  }
   catch { return { enabled: false }; }
 }
 // installationId + salt 는 프로젝트 해시를 역산하는 열쇠라 자격증명처럼 0600 으로 쓴다.
@@ -35,8 +39,10 @@ function writeConsent(value: Consent): void {
   writeCredentialJson(location(), value);
 }
 export function telemetryEnabled(): boolean {
+  const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  if (!webBase) return false;
   if (process.env.MIMI_SEED_TELEMETRY !== undefined) return process.env.MIMI_SEED_TELEMETRY === "1";
-  return readConsent().enabled === true;
+  return readConsent(webBase).enabled === true;
 }
 export function telemetryNotice(): string { return telemetryEnabled() ? "" : M().notice; }
 export function cmdTelemetry(argv: string[]): void {
@@ -44,9 +50,10 @@ export function cmdTelemetry(argv: string[]): void {
   if (argv.length > 1 || !["on", "off", "status"].includes(action)) {
     process.stderr.write(M().invalid); process.exitCode = 2; return;
   }
-  if (action === "on") {
-    const consent = readConsent();
-    writeConsent({ enabled: true, installationId: consent.installationId ?? randomUUID(), salt: consent.salt ?? randomUUID() });
+  const webBase = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  if (action === "on" && webBase) {
+    const consent = readConsent(webBase);
+    writeConsent({ webBase, enabled: true, installationId: consent.installationId ?? randomUUID(), salt: consent.salt ?? randomUUID() });
   }
   if (action === "off") writeConsent({ enabled: false });
   process.stdout.write(telemetryEnabled() ? M().enabled : M().disabled);
@@ -65,12 +72,13 @@ function frameworkAt(root: string): string {
 }
 export function usageRun(command: "check" | "setup", projectPath: string):
   (outcome: UsageOutcome, report?: ReleaseDoctorReport) => Promise<void> {
-  if (!telemetryEnabled()) return async () => {};
+  const baseUrl = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  if (!baseUrl || !telemetryEnabled()) return async () => {};
   try {
-    const consent = readConsent();
+    const consent = readConsent(baseUrl);
     const installationId = consent.installationId ?? randomUUID();
     const salt = consent.salt ?? randomUUID();
-    if (!consent.installationId || !consent.salt) writeConsent({ enabled: consent.enabled, installationId, salt });
+    if (!consent.installationId || !consent.salt) writeConsent({ webBase: baseUrl, enabled: consent.enabled, installationId, salt });
     let normalized = path.resolve(projectPath);
     try { normalized = fs.realpathSync(normalized); } catch { /* A failed check can still be measured. */ }
     if (process.platform === "win32") normalized = normalized.toLowerCase();
@@ -83,7 +91,7 @@ export function usageRun(command: "check" | "setup", projectPath: string):
     };
     const started = Date.now();
     return async (outcome, report) => {
-      if (!telemetryEnabled()) return;
+      if (!telemetryEnabled() || consoleUrl(process.env.MIMI_SEED_WEB_BASE) !== baseUrl) return;
       // Explicit allowlist projection: never spread a report, credential, error, or path into a payload.
       const payload = {
         ...base, outcome, durationMs: Math.min(86_400_000, Math.max(0, Date.now() - started)),
@@ -91,7 +99,7 @@ export function usageRun(command: "check" | "setup", projectPath: string):
         codes: [...new Set(report?.findings.map(f => f.code).filter(c => /^[a-zA-Z0-9_]{1,80}$/.test(c)) ?? [])].slice(0, 60),
       };
       try {
-        await fetchWithTimeout(ENDPOINT, {
+        await fetchWithTimeout(`${baseUrl}/api/sdk-usage`, {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify(payload), redirect: "error",
         }, 800);

@@ -1,3 +1,4 @@
+import { consoleUrl } from '#core/console-url.js';
 import { fetchWithTimeout } from '../lib/http.js';
 import { catalog } from '#core/lang.js';
 
@@ -14,13 +15,10 @@ const M = catalog(
   },
 );
 
-const WEB_BASE =
-  process.env.MIMI_SEED_WEB_BASE ?? 'https://mimi-seed.pryzm.gg';
-
-let _cached: { clientId: string; clientSecret: string } | null = null;
+let cached: { base: string; client: { clientId: string; clientSecret: string } } | undefined;
 
 /**
- * OAuth client id/secret 해석: env 오버라이드 → 웹 콘솔 원격 조회.
+ * OAuth client id/secret 해석: env → 저장된 프로필 → 명시한 팀 콘솔.
  * (디스크 캐시(credentials.json) 우선 순위는 호출자 — google-auth.ts
  * ensureFreshAccessToken — 가 처리하며, 원격 조회 성공 시 디스크에 저장한다.)
  *
@@ -28,7 +26,7 @@ let _cached: { clientId: string; clientSecret: string } | null = null;
  * errors.ts classifyError 가 이 마커로 CONFIG_FETCH_FAILED 로 분류해
  * "구글 연결 실패" 같은 오진 대신 정확한 원인/해법을 안내한다.
  */
-export async function getMcpOAuthClient(): Promise<{
+export async function getMcpOAuthClient(stored?: { clientId: string; clientSecret: string } | null): Promise<{
   clientId: string;
   clientSecret: string;
 }> {
@@ -40,14 +38,17 @@ export async function getMcpOAuthClient(): Promise<{
     process.env.PRESEED_GOOGLE_CLIENT_SECRET;
   if (id && secret) return { clientId: id, clientSecret: secret };
 
-  if (_cached) return _cached;
+  if (stored?.clientId && stored.clientSecret) return stored;
+  const base = consoleUrl(process.env.MIMI_SEED_WEB_BASE);
+  if (!base) throw new Error('mcp-auth-config: set MIMI_SEED_GOOGLE_CLIENT_ID and MIMI_SEED_GOOGLE_CLIENT_SECRET');
+  if (cached?.base === base) return cached.client;
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${WEB_BASE}/api/mcp-auth-config`, {}, 10_000);
+    res = await fetchWithTimeout(`${base}/api/mcp-auth-config`, {}, 10_000);
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
-    throw new Error(M().unreachable(WEB_BASE, detail), { cause: e });
+    throw new Error(M().unreachable(base, detail), { cause: e });
   }
   if (!res.ok) throw new Error(`mcp-auth-config fetch failed (${res.status})`);
 
@@ -64,6 +65,7 @@ export async function getMcpOAuthClient(): Promise<{
   if (!data || typeof data !== 'object' || !data.clientId || !data.clientSecret) {
     throw new Error(M().empty);
   }
-  _cached = { clientId: data.clientId, clientSecret: data.clientSecret };
-  return _cached;
+  const client = { clientId: data.clientId, clientSecret: data.clientSecret };
+  cached = { base, client };
+  return client;
 }

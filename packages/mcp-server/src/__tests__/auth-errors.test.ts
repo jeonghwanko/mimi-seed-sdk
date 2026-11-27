@@ -11,7 +11,7 @@ describe('classifyError — CONFIG_FETCH_FAILED (mcp-auth-config 마커)', () =>
     // fetch 실패 메시지에 ECONNREFUSED 가 섞여 있어도 마커가 이긴다 —
     // 아니면 "oauth2.googleapis.com 연결 실패" 로 엉뚱한 호스트를 지목한다.
     const p = classifyError(
-      new Error('mcp-auth-config fetch failed (https://mimi-seed.pryzm.gg 접속 불가: ECONNREFUSED)'),
+      new Error('mcp-auth-config fetch failed (https://console.example.test 접속 불가: ECONNREFUSED)'),
       { phase: 'refresh' },
     );
     expect(p.code).toBe('CONFIG_FETCH_FAILED');

@@ -14,22 +14,19 @@ connect only the stores and services you actually use.
 
 ## 1. Choose an install mode
 
-Remote MCP is enough for status and diagnostics. Real writes to stores, Firebase, or social platforms require
-Local MCP.
+Install the Local MCP to use store, Firebase and social tools with your own accounts.
 
-Recommended full setup:
+After [installing the SDK from source](../from-source.md), run:
 
 ```bash
 # Run inside the app project
-npx mimi-seed init --local
-npx mimi-seed setup
+mimi-seed init --local
+mimi-seed setup
 ```
 
 `init --local` performs or explains the following:
 
 - Detect app identity from Expo, Gradle, Info.plist, or pbxproj
-- Connect a Mimi Seed account in the browser
-- Register the app with Remote MCP
 - Prepare `.claude/mimi-seed.md`, `AGENTS.md`, and `docs/releases.json`
 - Guide Google OAuth and Local MCP registration
 

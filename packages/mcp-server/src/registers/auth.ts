@@ -1,6 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
-import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getGoogleAuthAttempt } from '../auth/google-auth.js';
+import { GOOGLE_PROFILE_ID, listGoogleProfiles, getAuthenticatedClient, getStoredCredentials, getGoogleAuthAttempt } from '../auth/google-auth.js';
 import { verifyYouTubeChannel, YOUTUBE_CHANNEL_ID } from '../auth/youtube-channel.js';
 import type { ToolRegistrar } from '../lib/tool-registrar.js';
 import { z } from 'zod';
@@ -119,7 +119,7 @@ const A = catalog(
       reqHeader: (name: string) => `── ${name} 요구사항 (.mimi-seed.json) ─────────`,
       teamHint: [
         'ℹ️  팀 공유가 목표라면, 각자 로컬 자격증명을 채우는 대신',
-        '   워크스페이스(https://mimi-seed.pryzm.gg) 초대 → PAT 발급 → 원격 MCP 연결도 가능.',
+        '   자체 운영 워크스페이스 초대 → PAT 발급 → 원격 MCP 연결도 가능.',
       ],
     },
     // ── mimi_seed_auth_start ──
@@ -224,7 +224,7 @@ const A = catalog(
       reqHeader: (name: string) => `── ${name} requirements (.mimi-seed.json) ─────────`,
       teamHint: [
         'ℹ️  If the goal is team sharing, instead of each person filling in local credentials,',
-        '   you can also use workspace (https://mimi-seed.pryzm.gg) invite → PAT issuance → remote MCP connection.',
+        '   you can also use a team-operated workspace invite → PAT issuance → remote MCP connection.',
       ],
     },
     start: {
@@ -630,7 +630,7 @@ export function registerAuthTools(server: ToolRegistrar) {
       let clientId: string;
       let clientSecret: string;
       try {
-        ({ clientId, clientSecret } = await getMcpOAuthClient());
+        ({ clientId, clientSecret } = await getMcpOAuthClient(getStoredCredentials(profile)));
       } catch (e) {
         const p = classifyError(e, { phase: 'login' });
         return textResult(`❌ [${p.code}] ${p.message}${p.hint ? `\n→ ${p.hint}` : ''}`);

@@ -54,10 +54,7 @@ For Search Console analysis, sign in with `mimi-seed auth login --domains gsc_re
 
 YouTube Analytics reports use the separate `youtube_analytics` grant. Channel, video-list, and comment reads can use that grant or the existing publishing `youtube` grant; video management writes and comment replies use `youtube`.
 
-**You need first:** a Google account. That's all.
-
-**Get it:** nothing to fetch. You do **not** create a Google Cloud project or an OAuth client — the client is
-supplied for you at login time. Just run the wizard, or:
+For first sign-in, create a **Desktop app** OAuth client in Google Cloud and set `MIMI_SEED_GOOGLE_CLIENT_ID` and `MIMI_SEED_GOOGLE_CLIENT_SECRET` in the CLI or MCP server environment. A returning profile can reuse its saved client.
 
 ```bash
 mimi-seed auth login
@@ -72,9 +69,7 @@ A browser opens; approve; the token lands in `~/.mimi-seed/tokens.json`.
 
 **Verify:** `mimi-seed auth status`
 
-**Air-gapped or self-hosting?** The OAuth client id/secret is fetched at login from the Mimi Seed web console.
-If you can't reach it, bring your own client via `MIMI_SEED_GOOGLE_CLIENT_ID` / `MIMI_SEED_GOOGLE_CLIENT_SECRET`
-(loopback redirect on port 9876). → [`troubleshooting.md#config-fetch-failed`](troubleshooting.md#config-fetch-failed)
+[Troubleshoot OAuth client setup](troubleshooting.md#config-fetch-failed)
 
 ---
 
@@ -292,7 +287,7 @@ seven days or less remaining) and offers to reconnect it.
 
 ## Instagram
 
-**Browser login (default):** Run `mimi-seed auth instagram` and approve Instagram login in the browser. Mimi Seed verifies the account and saves the returned token lifetime automatically. An operator-managed HTTPS broker must be configured with Instagram-specific app credentials and an approved callback; the SDK does not deploy it. If the broker is unavailable, existing credentials remain unchanged and the CLI does not ask you to paste a token. Use `--manual-token` only for the advanced manual flow.
+Without a console, enter a token locally. **Browser login with a team broker:** Set `MIMI_SEED_WEB_BASE` to its HTTPS origin. Run `mimi-seed auth instagram` and approve Instagram login in the browser. Mimi Seed verifies the account and saves the returned token lifetime automatically. An operator-managed HTTPS broker must be configured with Instagram-specific app credentials and an approved callback; the SDK does not deploy it. If the broker is unavailable, existing credentials remain unchanged and the CLI does not ask you to paste a token. Use `--manual-token` only for the advanced manual flow.
 
 
 **Unlocks:** `instagram_*` — posting images and carousels.
@@ -332,11 +327,11 @@ token — an Instagram token will not work here.
 
 **Get it:**
 
-1. Run `mimi-seed auth threads` (the default flow) and complete Threads login and consent in the browser opened by
+1. Without a team broker, `mimi-seed auth threads` prompts for a token locally. For browser login, configure the team broker in `MIMI_SEED_WEB_BASE` and complete Threads login and consent in the browser opened by
    the operator's HTTPS web broker.
 2. The broker operator must deploy the broker with the Threads App ID and secret, and register its HTTPS callback URL
    in the Threads app. The SDK does not deploy or configure this private broker.
-3. The broker exchanges the authorization callback for the token; you never paste a token into the CLI in the default
+3. The broker exchanges the authorization callback for the token; you never paste a token into the CLI in the broker
    flow. The returned account is verified and the actual expiry is saved locally.
 
 **Advanced/manual flow:** `mimi-seed auth threads --manual-token` keeps the token-paste path for headless or brokerless
@@ -390,8 +385,7 @@ follow [Set up TikTok Business Organic API](tiktok-business-setup.md).
 
 **Unlocks:** the hosted dashboard and the remote MCP (a read/diagnostic subset).
 
-**Get it:** run `mimi-seed init`. It opens the browser, you sign in, and the token comes back automatically. In
-CI, set `MIMI_SEED_TOKEN` instead and `init` skips the browser entirely.
+For a team-operated console, set `MIMI_SEED_WEB_BASE` to its URL and run `mimi-seed init`. In CI, set both the console URL and `MIMI_SEED_TOKEN`.
 
 **Verify:** `mimi-seed status`.
 

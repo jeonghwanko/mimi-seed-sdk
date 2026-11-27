@@ -17,12 +17,15 @@
 
 ---
 
-How many tabs do you have open right now to ship one app?
+## From a code change to a customer reply
 
-Play Console · App Store Connect · Firebase · AdMob · Google Cloud IAM...  
-Write release notes, check screenshot specs, reply to reviews, wire up Firebase — all in separate dashboards, all manual.
+Mimi Seed uses **what actually shipped in a version** to guide release, marketing and support work. For example, trace a sign-in fix from its commit to the build that contains it. That version gives the team a common reference for the update announcement, store listing and reply to the customer who reported the issue.
 
-**Mimi Seed handles all of this through Claude Code or Codex conversation.**
+1. **Build.** Trigger an existing Jenkins, GitHub Actions or GitLab CI job and check its result.
+2. **Match the release.** Match the Git tag and commits to a build number, then distribute that build through a Google Play track or iOS TestFlight.
+3. **Update the stores.** Use that version’s commits and release record to draft update news, refresh store images and prepare the review submission.
+4. **Create the campaign.** Turn the user-visible changes into promotional copy and video material.
+5. **Publish and support.** Publish to YouTube and Instagram. When drafting a store review reply, check the reported issue against the version containing the fix.
 
 ```
 "Is my app ready to ship?"
@@ -142,6 +145,8 @@ Claude Desktop (`claude_desktop_config.json`):
 The public web console has closed. For a new Google sign-in, [configure your own OAuth client](docs/troubleshooting.md#config-fetch-failed).
 
 ### 2 · Connect your project and accounts
+
+To scaffold project files without console sign-in, [install from source](docs/from-source.md) and run `mimi-seed init --local` in the app directory.
 
 ```bash
 cd <your-app>
@@ -517,7 +522,7 @@ To enable AI after a slim install, run `npm install --include=optional` in the s
 | `MIMI_SEED_LANG` | Force CLI output language (`ko` / `en`) — wins over `~/.mimi-seed/settings.json`; with neither set, a Korean system locale gets Korean and any other locale English |
 | `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | Local MCP only: expose just these tool domains (comma-separated domain keys such as `playstore,appstore`, or groups `store` · `google` · `social` · `media` · `build` · `all`). Unset = every domain. `auth` and `checks` are always on; unknown keys are ignored with a warning. Keeps tool lists small in clients without lazy tool loading ([agent guide](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
 | `MIMI_SEED_APPROVAL` | Local MCP only: how a confirmed write is approved. `auto` (default) opens an approval dialog in clients that support MCP elicitation and otherwise runs on the agent's `confirm`; `required` refuses in clients without the dialog (any unrecognized value counts as `required`); `off` never asks (unattended runs only) ([team security](docs/user-guide/team-security.md#approving-agent-actions)) |
-| `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Bring your own Google OAuth client. Otherwise it is fetched from the web console at login — set these if you're offline, air-gapped, or self-hosting ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
+| `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | Desktop app OAuth client for first sign-in. Subsequent logins can reuse the saved client. ([troubleshooting](docs/troubleshooting.md#config-fetch-failed)) |
 
 ---
 

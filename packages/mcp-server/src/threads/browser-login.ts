@@ -1,3 +1,4 @@
+import { consoleUrl } from '#core/console-url.js';
 import { createServer } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { fetchWithTimeout } from '../lib/http.js';
@@ -23,7 +24,9 @@ export async function connectThreadsInBrowser(options: BrowserLoginOptions = {})
   // Freeze the selected profile before any asynchronous work / directory changes.
   const target = resolveSocialConfigTarget('threads', options);
   const saveOptions = { ...options, profile: target.profile ?? undefined, startDir: options.startDir ?? process.cwd() };
-  const base = new URL(options.webBase ?? process.env.MIMI_SEED_WEB_BASE ?? 'https://mimi-seed.pryzm.gg');
+  const url = consoleUrl(options.webBase ?? process.env.MIMI_SEED_WEB_BASE);
+  if (!url) throw new ThreadsLoginError('configuration');
+  const base = new URL(url);
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash || base.pathname !== '/') {
     throw new ThreadsLoginError('configuration');
   }

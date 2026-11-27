@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mimi Seed · Mobile release tools</title>
-  <meta name="description" content="Mimi Seed pairs a mobile release-check CLI with a local MCP server for store operations in Claude Code and Codex.">
+  <meta name="description" content="Mimi Seed uses code and build history to run a mobile release. Trace a change to the version that shipped it, then use that record to write update news, make a promotional video and answer customers.">
   <link rel="canonical" href="https://mimi-seed.oddbout.com/en/">
   <link rel="alternate" hreflang="ko" href="https://mimi-seed.oddbout.com/">
   <link rel="alternate" hreflang="en" href="https://mimi-seed.oddbout.com/en/">
@@ -23,9 +23,9 @@
   <main class="wrap">
     <section class="hero">
       <div>
-        <h1><span>Release checks</span>start in your repo.</h1>
-        <p class="intro">Find settings in your mobile app that could block a store submission. Connect your store accounts to draft release notes and upload screenshots from Claude Code or Codex.</p>
-        <a class="button" href="#start">Run your first check <span aria-hidden="true">↓</span></a>
+        <h1><span>From commit</span>to customer.</h1>
+        <p class="intro">Mimi Seed uses code and build history to run a mobile release. Trace a change to the version that shipped it, then use that record to write update news, make a promotional video and answer customers.</p>
+        <a class="button" href="#guides">Explore the release workflow <span aria-hidden="true">↓</span></a>
       </div>
       <div class="art" aria-hidden="true">
         <img src="/mimi.svg" alt="" width="800" height="800">
@@ -43,14 +43,23 @@
     <section class="guides" id="guides" aria-labelledby="guide-heading">
       <h2 id="guide-heading">Release guides</h2>
       <div class="guide-list">
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-readiness.md">
-          <h3>Find release blockers</h3><p>Check the Android target API, Play Billing library and Xcode version against release requirements.</p><span class="arrow" aria-hidden="true">↗</span>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/build-ci.md">
+          <h3>Build from a code change</h3><p>Run an existing CI job and trace its build artifact back to the commits it contains.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/deploy.md">
+          <h3>Distribute and record the version</h3><p>Match the Git tag to the build number. Use the version distributed through Google Play or TestFlight as the reference for everything that follows.</p><span class="arrow" aria-hidden="true">↗</span>
         </a>
         <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.md">
-          <h3>Prepare a store listing</h3><p>Connect your local MCP server to Google Play and App Store Connect to manage screenshots and release notes.</p><span class="arrow" aria-hidden="true">↗</span>
+          <h3>Update the stores</h3><p>Use the changes in that version to write release notes, update store images and prepare the review submission.</p><span class="arrow" aria-hidden="true">↗</span>
         </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-ci.md">
-          <h3>Run checks in CI</h3><p>Run the same check in CI and fail the job when a change introduces a release blocker.</p><span class="arrow" aria-hidden="true">↗</span>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/video.md">
+          <h3>Create promotional material</h3><p>Turn a feature that shipped into promotional copy and a video showing how it works.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social.md">
+          <h3>Publish to your channels</h3><p>Publish the finished material on YouTube and Instagram and follow the response.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.md">
+          <h3>Respond to customers</h3><p>Read a store review and check which version contains the fix before drafting a reply.</p><span class="arrow" aria-hidden="true">↗</span>
         </a>
       </div>
     </section>

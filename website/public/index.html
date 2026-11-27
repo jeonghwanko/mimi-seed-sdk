@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mimi Seed · 모바일 앱 출시 도구</title>
-  <meta name="description" content="Mimi Seed는 모바일 앱의 출시 준비를 점검하는 CLI와 Claude Code·Codex에서 스토어 운영을 돕는 로컬 MCP 서버입니다.">
+  <meta name="description" content="Mimi Seed는 코드와 빌드 기록을 바탕으로 모바일 앱을 운영하는 SDK입니다. 어떤 변경이 어느 버전에 들어갔는지 확인하고, 그 기록으로 업데이트 소식을 쓰고 홍보 영상을 만들고 고객에게 답합니다.">
   <link rel="canonical" href="https://mimi-seed.oddbout.com/">
   <link rel="alternate" hreflang="ko" href="https://mimi-seed.oddbout.com/">
   <link rel="alternate" hreflang="en" href="https://mimi-seed.oddbout.com/en/">
@@ -23,9 +23,9 @@
   <main class="wrap">
     <section class="hero">
       <div>
-        <h1><span>앱 출시 준비,</span>저장소에서 시작하세요.</h1>
-        <p class="intro">Mimi Seed는 앱 코드에서 스토어 심사를 막을 수 있는 설정을 찾습니다. 계정을 연결하면 Claude Code와 Codex에서 릴리스 노트를 작성하고 스크린샷도 올릴 수 있습니다.</p>
-        <a class="button" href="#start">첫 출시 점검 실행하기 <span aria-hidden="true">↓</span></a>
+        <h1><span>코드에서 출시로,</span>출시에서 고객에게.</h1>
+        <p class="intro">Mimi Seed는 코드와 빌드 기록을 바탕으로 모바일 앱을 운영하는 SDK입니다. 어떤 변경이 어느 버전에 들어갔는지 확인하고, 그 기록으로 업데이트 소식을 쓰고 홍보 영상을 만들고 고객에게 답합니다.</p>
+        <a class="button" href="#guides">출시 작업 흐름 보기 <span aria-hidden="true">↓</span></a>
       </div>
       <div class="art" aria-hidden="true">
         <img src="/mimi.svg" alt="" width="800" height="800">
@@ -43,14 +43,23 @@
     <section class="guides" id="guides" aria-labelledby="guide-heading">
       <h2 id="guide-heading">출시 작업별 가이드</h2>
       <div class="guide-list">
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-readiness.ko.md">
-          <h3>출시 차단 요인 찾기</h3><p>Target API와 결제 라이브러리, Xcode 버전을 확인하고 수정할 파일을 찾습니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/build-ci.ko.md">
+          <h3>코드 변경과 빌드</h3><p>Jenkins 등 CI에서 빌드 작업을 실행하고, 어떤 커밋이 결과물에 포함됐는지 확인합니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/deploy.ko.md">
+          <h3>Android·iOS 배포와 버전 기록</h3><p>Git 태그를 빌드 번호와 대조하고, Google Play 트랙이나 TestFlight에 올린 버전을 다음 작업의 기준으로 삼습니다.</p><span class="arrow" aria-hidden="true">↗</span>
         </a>
         <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.ko.md">
-          <h3>스토어 등록정보 준비하기</h3><p>로컬 MCP로 Google Play와 App Store Connect의 스크린샷과 릴리스 노트를 관리합니다.</p><span class="arrow" aria-hidden="true">↗</span>
+          <h3>스토어 업데이트와 심사</h3><p>버전에 포함된 변경으로 업데이트 소식을 쓰고, 마켓 이미지와 심사 제출 정보를 준비합니다.</p><span class="arrow" aria-hidden="true">↗</span>
         </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-ci.ko.md">
-          <h3>CI에서 점검 반복하기</h3><p>같은 검사를 CI에 추가하고 출시를 막는 문제가 생기면 빌드에서 확인합니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/video.ko.md">
+          <h3>홍보 글과 영상 제작</h3><p>새 기능을 사용자가 경험하는 장면으로 풀어 홍보 글과 영상 소재를 만듭니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social.ko.md">
+          <h3>채널 게시와 운영</h3><p>완성한 콘텐츠를 YouTube와 Instagram에 게시하고 채널 반응을 확인합니다.</p><span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.ko.md">
+          <h3>리뷰와 고객 응대</h3><p>고객이 남긴 스토어 리뷰를 읽고, 문제를 고친 버전과 변경 내용을 확인해 답변을 작성합니다.</p><span class="arrow" aria-hidden="true">↗</span>
         </a>
       </div>
     </section>

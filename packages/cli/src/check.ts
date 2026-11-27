@@ -12,7 +12,7 @@ import { telemetryNotice, usageRun } from "./telemetry.js";
 // 이 명령 전용 문구. 공통 문구(setup/doctor/auth)는 i18n.ts 의 `t()` 에 있다.
 const M = catalog(
   {
-    noAccount: "연결된 계정 없음. `mimi-seed init` 실행.\n",
+    noAccount: "원격 기능은 MIMI_SEED_WEB_BASE를 팀 콘솔 주소로 설정하고 `mimi-seed init`으로 연결하세요.\n",
     missingOptionValue: (option: string) => `${option} 뒤에 값을 입력하세요.`,
     unknownOption: (option: string) => `알 수 없는 check 옵션: ${option}`,
     unexpectedArgument: (value: string) => `예상하지 않은 check 인자: ${value}`,
@@ -44,7 +44,7 @@ const M = catalog(
     notReady: (score: number) => `아직 ${score}/100 — 위 다음 단계를 진행하세요.\n`,
   },
   {
-    noAccount: "No account connected. Run `mimi-seed init`.\n",
+    noAccount: "For remote commands, set MIMI_SEED_WEB_BASE to your team console and run `mimi-seed init`.\n",
     missingOptionValue: (option: string) => `Provide a value after ${option}.`,
     unknownOption: (option: string) => `Unknown check option: ${option}`,
     unexpectedArgument: (value: string) => `Unexpected check argument: ${value}`,
