@@ -37,7 +37,7 @@ vi.mock('../auth/google-auth.js', () => ({ getStoredTokens: api.tokens }));
 const ledger = vi.hoisted(() => ({ realRecord: null as null | ((...args: never[]) => void) }));
 vi.mock('../social/publish-ledger.js', async (original) => {
   const actual = await original<typeof import('../social/publish-ledger.js')>();
-  ledger.realRecord = actual.recordPlatform as never;
+  ledger.realRecord = actual.recordPlatform;
   return { ...actual, recordPlatform: vi.fn(actual.recordPlatform) };
 });
 
