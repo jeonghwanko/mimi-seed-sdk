@@ -11,8 +11,8 @@
 <body>
   <header class="wrap"><a class="brand" href="/"><img src="/mimi.svg" alt="">Mimi Seed</a></header>
   <main class="legal wrap">
-<h1>개인정보처리방침</h1><p>최종 수정일: 2026년 11월 27일</p>
-<p>Mimi Seed는 CLI와 Claude Code·Codex 등 MCP 클라이언트에서 사용자가 본인의 앱 스토어·클라우드 리소스를 운영할 수 있도록 돕는 개발자 도구입니다. Google 동의 화면의 앱 이름은 mimi-seed-sdk입니다. 이 방침은 Google 계정 연동으로 접근하는 데이터의 종류와 사용·저장·보호 방식, 기존 웹 콘솔에 저장된 데이터의 처리를 설명합니다.</p>
+<h1>개인정보처리방침</h1><p>최종 수정일: 2026년 11월 28일</p>
+<p>Mimi Seed는 루카스 파운데이션(Lucas Foundation)이 운영하며, CLI와 Claude Code·Codex 등 MCP 클라이언트에서 사용자가 본인의 앱 스토어·클라우드 리소스를 운영할 수 있도록 돕는 개발자 도구입니다. Google 동의 화면의 앱 이름은 mimi-seed-sdk입니다. 이 방침은 Google 계정 연동으로 접근하는 데이터의 종류와 사용·저장·보호 방식, 기존 웹 콘솔에 저장된 데이터의 처리를 설명합니다.</p>
 
 <section>
 <h2>1. 접근하는 Google 사용자 데이터</h2>
@@ -41,7 +41,7 @@
 <section>
 <h2>4. 저장 및 보안</h2>
 <div><ul><li><b>CLI / 로컬 MCP 서버</b>: OAuth 토큰은 사용자 본인 컴퓨터의 홈 디렉토리(<code>~/.mimi-seed/</code>, 권한 0600)에만 저장되며 보관됩니다. Google 인증·토큰 갱신·API 호출에는 해당 토큰을 Google에 전송합니다. 로컬 Google OAuth 토큰은 Mimi Seed 원격 자격증명 동기화 대상에서 제외됩니다.</li>
-<li><b>웹 콘솔</b>: 인증 토큰은 사용자 세션 및 데이터베이스에 보관되며, 외부 API 시크릿은 별도 저장소에서 AES-256-GCM으로 암호화 저장됩니다. Google OAuth 토큰의 데이터베이스 저장과 이 외부 API 시크릿 암호화는 서로 다른 처리입니다. 전송 구간은 HTTPS로 보호됩니다.</li>
+<li><b>웹 콘솔</b>: 로그인 계정 정보와 연결 토큰은 서비스 데이터베이스에 보관되며, 외부 API 시크릿은 암호화해 저장합니다. 전송 구간은 HTTPS로 보호됩니다.</li>
 <li>스토어·클라우드 API 응답은 기능 실행 과정에서 처리됩니다. 사용자가 저장한 앱 구성, 작업 결과, 출시 정보와 작업 기록은 서비스 데이터베이스에 남을 수 있습니다.</li>
 </ul></div></section>
 <section>
@@ -56,12 +56,13 @@
 <section>
 <h2>7. 보관 및 삭제 요청</h2>
 <div><p>웹 콘솔의 로그인 계정 정보와 OAuth 토큰은 계정 연결을 유지하기 위해 보관됩니다. Google에서 권한을 취소하거나 웹 콘솔에서 로그아웃하는 것만으로 기존 데이터베이스 기록이 모두 삭제되지는 않습니다. 계정·연결 토큰·저장된 작업 데이터의 삭제를 요청하려면 아래 문의 이메일로 연락해 주세요. 계정 소유 확인 후 삭제 대상과 공유 워크스페이스 데이터의 처리 범위를 안내합니다. 비밀번호, 액세스 토큰, 서비스 계정 키를 이메일에 포함하지 마세요.</p>
-<p>선택적 SDK 사용량 측정 이벤트는 별도 안내에 따라 최대 90일 보관합니다. AI 제공자와 사용자가 연결한 MCP 클라이언트가 보관하는 데이터는 해당 제공자의 설정·삭제 절차를 함께 확인해야 합니다.</p>
+<p>선택적 SDK 사용량 측정 이벤트는 사용자가 지정한 팀 콘솔로만 전송되며, 보관 기간과 삭제는 그 콘솔 운영자의 조건을 따릅니다(<a href="/privacy/sdk-usage/">별도 안내</a>). AI 제공자와 사용자가 연결한 MCP 클라이언트가 보관하는 데이터는 해당 제공자의 설정·삭제 절차를 함께 확인해야 합니다.</p>
 </div></section>
 <section>
 <h2>8. 문의</h2>
 <div><p>본 방침이나 데이터 처리에 관한 문의는 아래로 연락해 주세요.</p>
-<ul><li>이메일: <a href="mailto:turbo08@supervlabs.io">turbo08@supervlabs.io</a></li>
+<ul><li>운영: 루카스 파운데이션 (Lucas Foundation)</li>
+<li>이메일: <a href="mailto:turbo08@gmail.com">turbo08@gmail.com</a></li>
 <li>GitHub: <a href="https://github.com/jeonghwanko/mimi-seed-sdk">https://github.com/jeonghwanko/mimi-seed-sdk</a></li>
 </ul></div></section>
   </main>

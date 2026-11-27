@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The license notice now names **Lucas Foundation** (https://mimi-seed.oddbout.com) as the copyright holder, replacing Pryzm GG and the retired console URL. The license itself (PolyForm Noncommercial 1.0.0) is unchanged.
+
 ## [0.25.5] - 2026-11-28
 
 ### Added
