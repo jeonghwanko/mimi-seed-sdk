@@ -129,8 +129,9 @@ found:
 
 This holds when you repeat the **same** post. Either answer lifts the block on the account, so if you edited the
 text, images, or video in the meantime, the edited version is a different post and is sent. Saying "it's posted"
-while asking for an edited post therefore leaves both on the platform. To record the old one and send nothing, ask
-with the original content.
+while asking for an edited post therefore leaves both on the platform. Saying "send it again" with an edited post
+sends only the edited one, and the old one stays unchecked. To record the old one and send nothing, ask with the
+original content. TikTok is the exception: a resend there is always a new plan of the same video (see below).
 
 To post identical content again on purpose, say so ("post it again"); the agent passes `repost`. Without that, a
 repeat request is skipped.
