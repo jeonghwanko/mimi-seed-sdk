@@ -196,7 +196,7 @@ then cli, skipping any version already on npm. Details and the rationale:
 `npm run version:set` also pins the plugin's `.mcp.json` to the new server version (stable versions only).
 **After the publish job is green**, release the plugin to Claude Code users in a follow-up PR:
 `npm run release:marketplace` — it refuses until npm has the version and GitHub has the tag, then moves the `ref`
-in `.claude-plugin/marketplace.json`. Users get a release only through that `ref` ([[skills-plugins]]).
+in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` together. Users get a release only through that `ref` ([[skills-plugins]]).
 
 Intermediate validation uses `beta.N` or `next.N` versions. `scripts/release-channel.mjs` owns their npm
 dist-tags; stable versions alone update `latest`. Batch routine fixes before a stable release.

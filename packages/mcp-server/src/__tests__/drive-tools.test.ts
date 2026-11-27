@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -140,6 +140,27 @@ describe('inspectLocalFile', () => {
     writeFileSync(empty, '');
     expect(() => inspectLocalFile(empty)).toThrow(/빈 파일/);
     expect(() => inspectLocalFile(dir)).toThrow(/파일이 아니야/);
+  });
+
+  // filePath 는 인젝션이 고를 수 있다 — 자격증명 폴더의 파일을 공유 폴더로 올리는 경로를 막는다 (심볼릭 링크 포함).
+  it.skipIf(process.platform === 'win32')('~/.mimi-seed 안의 파일은 직접이든 심볼릭 링크로든 올리지 않는다', () => {
+    const home = mkdtempSync(path.join(tmpdir(), 'drive-home-'));
+    vi.stubEnv('HOME', home);
+    try {
+      mkdirSync(path.join(home, '.mimi-seed'));
+      const token = path.join(home, '.mimi-seed', 'tokens.json');
+      writeFileSync(token, '{"refresh_token":"x"}');
+      expect(() => inspectLocalFile(token)).toThrow(/~\/\.mimi-seed/);
+      const link = path.join(dir, 'innocent.json');
+      symlinkSync(token, link);
+      expect(() => inspectLocalFile(link)).toThrow(/~\/\.mimi-seed/);
+      const ok = path.join(dir, 'clip.srt');
+      writeFileSync(ok, '1');
+      expect(inspectLocalFile(ok).size).toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it('확장자로 MIME 을 추정하고 모르면 octet-stream', () => {

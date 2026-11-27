@@ -58,6 +58,12 @@ YouTube Analytics reports use the separate `youtube_analytics` grant. Channel, v
 
 For first sign-in, create a **Desktop app** OAuth client in Google Cloud and set `MIMI_SEED_GOOGLE_CLIENT_ID` and `MIMI_SEED_GOOGLE_CLIENT_SECRET` in the CLI or MCP server environment. A returning profile reuses its saved client, and a new named profile reuses the default login's client.
 
+Your own client runs API calls against **its** Google Cloud project, so set that project up once:
+
+1. **OAuth consent screen** — user type *External* (or *Internal* in a Workspace org), and add your own Google account under *Test users* while the app is in *Testing*.
+2. **Enable the APIs** for the services you use (*APIs & Services → Library*): Firebase Management, AdMob, Google Play Android Developer, Google Play Developer Reporting, Search Console, Google Analytics Admin + Data, Identity and Access Management, BigQuery, YouTube Data, YouTube Analytics, Google Drive, Google Ads. A disabled API fails the first call with `SERVICE_DISABLED`; enable it and retry.
+3. **Testing mode lasts a week.** Google expires refresh tokens of an *External* app in *Testing* after 7 days, so you would sign in again weekly. Publishing the app (*In production*) removes that limit; for your own use you can stay unverified and click through the warning.
+
 ```bash
 mimi-seed auth login
 ```
@@ -65,9 +71,9 @@ mimi-seed auth login
 A browser opens; approve; the token lands in `~/.mimi-seed/tokens.json`.
 
 > ⚠️ **The one wall almost everyone hits.** If Google says *"access blocked"* / `access_denied` and you did not
-> click deny: the OAuth app is in **testing** mode, so only registered test users may sign in. Ask whoever
-> operates the app to add your Google account under *OAuth consent screen → Test users*, then retry. Retrying
-> without that will never work. → [`troubleshooting.md#user-denied`](troubleshooting.md#user-denied)
+> click deny: the OAuth app is in **testing** mode, so only registered test users may sign in. Add your Google
+> account under *OAuth consent screen → Test users* of the client's project (yours, if you created the client),
+> then retry. Retrying without that will never work. → [`troubleshooting.md#user-denied`](troubleshooting.md#user-denied)
 
 **Verify:** `mimi-seed auth status`
 

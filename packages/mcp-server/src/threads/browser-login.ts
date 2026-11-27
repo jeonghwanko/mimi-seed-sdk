@@ -1,4 +1,4 @@
-import { consoleUrl } from '#core/console-url.js';
+import { socialBrokerBase } from '../social/broker-base.js';
 import { createServer } from 'node:http';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { fetchWithTimeout } from '../lib/http.js';
@@ -24,12 +24,9 @@ export async function connectThreadsInBrowser(options: BrowserLoginOptions = {})
   // Freeze the selected profile before any asynchronous work / directory changes.
   const target = resolveSocialConfigTarget('threads', options);
   const saveOptions = { ...options, profile: target.profile ?? undefined, startDir: options.startDir ?? process.cwd() };
-  const url = consoleUrl(options.webBase ?? process.env.MIMI_SEED_WEB_BASE);
+  const url = socialBrokerBase(options.webBase ?? process.env.MIMI_SEED_WEB_BASE);
   if (!url) throw new ThreadsLoginError('configuration');
   const base = new URL(url);
-  if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash || base.pathname !== '/') {
-    throw new ThreadsLoginError('configuration');
-  }
   const state = randomBytes(32).toString('hex');
   const verifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(verifier).digest('base64url');

@@ -1,4 +1,4 @@
-import { consoleUrl } from "#core/console-url.js";
+import { consoleBase, consoleUrl } from "#core/console-url.js";
 // 자격증명 레지스트리 — `doctor` · `auth status --all` · `setup` 이 **공유하는 단일 SSOT**.
 //
 // 예전엔 doctor 와 auth 가 각자 4줄짜리 목록을 손으로 들고 있었고, Jenkins/CI/Ads/FB/IG 는
@@ -323,10 +323,10 @@ export const CREDENTIALS: readonly CredSpec[] = [
     docsAnchor: "cloud-pat",
     detect: (home) => {
       if (process.env.MIMI_SEED_TOKEN) {
-        return consoleUrl(process.env.MIMI_SEED_WEB_BASE) ? { present: true, detail: "MIMI_SEED_TOKEN (env)" } : { present: false };
+        return consoleBase(process.env.MIMI_SEED_WEB_BASE) ? { present: true, detail: "MIMI_SEED_TOKEN (env)" } : { present: false };
       }
       const cfg = readJson<{ prefix?: string; webBase?: string; endpoint?: string }>(home, "config.json");
-      return cfg?.prefix && consoleUrl(cfg.webBase) && consoleUrl(cfg.endpoint) ? { present: true, detail: `${cfg.prefix}…` } : { present: false };
+      return cfg?.prefix && consoleBase(cfg.webBase) && consoleUrl(cfg.endpoint) ? { present: true, detail: `${cfg.prefix}…` } : { present: false };
     },
   },
   {
@@ -895,7 +895,7 @@ export function missingRequired(
   platforms: Platform[],
 ): CredSpec[] {
   return CREDENTIALS.filter((spec) => {
-    if (spec.id === "mimiseed") return !!consoleUrl(process.env.MIMI_SEED_WEB_BASE) && !isSatisfied(spec, detected);
+    if (spec.id === "mimiseed") return !!consoleBase(process.env.MIMI_SEED_WEB_BASE) && !isSatisfied(spec, detected);
     if (spec.requirement === "optional") return false;
     if (spec.requirement === "platform" && !platforms.includes(spec.platform!)) return false;
     return !isSatisfied(spec, detected);
@@ -924,7 +924,7 @@ export function planSetup(detected: Map<CredId, Detected>, opts: PlanOpts = {}):
 
   return CREDENTIALS.filter((spec) => {
     if (only && !only.has(spec.id)) return false;
-    if (spec.id === "mimiseed" && !only && !reconnect.has(spec.id) && !consoleUrl(process.env.MIMI_SEED_WEB_BASE)) return false;
+    if (spec.id === "mimiseed" && !only && !reconnect.has(spec.id) && !consoleBase(process.env.MIMI_SEED_WEB_BASE)) return false;
     if (reconnect.has(spec.id)) return true;
     const found = detected.get(spec.id);
     // 만료됐거나 7일 안에 만료되는 토큰은 setup 이 알아서 재연결 대상으로 올린다.

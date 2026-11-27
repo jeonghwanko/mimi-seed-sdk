@@ -58,6 +58,12 @@ YouTube Analytics 리포트는 별도의 `youtube_analytics` 권한을 사용한
 
 처음 연결할 때는 Google Cloud에서 **데스크톱 앱** 유형 OAuth 클라이언트를 만들고 `MIMI_SEED_GOOGLE_CLIENT_ID`와 `MIMI_SEED_GOOGLE_CLIENT_SECRET`를 CLI 또는 MCP 서버 환경에 설정하세요. 같은 프로필의 재로그인은 저장된 클라이언트를, 새 이름 있는 프로필은 기본 로그인의 클라이언트를 재사용합니다.
 
+직접 만든 클라이언트는 API 호출이 **그 클라이언트의** Google Cloud 프로젝트로 나가므로, 그 프로젝트를 한 번 준비한다:
+
+1. **OAuth 동의 화면** — 사용자 유형 *외부*(Workspace 조직이면 *내부*), 앱이 *테스트* 상태인 동안 *테스트 사용자*에 내 Google 계정을 추가한다.
+2. **쓰는 서비스의 API 사용 설정** (*API 및 서비스 → 라이브러리*): Firebase Management, AdMob, Google Play Android Developer, Google Play Developer Reporting, Search Console, Google Analytics Admin + Data, Identity and Access Management, BigQuery, YouTube Data, YouTube Analytics, Google Drive, Google Ads. 꺼진 API 는 첫 호출이 `SERVICE_DISABLED` 로 실패한다 — 켜고 다시 시도한다.
+3. **테스트 모드는 일주일이다.** Google 은 *테스트* 상태인 *외부* 앱의 refresh token 을 7일 뒤 만료시켜 매주 다시 로그인해야 한다. 앱을 *프로덕션*으로 게시하면 이 제한이 없어진다 — 본인만 쓴다면 검증 없이 경고를 넘기고 써도 된다.
+
 ```bash
 mimi-seed auth login
 ```
@@ -65,9 +71,9 @@ mimi-seed auth login
 브라우저가 열리고, 승인하면, 토큰이 `~/.mimi-seed/tokens.json` 에 저장된다.
 
 > ⚠️ **거의 모두가 부딪히는 단 하나의 벽.** 거부한 적이 없는데 Google 이 *"액세스 차단됨"* / `access_denied` 라고
-> 한다면: 이 OAuth 앱이 **테스팅** 모드라 등록된 테스트 사용자만 로그인할 수 있다는 뜻이다. 앱 운영자에게
-> *OAuth 동의 화면 → 테스트 사용자* 에 네 Google 계정을 추가해달라고 요청한 뒤 재시도하라. 그 전엔 몇 번을
-> 다시 해도 절대 안 된다. → [`troubleshooting.ko.md#user-denied`](troubleshooting.ko.md#user-denied)
+> 한다면: 이 OAuth 앱이 **테스팅** 모드라 등록된 테스트 사용자만 로그인할 수 있다는 뜻이다. 클라이언트가 속한
+> 프로젝트(직접 만들었다면 내 프로젝트)의 *OAuth 동의 화면 → 테스트 사용자* 에 네 Google 계정을 추가한 뒤
+> 재시도하라. 그 전엔 몇 번을 다시 해도 절대 안 된다. → [`troubleshooting.ko.md#user-denied`](troubleshooting.ko.md#user-denied)
 
 **확인:** `mimi-seed auth status`
 

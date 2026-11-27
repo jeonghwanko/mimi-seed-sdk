@@ -26,7 +26,7 @@ export const APPROVAL_ENV = 'MIMI_SEED_APPROVAL';
 export const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
- * 거절·취소·시간 초과된 **같은 호출**(도구 + 인자)은 이 시간 동안 대화상자 없이 거부한다. 인젝션된 에이전트가
+ * 사용자가 거절·취소한 **같은 호출**(도구 + 인자)은 이 시간 동안 대화상자 없이 거부한다 (시간 초과·중단·오류는 거절이 아니라 제외). 인젝션된 에이전트가
  * 같은 요청을 반복해 사용자가 지쳐 승인하게 만드는 것(approval fatigue)을 막는다. 인자를 바꾼 호출은 다시 묻는다.
  */
 export const DECLINE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -201,8 +201,9 @@ export async function requestHumanApproval(
     state.refusedUntil.set(key, now() + DECLINE_COOLDOWN_MS);
     return refuse(m.declined(call.name));
   } catch (e) {
-    // 지원을 선언한 클라이언트에서의 실패(타임아웃·취소·응답 오류)는 모드와 무관하게 거부한다 — 실패를 승인으로 치지 않는다.
-    state.refusedUntil.set(key, now() + DECLINE_COOLDOWN_MS);
+    // 지원을 선언한 클라이언트에서의 실패(타임아웃·중단·응답 오류)는 모드와 무관하게 거부한다 — 실패를 승인으로 치지 않는다.
+    // 다만 쿨다운은 걸지 않는다: 사용자가 거절한 게 아니다. 클라이언트의 tools/call 타임아웃(SDK 기본 60초)이나
+    // 사용자가 턴을 중단(Esc)한 경우를 거절로 기록하면, "응, 실행해" 라고 한 뒤의 같은 호출이 5분간 막혔다.
     return refuse(m.failed(call.name, e instanceof Error ? e.message : String(e)));
   } finally {
     state.pending = false;

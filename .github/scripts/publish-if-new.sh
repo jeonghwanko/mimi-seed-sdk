@@ -83,7 +83,7 @@ verify_npm_install() (
 finish_release() {
   verify_npm_install || return 1
   if gh release view "$TAG" >/dev/null 2>&1; then return 0; fi
-  gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes "${RELEASE_FLAGS[@]}" \
+  gh release create "$TAG" --target "$GITHUB_SHA" --title "$NAME $VERSION" --generate-notes ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} \
     || echo "⚠ GitHub Release 생성 실패 ($TAG) — npm 설치 검증 완료"
 }
 

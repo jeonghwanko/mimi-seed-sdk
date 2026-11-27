@@ -9,7 +9,7 @@ import { generateKeystore, isKeytoolAvailable } from '../android/keystore.js';
 import { keystoresDir, persistGeneratedKeystore } from '../android/keystore-store.js';
 import { loadJenkinsConfig, requireJenkinsConfig } from '../jenkins/config.js';
 import { inspectCredential, KIND_FILE, upsertSecretFile } from '../jenkins/credentials.js';
-import { ambiguousDefaultIdNote, existingCredentialPreview } from '../jenkins/messages.js';
+import { ambiguousDefaultIdNote, existingCredentialPreview, newCredentialPreview } from '../jenkins/messages.js';
 import { loadPlayServiceAccountForUpload } from '../android/playstore-sa.js';
 import {
   existingAppSigningPlanLines, newAppSigningPlanLines, keytoolMissingLines, keystoreGeneratedLines,
@@ -153,8 +153,8 @@ export function registerAndroidTools(server: ToolRegistrar) {
       '~/.mimi-seed/play-service-accounts/{package_name}.json 을 읽어 base64로 변환 후 등록합니다.',
       'iam_create_key 로 막 발급한 키를 올리려면 service_account_json_path 에 그 경로(~/.mimi-seed/keys/ 안)를 넘기세요.',
       'setup_playstore_connection 실행 후 반드시 이 도구를 호출하세요.',
-      '새 id 는 바로 생성한다. 같은 id 가 이미 있으면 기존 SA JSON 을 되돌릴 수 없게 교체하므로',
-      'confirm 생략/false 면 아무것도 바꾸지 않고 "이미 존재" dry-run 만 반환 — 사용자 승인 후 confirm: true 로 재호출.',
+      'confirm 생략/false 면 아무것도 보내지 않고 dry-run 만 반환한다 — 새 id 면 "생성 예정", 같은 id 가 있으면',
+      '"이미 존재"(기존 SA JSON 을 교체하면 되돌릴 수 없음). 사용자 승인 후 같은 인자에 confirm: true 로 재호출.',
     ].join(' '),
     {
       package_name: androidPackageName.describe('Android 패키지명 (예: com.example.app)'),
@@ -165,7 +165,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
         .string()
         .optional()
         .describe('선택 — iam_create_key 가 저장한 키 파일 절대경로 (~/.mimi-seed/keys/ 안만 허용). 생략하면 패키지별 등록 SA 사용'),
-      confirm: z.boolean().optional().describe('같은 id 가 이미 있을 때만 필요. true 면 기존 SA JSON 을 교체'),
+      confirm: z.boolean().optional().describe('true 일 때만 Jenkins 로 보낸다 (새 id 생성 또는 기존 SA JSON 교체). 생략/false 면 dry-run'),
     },
     async ({ package_name, credential_id: credentialIdInput, service_account_json_path, confirm }) => {
       const credential_id = credentialIdInput ?? `${credentialPrefix(package_name)}-playstore-sa`;
@@ -175,14 +175,15 @@ export function registerAndroidTools(server: ToolRegistrar) {
       const saBase64 = Buffer.from(sa.raw, 'utf-8').toString('base64');
 
       const cfg = requireJenkinsConfig();
-      // jenkins_upload_keystore / jenkins_create_credential 와 같은 규칙: 새 id 는 바로 만들고,
-      // 이미 있는 id 를 교체하는 것만 confirm 을 요구한다 (예전엔 말없이 덮어썼다).
+      // jenkins_upload_keystore / jenkins_create_credential 와 같은 규칙: confirm 전에는 아무것도 보내지 않는다.
+      // 새 id 도 SA 키를 외부로 내보내는 작업이라 dry-run 을 거친다 (예전엔 새 id 는 바로, 기존 id 는 말없이 덮어썼다).
       // 설명에 패키지명을 남긴다 — 기본 id 가 마지막 세그먼트만 써서 다른 앱과 겹쳐도 다음 dry-run 이 누구 것인지 보여준다.
       const description = `Play Store service account for ${package_name}`;
       const result = await upsertSecretFile(cfg, credential_id, saBase64, `${package_name}-sa.json`, description, {
         allowReplace: confirm === true,
+        dryRun: confirm !== true,
       });
-      if (result === 'exists') {
+      if (result === 'exists' || result === 'new') {
         const notes: string[] = [];
         if (credentialIdInput === undefined) {
           notes.push(
@@ -190,6 +191,7 @@ export function registerAndroidTools(server: ToolRegistrar) {
               M().defaultIdNote(credential_id, package_name),
           );
         }
+        if (result === 'new') return textResult(newCredentialPreview(credential_id, cfg.url, KIND_FILE, notes));
         return textResult(existingCredentialPreview(credential_id, await inspectCredential(cfg, credential_id), KIND_FILE, notes));
       }
 

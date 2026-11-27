@@ -117,9 +117,6 @@
       ],
       "idempotent": [
         "jenkins_upload_playstore_sa"
-      ],
-      "approval": [
-        "jenkins_upload_playstore_sa"
       ]
     },
     "appstore": {
@@ -636,9 +633,7 @@
         "jenkins_update_job"
       ],
       "approval": [
-        "jenkins_save_config",
-        "jenkins_create_credential",
-        "jenkins_upload_keystore"
+        "jenkins_save_config"
       ]
     },
     "playstore": {
@@ -729,6 +724,9 @@
         "playstore_update_subscription_listing",
         "playstore_update_product_state",
         "playstore_update_product",
+        "playstore_register_service_account"
+      ],
+      "approval": [
         "playstore_register_service_account"
       ]
     },
@@ -925,6 +923,10 @@
       ],
       "idempotent": [
         "drive_create_folder",
+        "drive_update_file_metadata"
+      ],
+      "approval": [
+        "drive_upload_file",
         "drive_update_file_metadata"
       ]
     }
