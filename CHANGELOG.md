@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.25.6] - 2026-11-28
+
 ### Changed
 
 - The README and the social publishing guide now describe posting to several platforms at once: what to tell the agent after an unknown result (posted → `markPosted`, missing → `resendUnknown`), how to post again on purpose (`repost`), and that TikTok needs a new plan to post again.
