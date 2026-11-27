@@ -14,6 +14,8 @@ const M = catalog(
     preview:
       'dry-run — 아무것도 게시하지 않았습니다. 아래 계획을 사용자에게 보여주고 명시 승인을 받은 뒤, 같은 인자에 confirm: true 를 더해 다시 호출하세요.',
     blocked: '문제가 있는 대상이 있어 아무 곳에도 게시하지 않았습니다. problems 를 고친 뒤 다시 미리보기하세요.',
+    requestIdRemoved:
+      'requestId 는 더 이상 받지 않습니다. 같은 게시물(플랫폼·계정·내용이 같음)은 requestId 없이도 한 번만 게시됩니다. requestId 를 빼고 다시 부르세요. 같은 내용을 일부러 다시 올리려면 repost 를 쓰세요.',
     done: '게시를 마쳤습니다. 실패한 대상은 다시 호출하면 다시 보냅니다 — 이미 게시된 곳은 건너뜁니다. 결과를 알 수 없는 대상은 그 플랫폼에서 먼저 확인하세요.',
   },
   {
@@ -22,6 +24,8 @@ const M = catalog(
     preview:
       'dry-run — nothing was posted. Show the user the plan below, get their explicit approval, then call again with the same arguments plus confirm: true.',
     blocked: 'Nothing was posted because some targets have problems. Fix the problems, then preview again.',
+    requestIdRemoved:
+      'requestId is no longer accepted. The same post (same platform, account, and content) is posted only once without it. Call again without requestId. To post the same content again on purpose, use repost.',
     done: 'Publishing finished. Calling again resends the failed targets — platforms that already posted are skipped. Check any unknown-outcome target on its platform first.',
   },
 );
@@ -76,9 +80,12 @@ export function registerCrosspostTools(server: ToolRegistrar) {
       resendUnknown: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('사용자가 그 플랫폼에서 게시되지 않았음을 확인한, 결과를 알 수 없었던 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록만 다시 보내며, 이후 새로 생긴 결과 불명은 다시 막힙니다.'),
       repost: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('사용자가 일부러 다시 게시하려는 이미 게시된 기록. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 한 번 다시 게시되면 그 승인은 더 이상 맞지 않아 재시도로 반복 게시되지 않습니다.'),
       markPosted: z.array(approval).max(SOCIAL_TARGETS.length * 2).optional().describe('결과를 알 수 없었던 기록 중, 사용자가 그 플랫폼에서 실제로 올라가 있음을 확인한 것. 계획에 표시된 플랫폼과 at 을 그대로 넘깁니다. 그 기록을 게시됨으로 남기고 계정 차단을 풉니다 (보내지는 않음).'),
+      // Removed: the "same post" rule replaced it. Rejected rather than silently dropped, so a caller relying on it
+      // learns that it no longer chooses what counts as a retry.
+      requestId: z.never({ error: () => M().requestIdRemoved }).optional().describe('지원 중단 — 넘기면 거부합니다. 같은 게시물은 자동으로 한 번만 게시됩니다.'),
       confirm: z.boolean().default(false).describe('사용자의 명시 승인 후 true. false 면 dry-run 계획만 반환합니다.'),
     },
-    async ({ confirm, ...input }) => {
+    async ({ confirm, requestId: _removed, ...input }) => {
       const plan = planPublish(input);
       if (!confirm) return jsonResult({ mode: 'dry-run', note: M().preview, ...plan });
       if (!plan.ok) return jsonResult({ mode: 'blocked', note: M().blocked, ...plan });
