@@ -45,7 +45,7 @@ vi.mock('../crosspost/ledger.js', async (original) => {
   return { ...actual, writeRecord: vi.fn(actual.writeRecord) };
 });
 
-import { accountKey, decide, executePublish, planPublish, targetKey, type SocialPublishInput } from '../crosspost/tools.js';
+import { accountKey, decide, executePublish, planPublish, recordMarksOnly, targetKey, type SocialPublishInput } from '../crosspost/tools.js';
 import { acquireAccountLock, readPending, readRecord, recordPath, writeRecord, type PendingRecord, type PostRecord } from '../crosspost/ledger.js';
 import { TikTokApiError } from '../tiktok-business/api.js';
 
@@ -847,7 +847,9 @@ describe('review 9', () => {
     const t = readPending('threads', accountKey('threads', launch)!)!.at;
     // The person found the repost live and sends the same arguments with markPosted, as the message says.
     expect((await run({ ...repost, markPosted: [{ platform: 'threads', at: t }] }))[0].status).toBe('already_posted');
-    expect(readRecord('threads', targetKey('threads', launch)!)).toMatchObject({ state: 'posted', at: t });
+    const marked = readRecord('threads', targetKey('threads', launch)!)!;
+    expect(marked.state).toBe('posted');
+    expect(marked.at > t).toBe(true); // just past the marked send, so no approval naming t matches it
     expect((await run(repost))[0].status).toBe('already_posted');
     expect(api.thText).toHaveBeenCalledTimes(2);
   });
@@ -940,8 +942,9 @@ describe('settled by attempt id, not by clock', () => {
       expect(planPublish(other).ok).toBe(false);
       ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at: markerAt, attempt: 'attempt-a' });
       expect(planPublish(other).ok).toBe(true);
-      ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at: markerAt }); // no attempt
-      expect(planPublish(other).ok).toBe(false);
+      // A marker from an earlier build (no attempt) falls back to time order: settled only by a strictly newer record.
+      ledgerModule.writePending('threads', account(), { postKey: key(), state: 'unknown', at: markerAt });
+      expect(planPublish(other).ok).toBe(offset < 0);
     },
   );
 
@@ -992,5 +995,131 @@ describe('settled by attempt id, not by clock', () => {
     }
     expect(readPending('threads', account())).not.toBeNull();
     expect(planPublish(other).ok).toBe(true);
+  });
+});
+
+describe('issue 147', () => {
+  const run = async (input: SocialPublishInput) => executePublish(input, planPublish(input));
+  const launch: SocialPublishInput = { targets: ['threads'], text: 'Launch' };
+  const account = () => accountKey('threads', launch)!;
+  const record = () => readRecord('threads', targetKey('threads', launch)!)!;
+  const later = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+  it('#1: resendUnknown alone resends a repost a person found missing', async () => {
+    expect((await run(launch))[0].status).toBe('posted');
+    const posted = record();
+    await later();
+    const repost = { ...launch, repost: [{ platform: 'threads' as const, at: posted.at }] };
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(repost))[0].status).toBe('unknown_outcome');
+    const q = readPending('threads', account())!.at;
+    // Not live: the same content with resendUnknown alone (the advice the message gives) sends the repost again.
+    const resend = { ...launch, resendUnknown: [{ platform: 'threads' as const, at: q }] };
+    expect(planPublish(resend).posts[0].action).toMatch(/resending after a check/);
+    expect((await run(resend))[0].status).toBe('posted');
+    expect(readPending('threads', account())).toBeNull();
+    // Used up: the same arguments again skip.
+    expect((await run(resend))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(3);
+  });
+
+  it('#1: resendUnknown naming another post\'s marker does not repost this one', async () => {
+    expect((await run(launch))[0].status).toBe('posted');
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run({ targets: ['threads'], text: 'Other' }))[0].status).toBe('unknown_outcome');
+    const q = readPending('threads', account())!.at;
+    expect((await run({ ...launch, resendUnknown: [{ platform: 'threads', at: q }] }))[0].status).toBe('already_posted');
+    expect(api.thText).toHaveBeenCalledTimes(2);
+  });
+
+  it('#2: a clean refusal that could not be recorded says how to clear the account', async () => {
+    const real = ledger.realWrite as typeof writeRecord;
+    vi.mocked(writeRecord).mockImplementation((platform, key, rec) => {
+      if (rec.state === 'failed') throw new Error('ENOSPC');
+      real(platform, key, rec);
+    });
+    api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    const outcome = (await run(launch))[0];
+    vi.mocked(writeRecord).mockImplementation(real);
+    expect(outcome).toMatchObject({ status: 'failed', error: expect.stringMatching(/Refused, so nothing was posted.*ENOSPC.*resendUnknown: \[\{ "platform": "threads", "at": "/) });
+    const at = /"at": "([^"]+)"/.exec((outcome as { error: string }).error)![1];
+    expect(planPublish(launch).ok).toBe(false); // blocked as unknown, as the note says
+    expect((await run({ ...launch, resendUnknown: [{ platform: 'threads', at }] }))[0].status).toBe('posted');
+  });
+
+  it('#3: markPosted is reported, not silently dropped, when the account cannot be resolved', () => {
+    const tiktok: SocialPublishInput = { targets: ['tiktok'], text: 'x', tiktok: { planId: 'plan-1' } };
+    const at = new Date().toISOString();
+    writeRecord('tiktok', targetKey('tiktok', tiktok)!, { state: 'unknown', at });
+    api.ttOpenId = null; // TikTok disconnected
+    const plan = planPublish({ ...tiktok, markPosted: [{ platform: 'tiktok', at }] });
+    expect(plan.ok).toBe(false);
+    expect(plan.posts[0].problems.join()).toMatch(/To record markPosted, the tiktok account must be resolvable/);
+  });
+
+  it('#4: TikTok unknown outcomes point to a new plan for a resend', async () => {
+    api.ttPublish.mockImplementationOnce(failAfterPublishStart(timeout()));
+    const tiktok: SocialPublishInput = { targets: ['tiktok'], text: 'x', tiktok: { planId: 'plan-1' } };
+    expect((await run(tiktok))[0].status).toBe('unknown_outcome');
+    const problem = planPublish({ ...tiktok, tiktok: { planId: 'plan-2' } }).posts[0].problems.join();
+    expect(problem).toMatch(/markPosted: \[\{ "platform": "tiktok"/);
+    expect(problem).toMatch(/make a new plan with tiktok_business_plan_video_post and send its planId with resendUnknown/);
+    const at = readPending('tiktok', accountKey('tiktok', tiktok)!)!.at;
+    expect(decide('tiktok', { state: 'unknown', at }, null, { resendUnknown: [], repost: [], markPosted: [] }))
+      .toMatchObject({ kind: 'block', problem: expect.stringMatching(/make a new plan/) });
+    // The advice works: a new plan with resendUnknown is sent.
+    expect((await run({ ...tiktok, tiktok: { planId: 'plan-2' }, resendUnknown: [{ platform: 'tiktok', at }] }))[0].status).toBe('posted');
+  });
+
+  it('#5: markPosted frees a YouTube channel even after the render was moved', async () => {
+    const yt: SocialPublishInput = { targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
+    api.ytUpload.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(yt))[0].status).toBe('unknown_outcome');
+    const channel = accountKey('youtube', yt)!;
+    const at = readPending('youtube', channel)!.at;
+    rmSync(VIDEO); // the render is gone: the plan for this content can no longer pass
+    const marked = { ...yt, markPosted: [{ platform: 'youtube' as const, at }] };
+    expect(planPublish(marked).ok).toBe(false);
+    expect(recordMarksOnly(marked)).toEqual([{ platform: 'youtube', marked: at }]);
+    expect(readPending('youtube', channel)).toBeNull();
+    // The channel is free: a new render goes out.
+    const next = path.join(h.home, 'next.mp4');
+    writeFileSync(next, 'another video');
+    expect((await run({ ...yt, videoFilePath: next }))[0].status).toBe('posted');
+    expect(api.ytUpload).toHaveBeenCalledTimes(2);
+  });
+
+  it('#5: recordMarksOnly reports a platform it cannot mark instead of throwing', () => {
+    api.ttOpenId = null;
+    expect(recordMarksOnly({ targets: ['tiktok'], text: 'x', tiktok: { planId: 'plan-1' }, markPosted: [{ platform: 'tiktok', at: 'x' }] }))
+      .toEqual([{ platform: 'tiktok', error: expect.stringMatching(/must be resolvable/) }]);
+  });
+
+  it('#6: markPosted and repost naming the same first-send `at` mark it and do not repost it', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(timeout()));
+    expect((await run(launch))[0].status).toBe('unknown_outcome');
+    const p = readPending('threads', account())!.at;
+    const both = { ...launch, markPosted: [{ platform: 'threads' as const, at: p }], repost: [{ platform: 'threads' as const, at: p }] };
+    expect(planPublish(both).posts[0].action).toMatch(/already posted/);
+    expect((await run(both))[0].status).toBe('already_posted');
+    expect(record().at > p).toBe(true);
+    expect(api.thText).toHaveBeenCalledTimes(1);
+  });
+
+  it('#6: the same holds for an older unknown record with no marker', async () => {
+    const p = new Date(Date.now() - 60_000).toISOString();
+    writeRecord('threads', targetKey('threads', launch)!, { state: 'unknown', at: p });
+    const both = { ...launch, markPosted: [{ platform: 'threads' as const, at: p }], repost: [{ platform: 'threads' as const, at: p }] };
+    expect((await run(both))[0].status).toBe('already_posted');
+    expect(record()).toMatchObject({ state: 'posted' });
+    expect(record().at > p).toBe(true);
+    expect(api.thText).not.toHaveBeenCalled();
+  });
+
+  it('#8: a record or marker whose `at` is not a date is reported as unreadable, not thrown as a RangeError', () => {
+    const key = targetKey('threads', launch)!;
+    mkdirSync(path.dirname(recordPath('threads', key)), { recursive: true });
+    writeFileSync(recordPath('threads', key), JSON.stringify({ state: 'posted', at: 'yesterday-ish' }));
+    expect(() => planPublish(launch)).toThrow(/Cannot read the publish record/);
   });
 });

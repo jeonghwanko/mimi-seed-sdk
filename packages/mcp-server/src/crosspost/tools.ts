@@ -25,9 +25,12 @@
 //     none / failed    | no              | —                                | send
 //     (otherwise)      |                 | resendUnknown names the `at`     | send: a person checked it is not live
 //
-//   An approval (repost / resendUnknown) names the exact record it overrides by its `at`, shown in the plan. Once
-//   used, that record changes (a new `at`), so the same arguments on a retry cannot repost again or resend a newer
-//   unknown outcome nobody checked. A post that is only skipped never needs the account, its marker, or its lock.
+//   An approval (repost / resendUnknown / markPosted) names the exact record it overrides by its `at`, shown in the
+//   plan. An `at` is read against this call's post on that platform (its record) and that post's account (its marker)
+//   only — after changing the content, preview again and use the `at` the new plan shows. Once used, that record
+//   changes (a new `at`), so the same arguments on a retry cannot repost again or resend a newer unknown outcome
+//   nobody checked. resendUnknown naming a repost's own marker (same post, already `posted`) approves resending that
+//   repost. A post that is only skipped never needs the account, its marker, or its lock.
 //
 //   Changing a platform's content (text, images, a re-rendered video, the title) makes a different post with its own
 //   record, so it is sent — unless that account is pending. Another Page or account is another post and account.
@@ -159,6 +162,13 @@ const M = catalog(
     alreadyPostedTikTok: (at: string) => `이미 게시됨 (${at}) — 건너뜀. TikTok 에 다시 올리려면 tiktok_business_plan_video_post 로 새 계획을 만드세요.`,
     pendingNotCleared: (reason: string) => `(계정의 진행 중 표시를 지우지 못했습니다: ${reason}. 다음 호출에서 이 계정이 막히면 표시 파일을 확인하세요.)`,
     accountUnresolved: (p: string) => `${p} 의 대상 계정을 확인할 수 없습니다 (연결 또는 옵션을 확인하세요).`,
+    previousUnknownTikTok: (at: string) =>
+      `이전 시도(${at})의 결과를 알 수 없습니다 — 게시됐을 수 있습니다. tiktok 에서 직접 확인하세요. 올라가 있다면 markPosted: [{ "platform": "tiktok", "at": "${at}" }] 를 더해 보내세요. 없다면 TikTok 은 같은 계획을 다시 게시하지 않으니, tiktok_business_plan_video_post 로 새 계획을 만들어 그 planId 와 resendUnknown: [{ "platform": "tiktok", "at": "${at}" }] 로 보내세요.`,
+    accountPendingTikTok: (at: string) =>
+      `tiktok 계정에 결과를 알 수 없는 이전 게시(${at})가 있습니다 — 내용이 달라도 막습니다. tiktok 에서 직접 확인하세요. 올라가 있다면 markPosted: [{ "platform": "tiktok", "at": "${at}" }] 를 더해 보내세요. 없다면 TikTok 은 같은 계획을 다시 게시하지 않으니, tiktok_business_plan_video_post 로 새 계획을 만들어 그 planId 와 resendUnknown: [{ "platform": "tiktok", "at": "${at}" }] 로 보내세요.`,
+    failedUnrecorded: (p: string, at: string, reason: string) =>
+      `거부되어 게시되지 않았지만 그 결과를 기록하지 못했습니다 (${reason}). 다음 호출에서 이 계정은 "결과 알 수 없음"으로 막힙니다. 올라간 것이 없으니 resendUnknown: [{ "platform": "${p}", "at": "${at}" }] 를 더해 다시 보내세요.`,
+    markNeedsAccount: (p: string) => `markPosted 를 기록하려면 ${p} 의 대상 계정을 확인할 수 있어야 합니다 (연결 또는 옵션을 확인하세요).`,
     pendingTakenOver: '(이 호출의 잠금이 오래 멈춘 사이 다른 호출이 이 계정에 게시를 시작해 계정 표시를 바꿨습니다. 이 결과는 계정 표시에 남지 않았으니 플랫폼에서 직접 확인하세요.)',
     postedUnrecorded: (p: string, at: string, reason: string) =>
       `게시됐지만 기록하지 못했습니다 (${reason}). 다음 호출에서 이 계정은 "결과 알 수 없음"으로 막힙니다. ${p} 에서 게시물을 확인한 뒤 markPosted: [{ "platform": "${p}", "at": "${at}" }] 를 넘기면 풀립니다.`,
@@ -203,6 +213,13 @@ const M = catalog(
     alreadyPostedTikTok: (at: string) => `already posted (${at}) — skipped. To post to TikTok again, make a new plan with tiktok_business_plan_video_post.`,
     pendingNotCleared: (reason: string) => `(The account's pending marker could not be cleared: ${reason}. If the next call is blocked for this account, check that file.)`,
     accountUnresolved: (p: string) => `Cannot tell which ${p} account to post to (check its connection or options).`,
+    previousUnknownTikTok: (at: string) =>
+      `The outcome of the previous attempt (${at}) is unknown — it may have been posted. Check tiktok: if it is there, send with markPosted: [{ "platform": "tiktok", "at": "${at}" }]. If not, TikTok will not publish the same plan again: make a new plan with tiktok_business_plan_video_post and send its planId with resendUnknown: [{ "platform": "tiktok", "at": "${at}" }].`,
+    accountPendingTikTok: (at: string) =>
+      `This tiktok account has an earlier send (${at}) whose outcome is unknown — blocked even for different content. Check tiktok: if it is there, send with markPosted: [{ "platform": "tiktok", "at": "${at}" }]. If not, TikTok will not publish the same plan again: make a new plan with tiktok_business_plan_video_post and send its planId with resendUnknown: [{ "platform": "tiktok", "at": "${at}" }].`,
+    failedUnrecorded: (p: string, at: string, reason: string) =>
+      `Refused, so nothing was posted, but that could not be recorded (${reason}). The next call will find this account blocked as "outcome unknown". Nothing went out, so send again with resendUnknown: [{ "platform": "${p}", "at": "${at}" }].`,
+    markNeedsAccount: (p: string) => `To record markPosted, the ${p} account must be resolvable (check its connection or options).`,
     pendingTakenOver: '(While this call\'s lock was stalled, another call started publishing to this account and replaced its marker. This outcome is not on the marker: check the platform directly.)',
     postedUnrecorded: (p: string, at: string, reason: string) =>
       `Posted, but it could not be recorded (${reason}). The next call will find this account blocked as "outcome unknown". Check the post on ${p}, then pass markPosted: [{ "platform": "${p}", "at": "${at}" }] to clear it.`,
@@ -353,12 +370,17 @@ function settlePending(platform: SocialTarget, account: string, ours: { postKey:
  */
 function laterThan(previous: readonly (string | undefined)[], base = Date.now()): string {
   const floors = previous.map((at) => (at === undefined ? Number.NaN : Date.parse(at) + 1)).filter((ms) => !Number.isNaN(ms));
-  return new Date(Math.max(base, ...floors)).toISOString();
+  // The readers reject an unparsable `at`; an unparsable base still must not throw (new Date(NaN).toISOString()).
+  return new Date(Math.max(Number.isNaN(base) ? Date.now() : base, ...floors)).toISOString();
 }
 
-/** The `at` a marked-posted send gets: its own, moved past an earlier `posted` record so a repost approval is used up. */
-function markedAt(pendingAt: string, itsPost: PostRecord | null): string {
-  return itsPost?.state === 'posted' ? laterThan([itsPost.at], Date.parse(pendingAt)) : pendingAt;
+/**
+ * The `at` a marked-posted record gets: just past the `at` that was marked, and past an earlier `posted` record (a
+ * repost's). A mark is an outcome like any other: it must leave no record with the `at` an approval in the same call
+ * named — `markPosted: [P]` with `repost: [P]` would otherwise mark P and then repost it.
+ */
+function markedAt(at: string, itsPost: PostRecord | null): string {
+  return laterThan([at, itsPost?.state === 'posted' ? itsPost.at : undefined], Date.parse(at));
 }
 
 function errorText(error: unknown): string {
@@ -491,20 +513,27 @@ export function decide(
   record: PostRecord | null,
   pending: PendingRecord | null,
   { resendUnknown, repost }: DecideOptions,
+  /** This post's key: a marker naming it on a `posted` record is a repost of it, which resendUnknown may resend. */
+  key?: string,
 ): Decision {
+  // A person checked that this post's own repost (its marker) is not live: resending it is that repost, approved.
+  const resendsRepost = record?.state === 'posted' && pending !== null && key !== undefined && pending.postKey === key
+    && approves(resendUnknown, platform, pending.at);
   // A skip sends nothing, so nothing else (another call's pending send, a lock) can stand in its way.
-  const reposting = record?.state === 'posted' && approves(repost, platform, record.at);
+  const reposting = record?.state === 'posted' && (approves(repost, platform, record.at) || resendsRepost);
   if (record?.state === 'posted' && !reposting) {
     return { kind: 'skip', outcome: { platform, status: 'already_posted', id: record.id, url: record.url, at: record.at } };
   }
   if (pending && !approves(resendUnknown, platform, pending.at)) {
-    return { kind: 'block', problem: M().accountPending(platform, pending.at) };
+    return { kind: 'block', problem: platform === 'tiktok' ? M().accountPendingTikTok(pending.at) : M().accountPending(platform, pending.at) };
   }
-  if (reposting && record) return { kind: 'send', note: M().reposting(record.at) };
+  if (reposting && record) return { kind: 'send', note: resendsRepost && pending ? M().resendingUnknown(pending.at) : M().reposting(record.at) };
   if (record?.state === 'sending' || record?.state === 'unknown') {
     if (approves(resendUnknown, platform, record.at)) return { kind: 'send', note: M().resendingUnknown(record.at) };
     // The marker for this record is already approved above; an older record without a marker needs its own approval.
-    if (!pending || pending.at !== record.at) return { kind: 'block', problem: M().previousUnknown(platform, record.at) };
+    if (!pending || pending.at !== record.at) {
+      return { kind: 'block', problem: platform === 'tiktok' ? M().previousUnknownTikTok(record.at) : M().previousUnknown(platform, record.at) };
+    }
   }
   if (pending) return { kind: 'send', note: M().resendingUnknown(pending.at) };
   return { kind: 'send' };
@@ -532,7 +561,7 @@ function applyMarks(platform: SocialTarget, key: string, record: PostRecord | nu
   }
   if (view.record && (view.record.state === 'unknown' || view.record.state === 'sending') && approves(opts.markPosted, platform, view.record.at)) {
     marked = view.record.at;
-    view = { ...view, record: { ...view.record, state: 'posted' } };
+    view = { ...view, record: { ...view.record, state: 'posted', at: markedAt(view.record.at, null) } };
   }
   return { ...view, marked };
 }
@@ -572,6 +601,8 @@ export function planPublish(input: SocialPublishInput): PublishPlan {
         post.action = `${post.action} — ${decision.note}`;
       }
       if (markNote) post.action = `${post.action} — ${markNote}`;
+      // A mark is written under the account's lock: without the account it would be shown here but never saved.
+      if (resolved.view.marked && accountKey(platform, input) === null) post.problems.push(M().markNeedsAccount(platform));
     }
     if (duplicate) post.problems.push(M().duplicateTarget(platform));
     return post;
@@ -586,16 +617,19 @@ export function planPublish(input: SocialPublishInput): PublishPlan {
 function resolveDecision(platform: SocialTarget, key: string, record: PostRecord | null, input: SocialPublishInput) {
   const opts = options(input);
   const own = applyMarks(platform, key, record, null, opts);
-  const skipOnly = decide(platform, own.record, null, opts);
-  if (skipOnly.kind === 'skip') return { decision: skipOnly, account: null, view: own, locked: false, unresolved: false };
+  const skipOnly = decide(platform, own.record, null, opts, key);
+  // resendUnknown may name this post's own repost marker (decide's resendsRepost): then the account must be read.
+  const mayResendRepost = own.record?.state === 'posted' && opts.resendUnknown.some((a) => a.platform === platform);
+  if (skipOnly.kind === 'skip' && !mayResendRepost) return { decision: skipOnly, account: null, view: own, locked: false, unresolved: false };
   const account = accountKey(platform, input);
+  if (account === null && skipOnly.kind === 'skip') return { decision: skipOnly, account: null, view: own, locked: false, unresolved: false };
   if (account === null) {
     // The platform's own plan check normally says why (no youtube options, TikTok not connected); this is the fallback.
     const decision: Decision = { kind: 'block', problem: M().accountUnresolved(platform) };
     return { decision, account, view: own, locked: false, unresolved: true };
   }
   const view = applyMarks(platform, key, record, effectivePending(platform, account), opts);
-  return { decision: decide(platform, view.record, view.pending, opts), account, view, locked: isAccountLocked(platform, account), unresolved: false };
+  return { decision: decide(platform, view.record, view.pending, opts, key), account, view, locked: isAccountLocked(platform, account), unresolved: false };
 }
 
 /**
@@ -609,8 +643,10 @@ function effectivePending(platform: SocialTarget, account: string): PendingRecor
   const pending = readPending(platform, account);
   if (!pending) return null;
   const itsPost = readRecord(platform, pending.postKey);
+  // A marker from an earlier build has no attempt: fall back to a record strictly newer than it (marks and sends
+  // always write a later `at`). Ties and a stepped-back clock keep it blocking — the safe side.
   const settled = (itsPost?.state === 'posted' || itsPost?.state === 'failed')
-    && pending.attempt !== undefined && itsPost.settledAttempt === pending.attempt;
+    && (pending.attempt !== undefined ? itsPost.settledAttempt === pending.attempt : itsPost.at > pending.at);
   return settled ? null : pending;
 }
 
@@ -722,6 +758,22 @@ async function send(platform: SocialTarget, input: SocialPublishInput, post: Pla
 }
 
 /**
+ * The account half of markPosted, under the lock: the account's pending send the person found live becomes `posted`
+ * (a repost's record keeps its id/url and moves past its old `at`), and its marker is cleared (compare-and-set). It
+ * needs only the account, not this call's content, so it also works when the content can no longer be planned (a
+ * deleted render). Returns the `at` it marked, or null.
+ */
+function markPendingPosted(platform: SocialTarget, account: string, marks: readonly Approval[]): string | null {
+  const pending = readPending(platform, account);
+  if (!pending || !approves(marks, platform, pending.at)) return null;
+  const itsPost = readRecord(platform, pending.postKey);
+  writeRecord(platform, pending.postKey,
+    { ...(itsPost?.state === 'posted' ? itsPost : {}), state: 'posted', at: markedAt(pending.at, itsPost), settledAttempt: pending.attempt });
+  replacePendingIfOurs(platform, account, pending, null);
+  return pending.at;
+}
+
+/**
  * Write the person's markPosted approvals (applyMarks) to disk, each under its account's lock: the approved pending
  * send — or older unknown record — becomes `posted`, and that send's marker is cleared (compare-and-set). Nothing is
  * sent for it.
@@ -732,26 +784,56 @@ function persistMarks(input: SocialPublishInput, videoFile: ReturnType<typeof fi
     if (!input.targets.includes(platform)) continue;
     const key = targetKey(platform, input, videoFile);
     const account = accountKey(platform, input);
-    if (key === null || account === null) continue;
+    if (key === null || account === null) continue; // the plan blocks these (markNeedsAccount, or not connected)
     const lock = acquireAccountLock(platform, account);
     try {
-      const pending = readPending(platform, account);
-      if (pending && approves(marks, platform, pending.at)) {
-        // Also when the post is already `posted` (the marker is a repost's): move its `at` forward, so a repost
-        // approval naming the older `at` no longer matches (same as applyMarks).
-        const itsPost = readRecord(platform, pending.postKey);
-        writeRecord(platform, pending.postKey,
-          { ...(itsPost?.state === 'posted' ? itsPost : {}), state: 'posted', at: markedAt(pending.at, itsPost), settledAttempt: pending.attempt });
-        replacePendingIfOurs(platform, account, pending, null);
-      }
+      markPendingPosted(platform, account, marks);
       const record = readRecord(platform, key);
       if (record && (record.state === 'unknown' || record.state === 'sending') && approves(marks, platform, record.at)) {
-        writeRecord(platform, key, { ...record, state: 'posted' });
+        writeRecord(platform, key, { ...record, state: 'posted', at: markedAt(record.at, null) });
       }
     } finally {
       lock.release();
     }
   }
+}
+
+export interface MarkOutcome {
+  platform: SocialTarget;
+  /** The pending `at` recorded as posted; absent when nothing on the account matched. */
+  marked?: string;
+  error?: string;
+}
+
+/**
+ * markPosted for a plan that is blocked (nothing will be sent): record the approved pending sends of each target's
+ * account anyway. A person confirmed they are live, and that does not depend on the content still being postable —
+ * e.g. the rendered video was moved after an upload whose outcome was unknown, which would otherwise leave the
+ * channel blocked for good.
+ */
+export function recordMarksOnly(input: SocialPublishInput): MarkOutcome[] {
+  const marks = input.markPosted ?? [];
+  const outcomes: MarkOutcome[] = [];
+  for (const platform of new Set(marks.map((m) => m.platform))) {
+    if (!input.targets.includes(platform)) continue;
+    const account = accountKey(platform, input);
+    if (account === null) {
+      outcomes.push({ platform, error: M().markNeedsAccount(platform) });
+      continue;
+    }
+    try {
+      const lock = acquireAccountLock(platform, account);
+      try {
+        const marked = markPendingPosted(platform, account, marks);
+        outcomes.push(marked ? { platform, marked } : { platform });
+      } finally {
+        lock.release();
+      }
+    } catch (error) {
+      outcomes.push({ platform, error: errorText(error) });
+    }
+  }
+  return outcomes;
 }
 
 /**
@@ -784,7 +866,7 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
       }
       // Re-read under the lock: a concurrent call may have changed the records since the plan was made.
       const decision = lock && account !== null
-        ? decide(platform, readRecord(platform, key), effectivePending(platform, account), opts)
+        ? decide(platform, readRecord(platform, key), effectivePending(platform, account), opts, key)
         : preliminary;
       return { post, key, account: account ?? '', lock, decision };
     });
@@ -826,7 +908,7 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
         current = readRecord(platform, key);
         // The raw marker (even one effectivePending ignores) is overwritten below: the new one must not reuse its `at`.
         replacedMarkerAt = readPending(platform, account)?.at;
-        now = decide(platform, current, effectivePending(platform, account), opts);
+        now = decide(platform, current, effectivePending(platform, account), opts, key);
       } catch (error) {
         outcomes.push({ platform, status: 'failed', error: errorText(error) });
         continue;
@@ -888,6 +970,8 @@ export async function executePublish(input: SocialPublishInput, plan: PublishPla
         } catch (writeError) {
           // Both records stay `sending`, which decide() treats like unknown: safe, at worst it needs a manual check.
           ledgerBroken = errorText(writeError);
+          // A clean refusal sent nothing, but the account will read as unknown: say how to clear it.
+          if (!ambiguous) reported = `${reported} ${M().failedUnrecorded(platform, startedAt, ledgerBroken)}`;
         }
         outcomes.push(ambiguous
           ? { platform, status: 'unknown_outcome', error: reported, at }

@@ -88,6 +88,9 @@ function lockPath(platform: SocialTarget, account: string): string {
   return `${hashed('accounts', platform, account)}.lock`;
 }
 
+/** An `at` must be a date: every later `at` is computed from it, and an approval names a record by it. */
+const isDate = (value: unknown): value is string => typeof value === 'string' && !Number.isNaN(Date.parse(value));
+
 /** Missing → null. Unreadable → throw: treating it as missing could post again what it recorded. */
 function readJsonRecord<T>(file: string, valid: (value: Partial<T>) => boolean): T | null {
   if (!fs.existsSync(file)) return null;
@@ -102,7 +105,7 @@ function readJsonRecord<T>(file: string, valid: (value: Partial<T>) => boolean):
 }
 
 export function readRecord(platform: SocialTarget, postKey: string): PostRecord | null {
-  return readJsonRecord<PostRecord>(recordPath(platform, postKey), (r) => typeof r.state === 'string' && typeof r.at === 'string');
+  return readJsonRecord<PostRecord>(recordPath(platform, postKey), (r) => typeof r.state === 'string' && isDate(r.at));
 }
 
 export function writeRecord(platform: SocialTarget, postKey: string, record: PostRecord): void {
@@ -111,7 +114,7 @@ export function writeRecord(platform: SocialTarget, postKey: string, record: Pos
 
 export function readPending(platform: SocialTarget, account: string): PendingRecord | null {
   return readJsonRecord<PendingRecord>(pendingPath(platform, account),
-    (r) => typeof r.postKey === 'string' && (r.state === 'sending' || r.state === 'unknown') && typeof r.at === 'string'
+    (r) => typeof r.postKey === 'string' && (r.state === 'sending' || r.state === 'unknown') && isDate(r.at)
       && (r.attempt === undefined || typeof r.attempt === 'string'));
 }
 
