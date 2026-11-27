@@ -160,7 +160,7 @@ ${kleur.bold("환경변수:")}
   ANTHROPIC_API_KEY   AI 노트 생성 활성화 (선택)
   MIMI_SEED_LANG      출력 언어 강제 (ko / en) — settings.json 보다 우선
   MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET
-                      직접 만든 Google OAuth 클라이언트 사용 (미지정 시 로그인 때 웹 콘솔에서 받아옴)
+                      최초 연결용 Google 데스크톱 앱 OAuth 클라이언트 (재로그인은 저장된 설정 사용 가능)
 `,
   },
   {
@@ -314,7 +314,7 @@ ${kleur.bold("Environment variables:")}
   ANTHROPIC_API_KEY   enable AI note generation (optional)
   MIMI_SEED_LANG      force the output language (ko / en) — beats settings.json
   MIMI_SEED_GOOGLE_CLIENT_ID / _SECRET
-                      use your own Google OAuth client (otherwise fetched from the web console at sign-in)
+                      Google Desktop app OAuth client for first sign-in (a returning profile can reuse its saved client)
 `,
   },
 );
