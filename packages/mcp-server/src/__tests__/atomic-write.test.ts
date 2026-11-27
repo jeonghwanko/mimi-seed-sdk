@@ -104,6 +104,7 @@ describe('자격증명 writer 가드', () => {
     'iam/key-files.ts',
     'jenkins/builds.ts', // 빌드 요청 receipt (~/.mimi-seed/jenkins-build-requests/, 0600)
     'jenkins/config.ts',
+    'social/meta-app-config.ts', // 사용자 본인의 Meta 앱 (meta-apps.json)
     'social/profile-store.ts',
     'tiktok-business/config.ts',
   ];

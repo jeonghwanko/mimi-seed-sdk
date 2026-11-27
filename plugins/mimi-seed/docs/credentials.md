@@ -287,8 +287,29 @@ seven days or less remaining) and offers to reconnect it.
 
 ## Instagram
 
-Without a console, enter a token locally. **Browser login with a team broker:** Set `MIMI_SEED_WEB_BASE` to its HTTPS origin. Run `mimi-seed auth instagram` and approve Instagram login in the browser. Mimi Seed verifies the account and saves the returned token lifetime automatically. An operator-managed HTTPS broker must be configured with Instagram-specific app credentials and an approved callback; the SDK does not deploy it. If the broker is unavailable, existing credentials remain unchanged and the CLI does not ask you to paste a token. Use `--manual-token` only for the advanced manual flow.
+**Browser login with your own Meta app (recommended, no server):** run `mimi-seed auth instagram`. The
+first time, the wizard asks for your app's **Instagram app ID and app secret** and the redirect URI you
+registered. They are saved to `~/.mimi-seed/meta-apps.json` (`0600`) only after a login succeeds, and they are
+never sent anywhere except Instagram's token endpoint. Set the app up once:
 
+1. [developers.facebook.com](https://developers.facebook.com/apps) → your app → use case *Manage messaging &
+   content on Instagram* → *API setup with Instagram login*.
+2. *Set up Instagram business login* → add a redirect URI to *OAuth redirect URIs*. The wizard suggests
+   `https://localhost:8765/callback`.
+3. Copy the **Instagram app ID / app secret** shown there. They differ from the Meta app ID.
+4. While the app is in development mode, add your account under *App roles → Instagram Testers* and accept the
+   invite in Instagram. Posting to your own accounts this way needs no App Review.
+
+After you approve, the browser lands on the redirect URI. With an `https://` redirect the page usually fails to load;
+that is expected. Paste the full address-bar URL into the terminal. The CLI checks that it is this login's redirect
+(`state`), exchanges the code for a long-lived token, verifies the account, and saves it with the real expiry. If you
+registered `http://localhost:<port>/<path>` instead, the CLI catches the redirect itself and there is nothing to
+paste. A failed login keeps the existing connection. Use `--reset-app` to enter different app settings.
+
+**Team broker:** if `MIMI_SEED_WEB_BASE` points to an operator-managed HTTPS broker, that broker is used instead
+and holds the app secret. The SDK does not deploy it.
+
+**Manual token:** `--manual-token`, or leaving the app ID blank, switches to pasting a token yourself.
 
 **Unlocks:** `instagram_*` — posting images and carousels.
 
@@ -327,16 +348,25 @@ token — an Instagram token will not work here.
 
 **Get it:**
 
-1. Without a team broker, `mimi-seed auth threads` prompts for a token locally. For browser login, configure the team broker in `MIMI_SEED_WEB_BASE` and complete Threads login and consent in the browser opened by
-   the operator's HTTPS web broker.
-2. The broker operator must deploy the broker with the Threads App ID and secret, and register its HTTPS callback URL
-   in the Threads app. The SDK does not deploy or configure this private broker.
-3. The broker exchanges the authorization callback for the token; you never paste a token into the CLI in the broker
-   flow. The returned account is verified and the actual expiry is saved locally.
+1. Run `mimi-seed auth threads`. With your own Meta app (recommended, no server), the first run asks for the
+   **Threads app ID and app secret** and your registered redirect URI. They are saved to `~/.mimi-seed/meta-apps.json`
+   (`0600`) only after a login succeeds.
+2. Set the app up once: [developers.facebook.com](https://developers.facebook.com/apps) → your app → use case
+   *Access the Threads API* (`threads_basic`, `threads_content_publish`) → settings → add the redirect URI (the
+   wizard suggests `https://localhost:8765/callback`) to *Redirect Callback URLs*. Meta will not save the form
+   until the *Uninstall* and *Delete* callback URLs are filled in too. While the app is in development mode, add
+   your account as a *Threads Tester* and accept the invite under threads.net → Settings → Website permissions.
+3. Approve in the browser, then paste the address-bar URL of the page it lands on. The page failing to load is
+   expected. With an `http://localhost:<port>/<path>` redirect the CLI catches it automatically. The CLI checks
+   `state`, exchanges the code for a long-lived token, verifies the account, and saves it with the real expiry.
+   `--reset-app` enters different app settings.
 
-**Advanced/manual flow:** `mimi-seed auth threads --manual-token` keeps the token-paste path for headless or brokerless
-use. The account is verified before saving. Use `--profile <id>` in either flow to save a named account; the project
-can select it with `.mimi-seed.json` → `socialProfiles.threads`.
+**Team broker:** if `MIMI_SEED_WEB_BASE` points to an operator-managed HTTPS broker, it is used instead and holds the
+Threads app secret. The SDK does not deploy it.
+
+**Advanced/manual flow:** `mimi-seed auth threads --manual-token` (or leaving the app ID blank) keeps the token-paste
+path for headless use. The account is verified before saving. Use `--profile <id>` in any flow to save a named
+account; the project can select it with `.mimi-seed.json` → `socialProfiles.threads`.
 
 **Multiple accounts:** the project mapping is used automatically by Threads tools.
 

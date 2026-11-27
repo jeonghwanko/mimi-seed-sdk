@@ -28,6 +28,11 @@ import { connectThreads, refreshThreadsToken } from '../threads/setup.js';
 import { connectThreadsInBrowser, ThreadsLoginError } from '../threads/browser-login.js';
 import { resolveLang } from '#core/lang.js';
 import { resolveSocialConfigTarget } from './profile-store.js';
+import {
+  isValidAppId, isValidAppSecret, isValidRedirectUri, isLoopbackRedirect, loadMetaApp, saveMetaApp,
+  type MetaAppConfig, type MetaLoginPlatform,
+} from './meta-app-config.js';
+import { connectWithMetaApp, MetaDirectLoginError } from './meta-direct-login.js';
 
 // ko 가 원본이고 en 은 `typeof ko` 를 만족해야 한다 — 키를 빠뜨리면 컴파일이 깨진다.
 const ko = {
@@ -77,7 +82,43 @@ const ko = {
   thRefreshing: '  🔄 기존 Threads 토큰 갱신 중...',
   thRefreshFallback: '  자동 갱신에 실패했습니다. 다시 연결합니다.',
   profile: (id: string) => `  소셜 프로필: ${id}`,
-  invalidArgs: '  사용법: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token]',
+  invalidArgs: '  사용법: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token] [--reset-app]',
+
+  appHeader: (label: string) => `  🔑 내 Meta 앱으로 ${label} 브라우저 로그인 (서버 없음 — 앱 시크릿은 이 컴퓨터에만 저장)`,
+  appSaved: (label: string, id: string) => `  저장된 ${label} 앱 사용: ${id}  (바꾸려면 --reset-app)`,
+  igAppSteps: [
+    '   1. developers.facebook.com → 앱 → 사용 사례 "Instagram에서 메시지 및 콘텐츠 관리"',
+    '      → "Instagram 로그인을 통한 API 설정"',
+    '   2. "Instagram 비즈니스 로그인 설정" → OAuth 리디렉션 URI 에 아래 리디렉션 주소를 그대로 등록',
+    '   3. 같은 화면의 **Instagram 앱 ID / 앱 시크릿** (Meta 앱 ID 와 다름)',
+    '   4. 앱이 개발 모드면: 앱 역할 → Instagram 테스터에 내 계정 추가 → Instagram 앱에서 초대 수락',
+  ],
+  thAppSteps: [
+    '   1. developers.facebook.com → 앱 → 사용 사례 "Threads API 액세스" (threads_basic, threads_content_publish)',
+    '   2. 사용 사례 설정 → 리디렉션 콜백 URL 에 아래 리디렉션 주소를 그대로 등록',
+    '      (제거·삭제 콜백 URL 도 채워야 저장됩니다)',
+    '   3. 같은 화면의 **Threads 앱 ID / 앱 시크릿**',
+    '   4. 앱이 개발 모드면: 앱 역할 → Threads 테스터에 내 계정 추가 → threads.net 설정 → 웹사이트 권한에서 초대 수락',
+  ],
+  redirectSuggest: (uri: string) => `  리디렉션 주소 (권장): ${uri}`,
+  askAppId: (label: string) => `  ${label} 앱 ID (엔터: 토큰 직접 입력으로 전환): `,
+  askAppSecret: (label: string) => `  ${label} 앱 시크릿: `,
+  askRedirect: (def: string) => `  등록한 리디렉션 URI (엔터: ${def}): `,
+  badAppId: '  ❌ 앱 ID 는 숫자여야 합니다. 저장하지 않았습니다.',
+  badAppSecret: '  ❌ 앱 시크릿 형식이 아닙니다 (영문·숫자 16자 이상). 저장하지 않았습니다.',
+  badRedirect: '  ❌ 리디렉션 URI 는 https:// 이거나 포트가 있는 http://localhost 여야 하고, ?·# 를 포함할 수 없습니다.',
+  loopbackWait: '  브라우저에서 로그인·권한 동의를 마치면 자동으로 연결됩니다. 이 터미널을 열어두세요.',
+  pasteHow: '  권한 동의 후 브라우저가 "연결할 수 없음" 같은 페이지로 이동해도 정상입니다.',
+  pastePrompt: '  그 페이지의 주소창 전체 URL 을 붙여 넣으세요: ',
+  directFailed: (code: string) => `  ❌ ${(({
+    denied: '권한 동의가 취소되었습니다.',
+    timeout: '로그인 대기 시간이 지났습니다. 명령을 다시 실행해주세요.',
+    state: '붙여 넣은 URL 이 이번 로그인의 리디렉션 주소가 아닙니다 (state·경로 불일치). 다시 실행해주세요.',
+    exchange: '인증 코드를 토큰으로 바꾸지 못했습니다. 앱 ID·시크릿·리디렉션 URI 가 앱 대시보드와 정확히 같은지 확인하세요.',
+    validation: '받은 토큰으로 계정을 확인하지 못했습니다.',
+    configuration: '로그인을 시작하지 못했습니다.',
+  } as Record<string, string>)[code] ?? code)} 기존 연결은 보존했습니다.`,
+  directReason: (detail: string) => `     Meta 응답: ${detail}`,
 };
 
 const en: typeof ko = {
@@ -128,7 +169,43 @@ const en: typeof ko = {
   thRefreshing: '  🔄 Refreshing the existing Threads token...',
   thRefreshFallback: '  Automatic refresh failed. Reconnecting in your browser.',
   profile: (id: string) => `  Social profile: ${id}`,
-  invalidArgs: '  Usage: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token]',
+  invalidArgs: '  Usage: mimi-seed-social-auth [facebook|instagram|threads|all] [--profile <id>] [--manual-token] [--reset-app]',
+
+  appHeader: (label: string) => `  🔑 ${label} browser login with your own Meta app (no server — the app secret stays on this computer)`,
+  appSaved: (label: string, id: string) => `  Using the saved ${label} app: ${id}  (change it with --reset-app)`,
+  igAppSteps: [
+    '   1. developers.facebook.com → your app → use case "Manage messaging & content on Instagram"',
+    '      → "API setup with Instagram login"',
+    '   2. "Set up Instagram business login" → add the redirect URI below, exactly, to OAuth redirect URIs',
+    '   3. The **Instagram app ID / app secret** on that screen (not the Meta app ID)',
+    '   4. If the app is in development mode: App roles → add your account as an Instagram Tester → accept in the Instagram app',
+  ],
+  thAppSteps: [
+    '   1. developers.facebook.com → your app → use case "Access the Threads API" (threads_basic, threads_content_publish)',
+    '   2. Use case settings → add the redirect URI below, exactly, to Redirect Callback URLs',
+    '      (the Uninstall and Delete callback URLs must be filled in too, or saving fails)',
+    '   3. The **Threads app ID / app secret** on that screen',
+    '   4. If the app is in development mode: App roles → add your account as a Threads Tester → accept under threads.net Settings → Website permissions',
+  ],
+  redirectSuggest: (uri: string) => `  Redirect URI (suggested): ${uri}`,
+  askAppId: (label: string) => `  ${label} app ID (Enter: paste a token instead): `,
+  askAppSecret: (label: string) => `  ${label} app secret: `,
+  askRedirect: (def: string) => `  Registered redirect URI (Enter: ${def}): `,
+  badAppId: '  ❌ The app ID must be numeric. Nothing was saved.',
+  badAppSecret: '  ❌ That is not an app secret (16+ letters and digits). Nothing was saved.',
+  badRedirect: '  ❌ The redirect URI must be https:// or http://localhost with a port, without ? or #.',
+  loopbackWait: '  Finish login and consent in the browser; the connection completes automatically. Keep this terminal open.',
+  pasteHow: '  After consent the browser may show a "site can\'t be reached" page. That is expected.',
+  pastePrompt: '  Paste the full URL from that page\'s address bar: ',
+  directFailed: (code: string) => `  ❌ ${(({
+    denied: 'Consent was cancelled.',
+    timeout: 'The login timed out. Run the command again.',
+    state: 'The pasted URL is not this login\'s redirect (state or path mismatch). Run the command again.',
+    exchange: 'Could not exchange the authorization code. Check that the app ID, secret, and redirect URI match the app dashboard exactly.',
+    validation: 'Could not verify the account with the returned token.',
+    configuration: 'Could not start the login.',
+  } as Record<string, string>)[code] ?? code)} Existing credentials were preserved.`,
+  directReason: (detail: string) => `     Meta said: ${detail}`,
 };
 
 const M = resolveLang() === 'en' ? en : ko;
@@ -191,7 +268,62 @@ async function setupFacebook(profile?: string): Promise<boolean> {
   return result.ok;
 }
 
-async function setupInstagram(profile?: string, manualToken = false): Promise<boolean> {
+/** Suggested redirect: HTTPS (Meta's dashboards accept it) on a port nothing listens on — the user pastes the URL back. */
+const DEFAULT_REDIRECT_URI = 'https://localhost:8765/callback';
+
+/**
+ * Broker-free browser login with the user's own Meta app.
+ * Returns null when the user declines (blank app ID) so the caller can fall back to token paste.
+ */
+async function loginWithOwnApp(
+  platform: MetaLoginPlatform,
+  options: { profile?: string },
+  resetApp: boolean,
+): Promise<boolean | null> {
+  const label = platform === 'instagram' ? 'Instagram' : 'Threads';
+  console.log(M.appHeader(label));
+  let app: MetaAppConfig | null = resetApp ? null : loadMetaApp(platform);
+  const isNew = !app;
+  if (app) {
+    console.log(M.appSaved(label, app.appId));
+  } else {
+    for (const line of platform === 'instagram' ? M.igAppSteps : M.thAppSteps) console.log(line);
+    console.log(M.redirectSuggest(DEFAULT_REDIRECT_URI));
+    console.log('');
+    const appId = await ask(M.askAppId(label));
+    if (!appId) return null;
+    if (!isValidAppId(appId)) { console.error(M.badAppId); return false; }
+    const appSecret = await ask(M.askAppSecret(label));
+    if (!isValidAppSecret(appSecret)) { console.error(M.badAppSecret); return false; }
+    const redirectUri = (await ask(M.askRedirect(DEFAULT_REDIRECT_URI))) || DEFAULT_REDIRECT_URI;
+    if (!isValidRedirectUri(redirectUri)) { console.error(M.badRedirect); return false; }
+    app = { appId, appSecret, redirectUri };
+  }
+
+  const loopback = isLoopbackRedirect(app.redirectUri);
+  console.log(loopback ? M.loopbackWait : M.pasteHow);
+  try {
+    const result = await connectWithMetaApp(platform, {
+      ...options,
+      app,
+      onUrl: (url) => { console.log(M.thUrl); console.log(url); },
+      readRedirect: loopback ? undefined : () => ask(M.pastePrompt),
+    });
+    // Save the app only once it has produced a verified login, so a typo is never persisted.
+    if (isNew) saveMetaApp(platform, app);
+    console.log(indent(result.text));
+    return true;
+  } catch (error) {
+    if (error instanceof MetaDirectLoginError) {
+      console.error(M.directFailed(error.code));
+      if (error.detail) console.error(M.directReason(error.detail));
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function setupInstagram(profile?: string, manualToken = false, resetApp = false): Promise<boolean> {
   console.log('');
   console.log(M.igHeader);
   const options = { profile };
@@ -216,6 +348,11 @@ async function setupInstagram(profile?: string, manualToken = false): Promise<bo
     }
   }
 
+  if (!manualToken) {
+    const direct = await loginWithOwnApp('instagram', options, resetApp);
+    if (direct !== null) return direct;
+  }
+
   console.log(M.igHowTo);
   console.log(M.igIgaa);
   console.log(M.igEaa);
@@ -237,7 +374,7 @@ async function setupInstagram(profile?: string, manualToken = false): Promise<bo
   return result.ok;
 }
 
-async function setupThreads(profile?: string, manualToken = false): Promise<boolean> {
+async function setupThreads(profile?: string, manualToken = false, resetApp = false): Promise<boolean> {
   console.log('');
   console.log(M.thHeader);
   const options = { profile };
@@ -272,6 +409,11 @@ async function setupThreads(profile?: string, manualToken = false): Promise<bool
     }
   }
 
+  if (!manualToken) {
+    const direct = await loginWithOwnApp('threads', options, resetApp);
+    if (direct !== null) return direct;
+  }
+
   console.log(M.thHowTo);
   console.log(M.thStep1);
   console.log(M.thStep2);
@@ -304,6 +446,8 @@ function indent(text: string): string {
 async function main() {
   const args = process.argv.slice(2);
   const manualToken = args.includes('--manual-token');
+  const resetApp = args.includes('--reset-app');
+  const FLAGS = new Set(['--profile', '--manual-token', '--reset-app']);
   const profileIndex = args.indexOf('--profile');
   const profile = profileIndex >= 0 ? args[profileIndex + 1] : undefined;
   if (profileIndex >= 0 && !profile) {
@@ -311,8 +455,8 @@ async function main() {
     process.exit(1);
   }
   const positional = args.filter((arg, index) =>
-    arg !== '--manual-token' && arg !== '--profile' && (profileIndex < 0 || index !== profileIndex + 1));
-  if (positional.length > 1 || args.some((arg) => arg.startsWith('--') && arg !== '--profile' && arg !== '--manual-token')) {
+    !FLAGS.has(arg) && (profileIndex < 0 || index !== profileIndex + 1));
+  if (positional.length > 1 || args.some((arg) => arg.startsWith('--') && !FLAGS.has(arg))) {
     console.error(M.invalidArgs);
     process.exit(1);
   }
@@ -325,29 +469,29 @@ async function main() {
   if (target === 'facebook' || target === 'fb') {
     ok = await setupFacebook(profile);
   } else if (target === 'instagram' || target === 'ig') {
-    ok = await setupInstagram(profile, manualToken);
+    ok = await setupInstagram(profile, manualToken, resetApp);
   } else if (target === 'threads' || target === 'th') {
-    ok = await setupThreads(profile, manualToken);
+    ok = await setupThreads(profile, manualToken, resetApp);
   } else if (target === 'all' || target === 'meta') {
     const fb = await setupFacebook(profile);
-    const ig = await setupInstagram(profile, manualToken);
-    const th = await setupThreads(profile, manualToken);
+    const ig = await setupInstagram(profile, manualToken, resetApp);
+    const th = await setupThreads(profile, manualToken, resetApp);
     ok = fb && ig && th;
   } else {
     const which = await ask(M.which);
     const c = which.toLowerCase();
     if (c === 'f') ok = await setupFacebook(profile);
-    else if (c === 'i') ok = await setupInstagram(profile, manualToken);
-    else if (c === 't') ok = await setupThreads(profile, manualToken);
+    else if (c === 'i') ok = await setupInstagram(profile, manualToken, resetApp);
+    else if (c === 't') ok = await setupThreads(profile, manualToken, resetApp);
     else if (c === 'b') {
       // 기존 b=Facebook+Instagram 동작을 유지한다.
       const fb = await setupFacebook(profile);
-      const ig = await setupInstagram(profile, manualToken);
+      const ig = await setupInstagram(profile, manualToken, resetApp);
       ok = fb && ig;
     } else if (c === 'a') {
       const fb = await setupFacebook(profile);
-      const ig = await setupInstagram(profile, manualToken);
-      const th = await setupThreads(profile, manualToken);
+      const ig = await setupInstagram(profile, manualToken, resetApp);
+      const th = await setupThreads(profile, manualToken, resetApp);
       ok = fb && ig && th;
     } else {
       console.log(M.cancelled);
