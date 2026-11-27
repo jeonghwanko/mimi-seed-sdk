@@ -79,8 +79,9 @@ it runs `npx -y @yoonion/mimi-seed-mcp@<the CLI's own version>` — pinned, with
 version; an unpinned spec would pair an old or half-released CLI with whatever npm `latest` is.
 `MIMI_SEED_FORCE_NPX` (developer switch) still forces `@latest`, and so does running from a source checkout
 (no `node_modules` in the CLI's own path), with a one-line warning — a checkout's version is usually not on npm yet
-and the pinned spec would fail with `ETARGET`. The MCP *registration* spec stays `@latest` on purpose: it is a
-long-lived client setting that should not go stale on every CLI upgrade.
+and the pinned spec would fail with `ETARGET`. The MCP *registration* spec the CLI writes or prints stays `@latest` on purpose: it is a
+long-lived client setting that should not go stale on every CLI upgrade. The plugin bundle's `.mcp.json` is
+different — it ships *with* each plugin version, so it pins an exact published version ([[skills-plugins]]).
 
 Facebook, Instagram, and Threads support named local profiles. `mimi-seed auth facebook|instagram|threads
 --profile <id>` forwards the profile to the owning MCP setup binary. Without an explicit flag, the binary reads the current project's

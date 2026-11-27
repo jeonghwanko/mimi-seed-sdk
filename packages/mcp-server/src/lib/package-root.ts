@@ -36,6 +36,11 @@ export type DomainEntry = {
    * 막는 도구. 레지스트라는 이 도구들에만 confirm 가드 주입을 생략한다.
    */
   ownGate?: string[];
+  /**
+   * 확인 플래그와 무관하게 **매 호출** 사용자 승인(elicitation)을 받는 쓰기 도구 — 플래그 없이도 위험한 경로가 있는 것:
+   * 자격증명이 나갈 목적지를 바꾸거나(`*_save_config`), 새 id 로 비밀을 바로 올리거나, 배포 워크플로를 시작한다.
+   */
+  approval?: string[];
   /** 같은 인자로 반복 호출해도 추가 효과가 없는 **쓰기** 도구. 읽기 도구는 자동으로 idempotent. */
   idempotent?: string[];
 };

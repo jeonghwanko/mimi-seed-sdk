@@ -38,6 +38,7 @@ import {
 } from '#core/project-manifest.js';
 import { textResult } from '../lib/mcp-response.js';
 import { describeToolsets } from '../lib/toolsets.js';
+import { describeApproval } from '../lib/human-approval.js';
 import { findInvalidJsonFiles } from '../lib/json-file.js';
 import { credentialStoreReport } from '#core/credential-store.js';
 import { catalog } from '#core/lang.js';
@@ -380,6 +381,8 @@ export function registerAuthTools(server: ToolRegistrar) {
         m.header(PKG_VERSION),
         // 도메인을 꺼 둔 서버에서 "도구가 없다" 를 연결 문제로 오해하지 않게 켜진 toolset 을 밝힌다.
         `🧰 Toolsets: ${describeToolsets(server.toolsets, server.manifest)}`,
+        // 승인 게이트가 이 클라이언트에서 실제로 동작하는지 — 설정만 보고는 알 수 없다 (클라이언트 지원에 달림).
+        `🛡️ Approval: ${describeApproval(server.approvalStatus())}`,
         '',
       ];
 

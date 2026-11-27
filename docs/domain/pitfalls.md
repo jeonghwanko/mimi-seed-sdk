@@ -369,3 +369,43 @@ policy differs per package). The other trap is the module format: tsc decides ES
 file's nearest `package.json`, so `packages/core/package.json` must keep `"type": "module"` — without it, core is
 emitted as CommonJS into `dist/core/` and every named import from it fails at startup. Before trusting a change to
 core, run the packed-install check in [[recipes]] §8, not just the tests.
+
+## 26. `confirm: true` is the model's word, not the user's
+
+The confirm guard (the tool registrar in [[architecture]]) stops an agent that *forgets* to ask. It does not stop one
+that was *told* not to: the flag is an argument the model fills in. Reviews, comments, Drive documents, and video
+metadata are all text a tool reads back into the conversation, and an instruction hidden there can drive the
+preview → `confirm: true` pair on its own. The client's per-tool permission prompt was the only human in the loop,
+and users who auto-approve the mimi-seed server remove it.
+
+So a call that arrives with a confirm-style flag set is held until the **user** answers an MCP elicitation dialog
+(`lib/human-approval.ts`). Rules that keep it a real gate:
+
+- **Wrap at the registrar, keyed on the flag.** Every tool with a boolean named `confirm` or `confirm<Xxx>` in its
+  schema is wrapped — registrar-guarded **D** tools, `ownGate` tools, and the **W** tools with their own flag (remote
+  credential sync, public YouTube changes, paid generation, `confirmCreate`). A new tool that adds such a flag is
+  covered from its first line. Matching three exact names once let `confirmCreate` through.
+- **The flag is not the only way to the dangerous branch.** `jenkins_save_config` / `ci_save_config` take a URL /
+  host, and the next credential upload (a *new* Jenkins id runs without a flag) goes there; the other
+  `*_save_config` replace a stored token; `ci_trigger_build` starts a deploy workflow with no flag. These are listed
+  in the manifest's `approval` and ask on **every** call. When you add a tool that changes where data goes, or that
+  sends a secret on a flagless path, add it there — `tool-manifest.test.ts` only checks the list is well-formed.
+- **Only `accept` + a ticked `approve` box runs.** `accept` alone could be one Enter keypress; an unticked box,
+  decline, cancel, timeout, or a client error is a refusal. Never count a failure as consent.
+- **The dialog must not be forgeable by its own arguments.** Values are model-supplied: a `\n` in a post's text
+  once rendered a fake `profile:` line and a "✅ Verified" footer, and a 200-char cut hid a URL appended after a
+  benign prefix. Strings render as JSON literals, invisible and bidi characters as `\uXXXX`, and a long value as
+  head + tail with an explicit "middle omitted — decline if you can't check it" warning. Secrets are still redacted.
+- **Repeated asks are refused, not re-asked.** After a decline, timeout, or failure, the same tool + args is
+  refused for 5 min without a dialog, and only one dialog is open at a time — an injected agent cannot wear the
+  user down with 25 identical prompts or race two dialogs.
+- **Unsupported clients degrade under `auto`, by design — but a typo does not.** Refusing outright would break
+  every client without form elicitation. Teams that need the guarantee set `MIMI_SEED_APPROVAL=required`, and any
+  value the server doesn't recognise (`require`, `strict`, `true` …) also means `required`: a security setting must
+  not fail open. Unattended runs with no one to ask set `off`. `mimi_seed_status` prints which of these is live in
+  the connected client.
+- **A refusal returns `isError` with "do not retry".** An agent that re-calls on `⛔` just reopens the dialog;
+  the server instructions and [`../agent-guide.md`](../agent-guide.md) §5 say to stop and ask.
+
+`human-approval.test.ts` drives the real registrar against an in-memory client that does and does not declare
+`elicitation`.

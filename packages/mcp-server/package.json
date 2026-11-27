@@ -28,11 +28,12 @@
     "scripts/googleads-report.mjs",
     "assets",
     "tool-manifest.json",
+    "npm-shrinkwrap.json",
     "LICENSE"
   ],
   "scripts": {
     "report:googleads": "node scripts/googleads-report.mjs",
-    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "clean": "node -e \"const fs = require('node:fs'); fs.rmSync('dist', { recursive: true, force: true }); fs.rmSync('npm-shrinkwrap.json', { force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.core.json && tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "auth": "tsx src/auth/cli.ts",
@@ -40,6 +41,8 @@
     "test": "npm run typecheck && npm run lint && vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "node ../../scripts/sync-agent-guide.mjs --check && npm run build",
+    "prepack": "node ../../scripts/shrinkwrap.mjs write .",
+    "postpack": "node ../../scripts/shrinkwrap.mjs clean .",
     "lint": "eslint . ../core",
     "coverage": "vitest run --coverage"
   },

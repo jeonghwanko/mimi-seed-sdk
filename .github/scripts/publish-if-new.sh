@@ -26,6 +26,9 @@ TAG="$TAG_PREFIX-v$VERSION"
 REGISTRY=https://registry.npmjs.org/
 RELEASE_FLAGS=()
 if [ "$CHANNEL" != "latest" ]; then RELEASE_FLAGS+=(--prerelease); fi
+# A package that lists npm-shrinkwrap.json in `files` (mcp-server, built at prepack by scripts/shrinkwrap.mjs) must
+# reach users with it — and without the devDependencies npm installs when a shrinkwrap still carries dev entries.
+EXPECT_SHRINKWRAP=$(node -p "(require('./package.json').files || []).includes('npm-shrinkwrap.json')")
 
 on_npm() {
   local published_version
@@ -56,6 +59,17 @@ verify_npm_install() (
       if [ "$installed_version" != "$VERSION" ]; then
         echo "::error::$NAME@$VERSION executable reported '$installed_version'" >&2
         exit 1
+      fi
+      if [ "$EXPECT_SHRINKWRAP" = true ]; then
+        if [ ! -f "node_modules/$NAME/npm-shrinkwrap.json" ]; then
+          echo "::error::$NAME@$VERSION was published without npm-shrinkwrap.json — its dependency tree is not pinned" >&2
+          exit 1
+        fi
+        if [ -e node_modules/typescript ] || [ -e "node_modules/$NAME/node_modules/typescript" ]; then
+          echo "::error::$NAME@$VERSION installs devDependencies (typescript) — the shrinkwrap kept dev entries" >&2
+          exit 1
+        fi
+        echo "✓ $NAME@$VERSION ships npm-shrinkwrap.json and installs no devDependencies"
       fi
       echo "✓ installed $NAME@$VERSION and verified --version"
       exit 0

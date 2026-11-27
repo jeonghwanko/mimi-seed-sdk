@@ -52,7 +52,7 @@ describe('tool-manifest (boot smoke test)', () => {
   it('분류 목록(write/destructive/ownGate/local/idempotent)은 같은 도메인의 tools 안에 있고 서로 모순이 없다', () => {
     const problems: string[] = [];
     for (const [domain, d] of Object.entries(manifest.domains)) {
-      for (const key of ['write', 'destructive', 'ownGate', 'local', 'idempotent'] as const) {
+      for (const key of ['write', 'destructive', 'ownGate', 'approval', 'local', 'idempotent'] as const) {
         for (const name of d[key] ?? []) {
           if (!d.tools.includes(name)) problems.push(`${domain}.${key}: ${name} 은(는) ${domain}.tools 에 없음`);
         }
@@ -63,6 +63,11 @@ describe('tool-manifest (boot smoke test)', () => {
       }
       for (const name of d.ownGate ?? []) {
         if (!(d.destructive ?? []).includes(name)) problems.push(`${domain}.ownGate: ${name} 은 destructive 가 아님 — ownGate 는 파괴적 도구의 자체 가드 선언`);
+      }
+      for (const name of d.approval ?? []) {
+        if (!write.has(name) && !(d.destructive ?? []).includes(name)) {
+          problems.push(`${domain}.approval: ${name} 은 읽기 도구 — 승인 대화상자는 쓰기/파괴적 도구에만`);
+        }
       }
       for (const name of d.idempotent ?? []) {
         if (!write.has(name) && !(d.destructive ?? []).includes(name)) {

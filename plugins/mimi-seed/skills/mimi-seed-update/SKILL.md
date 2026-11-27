@@ -48,7 +48,7 @@ claude plugin marketplace update yoonion
 claude plugin update mimi-seed@yoonion
 ```
 
-이걸로 **스킬과 매니페스트는** 최신이 된다. 현행 플러그인의 `.mcp.json`은 `npx -y @yoonion/mimi-seed-mcp@latest`를 사용하므로 새로 뜨는 프로세스는 최신 dist-tag를 확인한다. 하지만 이미 실행 중인 MCP 서버는 옛것일 수 있으므로 반드시 3번에서 다시 띄운다.
+이걸로 **스킬과 매니페스트는** 최신이 된다. 플러그인의 `.mcp.json`은 서버를 **플러그인과 같은 정확한 버전**(`npx -y @yoonion/mimi-seed-mcp@<버전>`)으로 고정하므로, 플러그인을 업데이트해야 서버 버전도 바뀐다. Claude Code 마켓플레이스는 npm 배포가 끝난 릴리스 태그만 내보내서, npm `latest`가 나온 직후 잠깐은 플러그인 업데이트가 아직 없을 수 있다 — 정상이다. 이미 실행 중인 MCP 서버는 옛것일 수 있으므로 반드시 3번에서 다시 띄운다.
 
 서드파티 마켓플레이스는 자동 업데이트가 기본 **off**다. `/plugin` → Marketplaces 탭에서 auto-update를 켜두면 다음 세션 시작 때 자동 갱신된다.
 
@@ -59,9 +59,9 @@ npm install -g @yoonion/mimi-seed-mcp@latest   # 도구
 npm install -g mimi-seed@latest                # CLI도 쓴다면 (별개 패키지, 별개 버전)
 ```
 
-### C. npx 등록 (플러그인 번들과 `claude mcp add` 공통)
+### C. npx 등록 (`claude mcp add` 로 직접 등록한 경우)
 
-npx는 패키지 이름만 지정하면 캐시(`_npx`)에 있는 버전을 재사용할 수 있다. 등록을 다음처럼 명시한다:
+플러그인 번들은 A 처럼 정확한 버전으로 고정돼 있으니 여기 해당하지 않는다. npx는 패키지 이름만 지정하면 캐시(`_npx`)에 있는 버전을 재사용할 수 있다. 직접 등록했다면 다음처럼 명시한다:
 
 - 등록 args에 dist-tag를 박는다 → `npx -y @yoonion/mimi-seed-mcp@latest` (매 기동 시 레지스트리 확인 = 시작이 조금 느리고 오프라인에서 취약)
 - 이미 `@latest`인데 실행 버전이 옛것이면 캐시 삭제보다 먼저 3번의 플러그인/클라이언트 재시작을 한다.

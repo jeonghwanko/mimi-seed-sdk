@@ -513,6 +513,7 @@ npm install @yoonion/mimi-seed-mcp --omit=optional
 | `MIMI_SEED_FFMPEG_PATH`<br>`MIMI_SEED_FFPROBE_PATH` | FFmpeg/ffprobe가 `PATH`에 없을 때 지정하는 선택적 절대경로 |
 | `MIMI_SEED_LANG` | CLI 출력 언어 강제 (`ko` / `en`) — `~/.mimi-seed/settings.json` 보다 우선. 둘 다 없으면 한국어 시스템 로캘은 한국어, 그 외 로캘은 영어 |
 | `MIMI_SEED_TOOLSETS`<br>`MIMI_SEED_TOOLSETS_EXCLUDE` | 로컬 MCP 전용: 노출할 도구 영역만 고른다 (`playstore,appstore` 같은 도메인 키 쉼표 구분, 또는 그룹 `store` · `google` · `social` · `media` · `build` · `all`). 미지정 = 전체. `auth`·`checks` 는 항상 켜지고, 모르는 키는 경고 후 무시. 도구 lazy-load 가 없는 클라이언트에서 도구 목록을 줄일 때 쓴다 ([에이전트 가이드](docs/agent-guide.md#server-configuration--limiting-the-tool-surface-mimi_seed_toolsets)) |
+| `MIMI_SEED_APPROVAL` | 로컬 MCP 전용: 확정된 쓰기 작업의 승인 방식. `auto`(기본)는 MCP elicitation 을 지원하는 클라이언트에서 승인 대화상자를 띄우고, 그 외에는 에이전트의 `confirm` 만으로 실행한다. `required` 는 대화상자를 못 띄우는 클라이언트에서 거부하고(알 수 없는 값도 `required`), `off` 는 묻지 않는다(무인 실행 전용) ([팀 보안](docs/user-guide/team-security.ko.md#에이전트-작업-승인)) |
 | `MIMI_SEED_GOOGLE_CLIENT_ID`<br>`MIMI_SEED_GOOGLE_CLIENT_SECRET` | 자체 Google OAuth 클라이언트 사용. 미지정 시 로그인 때 웹 콘솔에서 받아온다 — 오프라인·폐쇄망·자체호스팅이면 지정할 것 ([문제 해결](docs/troubleshooting.ko.md#config-fetch-failed)) |
 
 ---

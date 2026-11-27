@@ -177,7 +177,7 @@ concept; prompts and resources work in **any** MCP client.
 ## 6. Cut a release (maintainers)
 
 The **root `package.json` version is the SDK's single version**; two packages, two plugin manifests, the
-generated Codex manifest, and two lockfiles follow it. Never edit those by hand:
+generated Codex manifest, the lockfiles, and (for a stable version) the plugin's `.mcp.json` server pin follow it. Never edit those by hand:
 
 ```bash
 npm run version:set patch     # or minor | major | 0.14.0
@@ -192,6 +192,11 @@ merge it through a PR (`main` is protected), and push a `v<version>` tag on the 
 publishes: CI checks that the tag matches the root version and is on `main`, then publishes mcp-server and
 then cli, skipping any version already on npm. Details and the rationale:
 [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md).
+
+`npm run version:set` also pins the plugin's `.mcp.json` to the new server version (stable versions only).
+**After the publish job is green**, release the plugin to Claude Code users in a follow-up PR:
+`npm run release:marketplace` — it refuses until npm has the version and GitHub has the tag, then moves the `ref`
+in `.claude-plugin/marketplace.json`. Users get a release only through that `ref` ([[skills-plugins]]).
 
 Intermediate validation uses `beta.N` or `next.N` versions. `scripts/release-channel.mjs` owns their npm
 dist-tags; stable versions alone update `latest`. Batch routine fixes before a stable release.
