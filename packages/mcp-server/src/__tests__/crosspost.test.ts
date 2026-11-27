@@ -13,7 +13,7 @@ const api = vi.hoisted(() => {
   const state = {
     fbPhoto: vi.fn(), fbMulti: vi.fn(), igImage: vi.fn(), igCarousel: vi.fn(),
     thText: vi.fn(), thCarousel: vi.fn(), thVideo: vi.fn(), ytUpload: vi.fn(), ttPublish: vi.fn(), ttPlan: vi.fn(),
-    requireAuth: vi.fn(), tokens: vi.fn(), connected: { facebook: true, instagram: true, threads: true } as Record<string, boolean>,
+    requireAuth: vi.fn(), tokens: vi.fn(), fbPage: vi.fn(), igAccount: vi.fn(), thAccount: vi.fn(), ytPrepare: vi.fn(), ttConfig: vi.fn(), connected: { facebook: true, instagram: true, threads: true } as Record<string, boolean>,
     cfg: { accessToken: 'example', userId: '1', pageAccessToken: 'example', pageId: '1' },
     loader: (platform: string) => () => {
       if (!state.connected[platform]) throw new Error(`${platform} is not connected`);
@@ -26,23 +26,24 @@ const cfg = api.cfg;
 vi.mock('../facebook/config.js', () => ({ requireFacebookConfig: api.loader('facebook') }));
 vi.mock('../instagram/config.js', () => ({ requireInstagramConfig: api.loader('instagram') }));
 vi.mock('../threads/config.js', () => ({ requireThreadsConfig: api.loader('threads') }));
-vi.mock('../facebook/api.js', () => ({ postPhoto: api.fbPhoto, postMultiPhoto: api.fbMulti }));
-vi.mock('../instagram/api.js', () => ({ postImage: api.igImage, postCarousel: api.igCarousel }));
-vi.mock('../threads/api.js', () => ({ postText: api.thText, postCarousel: api.thCarousel, postVideo: api.thVideo }));
+vi.mock('../facebook/api.js', () => ({ postPhoto: api.fbPhoto, postMultiPhoto: api.fbMulti, getPage: api.fbPage }));
+vi.mock('../instagram/api.js', () => ({ postImage: api.igImage, postCarousel: api.igCarousel, getAccount: api.igAccount }));
+vi.mock('../threads/api.js', () => ({ postText: api.thText, postCarousel: api.thCarousel, postVideo: api.thVideo, getAccount: api.thAccount }));
 vi.mock('../helpers.js', () => ({ requireAuth: api.requireAuth }));
-vi.mock('../video/youtube-publish.js', () => ({ YOUTUBE_SCOPE: 'youtube-scope', uploadYouTubeVideo: api.ytUpload }));
+vi.mock('../video/youtube-publish.js', () => ({ YOUTUBE_SCOPE: 'youtube-scope', uploadYouTubeVideo: api.ytUpload, prepareYouTubeUpload: api.ytPrepare }));
+vi.mock('../tiktok-business/auth.js', () => ({ ensureTikTokPublishConfig: api.ttConfig }));
 vi.mock('../tiktok-business/posting.js', () => ({ preflightPlannedVideo: api.ttPlan, publishPlannedVideo: api.ttPublish }));
 vi.mock('../auth/google-auth.js', () => ({ getStoredTokens: api.tokens }));
 // The real ledger, with recordPlatform observable so a test can make one write fail.
 const ledger = vi.hoisted(() => ({ realRecord: null as null | ((...args: never[]) => void) }));
-vi.mock('../social/publish-ledger.js', async (original) => {
-  const actual = await original<typeof import('../social/publish-ledger.js')>();
+vi.mock('../crosspost/ledger.js', async (original) => {
+  const actual = await original<typeof import('../crosspost/ledger.js')>();
   ledger.realRecord = actual.recordPlatform;
   return { ...actual, recordPlatform: vi.fn(actual.recordPlatform) };
 });
 
-import { autoRequestId, executePublish, planPublish, type SocialPublishInput } from '../social/publish.js';
-import { acquirePublishLock, ledgerPath, recordPlatform } from '../social/publish-ledger.js';
+import { autoRequestId, executePublish, planPublish, targetKey, type SocialPublishInput } from '../crosspost/tools.js';
+import { acquirePublishLock, ledgerPath, recordPlatform } from '../crosspost/ledger.js';
 import { TikTokApiError } from '../tiktok-business/api.js';
 
 type Hooks = { onPublishStart?: () => void; onUploadStart?: () => void };
@@ -75,6 +76,7 @@ beforeEach(() => {
   api.requireAuth.mockReset().mockResolvedValue({});
   api.tokens.mockReset().mockReturnValue({ refresh_token: 'r', scope: 'https://www.googleapis.com/auth/youtube.force-ssl' });
   vi.mocked(recordPlatform).mockReset().mockImplementation(ledger.realRecord as typeof recordPlatform);
+  for (const fn of [api.fbPage, api.igAccount, api.thAccount, api.ytPrepare, api.ttConfig]) fn.mockReset().mockResolvedValue({});
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -158,9 +160,9 @@ describe('planPublish', () => {
 
   it('a re-rendered video file is new content, not "already posted"', () => {
     const input: SocialPublishInput = { targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } };
-    const before = autoRequestId(input);
+    const before = targetKey('youtube', input);
     writeFileSync(VIDEO, 'a different render, longer than before');
-    expect(autoRequestId(input)).not.toBe(before);
+    expect(targetKey('youtube', input)).not.toBe(before);
   });
 
   it('the automatic requestId ignores target order but not content', () => {
@@ -211,7 +213,7 @@ describe('executePublish', () => {
     expect(plan.posts[0].problems.join()).toMatch(/outcome of the previous attempt .* is unknown/);
     await expect(executePublish(input, plan)).rejects.toThrow(/failed validation/);
     // Even a plan that slipped through (validated before the timeout was recorded) does not resend it.
-    expect((await executePublish(input, { ...plan, ok: true }))[0].status).toBe('unknown_outcome');
+    await expect(executePublish(input, { ...plan, ok: true })).rejects.toThrow(/outcome of the previous attempt .* is unknown/);
     expect(api.thText).toHaveBeenCalledTimes(1);
   });
 
@@ -243,7 +245,7 @@ describe('executePublish', () => {
     const input: SocialPublishInput = {
       targets: ['youtube'], text: 'T', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL, privacyStatus: 'public' }, requestId: 'req-5',
     };
-    expect((await run(input))[0]).toMatchObject({ status: 'failed', error: 'not signed in' });
+    expect((await run(input))[0]).toMatchObject({ status: 'failed', error: 'Pre-send check failed (youtube): not signed in' });
     await run(input);
     expect(api.ytUpload).toHaveBeenCalledWith({}, expect.objectContaining({ privacyStatus: 'public', confirmVisible: true }), expect.anything());
   });
@@ -292,9 +294,9 @@ describe('executePublish', () => {
 
   it('if the "posted" record cannot be written, it is still reported posted and a retry never resends it', async () => {
     const real = ledger.realRecord as typeof recordPlatform;
-    vi.mocked(recordPlatform).mockImplementation((id, platform, record, key) => {
+    vi.mocked(recordPlatform).mockImplementation((id, platform, record) => {
       if (record.state === 'posted') throw new Error('ENOSPC');
-      real(id, platform, record, key);
+      real(id, platform, record);
     });
     const input: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'hi', imageUrls: [IMG[0]], requestId: 'req-ledger' };
     const outcomes = await run(input);
@@ -311,7 +313,7 @@ describe('executePublish', () => {
   it('a requestId reused for different content is refused, so a new post is never skipped as "already posted"', async () => {
     await run({ targets: ['threads'], text: 'first post', requestId: 'launch' });
     const second: SocialPublishInput = { targets: ['threads'], text: 'a different post', requestId: 'launch' };
-    expect(planPublish(second).posts[0].problems.join()).toMatch(/already used for a post with different content/);
+    expect(planPublish(second).posts[0].problems.join()).toMatch(/already sent different content to threads/);
     // Re-checked under the lock too: a plan validated before the first post landed must not post into its record.
     await expect(executePublish(second, { ...planPublish(second), ok: true })).rejects.toThrow(/different content/);
     expect(api.thText).toHaveBeenCalledTimes(1);
@@ -338,6 +340,75 @@ describe('executePublish', () => {
     const input: SocialPublishInput = { targets: ['tiktok'], text: 'ignored', tiktok: { planId: 'plan-1' } };
     expect(await run(input)).toEqual([{ platform: 'tiktok', status: 'posted', id: 'pub1' }]);
     expect(api.ttPublish).toHaveBeenCalledWith('plan-1', true, { onPublishStart: expect.any(Function) });
+  });
+
+  it('review 2 #1: a failing pre-send check on any target sends nothing anywhere', async () => {
+    api.ytPrepare.mockRejectedValueOnce(new Error('The video file has no video stream.'));
+    const input: SocialPublishInput = {
+      targets: ['facebook', 'instagram', 'youtube'], text: 'Launch', imageUrls: [IMG[0]], videoFilePath: VIDEO,
+      youtube: { expectedChannelId: CHANNEL }, requestId: 'req-pre-all',
+    };
+    const outcomes = await run(input);
+    expect(outcomes.map((o) => o.status)).toEqual(['failed', 'failed', 'failed']);
+    expect(outcomes[2]).toMatchObject({ error: 'Pre-send check failed (youtube): The video file has no video stream.' });
+    expect(outcomes[0]).toMatchObject({ error: expect.stringMatching(/pre-send check for youtube failed/) });
+    expect(api.fbPhoto).not.toHaveBeenCalled();
+    expect(api.igImage).not.toHaveBeenCalled();
+    // Nothing was sent, so nothing is recorded: the same call can simply be retried once the file is fixed.
+    expect((await run(input)).map((o) => o.status)).toEqual(['posted', 'posted', 'posted']);
+  });
+
+  it('review 2 #1: an expired Meta token or a TikTok scope problem is also caught before sending', async () => {
+    api.thAccount.mockRejectedValueOnce(new Error('Threads token revoked'));
+    const outcomes = await run({ targets: ['facebook', 'threads'], text: 'hi', imageUrls: [IMG[0]], requestId: 'req-pre-meta' });
+    expect(outcomes[1]).toMatchObject({ status: 'failed', error: expect.stringMatching(/Threads token revoked/) });
+    expect(api.fbPhoto).not.toHaveBeenCalled();
+    api.ttConfig.mockRejectedValueOnce(new Error('no video.publish scope'));
+    const tt = await run({ targets: ['threads', 'tiktok'], text: 'x', tiktok: { planId: 'plan-1' }, requestId: 'req-pre-tt' });
+    expect(tt[1]).toMatchObject({ error: expect.stringMatching(/no video.publish scope/) });
+    expect(api.thText).not.toHaveBeenCalled();
+  });
+
+  it('review 2 #2: a Google 4xx after the upload started is a clean failure; a < or > is caught in the plan', async () => {
+    const quota = Object.assign(new Error('quota exceeded'), { cause: { response: { status: 403 } } });
+    api.ytUpload.mockImplementationOnce(failAfterPublishStart(quota));
+    const input: SocialPublishInput = {
+      targets: ['youtube'], text: 'Title', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL }, requestId: 'req-yt-4xx',
+    };
+    expect((await run(input))[0].status).toBe('failed');
+    expect((await run(input))[0].status).toBe('posted'); // retryable
+    expect(problemsOf({ targets: ['youtube'], text: 'We <3 our users', videoFilePath: VIDEO, youtube: { expectedChannelId: CHANNEL } }).youtube.join())
+      .toMatch(/cannot contain < or >/);
+  });
+
+  it('review 2 #3: correcting a failed target without a requestId never reposts the platforms that already posted', async () => {
+    api.thText.mockImplementationOnce(failAfterPublishStart(metaError(400)));
+    const first: SocialPublishInput = { targets: ['facebook', 'threads'], text: 'Launch', imageUrls: [IMG[0]] };
+    expect((await run(first)).map((o) => o.status)).toEqual(['posted', 'failed']);
+    const fixed: SocialPublishInput = { ...first, threads: { text: 'Launch (short)' } };
+    expect(autoRequestId(fixed)).toBe(autoRequestId(first)); // a per-target override keeps the announcement's id
+    expect((await run(fixed)).map((o) => o.status)).toEqual(['already_posted', 'posted']);
+    expect(api.fbPhoto).toHaveBeenCalledTimes(1);
+  });
+
+  it('review 2 #3: identical content is not posted twice under another automatic id, but a new explicit id reposts on purpose', async () => {
+    await run({ targets: ['facebook'], text: 'Same post', imageUrls: [IMG[0]] });
+    // Different target set → different automatic id, same Facebook content → skipped via the posted index.
+    const again = await run({ targets: ['facebook', 'threads'], text: 'Same post', imageUrls: [IMG[0]] });
+    expect(again.map((o) => o.status)).toEqual(['already_posted', 'posted']);
+    expect(api.fbPhoto).toHaveBeenCalledTimes(1);
+    expect((await run({ targets: ['facebook'], text: 'Same post', imageUrls: [IMG[0]], requestId: 'weekly-2' }))[0].status).toBe('posted');
+    expect(api.fbPhoto).toHaveBeenCalledTimes(2);
+  });
+
+  it('review 2 #4/#5: a lock left by a process that is gone is replaced; a live owner still blocks', () => {
+    const lock = ledgerPath('req-lock').replace(/\.json$/, '.lock');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(path.join(lock, 'owner'), '2147483646'); // a pid that is not running
+    const release = acquirePublishLock('req-lock');
+    expect(() => acquirePublishLock('req-lock')).toThrow(/already running/); // owned by this live process now
+    release();
+    expect(() => acquirePublishLock('req-lock')()).not.toThrow();
   });
 
   it('a concurrent call with the same requestId is refused', async () => {

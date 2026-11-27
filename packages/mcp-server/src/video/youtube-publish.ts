@@ -171,7 +171,12 @@ export interface UploadYouTubeVideoHooks {
   onUploadStart?: () => void;
 }
 
-export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTubeVideoInput, hooks: UploadYouTubeVideoHooks = {}) {
+/**
+ * Every check the upload makes before sending anything: the authenticated channel, visibility confirmation, the
+ * file, title/description/tags, and the video stream (ffprobe). Exported so a caller that posts to several
+ * platforms can run it for YouTube before posting anywhere else.
+ */
+export async function prepareYouTubeUpload(auth: OAuth2Client, input: UploadYouTubeVideoInput) {
   if (!input.expectedChannelId) throw new Error('expectedChannelId is required before uploading.');
   const channel = await verifyYouTubeChannel(auth, input.expectedChannelId);
   const privacyStatus = input.privacyStatus ?? 'private';
@@ -188,6 +193,11 @@ export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTub
     throw new Error(M().noVideoStream);
   }
   if (input.shortsOnly) assertShortsCompatible(facts);
+  return { channel, privacyStatus, file, validation, facts };
+}
+
+export async function uploadYouTubeVideo(auth: OAuth2Client, input: UploadYouTubeVideoInput, hooks: UploadYouTubeVideoHooks = {}) {
+  const { channel, privacyStatus, file, validation, facts } = await prepareYouTubeUpload(auth, input);
 
   const youtube = google.youtube({ version: 'v3', auth });
   // try 는 업로드 호출만 감싼다 — 응답 검사(videoId 없음)를 같은 try 에 두면 catch 에서 메시지 문구로 구분해야 했다.
