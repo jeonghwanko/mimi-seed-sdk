@@ -2,6 +2,8 @@
 
 The Korean homepage and its [English edition](https://mimi-seed.oddbout.com/en/) are static HTML. Edit the pages and shared assets in `public/`.
 
+The published HTML includes the ODDBOUT directory footer so its links work without JavaScript. Before publishing, regenerate it from the ODDBOUT web checkout with `node sync-footer.mjs /path/to/kaito_web` from this directory. The command refreshes the marked HTML and the matching stylesheet and language switcher in `public/directory/`. Both homepages link to each other through the language switcher. Policy pages keep their own language.
+
 Preview from this directory with `python -m http.server 8080 --directory public`. To publish, use an authenticated Cloudflare Wrangler CLI from this directory:
 
 ```sh

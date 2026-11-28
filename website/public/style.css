@@ -13,14 +13,14 @@ body { margin: 0; word-break: keep-all; overflow-wrap: break-word; }
 a { color: inherit; text-underline-offset: .22em; }
 a:focus-visible { outline: 3px solid #007553; outline-offset: 5px; }
 .wrap { width: min(1190px, 90%); margin-inline: auto; }
-header, footer, nav, .brand { display: flex; align-items: center; }
-header, footer { justify-content: space-between; }
+header, .mimi-policies, header nav, .brand { display: flex; align-items: center; }
+header, .mimi-policies { justify-content: space-between; }
 header { padding-block: 23px; border-bottom: 1px solid var(--line); }
 .brand { text-decoration: none; gap: 9px; font-size: 1.25rem; font-weight: 800; letter-spacing: -.04em; }
 .brand img { width: 34px; height: 34px; }
-nav { gap: clamp(14px, 3vw, 36px); font-size: .92rem; font-weight: 650; }
-nav a { text-decoration: none; }
-nav a:hover, .brand:hover { text-decoration: underline; }
+header nav { gap: clamp(14px, 3vw, 36px); font-size: .92rem; font-weight: 650; }
+header nav a { text-decoration: none; }
+header nav a:hover, .brand:hover { text-decoration: underline; }
 .lang { border-left: 1px solid var(--line); padding-left: 18px; }
 .hero { display: grid; grid-template-columns: 1.05fr 1fr; align-items: center; gap: clamp(26px, 5vw, 80px); padding-block: clamp(45px, 7vw, 94px); }
 h1, h2, h3, p { margin: 0; }
@@ -44,8 +44,8 @@ h2 { font-size: clamp(1.6rem, 3vw, 2.6rem); line-height: 1.22; letter-spacing: -
 .guide { display: grid; grid-template-columns: minmax(170px, 1fr) 1.5fr auto; align-items: center; gap: 20px; border-bottom: 1px solid var(--line); padding: 24px 5px; text-decoration: none; }
 .guide:hover h3 { text-decoration: underline; }
 h3 { font-size: 1.15rem; letter-spacing: -.04em; }
-.guide p, footer { color: #49594f; font-size: .94rem; line-height: 1.65; }
-footer { border-top: 1px solid var(--line); padding-block: 22px; gap: 18px; flex-wrap: wrap; }
+.guide p, .mimi-policies { color: #49594f; font-size: .94rem; line-height: 1.65; }
+.mimi-policies { border-top: 1px solid var(--line); padding-block: 22px; gap: 18px; flex-wrap: wrap; }
 @media(max-width: 760px) {
   .hero { grid-template-columns: 1fr; }
   .art { aspect-ratio: 1.95; }
@@ -57,7 +57,7 @@ footer { border-top: 1px solid var(--line); padding-block: 22px; gap: 18px; flex
   header { padding-block: 15px; }
 }
 @media(max-width: 400px) {
-  nav { gap: 12px; font-size: .84rem; }
+  header nav { gap: 12px; font-size: .84rem; }
   .lang { padding-left: 10px; }
   .brand { font-size: 1.06rem; gap: 5px; }
   .brand img { width: 28px; height: 28px; }
