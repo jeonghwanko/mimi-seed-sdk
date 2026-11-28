@@ -52,10 +52,8 @@ header .lang { position: relative; padding-left: 20px; }
 header .lang::before { content: ""; position: absolute; left: 0; height: 1em; border-left: 1px solid #b5c0b0; }
 .out { font: 1.1rem/1 system-ui, sans-serif; }
 .hero { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(26px, 4vw, 66px); align-items: center; padding-block: clamp(38px, 4.5vw, 68px); }
-.category, .check-type { display: flex; align-items: center; gap: 9px; font-size: .84rem; font-weight: 700; letter-spacing: .035em; }
-.category { color: var(--green); }
-.category::before { content: ""; width: 17px; height: 9px; border-radius: 100%; background: #bfd05c; transform: rotate(-28deg); }
-.hero h1 { margin-top: 18px; font: 760 clamp(2.55rem, 4.35vw, 4.05rem)/1.12 var(--display); letter-spacing: -.065em; }
+.check-type { display: flex; align-items: center; gap: 9px; font-size: .84rem; font-weight: 700; letter-spacing: .035em; }
+.hero h1 { font: 760 clamp(2.55rem, 4.35vw, 4.05rem)/1.12 var(--display); letter-spacing: -.065em; }
 html:lang(en) .hero h1 { font-size: clamp(3.65rem, 5.85vw, 6rem); line-height: .98; }
 .intro { max-width: 34em; margin-block: 20px 24px; font-size: clamp(1rem, 1.25vw, 1.15rem); color: var(--muted); line-height: 1.7; }
 .hero-actions { gap: 22px; flex-wrap: wrap; }
@@ -66,9 +64,6 @@ html:lang(en) .hero h1 { font-size: clamp(3.65rem, 5.85vw, 6rem); line-height: .
 .backdrop { display: block; width: 100%; height: 100%; object-fit: cover; }
 .seed-mark { position: absolute; width: auto; height: 62%; left: 50%; top: 44%; transform: translate(-50%, -50%); filter: drop-shadow(1px 2px 0 #8c480f) drop-shadow(5px 10px 6px rgb(56 42 28 / .16)); }
 
-.product figcaption { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px; padding: 11px 18px; background: #edf0dd; color: #394c38; font-size: .83rem; }
-.product figcaption span:last-child { font-family: var(--mono); font-size: .78rem; }
-.product figcaption i { margin-inline: 4px; color: #67775c; }
 .check { display: grid; grid-template-columns: 1fr minmax(0, .98fr); align-items: center; gap: clamp(24px, 5vw, 76px); padding: clamp(24px, 3vw, 46px); border-radius: 16px; color: #f8faef; background: #203c31; scroll-margin-top: 16px; }
 .check-type { color: #d9ed9f; }
 .check h2 { margin-top: 7px; font: 700 clamp(2rem, 3vw, 2.75rem)/1.07 var(--display); letter-spacing: -.05em; }
