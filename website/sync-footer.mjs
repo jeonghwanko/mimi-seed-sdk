@@ -10,6 +10,22 @@ const { staticDirectory, directoryAssets, directoryCss, directoryScript } = awai
 const site = fileURLToPath(new URL("./public/", import.meta.url));
 const home = { ko: "/", en: "/en/" };
 
+function withMimiPolicies(footer, lang, page) {
+  const privacyLink = /<a\b[^>]*\bdata-club-link="privacy"[^>]*>[^<]*<\/a>/g;
+  if (footer.match(privacyLink)?.length !== 1) {
+    throw new Error("Expected one privacy link in the shared footer");
+  }
+  const ko = lang === "ko";
+  const links = [
+    ["/privacy/", ko ? "개인정보처리방침" : "Privacy Policy (Korean)", "privacy/index.html"],
+    ["/terms/", ko ? "이용약관" : "Terms of Service (Korean)", "terms/index.html"],
+    ["https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/LICENSE", "PolyForm Noncommercial 1.0.0"],
+  ];
+  return footer.replace(privacyLink, links.map(([href, label, document]) =>
+    `<a href="${href}"${page === document ? ' aria-current="page"' : ""}>${label}</a>`
+  ).join(""));
+}
+
 for (const file of await readdir(site, { recursive: true })) {
   if (!file.endsWith(".html")) continue;
   const path = join(site, file);
@@ -20,7 +36,7 @@ for (const file of await readdir(site, { recursive: true })) {
   const translations = ["index.html", "en/index.html"].includes(page)
     ? home
     : { [lang]: page === "404.html" ? "#" : "/" + page.replace(/index\.html$/, "") };
-  const footer = staticDirectory(lang, { root: "https://oddbout.com/", translations });
+  const footer = withMimiPolicies(staticDirectory(lang, { root: "https://oddbout.com/", translations }), lang, page);
   let rendered = html;
   for (const [name, content, closingTag] of [
     ["assets", directoryAssets("/"), "</head>"],

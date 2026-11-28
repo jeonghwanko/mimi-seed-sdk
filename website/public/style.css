@@ -40,14 +40,14 @@ button { font: inherit; cursor: pointer; }
 .skip { position: absolute; inset: 8px auto auto 8px; z-index: 2; padding: 12px 18px; color: white; background: var(--ink); transform: translateY(-160%); }
 .skip:focus { transform: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-header.wrap, .mimi-policies, header nav, .brand, .hero-actions { display: flex; align-items: center; }
+header.wrap, header nav, .brand, .hero-actions { display: flex; align-items: center; }
 header.wrap { justify-content: space-between; gap: 12px; min-height: 78px; border-bottom: 1px solid var(--line); }
 .brand { gap: 10px; min-height: 44px; text-decoration: none; white-space: nowrap; font: 750 1.62rem/1 var(--display); letter-spacing: -.055em; }
 .brand img { display: block; width: 150px; height: auto; }
 header nav { gap: clamp(16px, 2.8vw, 40px); }
 header nav a { white-space: nowrap; }
-header nav a, .text-link, .mimi-policies a { display: inline-flex; align-items: center; gap: .4em; min-height: 44px; font-size: .96rem; font-weight: 700; text-decoration: none; }
-header nav a:hover, .text-link:hover, .mimi-policies a:hover { text-decoration: underline; }
+header nav a, .text-link { display: inline-flex; align-items: center; gap: .4em; min-height: 44px; font-size: .96rem; font-weight: 700; text-decoration: none; }
+header nav a:hover, .text-link:hover { text-decoration: underline; }
 header .lang { position: relative; padding-left: 20px; }
 header .lang::before { content: ""; position: absolute; left: 0; height: 1em; border-left: 1px solid #b5c0b0; }
 .out { font: 1.1rem/1 system-ui, sans-serif; }
@@ -91,9 +91,9 @@ html:lang(en) .hero h1 { font-size: clamp(3.65rem, 5.85vw, 6rem); line-height: .
 .guide-copy > span { margin-top: 5px; color: var(--muted); font-size: .96rem; line-height: 1.55; }
 .guide-group a:hover strong { text-decoration: underline; }
 .guide-group a:hover .out { color: var(--green); }
-.mimi-policies { border-top: 1px solid var(--line); flex-wrap: wrap; gap: 0 22px; padding-block: 13px; color: var(--muted); }
-.mimi-policies strong { margin-right: auto; color: var(--ink); }
-.mimi-policies a { font-size: .88rem; font-weight: 400; }
+
+
+
 .legal { max-width: 46rem; padding-block: clamp(32px, 6vw, 84px); font-size: 1.075rem; line-height: 1.8; }
 .legal h1 { margin-bottom: 1.4rem; font: 740 clamp(2.1rem, 4vw, 3.4rem)/1.15 var(--display); letter-spacing: -.045em; }
 .legal h2 { border-top: 1px solid var(--line); margin-top: 2.6rem; padding-top: 1.4rem; font-size: 1.45rem; line-height: 1.4; }
@@ -114,7 +114,7 @@ html:lang(en) .hero h1 { font-size: clamp(3.65rem, 5.85vw, 6rem); line-height: .
   .backdrop { object-position: 50% 58%; }
   .check { gap: 18px; }
   .guide-grid { gap: 24px; }
-  .mimi-policies { gap: 0 16px; }
+
 }
 @media (max-width: 540px) {
   header .nav-start { display: none; }
@@ -127,7 +127,7 @@ html:lang(en) .hero h1 { font-size: clamp(3.65rem, 5.85vw, 6rem); line-height: .
   .command code { font-size: .83rem; }
   .command { padding-left: 10px; gap: 6px; }
   .command button { padding-inline: 8px; }
-  .mimi-policies strong { flex-basis: 100%; }
+
 }
 @media (max-width: 380px) {
   header.wrap { flex-wrap: wrap; gap: 0 12px; padding-block: 4px; }
