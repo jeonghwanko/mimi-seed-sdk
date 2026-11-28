@@ -13,57 +13,61 @@
 <!-- oddbout:assets -->
 <link rel="stylesheet" href="/directory/footer.css"><script defer src="/directory/language.js"></script>
 <!-- /oddbout:assets -->
+  <script src="/copy-command.js" defer></script>
 </head>
 <body>
-  <header class="wrap">
-    <a class="brand" href="/"><img src="/mimi.svg" alt="">Mimi Seed</a>
+  <a class="skip" href="#main">본문으로 건너뛰기</a>
+  <header class="site-header wrap">
+    <a class="brand" href="/"><img src="/mimi-wordmark.webp" alt="Mimi Seed" width="651" height="144"></a>
     <nav aria-label="주 메뉴">
+      <a class="nav-start" href="#start">빠른 시작</a>
       <a href="#guides">가이드</a>
-      <a href="https://github.com/jeonghwanko/mimi-seed-sdk">GitHub</a>
-      <a class="lang" href="/en/" lang="en">English</a>
+      <a href="https://github.com/jeonghwanko/mimi-seed-sdk">GitHub<span class="out" aria-hidden="true">↗</span></a>
+      <a class="lang" href="/en/" lang="en" hreflang="en">English</a>
     </nav>
   </header>
-  <main class="wrap">
-    <section class="hero">
-      <div>
-        <h1><span>코드에서 출시로,</span>출시에서 고객에게.</h1>
-        <p class="intro">Mimi Seed는 코드와 빌드 기록을 바탕으로 모바일 앱을 운영하는 SDK입니다. 어떤 변경이 어느 버전에 들어갔는지 확인하고, 그 기록으로 업데이트 소식을 쓰고 홍보 영상을 만들고 고객에게 답합니다.</p>
-        <a class="button" href="#guides">출시 작업 흐름 보기 <span aria-hidden="true">↓</span></a>
+  <main id="main" class="wrap" tabindex="-1">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="category">모바일 앱 출시 SDK</p>
+        <h1 id="hero-title">코드에서 출시로,<br>출시에서 고객에게.</h1>
+        <p class="intro">커밋과 빌드 기록을 바탕으로 앱을 배포하고, 그 버전의 변경 사항으로 출시 소식을 쓰고 고객 리뷰에 답하세요.</p>
+        <div class="hero-actions"><a class="button" href="#start">내 앱 점검하기<span aria-hidden="true">↓</span></a><a class="text-link" href="#guides">작업 가이드<span aria-hidden="true">→</span></a></div>
       </div>
-      <div class="art" aria-hidden="true">
-        <img src="/mimi.svg" alt="" width="800" height="800">
-        <span class="tag tag-ios">App Store Connect</span>
-        <span class="tag tag-android">Google Play</span>
+      <figure class="product">
+        <div class="studio" aria-hidden="true"><img class="backdrop" src="/mimi-studio-1080.webp" srcset="/mimi-studio-640.webp 640w, /mimi-studio-1080.webp 1080w" sizes="(max-width: 760px) 92vw, (max-width: 1360px) 45vw, 620px" width="1080" height="720" fetchpriority="high" alt=""><img class="seed-mark" src="/mimi.svg" width="800" height="800" alt=""></div>
+        <figcaption><span>지원 스토어</span><span>App Store Connect <i aria-hidden="true">/</i> Google Play</span></figcaption>
+      </figure>
+    </section>
+    <section class="check" id="start" aria-labelledby="doctor" tabindex="-1">
+      <div><p class="check-type">로컬 출시 점검</p><h2 id="doctor">Release Doctor</h2><p class="check-description">앱 저장소에서 아래 명령을 실행하세요. 스토어 계정을 연결하기 전에 출시 준비 상태를 점검합니다.</p></div>
+      <div class="check-run">
+        <div class="command"><span class="prompt" aria-hidden="true">$</span><code id="command">npx mimi-seed check --local</code><button type="button" data-copy data-copied="복사됨" data-fallback="명령을 선택했습니다. 복사 단축키를 누르세요." hidden>복사</button></div>
+        <div class="command-meta"><span>Node.js 22+</span><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-doctor-pilot.ko.md">점검 가이드 <span aria-hidden="true">↗</span></a></div>
+        <span class="sr-only" role="status" id="copy-status"></span>
       </div>
     </section>
-    <section class="check" id="start" aria-labelledby="doctor">
-      <div>
-        <h2 id="doctor">Release Doctor</h2>
-        <p>Node.js 22 이상에서 앱 저장소를 열고 실행하세요. 첫 점검에는 스토어 계정이 필요 없습니다.</p>
-      </div>
-      <div class="command"><span aria-hidden="true">$ </span><code>npx mimi-seed check --local</code></div>
-    </section>
-    <section class="guides" id="guides" aria-labelledby="guide-heading">
+    <section class="guides" id="guides" aria-labelledby="guide-heading" tabindex="-1">
       <h2 id="guide-heading">출시 작업별 가이드</h2>
-      <div class="guide-list">
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/build-ci.ko.md">
-          <h3>코드 변경과 빌드</h3><p>Jenkins 등 CI에서 빌드 작업을 실행하고, 어떤 커밋이 결과물에 포함됐는지 확인합니다.</p><span class="arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/deploy.ko.md">
-          <h3>Android·iOS 배포와 버전 기록</h3><p>Git 태그를 빌드 번호와 대조하고, Google Play 트랙이나 TestFlight에 올린 버전을 다음 작업의 기준으로 삼습니다.</p><span class="arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.ko.md">
-          <h3>스토어 업데이트와 심사</h3><p>버전에 포함된 변경으로 업데이트 소식을 쓰고, 마켓 이미지와 심사 제출 정보를 준비합니다.</p><span class="arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/video.ko.md">
-          <h3>홍보 글과 영상 제작</h3><p>새 기능을 사용자가 경험하는 장면으로 풀어 홍보 글과 영상 소재를 만듭니다.</p><span class="arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social.ko.md">
-          <h3>채널 게시와 운영</h3><p>완성한 콘텐츠를 승인 한 번으로 Facebook·Instagram·Threads·YouTube·TikTok에 게시하고 채널 반응을 확인합니다.</p><span class="arrow" aria-hidden="true">↗</span>
-        </a>
-        <a class="guide" href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.ko.md">
-          <h3>리뷰와 고객 응대</h3><p>고객이 남긴 스토어 리뷰를 읽고, 문제를 고친 버전과 변경 내용을 확인해 답변을 작성합니다.</p><span class="arrow" aria-hidden="true">↗</span>
-        </a>
+      <div class="guide-grid">
+        <section class="guide-group"><h3>빌드와 배포</h3>
+          <ul>
+            <li><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/build-ci.ko.md"><span class="guide-copy"><strong>코드 변경과 빌드</strong><span>커밋이 어떤 CI 빌드에 포함됐는지 추적하세요.</span></span><span class="out" aria-hidden="true">↗</span></a></li>
+            <li><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/deploy.ko.md"><span class="guide-copy"><strong>버전 배포</strong><span>Google Play 트랙이나 TestFlight에 빌드를 올리세요.</span></span><span class="out" aria-hidden="true">↗</span></a></li>
+          </ul>
+        </section>
+        <section class="guide-group"><h3>스토어 운영</h3>
+          <ul>
+            <li><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/release-readiness.ko.md"><span class="guide-copy"><strong>출시 정보와 심사</strong><span>변경 기록으로 출시 노트와 심사 자료를 준비하세요.</span></span><span class="out" aria-hidden="true">↗</span></a></li>
+            <li><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/stores.ko.md"><span class="guide-copy"><strong>리뷰와 고객 응대</strong><span>스토어 리뷰를 읽고 수정 버전을 확인해 답하세요.</span></span><span class="out" aria-hidden="true">↗</span></a></li>
+          </ul>
+        </section>
+        <section class="guide-group"><h3>콘텐츠와 채널</h3>
+          <ul>
+            <li><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/video.ko.md"><span class="guide-copy"><strong>홍보 영상 제작</strong><span>출시한 기능을 보여 주는 짧은 영상을 만드세요.</span></span><span class="out" aria-hidden="true">↗</span></a></li>
+            <li><a href="https://github.com/jeonghwanko/mimi-seed-sdk/blob/main/docs/user-guide/social.ko.md"><span class="guide-copy"><strong>채널 게시</strong><span>완성한 글과 영상을 소셜 채널에 게시하세요.</span></span><span class="out" aria-hidden="true">↗</span></a></li>
+          </ul>
+        </section>
       </div>
     </section>
   </main>

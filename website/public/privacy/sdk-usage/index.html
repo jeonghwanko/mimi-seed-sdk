@@ -12,8 +12,9 @@
 <!-- /oddbout:assets -->
 </head>
 <body>
-  <header class="wrap"><a class="brand" href="/"><img src="/mimi.svg" alt="">Mimi Seed</a></header>
-  <main class="legal wrap">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="wrap"><a class="brand" href="/"><img src="/mimi-wordmark.webp" alt="Mimi Seed" width="651" height="144"></a></header>
+  <main id="main" tabindex="-1" class="legal wrap">
 <a href="/">← Mimi Seed</a><h1>Optional SDK usage measurement</h1><p>Off by default, and sent only to a team console. Set <code>MIMI_SEED_WEB_BASE</code> to your team console's address first, then run <code>mimi-seed telemetry on</code> to participate and <code>mimi-seed telemetry off</code> to stop. Without a team console, <code>telemetry on</code> changes nothing and exits with an error. The environment variable <code>MIMI_SEED_TELEMETRY=0</code> always disables transmission.</p>
 <p>With your consent, the CLI sends a random installation ID, a project-path hash with a private local salt, a random run ID, CLI version, OS, CI flag, framework category, command, outcome, duration, mobile platforms and finding codes. The salt never leaves your machine. These are pseudonymous identifiers, not a count of people. No source, paths, app IDs, credentials, free-text errors or store data are included.</p>
 <p>Reports go only to the team console named in <code>MIMI_SEED_WEB_BASE</code>, after a command finishes. Mimi Seed itself does not collect them. Transmission has an 800 ms timeout and never changes the check result. Crashes and network failures can be missing, so reported runs are not a complete start-to-finish funnel.</p>
